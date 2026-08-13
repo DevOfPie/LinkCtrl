@@ -159,8 +159,11 @@ func (a *LinkAPI) SetQR(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteQR returns the link's default code to the default style. Not "delete the
-// QR code" — there is no such thing to delete, because every link has one.
-// Removing one of the *named* codes M50 added is DeleteQRCode below.
+// QR code": since D183 the row carries the code's identity — the flag, and the
+// slug printed in its payload — so the style is written back to the product
+// default rather than the row being removed, and any logo on the code stays.
+// Removing a code is DeleteQRCode below, which since the same reopening will
+// remove any of them while a link has more than one.
 func (a *LinkAPI) DeleteQR(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id")
 	if err != nil {
@@ -182,16 +185,17 @@ func (a *LinkAPI) DeleteQR(w http.ResponseWriter, r *http.Request) {
 // row's uuid is reported for completeness rather than used to address anything.
 //
 // The five operations above are untouched and now name the link's *default*
-// code: the one whose payload carries no code parameter, which is every picture
-// this product drew before this milestone. That choice is recorded in
+// code: the one an untagged picture resolves through, which is every picture
+// this product drew before per-code identity existed. That choice is recorded in
 // decisions.md under M50, because silently changing what a shipped endpoint
 // answers for is the thing the contract test exists to catch.
 //
-// **The empty slug is not addressable here.** `/qr/codes/` is not a route, and
-// the default code is reached through `/qr` — one identity, one path. What
-// `/qr/codes` does list is every code including the default, because a client
-// asking what codes a link has wants the answer to include the one it started
-// with.
+// **The shorthand names a role and the collection names codes** (D183). The
+// default was the code with no slug, so `/qr` was the only address it had; it
+// carries a slug like every other code once a link has more than one, and is
+// therefore addressable here too. The two do not say the same thing: `/qr`
+// follows the flag wherever `PUT …/{slug}/default` puts it, and a slug does not
+// move. A client that wants a particular picture names the slug.
 
 // ListQRCodes answers with every code a link carries, default first.
 func (a *LinkAPI) ListQRCodes(w http.ResponseWriter, r *http.Request) {
@@ -289,24 +293,59 @@ func (a *LinkAPI) SetQRCode(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"code": code, "levels": qr.Levels})
 }
 
-// DeleteQRCode removes a named code.
+// DeleteQRCode removes one of a link's codes.
 //
-// The default code is not reachable here — it has no slug to name it with — and
-// that is the whole of why it cannot be deleted by accident: the operation that
-// looks like deleting it is `DELETE /links/{id}/qr`, which resets its style.
+// **Every code is reachable here since D183, the default included**, because
+// every stored code now carries a slug. What is refused is removing a link's
+// *last* code, and that refusal is a 422 rather than a 404: the code is there,
+// and what the caller almost certainly wants is `DELETE /links/{id}/qr`, which
+// restores its style.
+//
+// **204, and the promotion is not in the response.** Removing the code that
+// holds the default flag promotes the oldest one left, which the service returns
+// and this discards: a body on a 204 is not a body anything reads, and a caller
+// that needs to know which code untagged scans now land on re-lists them. The
+// dashboard is the surface that has to *say* so, and it says so from the same
+// return value.
 func (a *LinkAPI) DeleteQRCode(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id")
 	if err != nil {
 		WriteError(w, r, err)
 		return
 	}
-	if err := a.Links.DeleteQRCode(
+	if _, err := a.Links.DeleteQRCode(
 		r.Context(), IdentityFrom(r.Context()), id, r.PathValue("slug"),
 	); err != nil {
 		WriteError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SetDefaultQRCode makes one code the one untagged scans resolve through (D183).
+//
+// **PUT on a sub-resource rather than a field on the code, because it is not a
+// property of one code.** Setting it takes the flag off another, so a `PUT
+// /qr/codes/{slug}` carrying `"default": true` would be a request that silently
+// rewrites a resource it does not name — and one carrying `false` would have no
+// meaning at all, since a link always has a default. The sub-resource has one
+// verb for that reason: there is nothing to DELETE.
+//
+// Answers with the code, so a caller sees the flag it just set on the same
+// object `GET /qr/codes/{slug}` returns.
+func (a *LinkAPI) SetDefaultQRCode(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "id")
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	code, err := a.Links.SetDefaultQRCode(
+		r.Context(), IdentityFrom(r.Context()), id, r.PathValue("slug"))
+	if err != nil {
+		WriteError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"code": code, "levels": qr.Levels})
 }
 
 // GetQRCodeSVG serves a named code's picture.
@@ -355,8 +394,8 @@ func (a *LinkAPI) GetQRCodePNG(w http.ResponseWriter, r *http.Request) {
 // **Two capabilities, four routes, and that is the shape D133 already ships
 // five times.** The owner overruled D136 on 2026-08-07: a link where nobody
 // added a second code — nearly every link — could not carry a logo at all,
-// because the default code's identity is the *absence* of a slug (D130) and the
-// collection addresses codes by one. So the pair answers at `/links/{id}/qr/logo`
+// because the default code's identity was the *absence* of a slug (D130, since
+// reversed by D183) and the collection addresses codes by one. So the pair answers at `/links/{id}/qr/logo`
 // as well as at `/links/{id}/qr/codes/{slug}/logo`, the same way `qr.png` and
 // `codes/{slug}/image.png` are one capability at two addresses. The default code
 // gains no reserved slug — that would reopen D130 and change what an

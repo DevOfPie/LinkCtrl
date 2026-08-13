@@ -452,8 +452,8 @@ migrations run at boot.
 
 - **This product now accepts a file.** One kind of file, for one thing: an image
   uploaded against a QR code, over `PUT /api/v1/links/{id}/qr/logo` for the
-  link's original code and `PUT /api/v1/links/{id}/qr/codes/{slug}/logo` for a
-  named one, with a `multipart/form-data` body, and removed with a `DELETE` at
+  link's default code and `PUT /api/v1/links/{id}/qr/codes/{slug}/logo` for a
+  code named by its slug, with a `multipart/form-data` body, and removed with a `DELETE` at
   the same path. It needs `links.update` — the permission that already changes
   how a code is drawn — and an API key that holds it may use it. **The QR panel
   on a link's page does it too**, so a logo is not an API-only feature.
@@ -540,9 +540,8 @@ migrations run at boot.
   pass rather than immediately.
 
   **The link's original code carries one too**, and it is reached the way
-  `qr.svg` and `qr.png` reach it — without a slug, at `…/qr/logo`. The original
-  code's identity is that it has no printed slug, so it keeps none: nothing
-  already printed changes what it counts as.
+  `qr.svg` and `qr.png` reach it — at `…/qr/logo`, without naming a code. That
+  shorthand answers for whichever code is the link's default.
 
 - **More than one QR code per link, told apart in the analytics.** A print run
   and a shop-window card against the same short link used to be the same picture,
@@ -550,11 +549,20 @@ migrations run at boot.
   and an identity it prints, so the breakdown on the link page shows you which
   one people actually scanned.
 
-  **Every code already printed keeps counting exactly as it did.** A link's
-  original code is unchanged — same picture, same payload, same row in the
-  Referrers breakdown — because the identity a new code prints is something it
-  *adds*, and the original's identity is that it adds nothing. There is nothing
-  to reprint and nothing to reconcile.
+  **Every code already printed keeps counting exactly as it did.** A picture
+  that carries no code identity — which is every copy of your original code
+  printed before this release — is counted against whichever code is the link's
+  **default**, and that starts as the code it always was. There is nothing to
+  reprint and nothing to reconcile.
+
+  **Any code can be removed, and any code can be made the default.** The default
+  is the role that decides where those untagged pictures land. Removing the code
+  that holds it hands the role to the oldest code left and tells you which one,
+  because that is where your old posters start being counted; a link's last code
+  cannot be removed, since a link always has one. Your original code gains a
+  printed identity of its own at the moment you add a second code — the moment
+  there is something to tell it apart from — and until then it carries the
+  picture it always had.
 
   A link carries up to twenty codes. Twenty is the number that keeps the panel a
   list and the analytics a chart rather than a wall.
@@ -566,21 +574,25 @@ migrations run at boot.
 
   **Removing a code keeps what it already recorded, and stops it growing.** Scans
   from a picture printed with a code you have since removed are counted as the
-  link's original code from then on, rather than being credited back to the code
+  link's default code from then on, rather than being credited back to the code
   that is gone. That will look like an interrupted line to somebody reading a
   chart across the removal, so it is worth knowing before you remove one.
 
   Over the API: `GET`/`POST /api/v1/links/{id}/qr/codes`, and
   `GET`/`PUT`/`DELETE /api/v1/links/{id}/qr/codes/{slug}` with
   `.../{slug}/image.svg` and `.../{slug}/image.png` for the pictures. **The
-  existing five `/qr` endpoints are unchanged and answer for the link's original
-  code**, so nothing written against 0.2.0 has to move.
+  existing five `/qr` endpoints are unchanged and answer for the link's default
+  code**, so nothing written against 0.2.0 has to move — with the caveat that the
+  default is a role that can be moved, by `PUT .../{slug}/default`, and a client
+  that wants a particular code rather than the role names its slug. `DELETE
+  /api/v1/links/{id}/qr` restores the default code's style and no longer deletes
+  its row: the row now carries the code's printed identity.
 
   The new identity is a second reserved query parameter, `qrc`, beside `src`.
   Like `src` it is **forwarded** to your destination when a link has query
   forwarding on, and like `src` it is not evidence of anything: anybody can type
   one. A value that is not one of that link's codes is counted as the link's
-  original code and is never stored, which is what stops the parameter being a
+  default code and is never stored, which is what stops the parameter being a
   way for a stranger to write rows into your analytics.
 
 - **Clicking a notification goes to what it is about, and marks it read.** In the
@@ -975,10 +987,15 @@ migrations run at boot.
 - **A single container is still tested on every push.** Nothing in the
   high-availability work is required to run one, and `make single-instance`
   drives the whole surface on Postgres alone to keep that true.
-- **Seven additive migrations**, run at boot as usual: several QR codes per link,
+- **Eight additive migrations**, run at boot as usual: several QR codes per link,
   the QR logo column, password-reset tokens, account erasure, the second factor,
-  the API key's account reach, and the instance's update-check setting. No
-  backfill, no destructive step, and no new permission.
+  the API key's account reach, the instance's update-check setting, and the QR
+  default-code flag. No destructive step and no new permission. **One of them
+  writes data**: the default-code flag is set on the row that already held that
+  role, links carrying more than one code have their default named, and a link
+  with codes but no row for its default gains one at the style it was already
+  being drawn at. Nothing already printed changes what it counts as, and no
+  recorded click is touched.
 - **`LINKCTRL_UPLOAD_RATE_PER_MIN`** (default 30) is a new bucket for the one
   endpoint that now accepts a file. It is *on top of* `API_RATE_PER_MIN` rather
   than instead of it, and shared through Redis like the others.

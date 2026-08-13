@@ -199,9 +199,27 @@ type ResolveAliasForRedirectRow struct {
 // is drawn, and putting them in the snapshot would serialize workspace free text
 // into every cached entry for nothing.
 //
-// `q.slug <> ”` leaves the default code out. Its payload carries no parameter
-// at all, so there is nothing for a request to match it by, and a request
-// carrying no recognised slug is attributed to it by falling through.
+// **`q.slug <> ”` stays, and what it excludes has shrunk to one row** (D183).
+// It used to leave the whole default code out, because the default *was* the row
+// with no slug. The flag carries that identity now and the row it used to be
+// gains a slug the moment a second code appears beside it, so a link's default
+// rides home like every other code and a payload naming it is matched. What is
+// still left out is a link's *only* code, which keeps the empty slug and the
+// untagged payload — and it is left out because there is nothing to match it
+// with: `Snapshot.CodeSlug` returns before it scans when the parameter is empty
+// or absent, so an empty string in this array could never be compared against
+// anything. Carrying it would serialize a byte no request can reach into every
+// cached entry for the majority of links, and falsify what `Snapshot.Codes`
+// promises about the payload a link with no named codes carries — which is the
+// premise CacheKeyVersion was not bumped on.
+//
+// **`is_default` deliberately does not.** A request carrying no `qrc` still
+// records the bare `qr` it has always recorded — the value on every row this
+// product has written since M41 — and which code that belongs to is a question
+// the breakdown answers when somebody reads it, from the flag as it stands then.
+// Resolving it here instead would put the answer in `link_dimension_daily`,
+// where moving the flag afterwards could not reach it, and would rewrite what
+// every pre-reopening scan is stored as for no gain a reader can see.
 func (q *Queries) ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error) {
 	row := q.db.QueryRow(ctx, resolveAliasForRedirect, arg.DomainID, arg.Alias)
 	var i ResolveAliasForRedirectRow

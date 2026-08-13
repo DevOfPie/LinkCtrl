@@ -104,8 +104,8 @@ func logoBody(
 // logoPath is where one code's image is addressed.
 //
 // **Two shapes, one capability.** A named code is a member of the collection;
-// the link's default code has no slug — that absence is its identity (D130) —
-// so it is reached through the `/qr` shorthand D133 kept, exactly as `qr.svg`
+// a link's only code has no slug — nothing to be told apart from, and nothing to
+// name it with — so it is reached through the `/qr` shorthand D133 kept, exactly as `qr.svg`
 // and `qr.png` reach it. The owner's ruling of 2026-08-07 is what put a logo
 // there; before it the empty slug had no path at all.
 func logoPath(linkID uuid.UUID, slug string) string {
@@ -450,8 +450,9 @@ func TestALogoIsScopedToItsWorkspace(t *testing.T) {
 //
 // **The case it covers is the common one.** A link nobody has added a second
 // code to is nearly every link, and until the ruling it could carry no logo at
-// all: the only path was `/qr/codes/{slug}`, and the default code's identity is
-// the *absence* of a slug (D130). The shorthand `/qr/logo` is what reaches it,
+// all: the only path was `/qr/codes/{slug}`, and the default code's identity was
+// the *absence* of a slug (D130, since reversed by D183 — the shorthand now
+// answers for whichever code holds the flag). The shorthand `/qr/logo` is what reaches it,
 // on exactly the shape `qr.svg` and `qr.png` already have.
 //
 // **And it has to write a row.** A default code with no `qr_codes` row is a real
@@ -1211,5 +1212,53 @@ func TestTheSizeControlFitsAgainstTheLevelALogoIsDrawnAt(t *testing.T) {
 	// disagree about a picture they both describe.
 	if got := f.qrCode(id).Size; got != drawn {
 		t.Errorf("the panel reports %dpx and the endpoint draws %dpx", got, drawn)
+	}
+}
+
+// TestTheShorthandsLogoLandsOnTheDefaultCodesOwnRow is the seam D183 opened
+// under the logo operations.
+//
+// **The shorthand asks for a role and the storage needs a row.** `PUT
+// …/qr/logo` carries no slug, and the empty string it stands for stopped being
+// an identity when the flag replaced it — so every write and every read behind
+// it has to resolve the flag first. Keying the upsert on what was *asked for*
+// inserts a second row against the empty slug on any link whose default has one,
+// which is every link carrying more than one code: the image lands on a code
+// nobody can see, the picture the reader downloads has no logo in it, and the
+// link quietly grows a phantom third code.
+//
+// Three assertions, one per place the resolution has to happen: the write, the
+// row count, and the read the renderer makes.
+func TestTheShorthandsLogoLandsOnTheDefaultCodesOwnRow(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("shorthandlogo", "https://example.com/x")
+	// A second code, which is what gives the default a slug of its own.
+	f.createQRCode(t, id, "Autumn poster")
+	def := f.qrCode(id)
+	if def.Slug == "" {
+		t.Fatal("the default code has no slug on a link carrying two codes")
+	}
+
+	if status, body := f.uploadLogo(t, id, "", "logo.png", "image/png",
+		logoPNG(t, 256, 0x20)); status != http.StatusOK {
+		t.Fatalf("uploading through the shorthand = %d: %s", status, body)
+	}
+
+	if got := f.qrCode(id); got.Slug != def.Slug || !got.HasLogo {
+		t.Errorf("the shorthand answered for %q has_logo=%v, want %q with a logo — "+
+			"an empty slug here means the upload made a row of its own",
+			got.Slug, got.HasLogo, def.Slug)
+	}
+	if n := f.qrRowCount(id); n != 2 {
+		t.Errorf("%d qr_codes rows after uploading through the shorthand, want the "+
+			"link's own 2; a third is a code the reader never made", n)
+	}
+	// And the picture the renderer draws carries it, which is the half a row
+	// count cannot see: the logo read is keyed by slug too.
+	if svg := f.qrSVG(id); !strings.Contains(svg, "image") {
+		t.Errorf("the default code's picture carries no image after an upload "+
+			"through the shorthand; the read is keyed by slug and the shorthand "+
+			"does not carry one:\n%.300s", svg)
 	}
 }

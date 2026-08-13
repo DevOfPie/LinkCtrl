@@ -420,3 +420,109 @@ func TestTheBrowseControlAcknowledgesTheClick(t *testing.T) {
 		}
 	}
 }
+
+// --- the codes list, at M50's reopening --------------------------------------
+
+// TestEveryCodeCanBeRemovedAndMadeTheDefault is the reopening's third bullet
+// (D183, F222).
+//
+// **The owner reported it against the running product**: *"As long as there are
+// multiple QR codes any of them should be able to be removed, currently the
+// first one cannot be removed."* The first row had no remove control at all —
+// not one that refused — because the default code *was* the row with the empty
+// slug and deleting it would have left every already-printed picture resolving
+// to nothing.
+//
+// Two claims, and the second is what stops the fix from being cosmetic. Every
+// row carries a remove control, which is what was asked for. And every row that
+// is not the default carries one that makes it the default, which is what makes
+// the removal safe to offer: the flag has somewhere to go, and a reader who
+// wanted a different code answering for their old posters can say so rather than
+// deleting one to find out.
+func TestEveryCodeCanBeRemovedAndMadeTheDefault(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+
+		// The fixture carries two codes, so both rows are removable — and the
+		// count is what makes this a claim about *every* row rather than about
+		// the one that always had the control.
+		if n := strings.Count(body, `name="remove"`); n != 2 {
+			t.Errorf("%s draws %d remove controls over a two-code list, want 2. "+
+				"The first row is the default, and before D183 it had none: its "+
+				"identity was the absence of a slug, which is what made it "+
+				"undeletable (F222)", page, n)
+		}
+		// One, not two: the code that already holds the flag has nowhere to
+		// move it to, and a control that says "make this the default" on the
+		// default is a control that does nothing.
+		if n := strings.Count(body, `name="make_default"`); n != 1 {
+			t.Errorf("%s draws %d \"make default\" controls over a two-code list "+
+				"whose first row is the default, want 1. Removing the flag-holder "+
+				"promotes a code the reader did not pick, so choosing one has to "+
+				"be reachable without deleting anything", page, n)
+		}
+		if !strings.Contains(body, ">Make default<") {
+			t.Errorf("%s has no \"Make default\" button", page)
+		}
+	}
+}
+
+// TestTheDefaultCodeSaysWhatBeingTheDefaultMeans is the reader's half of D183.
+//
+// The flag decides where a picture carrying no code of its own is counted, and
+// that is not deducible from the word *default* — a reader who has printed a
+// poster wants to know which row their poster's scans are in. The row says so.
+//
+// It also asserts the old sentence is gone from the whole page. That one named
+// the default as *the code every already-printed picture of this link resolves
+// to*, which stopped being a property of one row the moment the flag could move.
+func TestTheDefaultCodeSaysWhatBeingTheDefaultMeans(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+
+		if !strings.Contains(body, "a scan carrying no code of its own is counted against this one") {
+			t.Errorf("%s does not say what the default code is for. The flag decides "+
+				"where an untagged picture's scans land, and a row labelled only "+
+				"\"the default\" leaves a reader to guess (D183)", page)
+		}
+		if strings.Contains(body, "the code every already-printed picture of this link resolves to") {
+			t.Errorf("%s still describes the default as the code every printed picture "+
+				"resolves to. That was true while the default was the row without a "+
+				"slug; the flag moves now, and so does what it describes", page)
+		}
+	}
+}
+
+// TestALinkWithOneCodeSaysWhyItCannotBeRemoved is the other end of the same
+// bullet: *the last remaining code cannot be removed, and that refusal says
+// why.*
+//
+// The control is absent rather than disabled, so without this sentence the page
+// would be back to the shape the owner reported — a row with no way to remove it
+// and nothing saying so. The one-code state is the state nearly every link on an
+// instance is in, so it is also the state most readers meet first.
+func TestALinkWithOneCodeSaysWhyItCannotBeRemoved(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := mainOf(t, renderPage(t, page, map[string]any{
+			"Tab": "qr",
+			"QRCodes": []map[string]any{{
+				"Slug": "d3f4u1t0", "Label": "", "Name": "The original code",
+				"Size": 740, "Default": true, "Selected": true,
+				"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+				"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
+				"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
+			}},
+		}))
+
+		if strings.Contains(body, `name="remove"`) {
+			t.Errorf("%s offers to remove a link's only QR code. A link always has "+
+				"one, and the service refuses — a control whose only outcome is a "+
+				"refusal is a control that should not be drawn", page)
+		}
+		if !strings.Contains(body, "A link always has a QR code, so this one cannot be removed") {
+			t.Errorf("%s draws a single-code list with no remove control and no reason. "+
+				"The absence is exactly what the owner reported as the defect, so "+
+				"the reason is what distinguishes this from it (D183)", page)
+		}
+	}
+}

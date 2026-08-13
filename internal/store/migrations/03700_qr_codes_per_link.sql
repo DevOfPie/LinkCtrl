@@ -31,15 +31,19 @@ CREATE INDEX qr_codes_link_idx ON qr_codes (link_id);
 -- before anything is recorded. Short, because it is printed: the generator emits
 -- eight characters from an unambiguous alphabet.
 --
--- **The empty slug is the link's default code, and that is load-bearing.** Every
--- row that exists when this migration runs gets it, and a default code's payload
--- carries no code parameter at all — which is exactly the payload every code
--- this product has ever drawn already carries. So every QR code already printed
--- goes on attributing to the same code it attributes to today, and the value the
--- analytics store for it stays the bare `qr` that M41 and D76 describe. A
--- backfill of generated slugs would instead have split each link's existing
--- history in two: everything printed before today under one name and everything
--- printed after it under another, for a code nobody changed.
+-- **The empty slug was the link's default code, and that was load-bearing** —
+-- until `04400` moved the identity onto `is_default` (D183), because being the
+-- code with no slug is exactly what made the default unremovable. What this
+-- paragraph was protecting is protected there instead, and by the same
+-- mechanism: a payload with no code parameter records the bare `qr` that M41 and
+-- D76 describe, and the breakdown counts that bucket against whichever code
+-- holds the flag. So every QR code already printed still attributes to the same
+-- code, and no recorded scan was rewritten to give today's default a slug — the
+-- split this paragraph refused to cause is still not caused.
+--
+-- Every row that exists when *this* migration runs gets the empty slug, and it
+-- is still what a link's only code carries: a code with nobody to be told apart
+-- from has no use for a tag, and gains one when a second code appears beside it.
 ALTER TABLE qr_codes ADD COLUMN label text NOT NULL DEFAULT '';
 ALTER TABLE qr_codes ADD COLUMN slug  text NOT NULL DEFAULT '';
 
@@ -49,9 +53,12 @@ ALTER TABLE qr_codes ADD COLUMN slug  text NOT NULL DEFAULT '';
 -- so two links may hold the same one and eight characters buy their full
 -- collision resistance per link instead of across the instance.
 --
--- It is also what keeps the default code single. `('', link_id)` can appear
--- once, so a link cannot acquire a second unnamed code and leave the redirect
--- path with two answers to "which code has no parameter".
+-- It is also what kept the default code single: `('', link_id)` can appear once,
+-- so a link cannot acquire a second unnamed code and leave the redirect path
+-- with two answers to "which code has no parameter". Since `04400` the single
+-- default is `qr_codes_link_default_key`'s to enforce, and this index bounds the
+-- other thing it always bounded — one slug per link, so resolving one on the
+-- redirect path is a decision rather than a guess.
 CREATE UNIQUE INDEX qr_codes_link_slug_key ON qr_codes (link_id, slug);
 
 -- +goose Down

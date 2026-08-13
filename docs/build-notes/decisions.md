@@ -344,6 +344,7 @@ file. Append a row when you append an entry.
 | [M49, the exact-size claim gets an enforcement on the API](#2026-08-13--m49-the-exact-size-claim-gets-an-enforcement-on-the-api) | `PUT /links/{id}/qr` accepted a `size` the symbol had outgrown and served a picture that was not it, falsifying the reopening's first bullet on the door the dashboard's control does not guard. It refuses now, at `qr.MinSizeForStyle` — the floor at the caller's own `scale`, because an API caller sets both fields and `MinSizeFor` binds only when the scale is chosen too. Rejected: re-fitting `scale` server-side, which would silently rewrite a field the caller set. The logo re-fit's escape from *the drawn size is held* stays, and is now written down outside the code comment |
 | [M49, what the exact size falsified where nothing was looking](#2026-08-13--m49-what-the-exact-size-falsified-where-nothing-was-looking) | Four survivals of the snap, in files the change reached but did not rewrite: two comments on `QRSizeInput`/`SetQRSize` still describing a snap and a size derived on read, D181's corpus description in `composite.go` left at three stored sizes and 816 pictures, two integration assertions still allowing half a span, and two comments citing the deleted `want`/`got` pair as live. The assertions are the substance — sabotage measured both passing a 20px drift they are meant to catch. `composite.go` keeps its 816-picture figures rather than restating them, because the two styles that grew the corpus test the quiet zone and not the cap |
 | [M50.7's plan review, and the three records it caught before anything was built](#2026-08-13--m507s-plan-review-and-the-three-records-it-caught-before-anything-was-built) | Thirteen findings from planning.md §7's independent review. Three count sentences corrected, and W43 found breached by the very commit that added M50.7 — M57.9's *what the re-run owes* list never named either QR-tab report or the three decisions that came with them, the **third** time that paragraph has been caught short by a plan review. The sharpest finding is held open deliberately: M50.7 claims nothing it touches is defective and then deletes M49's shipped preview claim |
+| [M50 rebuilt: the default is a flag, and the untagged bucket is what makes that free](#2026-08-13--m50-rebuilt-the-default-is-a-flag-and-the-untagged-bucket-is-what-makes-that-free) | The build of D183, and the two things it left open. Promotion goes to the **oldest** code left, the only candidate that is a property of the data rather than of a surface. Today's default gains a slug **on its row**, and the redirect path is untouched: an untagged scan still records the bare `qr` and the breakdown folds that bucket onto the flag-holder, so no recorded scan is rewritten and no link's history splits. A code gains a slug when it **stops being alone**, because handing one out on a style write would falsify M41's *restyling never changes what a code says*. The statement that takes the empty slug off a row writes the flag in the same clause — for a row the previous release left behind the two are spellings of one fact — and the removal refusal counts the codes a link **has** rather than the rows it stores, because those differ by one on exactly that link |
 
 ---
 
@@ -28384,3 +28385,201 @@ The review is worth its cost twice over on finding two alone: the rule it caught
 is one this repository wrote for itself after being caught by it, and it was
 breached again inside the commit that quoted the rule's own numbering
 convention.
+
+## 2026-08-13 — M50 rebuilt: the default is a flag, and the untagged bucket is what makes that free
+
+The build of [D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183).
+D183 settled *what* — any code can hold the flag, an untagged scan resolves
+through it, today's default gains a generated slug, removing the holder promotes
+another — and named two things it left to the build in as many words. This is
+those two, and a third the build found underneath them.
+
+**Which code is promoted: the oldest one left.** Three candidates were
+defensible and only one is a property of the *data*. "First in list" is the same
+rule wearing a presentation's name — `ListQRCodes` orders by `created_at, id`
+once the flag-holder is out of it, so the two answers are the same row, and
+naming the presentation would tie a data decision to a template. "The one the
+reader was looking at" cannot be expressed by a caller that is not a browser, so
+`DELETE /links/{id}/qr/codes/{slug}` and the dashboard's Remove button would
+promote different codes from the same act — and a delete whose side effect
+depends on which page you were on is not reproducible from the API. Oldest is
+also the most conservative reading of what the flag is for: the longest-lived
+code is the one most likely to have pictures of it in the world, and the flag is
+what those pictures resolve through. The automatic choice only has to be
+predictable, because the reader is told which code was promoted and can set the
+default explicitly afterwards.
+
+**How a pre-migration default row gains a slug without changing what any
+already-printed picture resolves to: it gains it on the row, and the redirect
+path is not touched at all.** An untagged scan goes on recording the bare `qr` it
+has recorded since M41 — `clickSource`, `Snapshot.CodeSlug` and
+`ClickSourceCode` are byte-identical after this reopening — and the analytics
+reader folds that bucket onto whichever code holds the flag. D183's sentence is
+that an untagged picture *"attributes to whichever code holds the flag"*, and
+that fold is what it is.
+
+The alternative was resolving the flag on the redirect path and storing
+`qr:<slug>` for an untagged scan, which is coherent and was rejected. It splits
+every link's existing history at the migration — everything printed before under
+one name and everything after under another, for a code nobody touched — which
+is the exact split [D130](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written)
+spent a milestone avoiding, and repairing it costs either a rewrite of
+`link_dimension_daily` or a second permanent column remembering which code used
+to be nameless. Neither buys a reader anything: the two payloads are the same
+code, and the breakdown says so with one row either way.
+
+What the fold costs is that moving the flag moves the untagged history with it.
+That is not a side effect to hide — it is what the flag *means*, and it is why
+both the promotion notice and the Make-default notice say where untagged scans
+land rather than reporting that a setting was saved.
+
+### The third thing, which the build found: a code gains a slug when it stops being alone
+
+D183 says *every code carries a `qrc` tag, the default included*. Handing one out
+the first time somebody styles a code would falsify M41's claim that **restyling
+a code never changes what it says** — a preference about two colours silently
+rewriting a printed payload is the shape this reopening exists to remove, not one
+to add. `TestAStyleChangesTheDrawingAndNeverTheContent` caught it, against a
+first draft that materialised the row inside the style write.
+
+So the slug arrives at the moment a second code appears beside the first, which
+happens in exactly two places: `04400`, for the links already carrying more than
+one, and `CreateQRCode`, which names the default before inserting the code that
+makes it one of several. A link's only code keeps the empty slug. It has nobody
+to be told apart from, it is the default by arithmetic, it cannot be removed
+while it is the only one, and its payload is the one every already-printed
+picture carries — nothing about it is decided by a slug it does not have.
+
+The empty slug therefore survives, and it means the opposite of what it meant.
+It was the default code's *identity*, load-bearing in three places and
+unremovable because of it. It is now the absence of a name on a code with nobody
+to distinguish it from, and it decides nothing.
+
+**Rejected: a `qr_codes` row for every link**, which would make the tag literally
+universal. It reverses M41's *twenty untouched links carry no rows at all*,
+[D139](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write), the ceiling in
+`demoCoverage()` and the panel's *no size is stored for this code* branch — four
+shipped claims, to tag a code that has nothing to be distinguished from.
+
+### What the reopening changed that nobody asked it to
+
+**`ResetQRStyle` no longer deletes the row.** It could, while a row held nothing
+but the preference being withdrawn; the row now holds the code's identity — the
+flag, and the slug printed in its payload — and dropping those to clear two
+colours and a size would retire a printed identity to undo a styling. It writes
+the product-default style instead, which is what "restore defaults" has always
+meant for a *named* code and now means for every code. The logo stays with it:
+*Remove the logo* is its own control with its own sentence, and a button labelled
+*Restore defaults* that silently discarded an uploaded image would be doing
+something nobody could read off it.
+
+**`GetDefaultQRCode` prefers the flag and falls back to the empty slug**, which
+is the second half of what makes the migration safe. A row can still arrive
+carrying 03700's spelling and not 04400's: written by the previous release during
+a rolling deploy, when `is_default` is a column it does not know about, or
+written by hand — `TestAStyleStoredBeforeM49DrawsExactlyWhatItAlwaysDrew` inserts
+exactly such a row and was the test that found it. Reading the flag alone reports
+such a link as having no default at all, and the next style write then inserts a
+second unnamed row against `qr_codes_link_slug_key`. The fallback costs one
+`ORDER BY` and makes both spellings resolve to one row.
+
+**No `CHECK (slug <> '')` and no `DROP DEFAULT`**, for the same rolling-deploy
+reason and for the one above: the previous release writes an empty slug on
+purpose, and a link's only code still carries one by design. The invariant 04400
+does enforce is the one that has no old spelling — `qr_codes_link_default_key`,
+partial and unique on `link_id WHERE is_default`, which an instance running the
+previous release cannot collide with because it writes `false` by column default.
+
+### The redirect path is not touched at all, and that is a fact rather than a claim
+
+`git diff internal/httpx/redirect.go internal/redirect/` is **empty**, and
+`git diff internal/store/query/redirect.sql` is comments. The resolve query the
+hot path runs is byte-identical to the one that shipped, `AND q.slug <> ''`
+included.
+
+A first draft dropped that predicate, reasoning that the default code now has a
+slug and must ride home. The first half is true and the predicate was never what
+kept it out: the default's slug is not empty once it has one, so it is
+aggregated either way. What dropping the predicate actually added was the *lone*
+default's empty string — serialized out of Postgres on every cold resolve, for
+the majority of links on any instance, to be discarded by `attachCodes`, which
+refuses everything `ValidQRCodeSlug` refuses and refuses the empty string.
+
+It also moved the premise under a shipped comment. `Snapshot.Codes` closes with
+*"a link with no named codes — the default, and every link that existed before
+this milestone — carries exactly the payload it carried before"*, and that
+sentence is the stated reason `CacheKeyVersion` did not move. Leaving a
+justification resting on something that had quietly stopped being true is worse
+than the byte it saves, so the predicate stays and
+`TestALoneDefaultCodeStaysOutOfTheRedirectSnapshot` is what keeps it there.
+
+The inherited rule is *touching the redirect path re-runs the k6 measurement*.
+Its trigger is not met by a comment, and the measurement's subject — the cached
+p99, over code and SQL that have not changed by a byte — is unchanged. Reported
+to the orchestrator rather than argued away by the worker.
+
+### The rolling-deploy row: the empty slug and the flag are two spellings, so one statement writes both
+
+`GetDefaultQRCode` falls back to `slug = ''` for a row the flag never reached,
+and the fallback is what makes the deploy window safe. It also creates a shape
+nothing else in the schema does: a row that is the link's default by the *old*
+spelling and not by the new one.
+
+`NameQRCode` is the statement that takes the old spelling away — it gives the
+default a slug at the moment a second code appears — and it therefore has to
+write the new one. `UPDATE … SET slug = $3, is_default = true`. Without the
+second clause the link matches neither half of `(is_default OR slug = '')` and
+has **no default at all**, silently: `ListQRCodes` and `qrCodeSplit` synthesise a
+code the link does not have, the untagged `qr` bucket stops folding onto the code
+every printed picture resolves through and surfaces as its own unlabelled row,
+and the next style write inserts a third row because it believes it is writing
+the default's first.
+
+Nothing raises an error at any point in that, which is why
+`TestARowTheFlagNeverReachedIsStillTheLinksDefault` builds the row explicitly —
+`slug = ''`, `is_default = false` — and asserts all four consequences rather than
+the clause.
+
+### Removing a code counts codes, not rows
+
+A link's default exists whether or not `qr_codes` holds it (D139), so the number
+of codes a link **has** and the number of rows it **stores** differ by one
+whenever no row carries the default. That is not a hypothetical shape: the
+previous release wrote it every time somebody added a code, `docs/slo.md`'s k6
+fixture writes it, and 04400 repairs only the links that existed when it ran.
+
+The refusal *this is the link's only QR code* was counting rows. On such a link
+the list shows two codes, both carrying a Remove control, and both removals were
+refused — the named one with a sentence saying it was the only code while the
+reader was looking at two. So the refusal counts what the list counts, which is
+the arithmetic `CreateQRCode`'s cap check already used.
+
+The other end of the same disagreement is removing the default when no row holds
+it. There is nothing to delete, and what removing it *means* is precisely what
+the flag means: the code untagged pictures resolve through stops being that one
+and becomes the oldest code that is written down. So it promotes, through the
+same operation the delete path promotes with, rather than refusing on a row's
+absence.
+
+### A style write on the default retries once, and only once
+
+`SetQRStyleBySlug` with the empty slug reads the default, finds no row, and
+inserts one carrying the flag. A concurrent `CreateQRCode` can write and name
+that row in between, at which point the insert no longer collides on
+`(link_id, '')` — it collides on `qr_codes_link_default_key`, because two rows
+claim the flag, and a raw 23505 leaves the API answering 500 for a race about
+which code is the default.
+
+`pgerr.IsUniqueViolation` is where this repository turns that into an answer, and
+the answer here is to look again: the second attempt finds the row the winner
+wrote, keys the upsert on its slug, and lands the style on the default code — the
+same outcome a request arriving a moment later would get. Once, because a second
+violation is not a race this can reason about. It is the idiom `applyTags` uses
+for a concurrent tag create, for the same reason: re-read the winner rather than
+failing the whole write over a race nobody can see.
+
+Unasserted, and deliberately so. Producing the window needs a commit between one
+statement and the next inside a single service call, which this repository has no
+hook for; the state the retry converges on is the ordinary multi-code case and is
+covered. `CreateQRCode` handles the mirror-image collision on `NameQRCode` the
+same way and for the same reason.

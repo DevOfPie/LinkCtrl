@@ -742,6 +742,30 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// somebody removed must stop answering.
 	c.do("GET", p+"/links/"+linkID+"/qr/codes/zzzzzzzz", nil, http.StatusNotFound)
 	c.do("DELETE", p+"/links/"+linkID+"/qr/codes/zzzzzzzz", nil, http.StatusNotFound)
+	// Which code an untagged scan resolves through, moved and moved back (D183).
+	// **Moved back deliberately**: everything below addresses the link through
+	// both the `/qr` shorthand and this code's own slug, and those are two names
+	// for one code while the flag sits on it — `svgCodeEndpoint` asserts the two
+	// pictures differ, which is a claim about slugs and not about roles.
+	var defaultCodeSlug struct {
+		QR struct {
+			Slug string `json:"slug"`
+		} `json:"qr"`
+	}
+	if err := json.Unmarshal(c.do("GET", p+"/links/"+linkID+"/qr", nil, http.StatusOK),
+		&defaultCodeSlug); err != nil {
+		c.t.Fatalf("decode the default qr code: %v", err)
+	}
+	if defaultCodeSlug.QR.Slug == "" {
+		c.t.Fatal("the default code has no slug on a link carrying two codes; a code " +
+			"gains one when it stops being alone (D183), and without one it cannot " +
+			"be addressed, removed or told apart")
+	}
+	c.do("PUT", p+"/links/"+linkID+"/qr/codes/"+slug+"/default", nil, http.StatusOK)
+	c.do("PUT", p+"/links/"+uuid.NewString()+"/qr/codes/"+slug+"/default", nil,
+		http.StatusNotFound)
+	c.do("PUT", p+"/links/"+linkID+"/qr/codes/"+defaultCodeSlug.QR.Slug+"/default", nil,
+		http.StatusOK)
 	c.svgCodeEndpoint(linkID, slug)
 	c.pngCodeEndpoint(linkID, slug)
 
@@ -837,15 +861,16 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	// --- and the same capability at the shorthand (M50.5, D136 overruled) ---
 	//
 	// The owner ruled on 2026-08-07 that the link's *default* code carries a
-	// logo too, addressed the way `qr.svg` and `qr.png` address it: without a
-	// slug, because having none is what makes it the default code. Two routes,
-	// one capability — which is the same relationship `GET …/qr.png` and
-	// `GET …/qr/codes/{slug}/image.png` already have.
+	// logo too, addressed the way `qr.svg` and `qr.png` address it: without
+	// naming a code. Two routes, one capability — which is the same relationship
+	// `GET …/qr.png` and `GET …/qr/codes/{slug}/image.png` already have.
 	//
-	// Replayed here rather than beside the named code because the state matters:
-	// `DELETE …/qr` ran above and removed this link's default-code row, so this
-	// is the upload against a code that has no row at all — the case that was
-	// nearly every link and could not carry a logo before the ruling.
+	// **The shorthand names a role rather than a slug** (D183), and that is what
+	// this block holds. `POST /qr/codes` ran above, so this link carries two
+	// codes and its default has a slug of its own; the upload has to land on
+	// *that row* rather than inserting a second one against the empty slug the
+	// request carried. A client cannot see the difference except through what
+	// comes back, which is why the slug is asserted rather than the row count.
 	shorthandLogo := p + "/links/" + linkID + "/qr/logo"
 	var defaultCode struct {
 		QR struct {
@@ -859,12 +884,14 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		http.StatusOK, true), &defaultCode); err != nil {
 		t.Fatalf("decode default-code logo upload: %v", err)
 	}
-	// Keyed `qr` and not `code`, like every other `/links/{id}/qr` operation,
-	// and answering for the code whose slug is empty. Both are what the document
-	// promises, and a client reading either from the wrong key gets nothing.
-	if defaultCode.QR.Slug != "" {
-		t.Errorf("the shorthand answered for the code %q; it addresses the default "+
-			"code, whose slug is the empty string", defaultCode.QR.Slug)
+	// Keyed `qr` and not `code`, like every other `/links/{id}/qr` operation, and
+	// answering for the code that holds the default flag — which on this link has
+	// a slug, and is the one the collection addresses by it.
+	if defaultCode.QR.Slug != defaultCodeSlug.QR.Slug {
+		t.Errorf("the shorthand answered for the code %q; the link's default is %q. "+
+			"An empty answer here means the upload inserted a row against the empty "+
+			"slug the request carried instead of landing on the default's own row",
+			defaultCode.QR.Slug, defaultCodeSlug.QR.Slug)
 	}
 	if !defaultCode.QR.HasLogo || !defaultCode.QR.Stored {
 		t.Errorf("the default code came back has_logo=%v stored=%v after an upload; "+

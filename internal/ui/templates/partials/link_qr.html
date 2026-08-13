@@ -109,11 +109,15 @@
        same route with an argument, which keeps one pattern rather than
        inventing a second one for a list inside a section.
 
-       The default code is the one every already-printed picture of this link
-       resolves to. It carries no code parameter in its payload, which is why it
-       cannot be removed: deleting it would leave those pictures resolving to
-       nothing. Its row therefore has no remove control at all rather than one
-       that refuses. */ -}}
+       **The default is the code an untagged scan resolves through, and it is a
+       property rather than an absence** (D183). It used to be the row with no
+       slug, and that identity was what made it unremovable — which the owner
+       rejected: *"As long as there are multiple QR codes any of them should be
+       able to be removed."* So every row carries the same two controls: remove,
+       and make this the default. What is refused instead is removing a link's
+       *last* code, and the row says why rather than the control simply being
+       absent — a link always has a code, and every picture of it already
+       printed resolves through whichever one holds the flag. */ -}}
 {{if .QRCodes}}
 <div class="mb-6">
   <ul class="divide-y divide-line rounded-md border border-line">
@@ -122,7 +126,7 @@
       <div class="min-w-0 grow">
         <a href="{{.Panel}}" class="text-sm font-medium text-ink hover:text-accent">{{.Name}}</a>
         <p class="text-xs text-subtle">
-          {{.Size}}px{{if .Default}} &middot; the code every already-printed picture of this link resolves to{{else}} &middot; <code>{{.Slug}}</code>{{end}}{{if .HasLogo}} &middot; has a logo{{end}}{{if .Counted}} &middot; {{.Clicks}} scan{{if ne .Clicks 1}}s{{end}} in this window{{end}}
+          {{.Size}}px{{if .Slug}} &middot; <code>{{.Slug}}</code>{{end}}{{if .Default}} &middot; the default &mdash; a scan carrying no code of its own is counted against this one{{end}}{{if .HasLogo}} &middot; has a logo{{end}}{{if .Counted}} &middot; {{.Clicks}} scan{{if ne .Clicks 1}}s{{end}} in this window{{end}}
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -130,18 +134,39 @@
            class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-sunken">PNG</a>
         <a href="{{.Download}}" download="qr-{{$.Link.Alias}}{{if .Slug}}-{{.Slug}}{{end}}.svg"
            class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-sunken">SVG</a>
-        {{if and (not .Default) ($.Identity.Can "links.update")}}
-        <form method="post" action="/links/{{$.Link.ID}}/qr">
+        {{if $.Identity.Can "links.update"}}
+        {{/* Two buttons in one form, because they act on the same code and a
+             second form would be a second copy of the two hidden fields that
+             say which. `code` is this row's slug, never the selection the
+             style form below is editing — the control that acted on the
+             selection instead of on itself is the other half of F222. */}}
+        <form method="post" action="/links/{{$.Link.ID}}/qr" class="flex items-center gap-2">
           <input type="hidden" name="next" value="{{$.QRReturn}}">
           <input type="hidden" name="code" value="{{.Slug}}">
+          {{if not .Default}}
+          <button type="submit" name="make_default" value="1"
+                  class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-sunken">Make default</button>
+          {{end}}
+          {{/* Present on every row since D183, the default included, and absent
+               on the only row a link can have — a link always has a code, so
+               the last one is refused. Absent rather than disabled: the
+               sentence below the list is where the reason goes, because a
+               disabled control with no explanation reads as a bug. */}}
+          {{if gt (len $.QRCodes) 1}}
           <button type="submit" name="remove" value="1"
                   class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-danger hover:bg-sunken">Remove</button>
+          {{end}}
         </form>
         {{end}}
       </div>
     </li>
     {{end}}
   </ul>
+  {{if eq (len .QRCodes) 1}}
+  <p class="mt-2 text-xs text-subtle">
+    A link always has a QR code, so this one cannot be removed &mdash; every picture of it already printed resolves through it. Add a second code and either becomes removable.
+  </p>
+  {{end}}
 
   {{if $.Identity.Can "links.update"}}
   {{if lt (len .QRCodes) .QRMaxCodes}}
@@ -259,11 +284,14 @@
          against the two paths it builds itself, so this field cannot name a
          third. */}}
     <input type="hidden" name="next" value="{{.QRReturn}}">
-    {{/* Which code this form writes to. Empty is the link's default code, which
-         is what the link page and an unqualified panel show; the list above
-         sets it by linking back to this route with `?code=`. The handler passes
-         it to the service, which refuses a slug the link does not have — the
-         field is a name, never a permission. */}}
+    {{/* Which code this form writes to, and every control on it — Save, Rename,
+         Restore defaults — acts on that one code. Empty asks for the link's
+         default, which is what the link page and an unqualified panel show, and
+         on a link whose single code has no slug it is also that code's name.
+         The list above sets it by linking back to this route with `?code=`. The
+         handler passes it to the service, which resolves the default from the
+         flag and refuses a slug the link does not have — the field is a name,
+         never a permission. */}}
     <input type="hidden" name="code" value="{{.QRSlug}}">
     {{/* Renaming is a control on the form for the code being edited rather than
          a field on every row of the list above: a list where every row is an
@@ -342,9 +370,14 @@
       {{if .QRStored}}
       {{/* "Restore defaults", not "Back to black on white" (F213). The old
            label named the colours because colours were once all this form
-           carried; M49 added a size, so the button that clears the stored row
-           clears more than the two swatches and the label said otherwise. The
-           owner asked for this wording. */}}
+           carried; M49 added a size, so the button clears more than the two
+           swatches and the label said otherwise. The owner asked for this
+           wording.
+
+           It clears the style of **the code named in `code` above** and leaves
+           the row, its name and any logo on it (D183). It used to clear the
+           *default* code's style whichever code you were looking at, and to
+           delete the row — which now carries the code's printed identity. */}}
       <button type="submit" name="reset" value="1" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Restore defaults</button>
       {{end}}
     </div>
@@ -372,12 +405,13 @@
        remove already do.
 
        **This reaches the default code as well as a named one.** `code` is
-       whichever row the panel is open on, and for the default that is the
-       empty string &mdash; its identity is the absence of a slug, and the
-       owner's ruling of 2026-08-07 is what made a logo addressable that way
-       rather than giving it a reserved one. A link nobody has added a second
-       code to is nearly every link, and it was the case that could not carry a
-       logo at all.
+       whichever row the panel is open on, and for a link whose single code has
+       no slug that is the empty string &mdash; which the service reads as *the
+       default code* and resolves from the flag (D183). The owner's ruling of
+       2026-08-07 is what made a logo addressable that way at all rather than by
+       giving the default a reserved slug. A link nobody has added a second code
+       to is nearly every link, and it was the case that could not carry a logo
+       at all.
 
        **What the upload does to the picture is stated here** (M50.6), because
        two things change and neither was asked for directly: the image appears

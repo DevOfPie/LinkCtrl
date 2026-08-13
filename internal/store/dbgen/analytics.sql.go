@@ -193,11 +193,12 @@ type GetLinkQRDimensionsRow struct {
 //
 // **A filter over GetLinkDimensions' rows, not a rollup of its own.** Every
 // value here was written by RollupDimensionDaily's ordinary `referrer` pass,
-// because a scan's code is stored *as* its referrer value — `qr` for the default
-// code and `qr:<slug>` for a named one. So this milestone added no pass over
-// click_events, no column and no dimension name: the thing that made a
-// per-campaign rollup too expensive to include in this phase is the thing this
-// does not do.
+// because a scan's code is stored *as* its referrer value — `qr:<slug>` for a
+// scan that named a code, and the bare `qr` for one that named none, which the
+// reader counts against whichever code is the default (D183). So this milestone
+// added no pass over click_events, no column and no dimension name: the thing
+// that made a per-campaign rollup too expensive to include in this phase is the
+// thing this does not do.
 //
 // It is a separate statement rather than a reuse of GetLinkDimensions because
 // that one is bounded at twenty rows ordered by clicks, and a link whose busiest

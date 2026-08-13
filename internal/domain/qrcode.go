@@ -16,13 +16,20 @@ import (
 // its own and no gate of its own, because each of those already belongs to the
 // link and giving one to a code would put two answers on one redirect.
 //
-// **The default code is the one with the empty slug.** Every code this product
-// drew before M50 carries a payload with no code parameter in it, so the empty
-// slug is what those already-printed codes resolve to — not a migration
-// artefact but the identity of the code they are pictures of. It is why 03700
-// backfills nothing, why M41's bare `qr` value in the referrers breakdown still
-// means what it meant, and why the single-code endpoints can go on answering for
-// a link without changing their meaning.
+// **The default code is the one carrying `qr_codes.is_default`** (04400, D183).
+// It was the row with the empty slug, and that identity is what made it
+// unremovable — which is what the owner rejected. What the empty slug protected
+// is protected by the flag instead: a payload with no code parameter in it,
+// which is what every code drawn before M50 carries, records the bare `qr` and
+// is counted against whichever code holds the flag. So M41's value in the
+// referrers breakdown still means what it meant, no recorded scan was rewritten,
+// and the single-code endpoints go on answering for the default — which is now a
+// role that can be moved rather than a row that cannot.
+//
+// **The empty slug survives, meaning nothing.** A link's only code keeps it: it
+// has nobody to be told apart from, and handing it a tag on the way past would
+// change what a picture says for no reader's benefit. It gains one at the moment
+// a second code appears beside it.
 
 // MaxQRCodesPerLink bounds how many codes one link may carry.
 //

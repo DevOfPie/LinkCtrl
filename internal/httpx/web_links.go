@@ -723,9 +723,11 @@ type qrCodeView struct {
 	// nobody can point at, and the default code starts unnamed for every link
 	// that existed before this milestone.
 	Name string
-	// Default marks the code whose payload carries no code parameter — the one
-	// every already-printed picture of this link resolves to. It cannot be
-	// removed, and the row says so by not offering the control.
+	// Default marks the code an untagged picture is counted against — every copy
+	// printed before codes had identities, and every one printed since off a code
+	// with no tag. Read off the service's answer rather than derived from an
+	// empty slug, which is what it meant until D183: the flag can be set on any
+	// row, and the row that holds it is removable like every other.
 	Default bool
 	// Selected marks the code the style form below the list is editing.
 	Selected bool
@@ -1191,7 +1193,12 @@ func (h *Web) linkQR(
 	// The thumbnail is always the default code. It is the link page's heading
 	// row and it stands for "this link has a QR code", not for whichever one the
 	// panel was last left open on.
-	if slug == "" {
+	//
+	// The test is the code's own flag rather than an empty slug (D183): the
+	// default is reachable by its slug now, and asking whether one was supplied
+	// would fetch and draw the same code twice whenever the reader selected it
+	// from the list.
+	if code.Default {
 		view.QRThumbSVG = qrThumb(code.Content, code.Style, logo)
 	} else if def, derr := h.Links.QRCode(ctx, actor, l.ID); derr == nil {
 		var defLogo []byte
@@ -1238,10 +1245,15 @@ func qrCodeExists(codes []link.QRCode, slug string) bool {
 
 // qrDownloadPath is where one code's picture is fetched from.
 //
-// The default code keeps the paths M41 and M49 shipped; a named code uses the
-// collection M50 added. One function, because the panel builds two of these per
-// row and a second copy of the branch is a second answer to "where is this
-// picture".
+// A code with a slug uses the collection M50 added; the shorthand M41 and M49
+// shipped answers for the code with no slug, which since D183 is only a link
+// whose default has never been written down. One function, because the panel
+// builds two of these per row and a second copy of the branch is a second answer
+// to "where is this picture".
+//
+// **The branch stays even though the flag-holder now has a slug**, because the
+// unstored default still does not: a link nobody has touched has one code, no
+// row and nothing to name it with, and the shorthand is the only address it has.
 func qrDownloadPath(linkID uuid.UUID, slug, ext string) string {
 	if slug == "" {
 		return fmt.Sprintf("%s/links/%s/qr.%s", APIPrefix, linkID, ext)
@@ -1250,12 +1262,18 @@ func qrDownloadPath(linkID uuid.UUID, slug, ext string) string {
 }
 
 // qrCodeViews turns the service's codes into the panel's rows.
+//
+// **`Default` is read off the code rather than derived from its slug** (D183).
+// It was `c.Slug == ""`, which was the identity until this reopening moved it
+// onto a flag; deriving it now would mark the wrong row the moment somebody set
+// a different code as the default, and would mark *no* row on a link whose codes
+// all have slugs — which after 04400 is every link anybody has touched.
 func qrCodeViews(linkID uuid.UUID, codes []link.QRCode, selected string) []qrCodeView {
 	out := make([]qrCodeView, 0, len(codes))
 	for _, c := range codes {
 		name := c.Label
 		if name == "" {
-			if c.Slug == "" {
+			if c.Default {
 				name = "The original code"
 			} else {
 				name = "Unnamed code"
@@ -1267,7 +1285,7 @@ func qrCodeViews(linkID uuid.UUID, codes []link.QRCode, selected string) []qrCod
 		}
 		out = append(out, qrCodeView{
 			Slug: c.Slug, Label: c.Label, Size: c.Size, Name: name, HasLogo: c.HasLogo,
-			Default: c.Slug == "", Selected: c.Slug == selected, Panel: panel,
+			Default: c.Default, Selected: c.Slug == selected, Panel: panel,
 			Download:    qrDownloadPath(linkID, c.Slug, "svg"),
 			DownloadPNG: qrDownloadPath(linkID, c.Slug, "png"),
 		})

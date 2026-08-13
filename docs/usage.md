@@ -313,7 +313,7 @@ who reviews it either way.
 
 ### QR codes
 
-Every link has one. There is nothing to create and no row to make: open a link's
+Every link has one, and always at least one. There is nothing to create and no row to make: open a link's
 page and a small version of the code is drawn beside the link's name, at the top.
 Clicking it opens the **QR** tab, which holds the full code, the style form and
 **Download the PNG** and **Download the SVG** buttons.
@@ -327,6 +327,8 @@ a scan countable. A camera sends no `Referer` header, so without the parameter
 every scan would arrive indistinguishable from somebody typing the URL by hand.
 Scans show up in the link's **Referrers** breakdown as `qr`, beside `direct` —
 counted, deduplicated by visitor and filtered for bots like every other click.
+That row stays one row however many codes the link carries; which code was
+scanned is the per-code breakdown's question, below.
 One thing follows: somebody who types `?src=qr` by hand is counted as a scan.
 
 ### More than one code for a link
@@ -336,15 +338,42 @@ picture, so their scans were the same number. **Add another code** on the QR tab
 give it a name, and it becomes a code of its own — the same destination, its own
 row in the breakdown.
 
-Each code you add prints an identity in its picture, as `&qrc=<something>` beside
+Every code prints an identity in its picture, as `&qrc=<something>` beside
 `?src=qr`. That is what the redirect reads to say which code was scanned. The
 name you type is for you: it never appears in the picture, in a URL, or anywhere
 a visitor can see it.
 
-**Your link's original code is untouched.** It keeps the picture it always had —
-nothing added to the payload — which is exactly why every copy of it already
-printed, mounted or published goes on being counted as the same code it always
-was. There is nothing to reprint.
+**Your original code gets one too, at the moment you add the second.** Until then
+it has nothing to be told apart from, so it carries the picture it always had
+with nothing added to the payload; adding a second code is what gives it a
+`qrc` of its own, and from then on what you download carries it.
+
+**Nothing you have already printed changes what it counts as.** Every copy of the
+original code already printed, mounted or published carries no `qrc` at all, and
+a scan of one is counted against whichever code is the link's **default** — which
+starts as the code it always was. So the copy on last year's poster and the copy
+you download today are the same row in the breakdown, and there is nothing to
+reprint.
+
+### The default code, and removing one
+
+**The default is the code a picture with no `qrc` on it is counted against.** One
+of a link's codes always holds that role, and every picture printed before codes
+had identities relies on it.
+
+Each row in the codes list carries **Make default** and **Remove**. Making a code
+the default moves where those untagged scans land — including the ones already
+recorded, because what they record is *no code* rather than a code that has gone.
+Nothing about any picture changes when you move it.
+
+**Any code can be removed once a link has two**, the default included. Removing
+the default hands the role to the oldest code left and says which one, because
+that is where your old posters start being counted. A link's **last** code cannot
+be removed: a link always has a code, and the pictures already printed of it have
+to resolve somewhere.
+
+**Restore defaults** clears the style of the code you have selected — the colours
+and the size — and leaves the code, its name and any logo on it alone.
 
 A link carries at most **twenty** codes. That is the number that keeps the codes
 list a list and the breakdown a chart.
@@ -356,7 +385,7 @@ can make one of those.
 
 **Removing a code keeps what it recorded and stops it growing.** The rows it
 earned stay in the breakdown, marked as removed. A scan arriving afterwards from
-a picture printed with it is counted as the link's *original* code, because the
+a picture printed with it is counted as the link's **default** code, because the
 identity it prints is no longer one this link recognises — it is not credited
 back to the code that is gone, and it is not stored as an unknown value either.
 So a chart read across the removal shows one line stopping and another taking up
@@ -460,9 +489,10 @@ how a code is drawn, and an API key that holds it may use it. The QR tab on a
 link's page does the same thing from a browser.
 
 Two addresses, one operation — the same relationship `qr.png` and
-`codes/{slug}/image.png` have. The link's **default** code has no slug, because
-having none is what makes it the code every already-printed picture resolves to,
-so it is reached through the shorthand:
+`codes/{slug}/image.png` have. The shorthand answers for the link's **default**
+code, which is a role rather than an address: it is whichever code an untagged
+picture is counted against, and it can be moved. A code's own slug in the
+collection is the address that does not move.
 
 ```sh
 # The link's default code. Upload; the part must be named `logo`, and the
@@ -573,6 +603,11 @@ it would have been without the parameter.
 these visits came from a QR code at all*, which is a different question from
 *which code*; the per-code split is its own section on the link page and its own
 `qr_codes` field in the API's answer.
+
+The bare `qr` is also a *stored* value, and there it means something narrower: a
+scan that named no code. Those are counted against the link's default code in the
+per-code split, which is what lets a picture printed before codes had identities
+and one printed since be the same row.
 
 Whether a QR code is scanned or its URL is typed cannot be distinguished — the
 label travels in the URL, and anybody can type it.
@@ -1090,7 +1125,7 @@ it is better informed rather than compromised.
 
 **`qrc` is the second reserved parameter**, and it says which of a link's QR
 codes was scanned. It is only read beside a recognised `src`, and its value must
-be one this link actually issued: anything else is counted as the link's original
+be one this link actually issued: anything else is counted as the link's default
 code and is never stored, which is what stops a stranger writing rows into your
 analytics by editing a URL. It is not stripped either, for the reason `src` is
 not — it is a label rather than a credential, and it is no more evidence than

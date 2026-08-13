@@ -1362,9 +1362,13 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	// The default code gets a name too. Without one the panel heads its row "The
 	// original code", which is honest and is not what a workspace running two
 	// campaigns would see: they would have named both.
-	if _, err := s.link.SetQRCodeLabel(
-		ctx, s.owner, styled, "", demoQRDefaultLabel,
-	); err != nil {
+	//
+	// The write comes back with the code, because since D183 the default has a
+	// slug of its own — generated when CreateQRCode above wrote its row — and the
+	// scan attribution below needs it to seed a picture printed *after* it had
+	// one, beside the untagged history of every picture printed before.
+	def, err := s.link.SetQRCodeLabel(ctx, s.owner, styled, "", demoQRDefaultLabel)
+	if err != nil {
 		return fmt.Errorf("name the default QR code on /%s: %w", demoQRStyled, err)
 	}
 	// And a logo on that second code (M50.5), which is this product's first
@@ -1389,7 +1393,7 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 		return fmt.Errorf("upload a logo to the second QR code on /%s: %w", demoQRStyled, err)
 	}
 
-	scans, err := s.attributeQRScans(ctx, styled, second.Slug)
+	scans, err := s.attributeQRScans(ctx, styled, second.Slug, def.Slug)
 	if err != nil {
 		return err
 	}
@@ -1462,22 +1466,32 @@ func demoLogoPNG() []byte {
 //
 // Bots are left alone. They are excluded from every rollup anyway, and a crawler
 // did not scan anything.
+//
+// **Three values, and the third is what M50's reopening added.** The default
+// code has a slug of its own now (D183), so a picture of it printed since then
+// records `qr:<default slug>` while every picture printed before it had one
+// records the bare `qr` — two stored values for one code, which the breakdown
+// folds onto that code's single row. Seeding only one of the pair would show a
+// number without showing that it is a sum, and the sum is exactly how today's
+// default code gained a slug without any recorded scan being rewritten.
 func (s *demoSeeder) attributeQRScans(
-	ctx context.Context, linkID uuid.UUID, slug string,
+	ctx context.Context, linkID uuid.UUID, named, def string,
 ) (int64, error) {
 	const q = `
 		UPDATE click_events ce
 		   SET referrer_host = CASE
 		           WHEN ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
 		                BETWEEN 0 AND 12 THEN $2
-		           ELSE $3
+		           WHEN ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
+		                BETWEEN 13 AND 16 THEN $3
+		           ELSE $4
 		       END
 		 WHERE ce.link_id = $1
 		   AND NOT ce.is_bot
 		   AND ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
 		       BETWEEN 0 AND 20`
 	tag, err := s.pool.Exec(ctx, q, linkID,
-		domain.ClickSourceCode(slug), domain.ClickSourceQR)
+		domain.ClickSourceCode(named), domain.ClickSourceCode(def), domain.ClickSourceQR)
 	if err != nil {
 		return 0, fmt.Errorf("attribute qr scans on /%s: %w", demoQRStyled, err)
 	}

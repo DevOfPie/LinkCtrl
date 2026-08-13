@@ -1240,6 +1240,13 @@ travel inside the cached snapshot, so entries written before the rows existed
 carry none and the run measures the unrecognised-value branch while reporting the
 recognised one.
 
+The insert writes no `is_default`, which after `04400` (D183) leaves each of
+these links with a synthesised default beside the code being measured. That is
+deliberate and it is what the measured request needs: `qrc=sloqrcod` names a
+stored code and resolves, which is the branch this column is for. Nothing on the
+redirect path reads the flag — it is consulted when a breakdown is *drawn*, not
+when a scan is recorded — so the arrangement measures what it claims either way.
+
 ```sh
 docker compose exec postgres psql -U linkctrl -d linkctrl -c \
   "INSERT INTO qr_codes (id, link_id, workspace_id, slug, label, style)

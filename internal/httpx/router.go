@@ -311,9 +311,17 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// may now carry several, and the choice m50.md required be made and
 			// recorded was between growing these an identifier and leaving them
 			// as the shorthand. They are the shorthand: the default code is what
-			// every already-printed picture resolves to, so a client calling
+			// every untagged picture resolves through, so a client calling
 			// `GET /links/{id}/qr` today goes on getting the same code tomorrow,
 			// which is exactly what the contract test exists to hold.
+			//
+			// **What they answer for can now move, and the five paths cannot say
+			// so** (D183). The default became a flag, and `PUT
+			// …/qr/codes/{slug}/default` moves it — so a caller that wants the
+			// code rather than the role addresses it by its slug in the
+			// collection, which is the address that does not move. The shorthand
+			// keeps meaning *the role*, which is what it has always meant and
+			// what an untagged picture resolves through.
 			//
 			// The `/qr/codes` collection below is where several are addressed. Its
 			// members are keyed by slug rather than by id because the slug is what
@@ -331,6 +339,7 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}":           api.GetQRCode,
 			"PUT " + APIPrefix + "/links/{id}/qr/codes/{slug}":           api.SetQRCode,
 			"DELETE " + APIPrefix + "/links/{id}/qr/codes/{slug}":        api.DeleteQRCode,
+			"PUT " + APIPrefix + "/links/{id}/qr/codes/{slug}/default":   api.SetDefaultQRCode,
 			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}/image.svg": api.GetQRCodeSVG,
 			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}/image.png": api.GetQRCodePNG,
 			"GET " + APIPrefix + "/folders":                              api.ListFolders,
@@ -437,10 +446,11 @@ func registerAppRoutes(d Deps, app *appMux) {
 		//
 		// **Four routes, two capabilities.** The `/qr/logo` pair is the default
 		// code's, on exactly the shape D133 gave `/qr.svg` and `/qr.png`: the
-		// shorthand is how a code with no slug is addressed, and the default
-		// code's identity *is* the absence of one (D130). The owner overruled
-		// D136 on 2026-08-07 to add it — without it a link nobody had added a
-		// second code to, which is nearly every link, could carry no logo at all.
+		// shorthand answers for whichever code holds the default flag, which was
+		// the code with no slug when this was written (D130, reversed by D183).
+		// The owner overruled D136 on 2026-08-07 to add it — without it a link
+		// nobody had added a second code to, which is nearly every link, could
+		// carry no logo at all.
 		upload := RateLimit(d.Limits.Upload, "upload", d.Metrics, nil)
 		app.Handle("PUT "+APIPrefix+"/links/{id}/qr/logo",
 			upload(RequireAuth(http.HandlerFunc(api.SetQRLogo))))

@@ -154,12 +154,40 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.PostFormValue("remove") != "" {
-		if derr := h.Links.DeleteQRCode(r.Context(), actor, id, slug); derr != nil {
+		promoted, derr := h.Links.DeleteQRCode(r.Context(), actor, id, slug)
+		if derr != nil {
 			h.finishQRAction(w, r, id, next, slug, derr)
 			return
 		}
-		// Back to the default code: the one just removed has no page left.
-		seeOther(w, r, qrReturn(next, id, "removed", "", nil))
+		// Back to the default code: the one just removed has no page left. The
+		// promotion travels as its own marker because the page it lands on is a
+		// fresh request that never saw the delete (D183), and it is *stated*
+		// rather than left to be noticed, since it moves where every untagged
+		// picture of this link lands.
+		//
+		// The slug travels and the label does not. A label is workspace free text
+		// and a sentence assembled out of a query string is a sentence somebody
+		// else can write — the trade `dims` makes, for the same reason — while a
+		// slug is `[a-z0-9]` and is re-checked on the far side against the shape
+		// this product generates.
+		marker, extra := "removed", url.Values(nil)
+		if promoted != nil {
+			marker, extra = "promoted", url.Values{"promoted": {promoted.Slug}}
+		}
+		seeOther(w, r, qrReturn(next, id, marker, "", extra))
+		return
+	}
+	// Making a code the default (D183). Its own button on the row, beside that
+	// row's Remove and carrying the same `code` field: the flag is a property of
+	// *that* code, and a control that acted on whichever code the form beside the
+	// list happened to be editing is the defect this reopening also fixes in
+	// Restore defaults.
+	if r.PostFormValue("make_default") != "" {
+		if _, derr := h.Links.SetDefaultQRCode(r.Context(), actor, id, slug); derr != nil {
+			h.finishQRAction(w, r, id, next, slug, derr)
+			return
+		}
+		seeOther(w, r, qrReturn(next, id, "defaulted", slug, nil))
 		return
 	}
 	if r.PostFormValue("rename") != "" {
@@ -189,12 +217,18 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 
 	// The reset button posts the same form under a different name, so the
 	// service sees an ordinary style rather than a second operation.
+	//
+	// **It carries the form's `code` since D183, and the redirect keeps it.** It
+	// took no slug, so pressing it while a named code was selected cleared the
+	// *default* code's style and dropped the reader onto the default code — a
+	// button on a form about one code writing to another, which is the second
+	// half of F222. It is scoped to the selection now, and returns to it.
 	if r.PostFormValue("reset") != "" {
-		if rerr := h.Links.ResetQRStyle(r.Context(), actor, id); rerr != nil {
+		if rerr := h.Links.ResetQRStyleBySlug(r.Context(), actor, id, slug); rerr != nil {
 			h.finishQRAction(w, r, id, next, slug, rerr)
 			return
 		}
-		seeOther(w, r, qrReturn(next, id, "reset", "", nil))
+		seeOther(w, r, qrReturn(next, id, "reset", slug, nil))
 		return
 	}
 
@@ -264,9 +298,11 @@ func requestedQRSize(r *http.Request) int {
 // returns to, matched against the two paths qrReturn builds itself, and which
 // code is being edited, which the service refuses if the link does not have it.
 //
-// The default code is reachable here exactly as a named one is: its `code` value
-// is the empty string, which is its identity (D130) and what the owner's ruling
-// of 2026-08-07 made addressable for a logo.
+// The default code is reachable here exactly as a named one is. Its `code` value
+// is whatever slug the panel is open on — the empty string only on a link whose
+// single code has none — and the service resolves the default from the flag
+// rather than from that emptiness (D183). The owner's ruling of 2026-08-07 is
+// what made the default addressable for a logo at all.
 //
 // **The form submits itself the moment a file is chosen** (F214c), through an
 // htmx `change` trigger on the form and no script of this product's own. Nothing
@@ -448,14 +484,42 @@ func qrNotice(q url.Values) string {
 		// It says defaults rather than colours because the button does: M49 put
 		// a size on this form and reset clears that too, so the old sentence
 		// named a third of what happened (F213).
-		return "QR code restored to the default style — black on white, at the default size."
+		//
+		// *This* code since D183, because the button is scoped to the selection
+		// now. It used to clear the default code's style whichever one you were
+		// looking at, and the sentence said nothing about which — which was
+		// exactly why the defect went unreported until the owner met it.
+		return "This code restored to the default style — black on white, at the default " +
+			"size. Any logo on it is left alone; removing one is its own control."
 	case "added":
 		return "A second code, with a name and an identity of its own. It points at the " +
 			"same destination — what it changes is that a scan of this one is told apart " +
 			"from a scan of the others."
 	case "removed":
 		return "Code removed. What it already recorded stays in the breakdown; anything " +
-			"printed with it is counted as the link's original code from now on."
+			"printed with it is counted as the link's default code from now on."
+	case "promoted":
+		// The code that was removed held the flag, so something had to take it.
+		// Said in as many words rather than left to be discovered: every picture
+		// of this link that carries no code parameter — which is every picture
+		// printed before codes had identities — now lands on a different row
+		// (D183). The slug is named because it is what is printed; the label is
+		// not, because it arrived in a URL.
+		slug := q.Get("promoted")
+		if !domain.ValidQRCodeSlug(slug) {
+			return "Code removed, and it was the default — so another code is the default " +
+				"now. Scans from pictures that carry no code of their own are counted " +
+				"against whichever code holds that role."
+		}
+		return "Code removed. It was this link's default, so the oldest code left — " +
+			slug + " — is the default now: scans from any picture that carries no code " +
+			"of its own are counted against it from here on, including every picture " +
+			"printed before codes had identities. What the removed code already " +
+			"recorded stays in the breakdown."
+	case "defaulted":
+		return "Default code set. A scan that carries no code of its own — which is what " +
+			"every picture printed before codes had identities carries — is counted " +
+			"against this one from now on. Nothing already printed changed what it says."
 	case "renamed":
 		return "Code renamed. The name is what the dashboard calls it — what the code " +
 			"says is unchanged, so nothing already printed is affected."

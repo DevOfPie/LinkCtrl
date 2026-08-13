@@ -383,6 +383,7 @@ type QrCode struct {
 	Label       string
 	Slug        string
 	Logo        []byte
+	IsDefault   bool
 }
 
 type ReservedAlias struct {

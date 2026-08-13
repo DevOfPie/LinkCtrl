@@ -223,6 +223,25 @@ type Querier interface {
 	// it off, or has not been asked yet, or somebody has already run it today, and
 	// the caller does not need to know which — all three are "do nothing".
 	ClaimUpdateCheck(ctx context.Context, arg ClaimUpdateCheckParams) (int64, error)
+	// Moving the flag an untagged scan resolves through takes two statements and one
+	// transaction (M50's reopening, D183).
+	//
+	// **Two rather than one, and the reason is the index rather than taste.**
+	// `UPDATE … SET is_default = (id = $3)` over the whole link reads as the obvious
+	// single statement, and `qr_codes_link_default_key` is a plain unique index,
+	// which Postgres checks as each row version is written rather than at the end of
+	// the statement. Such an update collides with itself whenever the scan reaches
+	// the incoming default before the outgoing one — the same failure
+	// `UPDATE t SET n = n + 1` has on a unique column. A partial index cannot be
+	// declared DEFERRABLE, because only a constraint can and a constraint cannot be
+	// partial, so the ordering is made explicit instead: clear, then set, inside the
+	// transaction the service opens.
+	//
+	// The window between them holds a link with no default at all. It is invisible:
+	// the transaction has not committed, so no reader outside it sees either write,
+	// and inside it the only reader is the second statement.
+	// The first half. Takes the flag off whichever row holds it, or off nothing.
+	ClearDefaultQRCode(ctx context.Context, arg ClearDefaultQRCodeParams) (int64, error)
 	// The orphan sweep, run hourly by the maintenance pass.
 	//
 	// **What is orphaned under a column, and what is not.** Removing a code, a
@@ -770,12 +789,14 @@ type Querier interface {
 	// working at the same moment, which is what makes this safe: there is never
 	// more than one live link per address.
 	DeleteOutstandingRegistration(ctx context.Context, email string) (int64, error)
-	// Returns the link's default code to the default style. A hard delete, because
-	// the row holds nothing but the preference being withdrawn.
-	DeleteQRCode(ctx context.Context, arg DeleteQRCodeParams) (int64, error)
-	// Removes one named code. Scoped by workspace rather than by link, because the
-	// id is already unique and the service has resolved the link before it gets
-	// here; the workspace column is the tenancy check.
+	// Removes one code. Scoped by workspace rather than by link, because the id is
+	// already unique and the service has resolved the link before it gets here; the
+	// workspace column is the tenancy check.
+	//
+	// **`AND slug <> ''` is gone** (D183). It was what refused to delete the default
+	// code, back when the default *was* the empty slug; the refusal that replaces it
+	// is the service's, and it is about arithmetic rather than identity — a link's
+	// last code cannot be removed, whichever one it is.
 	//
 	// The logo goes with the row, which is the whole of what D134 bought: no second
 	// statement, and no way for the two to come apart.
@@ -1105,6 +1126,26 @@ type Querier interface {
 	// Not scoped by owner, like every other statement addressed by id in this
 	// schema. link.Service has already judged the actor against the row.
 	GetDefaultDomainSettings(ctx context.Context, domainID uuid.UUID) (GetDefaultDomainSettingsRow, error)
+	// The code an untagged scan resolves through (M50's reopening, D183).
+	//
+	// One flagged row at most, which `qr_codes_link_default_key` (04400) is what
+	// makes true: a partial unique index over `link_id WHERE is_default`. No rows
+	// means the link's default code has never been written down — the synthesised
+	// default D139 describes — and the service answers for it at the product style
+	// rather than reporting an absence.
+	//
+	// **The empty slug is a fallback rather than the answer, and it is the second
+	// half of what makes this migration safe.** 03700's identity was `slug = ''`,
+	// and a row can still arrive carrying it and not the flag: written by the
+	// previous release during a rolling deploy, when `is_default` is a column it
+	// does not know about, or written by hand. Reading the flag alone would report
+	// such a link as having no default at all, and the next style write would then
+	// insert a second unnamed row against `qr_codes_link_slug_key`. Preferring the
+	// flag and falling back to the empty slug costs one ORDER BY and makes both
+	// spellings of the same fact resolve to the same row. `LIMIT 1` because the two
+	// can name different rows only on a link that has more than one code, where the
+	// empty slug does not occur at all.
+	GetDefaultQRCode(ctx context.Context, arg GetDefaultQRCodeParams) (GetDefaultQRCodeRow, error)
 	GetDestinationDispute(ctx context.Context, id uuid.UUID) (GetDestinationDisputeRow, error)
 	// One domain's bot policy, by id.
 	//
@@ -1192,11 +1233,12 @@ type Querier interface {
 	//
 	// **A filter over GetLinkDimensions' rows, not a rollup of its own.** Every
 	// value here was written by RollupDimensionDaily's ordinary `referrer` pass,
-	// because a scan's code is stored *as* its referrer value — `qr` for the default
-	// code and `qr:<slug>` for a named one. So this milestone added no pass over
-	// click_events, no column and no dimension name: the thing that made a
-	// per-campaign rollup too expensive to include in this phase is the thing this
-	// does not do.
+	// because a scan's code is stored *as* its referrer value — `qr:<slug>` for a
+	// scan that named a code, and the bare `qr` for one that named none, which the
+	// reader counts against whichever code is the default (D183). So this milestone
+	// added no pass over click_events, no column and no dimension name: the thing
+	// that made a per-campaign rollup too expensive to include in this phase is the
+	// thing this does not do.
 	//
 	// It is a separate statement rather than a reuse of GetLinkDimensions because
 	// that one is bounded at twenty rows ordered by clicks, and a link whose busiest
@@ -1268,8 +1310,9 @@ type Querier interface {
 	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
 	// row the first consumed.
 	GetPendingRegistrationByTokenHash(ctx context.Context, tokenHash []byte) (PendingRegistration, error)
-	// **`q.*` is gone from the three reads below, and that is M50.5 rather than
-	// style.** `qr_codes` now carries a `logo bytea` (03800, D134) bounded at
+	// **`q.*` is gone from the four reads below, and that is M50.5 rather than
+	// style.** *(Three when M50.5 wrote this; `GetDefaultQRCode` is D183's, and it
+	// carries the same explicit list for the same reason.)* `qr_codes` now carries a `logo bytea` (03800, D134) bounded at
 	// qr.MaxLogoStoredBytes — a little over a megabyte a row — and a link may hold
 	// domain.MaxQRCodesPerLink of them. A star projection would fetch every one of
 	// those bytes to draw a list of names, so the reads carry an explicit column
@@ -1280,10 +1323,13 @@ type Querier interface {
 	// The bytes themselves are read by nothing here. Nothing in M50.5 serves a
 	// stored logo back — the two operations are set and clear — and M50.6, which
 	// composites one into a picture, is where a query that reads them belongs.
-	// One code of a link's, by slug. No rows is not an error for the default code
-	// (slug ''): it means the default style, which is what every link's code is
-	// drawn with until somebody changes it. For any other slug no rows means the
-	// code does not exist, and the service reports that.
+	// One code of a link's, by slug. No rows means the code does not exist, and the
+	// service reports that.
+	//
+	// **The default code is not reachable here and that is the point** (D183). It
+	// used to be `slug = ''`; it is now whichever row carries `is_default`, which is
+	// GetDefaultQRCode's job, because a caller that wanted "the default" and passed
+	// the empty string would silently match nothing at all now that no row holds it.
 	GetQRCode(ctx context.Context, arg GetQRCodeParams) (GetQRCodeRow, error)
 	// The bytes, for the one thing they are for (M50.6).
 	//
@@ -1749,10 +1795,14 @@ type Querier interface {
 	// the whole set, and a pager over a list that cannot exceed it would be a
 	// control nobody ever operates.
 	//
-	// `q.slug <> ''` sorts false before true, so the default code leads whatever
-	// order the rest were created in — it is the one every already-printed code
-	// attributes to, and a list that buried it would bury the answer to "which of
-	// these is the one on my existing posters".
+	// `NOT (is_default OR slug = '')` sorts false before true, so the default code
+	// leads whatever order the rest were created in — it is the one every untagged
+	// scan attributes to, and a list that buried it would bury the answer to "which
+	// of these is the one my existing posters land on". The sort key used to be
+	// `q.slug <> ''` alone, and it moved with the identity (D183): the flag can now
+	// be set on any row, so the list re-orders when the reader moves it, which is
+	// the visible half of what setting a default does. The empty slug stays in the
+	// key as GetDefaultQRCode's fallback, and for the same reason.
 	ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]ListQRCodesRow, error)
 	// The management list: every rule on a link, enabled or not, in the order the
 	// redirect path would evaluate them.
@@ -2096,6 +2146,9 @@ type Querier interface {
 	// would park it at the head of the queue forever, which is F83 again with a
 	// different cause.
 	MarkAutomationRulesChecked(ctx context.Context, arg MarkAutomationRulesCheckedParams) error
+	// The second half, and never run on its own: without the clear before it, it is
+	// the collision the comment above describes.
+	MarkDefaultQRCode(ctx context.Context, arg MarkDefaultQRCodeParams) (int64, error)
 	// Caddy asked whether to obtain a certificate for this hostname and was told
 	// yes. Guarded on 'pending' so it is one write per verification rather than one
 	// per handshake: the ask endpoint is public and unauthenticated, and a statement
@@ -2316,6 +2369,40 @@ type Querier interface {
 	// destination here: it means the root. A partial-update idiom would make
 	// "move to the top level" unexpressible.
 	MoveFolder(ctx context.Context, arg MoveFolderParams) (Folder, error)
+	// Gives a slug to the one code that may not have one (M50's reopening, D183).
+	//
+	// A link's only code carries no slug: there is nothing to tell it apart from,
+	// and handing one out while writing a style would change what a picture says.
+	// When a second code appears the first one needs a tag, and this is the
+	// statement that writes it.
+	//
+	// **`AND slug = ''` is what makes it structurally incapable of a rename.** A
+	// slug is printed, so moving one breaks every copy already in the world —
+	// UpdateQRCodeLabel says so above and this is the same rule enforced by the
+	// WHERE clause rather than by the caller. Naming a code that has no name is not
+	// moving anything: nothing printed carries the value being replaced, because
+	// there was no value.
+	//
+	// **`is_default = true` goes with the slug, and it is the one statement in this
+	// file that sets the flag without clearing another.** The row this reaches is
+	// whichever row GetDefaultQRCode answered with, and that read falls back to the
+	// empty slug for a row the flag never reached — one written by the previous
+	// release during a rolling deploy, where `is_default` is a column it does not
+	// know about. Taking the empty slug off such a row without putting the flag on
+	// it would leave the link matching neither half of `(is_default OR slug = '')`:
+	// no default at all, a phantom code synthesised into every list and breakdown,
+	// and the untagged `qr` bucket no longer folding onto the code every already-
+	// printed picture of this link resolves through. The empty slug and the flag are
+	// two spellings of the same fact, so the statement that removes one writes the
+	// other.
+	//
+	// Against `qr_codes_link_default_key` this is safe by the same read: it runs
+	// only on a row carrying the empty slug, and GetDefaultQRCode orders the flag
+	// first, so a link with some *other* row flagged never returns this row to be
+	// named. What the read cannot rule out is the flag moving between it and this
+	// write, which is a unique violation and is the caller's to answer — CreateQRCode
+	// re-reads the winner rather than failing over it.
+	NameQRCode(ctx context.Context, arg NameQRCodeParams) (int64, error)
 	// The next free position above the primary. COALESCE so the first rule on a
 	// link lands at 1 rather than at NULL.
 	NextRuleDestinationPosition(ctx context.Context, linkID uuid.UUID) (int32, error)
@@ -2340,6 +2427,16 @@ type Querier interface {
 	// sequential arm, which is the cost D8 accepts and the reason every other link
 	// keeps the unchanged fast path.
 	NextVariantRotation(ctx context.Context, arg NextVariantRotationParams) (int64, error)
+	// The code that has existed longest, which is what a removed default promotes to
+	// (M50's reopening).
+	//
+	// `created_at, id` is the order ListQRCodes and ResolveAliasForRedirect already
+	// enumerate codes in, so the promoted code is the one at the top of the list the
+	// reader is looking at. Excluding a row by id rather than filtering on
+	// `is_default`, because the caller runs this *after* deleting the flag-holder in
+	// the same transaction and inside it that row is already gone — the exclusion is
+	// what makes the statement correct if it is ever called before one.
+	OldestQRCode(ctx context.Context, arg OldestQRCodeParams) (OldestQRCodeRow, error)
 	// The same lookup without the lock, for rendering the redemption page.
 	//
 	// A GET must not take a row lock: the page is served to anybody holding the
@@ -2581,9 +2678,27 @@ type Querier interface {
 	// is drawn, and putting them in the snapshot would serialize workspace free text
 	// into every cached entry for nothing.
 	//
-	// `q.slug <> ''` leaves the default code out. Its payload carries no parameter
-	// at all, so there is nothing for a request to match it by, and a request
-	// carrying no recognised slug is attributed to it by falling through.
+	// **`q.slug <> ''` stays, and what it excludes has shrunk to one row** (D183).
+	// It used to leave the whole default code out, because the default *was* the row
+	// with no slug. The flag carries that identity now and the row it used to be
+	// gains a slug the moment a second code appears beside it, so a link's default
+	// rides home like every other code and a payload naming it is matched. What is
+	// still left out is a link's *only* code, which keeps the empty slug and the
+	// untagged payload — and it is left out because there is nothing to match it
+	// with: `Snapshot.CodeSlug` returns before it scans when the parameter is empty
+	// or absent, so an empty string in this array could never be compared against
+	// anything. Carrying it would serialize a byte no request can reach into every
+	// cached entry for the majority of links, and falsify what `Snapshot.Codes`
+	// promises about the payload a link with no named codes carries — which is the
+	// premise CacheKeyVersion was not bumped on.
+	//
+	// **`is_default` deliberately does not.** A request carrying no `qrc` still
+	// records the bare `qr` it has always recorded — the value on every row this
+	// product has written since M41 — and which code that belongs to is a question
+	// the breakdown answers when somebody reads it, from the flag as it stands then.
+	// Resolving it here instead would put the answer in `link_dimension_daily`,
+	// where moving the flag afterwards could not reach it, and would rewrite what
+	// every pre-reopening scan is stored as for no gain a reader can see.
 	ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error)
 	// Read once at boot and cached. The default domain is matched on the flag
 	// rather than on a hostname string, so it never has to agree with
@@ -3063,6 +3178,10 @@ type Querier interface {
 	// the same reason and with more at stake: restyling a code must not throw away
 	// the image somebody uploaded to it, and the insert branch leaves the column at
 	// its NULL default because a code that has just come into being has no logo.
+	// `is_default` is not in the DO UPDATE list either, and for the strongest of the
+	// three reasons: which code an untagged scan resolves through is not something a
+	// style write may move. ClearDefaultQRCode and MarkDefaultQRCode are the pair
+	// that moves it, and they are the only pair that does.
 	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (UpsertQRCodeRow, error)
 }
 

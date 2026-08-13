@@ -1775,7 +1775,8 @@ paths:
         The JSON view. `GET /links/{id}/qr.svg` beside it is the picture.
 
         `content` is exactly what the code encodes: the link's short URL with
-        `?src=qr` on it. That parameter is what makes a scan countable — a
+        `?src=qr` on it, and `&qrc=<slug>` once this link carries more than one
+        code — a code gains a printed identity when it stops being the only one. That parameter is what makes a scan countable — a
         camera sends no `Referer`, so without it every scan would arrive
         indistinguishable from somebody typing the URL. It is read by the
         redirect path, attributed through the existing `referrer` breakdown as
@@ -1836,9 +1837,19 @@ paths:
       operationId: deleteLinkQR
       summary: Put the link's code back to the default style
       description: |
-        Not "delete the QR code" — there is no such thing to delete, because
-        every link has one. A link that had no stored style still answers 204:
-        "draw this at the default" was already true.
+        Not "delete the QR code" — the code stays and the *style* goes back to
+        black on white at the default size. A link that had no stored style
+        still answers 204: "draw this at the default" was already true.
+
+        **It is the code's row that survives, and that is what changed.** The
+        row used to hold nothing but the preference being withdrawn, so this
+        deleted it; it now holds the code's identity — the slug printed in its
+        payload, and the flag that says untagged scans resolve through it — and
+        neither of those is a style. Any logo on the code stays too: removing
+        one is its own operation with its own sentence.
+
+        This is the default code's shorthand. Restoring any other code's style
+        is a `PUT /links/{id}/qr/codes/{slug}` carrying an empty `style`.
       responses:
         "204":
           description: Back to the default style
@@ -1935,10 +1946,10 @@ paths:
       summary: Upload the default code's logo
       description: |
         **The link's default code, addressed the way `qr.svg` and `qr.png`
-        address it: without a slug.** The default code's identity is that it has
-        none — its payload carries no code parameter, which is what every
-        picture printed before per-code identity existed carries — so this is
-        the shorthand for it rather than a second kind of logo.
+        address it: without a slug.** The default is the code an untagged scan
+        resolves through, which is a role rather than an address — so this
+        shorthand answers for whichever code holds it, and the code's own
+        address in the collection is the one that does not move.
 
         Everything `PUT /links/{id}/qr/codes/{slug}/logo` says applies here
         unchanged: one `multipart/form-data` part named `logo`, `links.update`,
@@ -1998,14 +2009,20 @@ paths:
         A link may carry several codes — a print run and a shop window against
         the same destination — and this is all of them, the default code first.
 
-        **The default code is the one with an empty `slug`.** Its payload
-        carries no code parameter at all, which is the payload of every code
-        this product drew before per-code identity existed, so it is what every
-        already-printed picture of this link resolves to. It cannot be deleted
-        and it is addressed through `/links/{id}/qr` rather than here.
+        **The default code is the one whose `default` is true**, and it is what
+        an *untagged* scan resolves through — a picture carrying `?src=qr` and
+        no `qrc`, which is the payload of every code this product drew before
+        per-code identity existed. Every code here carries a slug, the default
+        included, and every one of them is addressable in this collection and
+        removable while the link has more than one.
 
-        Every link has one whether or not a row holds it, so this list is never
-        empty for a link that exists.
+        The one exception is a link whose default code has never been written
+        down: it has one code, no row, an empty `slug`, and the shorthand at
+        `/links/{id}/qr` is the only address it has. That code has nothing to be
+        told apart from, which is what a `qrc` tag is for.
+
+        Every link has a default whether or not a row holds it, so this list is
+        never empty for a link that exists.
       responses:
         "200":
           description: The link's codes, and how many one link may hold
@@ -2116,20 +2133,68 @@ paths:
     delete:
       tags: [qr]
       operationId: deleteLinkQRCode
-      summary: Remove a named code
+      summary: Remove a code
       description: |
         **What the code already recorded stays in the breakdown.** A scan
         arriving afterwards from a picture printed with this slug is recorded as
-        the link's default code, because an unrecognised identity is recorded as
-        no code rather than stored — so the removed code's history stops
-        accumulating rather than being reassigned, and the rows it already
-        earned are still reported, marked `removed`.
+        no code at all, because an unrecognised identity is never stored — so
+        the removed code's history stops accumulating rather than being
+        reassigned, and the rows it already earned are still reported, marked
+        `removed`.
 
-        The default code is not reachable here: it has no slug. Putting it back
-        to plain black on white is `DELETE /links/{id}/qr`.
+        **Any code can be removed, the default included, while the link has more
+        than one.** Removing the default promotes the oldest code that is left,
+        and the promotion is not in this response: re-list the codes to see
+        which one now carries `default`. It matters, because an untagged scan is
+        counted against whichever code that is.
+
+        **A link's last code cannot be removed** — a link always has a code, and
+        every picture of it already printed resolves through this one. That is a
+        `422`, not a `404`. Restoring its style is `DELETE /links/{id}/qr` for
+        the default code, or a `PUT` here carrying an empty `style` for any
+        code.
       responses:
         "204":
           description: The code is gone
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/codes/{slug}/default:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    put:
+      tags: [qr]
+      operationId: setLinkDefaultQRCode
+      summary: Make this the code untagged scans resolve through
+      description: |
+        **The default is which code a scan carrying no `qrc` is counted
+        against.** Every picture this product drew before per-code identity
+        existed carries exactly that payload, so this decides where all of them
+        land — and it decides it for the pictures already printed as well as the
+        ones printed next, because nothing about a picture changes here.
+
+        **Its own sub-resource rather than a field on the code.** Setting it
+        takes the flag off another code, so a `PUT` on the code carrying
+        `"default": true` would be a request that rewrites a resource it does
+        not name. There is no `DELETE`: a link always has a default, so the flag
+        moves and is never cleared.
+
+        No body. Setting the flag on the code that already holds it succeeds and
+        changes nothing.
+      responses:
+        "200":
+          description: The code, now the link's default
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2237,10 +2302,10 @@ paths:
       operationId: getLinkQRCodeSVG
       summary: A named code, drawn
       description: |
-        Everything `GET /links/{id}/qr.svg` says, for one named code. The
-        picture differs from the default code's by the slug in its payload,
-        which is what a scanner sends back and what makes this code's scans
-        distinguishable from the rest.
+        Everything `GET /links/{id}/qr.svg` says, for one code addressed by its
+        own slug. Every code's picture carries its slug in its payload, which is
+        what a scanner sends back and what makes one code's scans
+        distinguishable from another's.
 
         The path carries `image.svg` rather than ending in `{slug}.svg` for a
         mechanical reason: a route wildcard matches a whole path segment, so
@@ -4505,8 +4570,10 @@ components:
       in: path
       required: true
       description: >
-        The identity printed in the code's payload. The default code has none
-        and is not addressable here.
+        The identity printed in the code's payload. Every stored code has one,
+        the default included; the only code without one is the default of a link
+        that has never been written down, which is reached through the
+        `/links/{id}/qr` shorthand instead.
       schema:
         type: string
         pattern: "^[a-z0-9]{1,16}$"
@@ -5645,25 +5712,42 @@ components:
     QRCode:
       type: object
       additionalProperties: false
-      required: [link_id, slug, label, content, style, stored, size, has_logo]
+      required: [link_id, slug, default, label, content, style, stored, size, has_logo]
       properties:
         id:
           type: string
           format: uuid
           description: >
             The stored row. Absent for a default code nobody has styled or
-            named, which has no row yet. Reported for completeness; the slug is
-            what addresses a code.
+            named, which has no row yet — and which is therefore also the one
+            code with no `slug`. Reported for completeness; the slug is what
+            addresses a code.
         link_id: { type: string, format: uuid }
         slug:
           type: string
           description: >
             The identity this code prints in its payload, as `&qrc=<slug>`
-            beside `?src=qr`. **Empty for the link's default code**, whose
-            payload carries no code parameter at all — which is what every
-            picture drawn before per-code identity existed carries, and why an
-            already-printed code goes on being counted as the same code it
-            always was. Generated, never chosen, and never rewritten.
+            beside `?src=qr`. Generated, never chosen, and never rewritten.
+
+            **Every stored code has one, the default included.** It used to be
+            empty for the default code, and that emptiness *was* the default's
+            identity — which is what made it unremovable. The identity is
+            `default` below now, and what is left empty is only a link whose
+            default code has never been written down: one code, no row, and a
+            payload with no `qrc` in it, which is what every picture drawn
+            before per-code identity existed carries.
+
+            A picture already printed is unaffected either way. One carrying no
+            `qrc` is counted against whichever code is the default; one carrying
+            a `qrc` is counted against that slug exactly as before.
+        default:
+          type: boolean
+          description: >
+            Whether a scan carrying no `qrc` is counted against this code. True
+            for exactly one of a link's codes, and for the synthesised code of a
+            link whose default has no row — a link always has a default. Moved
+            with `PUT /links/{id}/qr/codes/{slug}/default`; never set by writing
+            a code.
         label:
           type: string
           description: >
@@ -5674,7 +5758,8 @@ components:
           type: string
           description: >
             Exactly what the picture encodes: the link's short URL carrying
-            `?src=qr`, and `&qrc=<slug>` for a named code.
+            `?src=qr`, and `&qrc=<slug>` for every code that has a slug — which
+            is every stored code, the default included.
         style: { $ref: "#/components/schemas/QRStyle" }
         stored:
           type: boolean
@@ -5698,8 +5783,8 @@ components:
             document that returns the bytes** — the two that exist replace one
             and remove one. Every code can carry one, the default included: it
             is addressed at `/links/{id}/qr/logo`, the same shorthand `qr.svg`
-            and `qr.png` use, because the default code's identity is having no
-            slug rather than having a reserved one.
+            and `qr.png` use, because that shorthand answers for whichever code
+            is the default.
 
             **When this is true, both picture endpoints draw the image into the
             middle of the code**: a centred square three tenths of the
@@ -5778,7 +5863,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QRCode"
-          description: The link's codes, default first, then in creation order.
+          description: >
+            The link's codes, default first, then in creation order. The first
+            entry is whichever code carries `default`, so the order moves when
+            the default does.
         max:
           type: integer
           description: >
@@ -6688,9 +6776,14 @@ components:
             whose codes nobody has added to, which is every link on a default
             instance. **A filter over the `referrer` dimension rather than a
             rollup of its own** — a scan's code *is* its referrer value, `qr` for
-            the default code and `qr:<slug>` for a named one — so the `referrer`
-            breakdown above still reports every scan under the single value `qr`,
-            unchanged by how many codes a link carries.
+            a scan carrying no code and `qr:<slug>` for one that names a code —
+            so the `referrer` breakdown above still reports every scan under the
+            single value `qr`, unchanged by how many codes a link carries.
+
+            The bare `qr` is not a code's own value and never was a slug: it is
+            what an untagged picture records, and it is counted against whichever
+            code is the default. That is what let today's default code gain a
+            slug without a single already-recorded scan being rewritten.
           items:
             $ref: "#/components/schemas/QRCodeSplit"
         caveat:
@@ -6705,9 +6798,15 @@ components:
         slug:
           type: string
           description: >
-            Empty for the link's default code — the one whose payload carries no
-            code parameter, and the one every picture printed before per-code
-            identity existed resolves to.
+            The code's own slug. Empty only for the default code of a link that
+            has never been written down.
+
+            **The default code's row includes every untagged scan.** A picture
+            carrying no `qrc` — which is every picture drawn before per-code
+            identity existed — is recorded without a code, and those are counted
+            against whichever code is the default when this breakdown is read.
+            Making a different code the default therefore moves them; that is
+            what the default *is*.
         label:
           type: string
           description: What the workspace calls this code. Empty for one nobody named.
@@ -6717,8 +6816,8 @@ components:
             Scans attributed to a code that no longer exists. Reported rather
             than dropped: a link's history must not change because somebody
             retired a poster. The row stops growing when the code is deleted,
-            because a payload naming a slug the link no longer has is recorded as
-            the default code.
+            because a payload naming a slug the link no longer has is recorded
+            without a code and is therefore counted against the default one.
         clicks: { type: integer }
         unique_visitors: { type: integer }
 

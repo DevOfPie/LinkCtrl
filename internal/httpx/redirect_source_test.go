@@ -86,8 +86,19 @@ func TestTheCodeParameterNamesOnlyThisLinksCodes(t *testing.T) {
 		snap  *redirect.Snapshot
 		want  string
 	}{
+		// **The two halves D183 requires be asserted, side by side.** A picture
+		// printed before any code had an identity carries no `qrc` and records
+		// the bare `qr`, which the breakdown counts against whichever code is
+		// the default — so it lands where it always did. A picture carrying a
+		// `qrc` records that slug exactly as it did before the reopening, and
+		// the default code's own slug is now one of them: it is in the
+		// snapshot's list like any other, because 04400 gave it one and the
+		// lateral's `slug <> ''` never excluded anything but the empty string.
 		{"no code parameter is the default code", "src=qr", codeSnapshot("k7m2qh4b"),
 			domain.ClickSourceQR},
+		{"the default code's own slug, printed since it gained one",
+			"src=qr&qrc=d3f4u1t0", codeSnapshot("d3f4u1t0", "k7m2qh4b"),
+			domain.ClickSourceQR + ":d3f4u1t0"},
 		{"a code this link has", "src=qr&qrc=k7m2qh4b", codeSnapshot("k7m2qh4b"),
 			domain.ClickSourceQR + ":k7m2qh4b"},
 		{"one of several", "src=qr&qrc=b2c3d4e5", codeSnapshot("k7m2qh4b", "b2c3d4e5"),

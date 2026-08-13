@@ -24,6 +24,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/httpx"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
+	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 )
 
 // QR codes end to end (M41).
@@ -265,7 +266,12 @@ func TestAStyleChangesTheDrawingAndNeverTheContent(t *testing.T) {
 		t.Errorf("%d qr_codes rows after styling twice, want 1", n)
 	}
 
-	// And resetting puts it back to a link with no stored preference.
+	// And resetting puts the style back to the default. **The row stays**, which
+	// is D183's change to this operation: it used to hold nothing but the
+	// preference being withdrawn, and it now holds the code's identity — the
+	// flag that says untagged scans resolve through it, and the slug printed in
+	// its payload once the link has a second code. Deleting those to clear two
+	// colours and a size would retire a printed identity to undo a styling.
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodDelete,
 		f.server.URL+"/api/v1/links/"+id.String()+"/qr", nil)
 	del, err := f.client.Do(req)
@@ -276,8 +282,13 @@ func TestAStyleChangesTheDrawingAndNeverTheContent(t *testing.T) {
 	if del.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE qr = %d", del.StatusCode)
 	}
-	if n := f.qrRowCount(id); n != 0 {
-		t.Errorf("%d qr_codes rows after a reset, want 0", n)
+	if n := f.qrRowCount(id); n != 1 {
+		t.Errorf("%d qr_codes rows after a reset, want the code's own 1", n)
+	}
+	if style := f.qrCode(id).Style; style.Foreground != qr.DefaultForeground ||
+		style.Background != qr.DefaultBackground {
+		t.Errorf("the code reads back at %+v after a reset; the row survives the "+
+			"reset now, so the style being cleared is what has to be asserted", style)
 	}
 }
 
@@ -500,10 +511,15 @@ func TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore(t *testing.T) {
 		t.Errorf("a 9px code = %d, want 422", status)
 	}
 
-	// The reset button is a value of the same form rather than a second one.
+	// The reset button is a value of the same form rather than a second one. It
+	// clears the style and leaves the row, which is what carries the code's
+	// identity since D183.
 	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{"reset": {"1"}})
-	if n := f.qrRowCount(id); n != 0 {
-		t.Errorf("%d rows after the reset button, want 0", n)
+	if n := f.qrRowCount(id); n != 1 {
+		t.Errorf("%d rows after the reset button, want the code's own 1", n)
+	}
+	if style := f.qrCode(id).Style; style.Foreground != qr.DefaultForeground {
+		t.Errorf("the reset button left the code at %+v", style)
 	}
 }
 
@@ -842,7 +858,17 @@ func TestTwoCodesOnOneLinkAreCountedApart(t *testing.T) {
 		counts[deref(host)] = n
 	}
 	rows.Close()
-	if got := counts[`"`+domain.ClickSourceQR+`"`]; got != 2 {
+	// **The default code's own slug, because it has one now** (D183). Creating
+	// the second code is what gave it one — that is the moment it stopped being
+	// alone — so its picture carries a tag and its scans record under it. The
+	// untagged payload every picture printed before that moment carries is
+	// asserted separately, by TestAPrintedPictureWithNoCodeStillLandsOnTheDefault.
+	def := f.qrCode(id)
+	if def.Slug == "" {
+		t.Fatal("the default code has no slug on a link that carries two codes; " +
+			"a code gains one when it stops being alone (D183)")
+	}
+	if got := counts[`"`+domain.ClickSourceCode(def.Slug)+`"`]; got != 2 {
 		t.Errorf("the default code recorded %d scans, want 2 (all of them: %v)", got, counts)
 	}
 	if got := counts[`"`+domain.ClickSourceCode(named.Slug)+`"`]; got != 1 {
@@ -865,7 +891,7 @@ func TestTwoCodesOnOneLinkAreCountedApart(t *testing.T) {
 			t.Errorf("the named code came back labelled %q, want %q", c.Label, "Autumn poster")
 		}
 	}
-	if byLabel[""] != 2 || byLabel[named.Slug] != 1 {
+	if byLabel[def.Slug] != 2 || byLabel[named.Slug] != 1 {
 		t.Errorf("the per-code breakdown reads %v; want 2 for the default code and 1 for %q",
 			byLabel, named.Slug)
 	}
@@ -988,19 +1014,139 @@ func TestADeletedCodeStopsAccumulatingRatherThanBeingReassigned(t *testing.T) {
 // else. If the default code's payload gained an identifier, every one of those
 // pictures would start recording as *no code* while new prints recorded as the
 // default — one code's history split in two, for a code nobody touched.
-func TestTheDefaultCodesPayloadIsUnchanged(t *testing.T) {
+func TestTheDefaultCodesPayloadIsUnchangedUntilItStopsBeingAlone(t *testing.T) {
 	f := newRules(t)
 	f.claim()
 	id := f.createLink("unchanged", "https://example.com/x")
-	f.createQRCode(t, id, "A second code, which must not disturb the first")
 
+	// A link's only code, styled. **Restyling never changes what a code says**,
+	// which is M41's claim and the reason a slug is not handed out here: a
+	// preference about colours that silently rewrote a printed payload would be
+	// the shape D183 exists to remove rather than one to add.
+	styled := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		`{"style":{"foreground":"#123a6b","background":"#f5f7fa"}}`)
+	if styled.StatusCode != http.StatusOK {
+		t.Fatalf("styling the only code = %d", styled.StatusCode)
+	}
+	_ = styled.Body.Close()
 	content := f.codeContent(t, id, "")
 	if strings.Contains(content, domain.ClickCodeParam+"=") {
-		t.Fatalf("the default code now encodes %q; every already-printed picture of this "+
-			"link carries the payload without it", content)
+		t.Fatalf("a link's only QR code encodes %q; it has nothing to be told apart "+
+			"from, and every picture of it already printed carries the payload "+
+			"without a tag", content)
 	}
 	if !strings.HasSuffix(content, domain.ClickSourceParam+"="+domain.ClickSourceQR) {
 		t.Fatalf("the default code encodes %q, which is not what M41 shipped", content)
+	}
+
+	// And the moment it stops being alone it gains one, because that is when a
+	// tag starts telling something apart (D183). This is the one moment the
+	// picture changes, and it is what *"every code should have a qrc tag on its
+	// link"* asked for.
+	f.createQRCode(t, id, "A second code")
+	tagged := f.codeContent(t, id, "")
+	if !strings.Contains(tagged, domain.ClickCodeParam+"=") {
+		t.Fatalf("the default code still encodes %q on a link that now carries two "+
+			"codes; without a tag it cannot be told apart from the one beside it, "+
+			"and it is the code the owner could not remove", tagged)
+	}
+	if def := f.qrCode(id); !strings.HasSuffix(tagged, domain.ClickCodeParam+"="+def.Slug) {
+		t.Fatalf("the default code encodes %q, which does not end in its own slug %q",
+			tagged, def.Slug)
+	}
+}
+
+// TestAPrintedPictureWithNoCodeStillLandsOnTheDefault is the assertion D183
+// names as the one that matters: *a pre-migration picture still attributes where
+// it always did*.
+//
+// **Two payloads for one code, and the whole of the reopening's safety is that
+// they meet.** Every picture this product drew before per-code identity existed
+// carries `?src=qr` and nothing else; the same code's picture, downloaded after
+// it gained a slug, carries the tag. The first records the bare `qr` it has
+// recorded since M41 — nothing on the redirect path changed and nothing already
+// recorded was rewritten — and the breakdown counts that bucket against
+// whichever code holds the flag. So both land on one row.
+//
+// The alternative was resolving the flag on the redirect path and storing
+// `qr:<slug>` for an untagged scan, which splits every link's existing history
+// at the migration: everything printed before under one name and everything
+// after under another, for a code nobody touched. That is the split D130 spent a
+// milestone avoiding, and it is not reopened here.
+func TestAPrintedPictureWithNoCodeStillLandsOnTheDefault(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("printed", "https://example.com/x")
+
+	// The picture as it was printed, before this link had any code identities:
+	// the short URL and the source parameter, and nothing else.
+	printed := f.codeContent(t, id, "")
+	if strings.Contains(printed, domain.ClickCodeParam+"=") {
+		t.Fatalf("the fixture is not a pre-identity picture: %q", printed)
+	}
+
+	// Now the link grows a second code, which is what gives the first one a slug
+	// and a tagged picture of its own.
+	f.createQRCode(t, id, "Autumn poster")
+	def := f.qrCode(id)
+	if def.Slug == "" {
+		t.Fatal("the default code gained no slug when a second code appeared")
+	}
+
+	// One scan off the printed picture, one off the picture served today.
+	f.scan(t, printed)
+	f.scan(t, def.Content)
+	waitForClicks(t, f.pool, id, 2)
+
+	// They are stored under two values, and that is expected: the redirect path
+	// records what the payload says, unchanged by this reopening.
+	counts := map[string]int{}
+	rows, err := f.pool.Query(t.Context(),
+		`SELECT referrer_host, count(*) FROM click_events WHERE link_id = $1 GROUP BY 1`, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var host *string
+		var n int
+		if err := rows.Scan(&host, &n); err != nil {
+			t.Fatal(err)
+		}
+		counts[deref(host)] = n
+	}
+	rows.Close()
+	if counts[`"`+domain.ClickSourceQR+`"`] != 1 {
+		t.Errorf("the printed picture's scan reads %v; it carries no code parameter, "+
+			"so it records the bare %q exactly as it did before this reopening — "+
+			"nothing on the redirect path changed", counts, domain.ClickSourceQR)
+	}
+	if counts[`"`+domain.ClickSourceCode(def.Slug)+`"`] != 1 {
+		t.Errorf("the tagged picture's scan reads %v, want one under %q",
+			counts, domain.ClickSourceCode(def.Slug))
+	}
+
+	// And they meet in the breakdown, on the default code's one row.
+	if err := analytics.NewRoller(f.pool, nil).
+		RunRecentDimensions(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	stats := f.linkStats(t, id)
+	var onDefault int64
+	for _, c := range stats.QRCodes {
+		if c.Slug == def.Slug {
+			onDefault = c.Clicks
+		}
+		if c.Slug == "" {
+			t.Errorf("the breakdown holds a row with no slug and %d clicks; the "+
+				"untagged bucket belongs to the code that is the default, not to a "+
+				"row of its own", c.Clicks)
+		}
+	}
+	if onDefault != 2 {
+		t.Errorf("the default code's row reads %d, want both scans: the picture "+
+			"printed before it had a slug and the one printed after are the same "+
+			"code, and a reader who split them in two would see a poster's history "+
+			"halve on the day the link grew a second code (%v)", onDefault, stats.QRCodes)
 	}
 }
 
@@ -1042,6 +1188,476 @@ func TestThePanelListsEveryCodeWithItsOwnDownload(t *testing.T) {
 				"label, its size and its download", want)
 		}
 	}
+}
+
+// --- M50's reopening: the default is a flag (D183, F222) ----------------------
+
+// TestAnyCodeCanBeRemovedAndTheLastCannot is the owner's report, end to end.
+//
+// *"As long as there are multiple QR codes any of them should be able to be
+// removed, currently the first one cannot be removed."* The first one could not
+// be removed because the default *was* the row with the empty slug, so removing
+// it would have left every already-printed picture resolving to nothing. The
+// refusal moves off identity and onto arithmetic: a link always has a code, so
+// what cannot go is whichever one is last.
+func TestAnyCodeCanBeRemovedAndTheLastCannot(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("removable", "https://example.com/x")
+	named := f.createQRCode(t, id, "Autumn poster")
+	def := f.qrCode(id)
+
+	// The default, removed — which is the whole of what was asked for.
+	if got := f.deleteAPI("/api/v1/links/" + id.String() + "/qr/codes/" + def.Slug); got != http.StatusNoContent {
+		t.Fatalf("removing the default code answered %d, want 204: it is the code "+
+			"the owner reported could not be removed (F222)", got)
+	}
+	codes := f.listQRCodes(t, id)
+	if len(codes) != 1 || codes[0].Slug != named.Slug {
+		t.Fatalf("the link carries %+v after removing its default, want only %q",
+			codes, named.Slug)
+	}
+
+	// And the one left cannot go, with a reason rather than a 404: the code is
+	// there, and a link without one is not a state this product has.
+	status, body := f.deleteAPIBody("/api/v1/links/" + id.String() + "/qr/codes/" + named.Slug)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("removing a link's last QR code answered %d, want 422 — the code "+
+			"exists, so a 404 would be a lie about why", status)
+	}
+	if !strings.Contains(body, "only QR code") {
+		t.Errorf("the refusal does not say why the last code stays:\n%.400s", body)
+	}
+	if n := f.qrRowCount(id); n != 1 {
+		t.Errorf("%d rows after a refused removal, want the one that was refused", n)
+	}
+}
+
+// TestRemovingTheDefaultPromotesTheOldestCodeLeft is the milestone's promotion
+// bullet, and the decision it left to the build.
+//
+// **Oldest, and the test is what pins it.** The three candidates were oldest,
+// first-in-list and the one the reader was looking at; only the first is a
+// property of the data rather than of a surface, so the API and the dashboard
+// promote the same code from the same delete. The link here carries three codes
+// so that "oldest" and "any code at all" are different answers.
+//
+// The second half is what makes the promotion matter: untagged scans follow the
+// flag, so a picture with no code on it lands on the promoted code afterwards.
+func TestRemovingTheDefaultPromotesTheOldestCodeLeft(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("promoted", "https://example.com/x")
+
+	// The picture as printed before any of this link's codes had identities.
+	printed := f.codeContent(t, id, "")
+
+	first := f.createQRCode(t, id, "Autumn poster")
+	second := f.createQRCode(t, id, "Shop window")
+	def := f.qrCode(id)
+	if def.Slug == first.Slug || def.Slug == second.Slug {
+		t.Fatalf("the default resolved to a created code (%q)", def.Slug)
+	}
+
+	if got := f.deleteAPI("/api/v1/links/" + id.String() + "/qr/codes/" + def.Slug); got != http.StatusNoContent {
+		t.Fatalf("removing the default answered %d", got)
+	}
+	promoted := f.qrCode(id)
+	if promoted.Slug != first.Slug {
+		t.Fatalf("the default is now %q; removing the flag-holder promotes the "+
+			"oldest code left, which is %q — the newer one was %q",
+			promoted.Slug, first.Slug, second.Slug)
+	}
+	if !promoted.Default {
+		t.Error("the promoted code does not report itself as the default")
+	}
+
+	// The printed picture still works and still carries no code, and its scan is
+	// now counted against the code that was promoted. That is what makes the
+	// promotion worth stating to a reader rather than performing silently.
+	f.scan(t, printed)
+	waitForClicks(t, f.pool, id, 1)
+	if err := analytics.NewRoller(f.pool, nil).
+		RunRecentDimensions(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range f.linkStats(t, id).QRCodes {
+		if c.Slug == promoted.Slug && c.Clicks != 1 {
+			t.Errorf("the promoted code's row reads %d, want the untagged scan's 1", c.Clicks)
+		}
+	}
+}
+
+// TestAnyCodeCanBeMadeTheDefault is D183's first limb: *any code can be set as
+// the default, and the default is what an untagged scan resolves through.*
+//
+// Asserted through where a scan lands rather than through the flag alone,
+// because the flag is only worth having for what it decides.
+func TestAnyCodeCanBeMadeTheDefault(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("settable", "https://example.com/x")
+	printed := f.codeContent(t, id, "")
+	named := f.createQRCode(t, id, "Autumn poster")
+
+	resp := f.putJSON("/api/v1/links/"+id.String()+"/qr/codes/"+named.Slug+"/default", "")
+	status := resp.StatusCode
+	_ = resp.Body.Close()
+	if status != http.StatusOK {
+		t.Fatalf("setting the default answered %d, want 200", status)
+	}
+	if got := f.qrCode(id); got.Slug != named.Slug {
+		t.Fatalf("the /qr shorthand answers for %q, want the code just made the "+
+			"default (%q) — the shorthand means the role", got.Slug, named.Slug)
+	}
+
+	f.scan(t, printed)
+	waitForClicks(t, f.pool, id, 1)
+	if err := analytics.NewRoller(f.pool, nil).
+		RunRecentDimensions(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range f.linkStats(t, id).QRCodes {
+		if c.Slug == named.Slug && c.Clicks != 1 {
+			t.Errorf("a picture carrying no code recorded %d scans against the code "+
+				"that is now the default, want 1 — that is what the flag decides",
+				c.Clicks)
+		}
+	}
+}
+
+// TestRestoreDefaultsActsOnTheCodeThatIsSelected is the second defect the
+// reopening carries: *Restore defaults takes no slug, so pressing it while a
+// named code is selected clears the default code's style.*
+//
+// Driven through the form, because the form is where the defect was: the button
+// posts the panel's `code` field like every other control on it, and the handler
+// had been dropping it.
+func TestRestoreDefaultsActsOnTheCodeThatIsSelected(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("scoped", "https://example.com/x")
+	named := f.createQRCode(t, id, "Autumn poster")
+
+	// Two codes, both restyled away from the default, so clearing the wrong one
+	// is visible in either direction.
+	for _, slug := range []string{"", named.Slug} {
+		f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{
+			"code": {slug}, "foreground": {"#123a6b"}, "background": {"#f5f7fa"},
+			"size": {"512"},
+		})
+	}
+
+	// Restore defaults, with the named code selected.
+	f.postQRForm(t, "/links/"+id.String()+"/qr", url.Values{
+		"code": {named.Slug}, "reset": {"1"},
+	})
+
+	if got := f.qrCodeBySlug(t, id, named.Slug); got.Style.Foreground != qr.DefaultForeground {
+		t.Errorf("the selected code reads back at %q; Restore defaults is scoped to "+
+			"the selection, and it was the control that was not (F222)",
+			got.Style.Foreground)
+	}
+	if got := f.qrCode(id); got.Style.Foreground != "#123a6b" {
+		t.Errorf("the default code's style was cleared by a button pressed on "+
+			"another code: it reads %q. That is the defect, not the fix",
+			got.Style.Foreground)
+	}
+}
+
+// TestARowTheFlagNeverReachedIsStillTheLinksDefault is the rolling deploy, and
+// it is the one shape 04400 cannot reach.
+//
+// The migration flags every row carrying the empty slug at the moment it runs.
+// A `qr_codes` row written *after* that by an instance still serving the
+// previous release carries the empty slug and `is_default = false`, because the
+// column is one that release does not know about — which is exactly the case
+// GetDefaultQRCode's fallback exists for, and 04400 reasons about the deploy
+// window in as many words.
+//
+// **What must not happen is the link losing its default silently.** The empty
+// slug and the flag are two spellings of one fact, so a create that takes the
+// slug off such a row without putting the flag on leaves the link matching
+// neither: the read path then synthesises a code the link does not have, the
+// untagged `qr` bucket stops folding onto the code every printed picture
+// resolves through and appears as its own unlabelled row, and the next style
+// write inserts a third row beside the two. None of it raises an error, which is
+// why it is asserted here rather than left to the shape of the code.
+func TestARowTheFlagNeverReachedIsStillTheLinksDefault(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("rolling", "https://example.com/x")
+
+	// The picture as printed, carrying no tag — the payload every copy of this
+	// link's code in the world has.
+	printed := f.codeContent(t, id, "")
+
+	// A style, which is what writes the default code's row down.
+	styled := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		`{"style":{"foreground":"#123a6b","background":"#f5f7fa"}}`)
+	if styled.StatusCode != http.StatusOK {
+		t.Fatalf("styling the default answered %d", styled.StatusCode)
+	}
+	_ = styled.Body.Close()
+
+	// And this is the fixture: the same row as the previous release would have
+	// left it, identified by its empty slug and by nothing else.
+	if _, err := f.pool.Exec(t.Context(),
+		`UPDATE qr_codes SET is_default = false WHERE link_id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	var slug string
+	var flagged bool
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT slug, is_default FROM qr_codes WHERE link_id = $1`, id,
+	).Scan(&slug, &flagged); err != nil {
+		t.Fatal(err)
+	}
+	if slug != "" || flagged {
+		t.Fatalf("the fixture is not a pre-flag row: slug %q, is_default %v", slug, flagged)
+	}
+
+	// The second code appears, which is the moment the first one is named.
+	named := f.createQRCode(t, id, "Autumn poster")
+
+	if n := f.qrRowCount(id); n != 2 {
+		t.Fatalf("%d rows after adding a second code, want the two the link has", n)
+	}
+	var defSlug string
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT slug FROM qr_codes WHERE link_id = $1 AND is_default`, id,
+	).Scan(&defSlug); err != nil {
+		t.Fatalf("the link has no row holding the flag after its default was named, "+
+			"so it has no default at all: %v", err)
+	}
+	if defSlug == named.Slug || defSlug == "" {
+		t.Fatalf("the flag is on %q; it belongs on the code that was already there, "+
+			"which is neither the new code %q nor a row with no slug", defSlug, named.Slug)
+	}
+
+	codes := f.listQRCodes(t, id)
+	if len(codes) != 2 {
+		t.Errorf("the link lists %d codes, want 2: a link whose default is not "+
+			"reachable has one synthesised into every read, and that code has no "+
+			"row, no download anybody has printed and nothing to remove (%+v)",
+			len(codes), codes)
+	}
+
+	// A style write on the default afterwards finds the row rather than inserting
+	// a second unnamed one beside it.
+	restyled := f.putJSON("/api/v1/links/"+id.String()+"/qr", `{"style":{"foreground":"#0a0a0a"}}`)
+	if restyled.StatusCode != http.StatusOK {
+		t.Fatalf("restyling the default answered %d", restyled.StatusCode)
+	}
+	_ = restyled.Body.Close()
+	if n := f.qrRowCount(id); n != 2 {
+		t.Errorf("%d rows after restyling the default, want 2: a style write that "+
+			"cannot find the default inserts a row for it, and the link then has "+
+			"two codes nobody named", n)
+	}
+
+	// The whole of why it matters: the picture printed before any of this still
+	// counts against the code it always did.
+	f.scan(t, printed)
+	waitForClicks(t, f.pool, id, 1)
+	if err := analytics.NewRoller(f.pool, nil).
+		RunRecentDimensions(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	var onDefault int64
+	for _, c := range f.linkStats(t, id).QRCodes {
+		if c.Slug == defSlug {
+			onDefault = c.Clicks
+		}
+		if c.Slug == "" {
+			t.Errorf("the breakdown holds an unlabelled row with %d clicks; the "+
+				"untagged bucket belongs to whichever code holds the flag, and a row "+
+				"of its own is what a reader sees when no code does", c.Clicks)
+		}
+	}
+	if onDefault != 1 {
+		t.Errorf("the default code's row reads %d, want the printed picture's scan", onDefault)
+	}
+}
+
+// TestACodeIsRemovableWhenTheDefaultHasNoRowOfItsOwn is the other half of F222,
+// and it is about the two counts agreeing.
+//
+// A link can hold one named row while its default has none — the previous
+// release wrote that shape every time somebody added a code, and
+// docs/slo.md's k6 fixture writes it too. The list the reader is looking at
+// shows two codes, because a link's default exists whether or not a row holds
+// it. Counting rows instead would put a Remove control on both and refuse both,
+// and refuse the named one by saying it is the link's only code while two are
+// on screen.
+func TestACodeIsRemovableWhenTheDefaultHasNoRowOfItsOwn(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("rowless", "https://example.com/x")
+	named := f.createQRCode(t, id, "Autumn poster")
+
+	// The fixture: the default's row taken away, leaving the named code and a
+	// default that only the read path knows about.
+	if _, err := f.pool.Exec(t.Context(),
+		`DELETE FROM qr_codes WHERE link_id = $1 AND id <> $2`, id, named.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.qrRowCount(id); n != 1 {
+		t.Fatalf("the fixture holds %d rows, want the one named code", n)
+	}
+	if codes := f.listQRCodes(t, id); len(codes) != 2 {
+		t.Fatalf("the link lists %+v; the fixture is two codes on screen and one "+
+			"row behind them", codes)
+	}
+
+	// The named code goes. The refusal that used to fire here counted rows, and
+	// the reader was looking at two codes.
+	status, body := f.deleteAPIBody("/api/v1/links/" + id.String() + "/qr/codes/" + named.Slug)
+	if status != http.StatusNoContent {
+		t.Fatalf("removing a named code from a link whose default has no row "+
+			"answered %d, want 204: %s", status, body)
+	}
+	if codes := f.listQRCodes(t, id); len(codes) != 1 || !codes[0].Default {
+		t.Errorf("the link lists %+v after the removal, want only its default", codes)
+	}
+
+	// And the same state from the other side: the default is the row that does
+	// not exist, and removing it is the flag moving to the code that does.
+	second := f.createLink("rowless2", "https://example.com/y")
+	keep := f.createQRCode(t, second, "Shop window")
+	if _, err := f.pool.Exec(t.Context(),
+		`DELETE FROM qr_codes WHERE link_id = $1 AND id <> $2`, second, keep.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.postQRForm(t, "/links/"+second.String()+"/qr", url.Values{
+		"code": {""}, "remove": {"1"},
+	})
+	codes := f.listQRCodes(t, second)
+	if len(codes) != 1 || codes[0].Slug != keep.Slug || !codes[0].Default {
+		t.Fatalf("the link lists %+v after removing the default that had no row; "+
+			"there was nothing to delete, so what removing it means is that %q "+
+			"becomes the code an untagged scan resolves through", codes, keep.Slug)
+	}
+	if n := f.qrRowCount(second); n != 1 {
+		t.Errorf("%d rows after the removal, want the one code that is left", n)
+	}
+}
+
+// TestALoneDefaultCodeStaysOutOfTheRedirectSnapshot is what keeps M50's
+// no-version-bump argument resting on a fact rather than on a comment.
+//
+// `Snapshot.Codes` promises that a link with no named codes carries exactly the
+// payload it carried before this milestone, and that promise is the stated
+// reason CacheKeyVersion did not move. A link's only code keeps the empty slug,
+// so the lateral has to leave it out: `CodeSlug` returns before it scans when
+// the parameter is empty, which makes an empty string in that array a value no
+// request could ever match — serialized out of Postgres on every cold resolve
+// and thrown away.
+//
+// The second half is the reopening's: the default code's own slug *does* ride
+// home once it has one, because a picture of it now carries a tag and a tag that
+// the snapshot does not know is a tag the redirect records as no code at all.
+func TestALoneDefaultCodeStaysOutOfTheRedirectSnapshot(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("snapshot", "https://example.com/x")
+
+	// Styled, so the link's only code has a row — which is the case that could
+	// put an empty slug in the array. A link with no rows at all never could.
+	styled := f.putJSON("/api/v1/links/"+id.String()+"/qr", `{"style":{"foreground":"#123a6b"}}`)
+	if styled.StatusCode != http.StatusOK {
+		t.Fatalf("styling the default answered %d", styled.StatusCode)
+	}
+	_ = styled.Body.Close()
+	if slugs := f.redirectCodeSlugs(t, id); len(slugs) != 0 {
+		t.Errorf("the redirect snapshot carries %q for a link whose only code has "+
+			"no slug; nothing can match an empty string, and Snapshot.Codes "+
+			"promises this link's payload is the one it had before M50", slugs)
+	}
+
+	// And once it stops being alone, both codes are matchable and both ride home.
+	named := f.createQRCode(t, id, "Autumn poster")
+	def := f.qrCode(id)
+	got := f.redirectCodeSlugs(t, id)
+	want := map[string]bool{named.Slug: true, def.Slug: true}
+	if len(got) != 2 {
+		t.Fatalf("the snapshot carries %q, want the link's two codes %q and %q",
+			got, def.Slug, named.Slug)
+	}
+	for _, slug := range got {
+		if !want[slug] {
+			t.Errorf("the snapshot carries %q, which is not one of this link's codes; "+
+				"a value the redirect path cannot match is a scan attributed to the "+
+				"default that was printed off a code of its own", slug)
+		}
+	}
+}
+
+// redirectCodeSlugs is what the redirect path is handed for a link: the slugs
+// the lateral in ResolveAliasForRedirect aggregates, read through the generated
+// query rather than rebuilt here.
+func (f *ruleFixture) redirectCodeSlugs(t *testing.T, linkID uuid.UUID) []string {
+	t.Helper()
+	var domainID uuid.UUID
+	var alias string
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT domain_id, alias FROM links WHERE id = $1`, linkID,
+	).Scan(&domainID, &alias); err != nil {
+		t.Fatal(err)
+	}
+	row, err := dbgen.New(f.pool).ResolveAliasForRedirect(t.Context(),
+		dbgen.ResolveAliasForRedirectParams{DomainID: domainID, Alias: alias})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var slugs []string
+	if err := json.Unmarshal(row.CodeSlugs, &slugs); err != nil {
+		t.Fatal(err)
+	}
+	return slugs
+}
+
+// listQRCodes reads a link's codes over the API.
+func (f *ruleFixture) listQRCodes(t *testing.T, linkID uuid.UUID) []link.QRCode {
+	t.Helper()
+	var out struct {
+		Codes []link.QRCode `json:"codes"`
+	}
+	body := f.getJSON("/api/v1/links/" + linkID.String() + "/qr/codes")
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatalf("%v: %s", err, body)
+	}
+	return out.Codes
+}
+
+// qrCodeBySlug reads one code over the API.
+func (f *ruleFixture) qrCodeBySlug(t *testing.T, linkID uuid.UUID, slug string) link.QRCode {
+	t.Helper()
+	var out struct {
+		Code link.QRCode `json:"code"`
+	}
+	body := f.getJSON("/api/v1/links/" + linkID.String() + "/qr/codes/" + slug)
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatalf("%v: %s", err, body)
+	}
+	return out.Code
+}
+
+// deleteAPIBody issues a DELETE and returns the status with the body, for the
+// refusals whose sentence is the thing being asserted.
+func (f *ruleFixture) deleteAPIBody(path string) (int, string) {
+	f.t.Helper()
+	req, err := http.NewRequestWithContext(f.t.Context(), http.MethodDelete, f.server.URL+path, nil)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(raw)
 }
 
 // createQRCode adds a named code through the API and returns it.
@@ -1215,8 +1831,12 @@ func TestARefusedStyleStaysOnThePageItWasTypedOn(t *testing.T) {
 
 	// Nothing was stored by either, which is the half of the refusal that was
 	// already correct and has to stay correct.
-	if n := f.qrRowCount(id); n != 1 {
-		t.Errorf("%d qr_codes rows after two refusals, want the named code's own 1", n)
+	// Two rows, and neither is a refusal's doing: adding the named code is what
+	// writes the default's row down (D183), so the count was 2 before the first
+	// refusal and has to be 2 after the second.
+	if n := f.qrRowCount(id); n != 2 {
+		t.Errorf("%d qr_codes rows after two refusals, want the named code's and the "+
+			"default's, which adding the named one created", n)
 	}
 }
 

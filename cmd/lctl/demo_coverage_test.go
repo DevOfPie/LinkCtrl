@@ -635,23 +635,54 @@ func demoCoverage() []demoFeature {
 				"list nobody can read",
 		},
 		{
-			Milestone: "M50", Feature: "A named code with an identity in its payload",
+			// **Both, since M50's reopening.** The count was 1 and the ceiling
+			// said so: the default code was the one *without* a slug, and its
+			// absence was its identity. D183 moved that identity onto
+			// `is_default`, so today's default carries a generated slug like
+			// every other code, and a demo where one of the two still had none
+			// would be showing the shape this reopening removed.
+			Milestone: "M50", Feature: "Every code carries an identity in its payload",
 			Query: `SELECT count(*) FROM qr_codes
 			         WHERE workspace_id IN (` + demoWorkspaces + `)
 			           AND slug <> ''`,
-			Min: 1, Max: 1,
-			Shows: "a code whose picture encodes ?src=qr&qrc=<slug> beside one whose " +
-				"picture does not, which is what makes the two scannable apart",
+			Min: 2, Max: 2,
+			Shows: "two codes whose pictures each encode ?src=qr&qrc=<slug>, which is " +
+				"what makes them scannable apart and what makes either removable",
 		},
 		{
+			// M50's reopening. One code holds the flag, and only one can.
+			//
+			// **A ceiling as well as a floor, and the ceiling is the invariant.**
+			// `qr_codes_link_default_key` refuses a second default per link, and
+			// the demo seeds one link with codes — so two would mean either the
+			// index is not there or the seeder wrote a second link's codes
+			// without a default, and both are defects this row would catch.
+			Milestone: "M50", Feature: "One code is the default, and it is a flag",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND is_default`,
+			Min: 1, Max: 1,
+			Shows: "a codes list whose rows each carry Remove and Make default, with " +
+				"one marked as the code an untagged scan is counted against — before " +
+				"this the first row had no Remove at all",
+		},
+		{
+			// **Three values rather than two, since M50's reopening.** The
+			// default code's row is the sum of two of them — the bare `qr` an
+			// untagged picture records, and `qr:<its own slug>` from a picture
+			// printed since it gained one — and a demo carrying only one of the
+			// pair would not show that the fold happens at all. That fold is
+			// what let today's default code gain a slug without any recorded
+			// scan being rewritten (D183), so it is the thing worth looking at.
 			Milestone: "M50", Feature: "Scan history against more than one code",
 			Query: `SELECT count(DISTINCT referrer_host) FROM click_events
 			         WHERE workspace_id IN (` + demoWorkspaces + `)
 			           AND (referrer_host = 'qr' OR referrer_host LIKE 'qr:%')`,
-			Min: 2,
+			Min: 3,
 			Shows: "two rows in the per-code breakdown with different numbers in " +
-				"them — with traffic against only one code the panel shows a " +
-				"column of zeroes beside a column of clicks",
+				"them — the default code's row counting both its own tagged scans " +
+				"and the untagged ones every picture printed before it had a slug " +
+				"still sends",
 		},
 		{
 			// M50.5. The first uploaded file this product holds, and since

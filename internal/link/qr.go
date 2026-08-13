@@ -15,6 +15,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/qr"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/store/pgerr"
 )
 
 // QR codes (M41).
@@ -39,18 +40,59 @@ import (
 
 // More than one code per link (M50).
 //
-// **A link has codes, and one of them is the default.** The default is the code
-// whose payload carries no code parameter — which is the payload of every code
-// this product drew before M50 — so it is what every already-printed picture
-// resolves to, and it exists for every link whether or not a row has ever been
-// written for it. The rest are named: each carries a generated slug that travels
-// in its payload and a label that never leaves the dashboard.
+// **A link has codes, and one of them is the default.** The default is what an
+// *untagged* scan resolves through — a payload carrying `?src=qr` and no `qrc`,
+// which is what every picture this product drew before M50 carries. The rest is
+// per code: a generated slug that travels in the payload and a label that never
+// leaves the dashboard.
 //
 // **The single-code operations stayed as they were and now mean the default
 // code.** m50.md required this choice be made and recorded, and the alternative —
 // growing `GET /links/{id}/qr` an identifier — would have changed what a shipped
 // endpoint answers for every client already calling it, which is exactly what
 // the contract test exists to catch. Recorded in decisions.md under M50.
+
+// The default became a flag (M50's reopening, D183).
+//
+// **It was the row with the empty slug, and that identity is what made it
+// unremovable** — the owner's report, F222: *"As long as there are multiple QR
+// codes any of them should be able to be removed, currently the first one cannot
+// be removed."* Deleting the code every already-printed picture resolved to
+// would have left those pictures resolving to nothing, so the refusal was right
+// and the identity was wrong. `qr_codes.is_default` carries it now, any code may
+// hold it, and removing the holder promotes another rather than being refused.
+//
+// **Nothing already printed changes what it means, and here is the whole of
+// why.** An untagged scan records the bare `qr` it has recorded since M41 —
+// `clickSource` and `Snapshot.CodeSlug` are untouched by this reopening — and
+// the breakdown attributes that bucket to whichever code holds the flag when
+// somebody reads it. So a picture printed before M50 existed, one printed
+// between M50 and this reopening, and one printed tomorrow off a code that holds
+// the flag all land on the same row, and no scan already recorded was rewritten
+// to make it so. The alternative was resolving the flag on the redirect path and
+// storing `qr:<slug>` for an untagged scan, which splits every link's existing
+// history at the migration — the split D130 spent a milestone avoiding.
+//
+// **A code gains a slug when it stops being alone**, which happens at exactly
+// two moments: 04400, for the links already carrying more than one code, and
+// CreateQRCode, which names the default before it adds the second code beside
+// it. From there every code of that link has one and every one of them is
+// removable, addressable and tellable apart, which is the whole of what the
+// reopening asked for.
+//
+// **A link's only code keeps the payload it has**, and that is not a shortcut.
+// M41's claim is that *restyling a code never changes what it says*, which a
+// style write that also handed out an identity would falsify — a preference
+// about colours silently rewriting a printed payload is the shape this
+// reopening exists to remove, not one to add. A lone code also has nothing for a
+// tag to distinguish it from: it is the link's default by arithmetic, an
+// untagged scan is counted against it either way, and it cannot be removed while
+// it is the only one. Nothing about it is decided by a slug it does not have.
+//
+// So the empty slug survives, and what it means has changed completely. It was
+// the *identity* of the default code, load-bearing in three places and
+// unremovable because of it. It is now the absence of a name on a code that has
+// nobody to be told apart from, and it carries no meaning at all.
 
 // QRCode is one of a link's codes: the style it is drawn with and the URL it
 // encodes.
@@ -61,11 +103,26 @@ type QRCode struct {
 	// answering with a uuid nothing can be done with.
 	ID     uuid.UUID `json:"id,omitempty"`
 	LinkID uuid.UUID `json:"link_id"`
-	// Slug is the identity that travels in the payload, and the empty string is
-	// the default code (M50). It is generated, never chosen: it is printed, so a
-	// workspace-supplied one would be a name somebody has to keep unique across
-	// a link's codes and correct across every copy already in the world.
+	// Slug is the identity that travels in the payload. It is generated, never
+	// chosen: it is printed, so a workspace-supplied one would be a name somebody
+	// has to keep unique across a link's codes and correct across every copy
+	// already in the world.
+	//
+	// **Empty only for a link's single code** (D183). It used to be the default
+	// code's identity, and that is what made the default undeletable; the
+	// identity is Default below. A code gains a slug when a second one appears
+	// beside it, because that is when there is something to tell it apart from —
+	// before then it is the link's default by arithmetic and its payload is the
+	// one every already-printed picture carries.
 	Slug string `json:"slug"`
+	// Default says whether an untagged scan resolves through this code (D183).
+	//
+	// True for exactly one of a link's codes, which
+	// `qr_codes_link_default_key` (04400) is what makes true. Also true for the
+	// synthesised code above: a link's default exists whether or not a row holds
+	// it, and reporting false for the only code a link has would be reporting
+	// that the link has no default at all.
+	Default bool `json:"default"`
 	// Label is what a person reads in the list. Free text, never in a URL, never
 	// in the picture, and never seen by the redirect path.
 	Label string `json:"label"`
@@ -112,23 +169,32 @@ type QRCode struct {
 // generated row struct per query. Three structurally identical types would
 // otherwise mean three copies of qrCodeFrom.
 type qrRow struct {
-	ID      uuid.UUID
-	Slug    string
-	Label   string
-	Style   []byte
-	HasLogo bool
+	ID        uuid.UUID
+	Slug      string
+	Label     string
+	Style     []byte
+	IsDefault bool
+	HasLogo   bool
 }
 
 func qrRowFromGet(r dbgen.GetQRCodeRow) qrRow {
-	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style, HasLogo: r.HasLogo}
+	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style,
+		IsDefault: r.IsDefault, HasLogo: r.HasLogo}
+}
+
+func qrRowFromDefault(r dbgen.GetDefaultQRCodeRow) qrRow {
+	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style,
+		IsDefault: r.IsDefault, HasLogo: r.HasLogo}
 }
 
 func qrRowFromList(r dbgen.ListQRCodesRow) qrRow {
-	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style, HasLogo: r.HasLogo}
+	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style,
+		IsDefault: r.IsDefault, HasLogo: r.HasLogo}
 }
 
 func qrRowFromUpsert(r dbgen.UpsertQRCodeRow) qrRow {
-	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style, HasLogo: r.HasLogo}
+	return qrRow{ID: r.ID, Slug: r.Slug, Label: r.Label, Style: r.Style,
+		IsDefault: r.IsDefault, HasLogo: r.HasLogo}
 }
 
 // QRCode returns a link's default code: its content and the style it is drawn
@@ -145,12 +211,18 @@ func (s *Service) QRCode(
 
 // QRCodeBySlug returns one of a link's codes.
 //
-// The empty slug is the default code and never 404s: a link that has never been
-// styled or named still has one, drawn at the default style, which is what "a QR
-// endpoint returns a code for any link" has meant since M41. Any other slug is a
-// row that must exist, and its absence is a 404 rather than a default — a code
-// somebody deleted must stop answering, or a printed identity would go on
+// The empty slug asks for the default code and never 404s: a link that has never
+// been styled or named still has one, drawn at the default style, which is what
+// "a QR endpoint returns a code for any link" has meant since M41. Any other
+// slug is a row that must exist, and its absence is a 404 rather than a default —
+// a code somebody deleted must stop answering, or a printed identity would go on
 // resolving after the workspace retired it.
+//
+// **A link's default code can be reached two ways now and they agree** (D183):
+// by the empty string, which dispatches on the flag, and by the slug the flag's
+// holder carries. The second is what the codes list links to and what the
+// per-code API paths address, and it is why nothing in this function special-
+// cases which of the two it was given.
 func (s *Service) QRCodeBySlug(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
 ) (*QRCode, error) {
@@ -179,6 +251,14 @@ func (s *Service) QRCodeBySlug(
 // styled it, and a list that omitted it would show a link's second code as its
 // only one. A link nobody has touched therefore lists exactly one code, which is
 // the state every link is in until this milestone's create operation is used.
+//
+// **The test for synthesising is the flag, with the empty slug behind it**
+// (D183). It read `rows[0].Slug != ""`, which was the same question while the
+// default was the empty slug; it is now the flag, falling back to that slug for
+// the reason GetDefaultQRCode falls back to it — a row can still arrive carrying
+// the old spelling and not the new one. Either way the list is ordered so that
+// the default leads, and a link with rows and none of them the default is the
+// only case that still needs a code invented.
 func (s *Service) ListQRCodes(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
 ) ([]QRCode, error) {
@@ -196,7 +276,7 @@ func (s *Service) ListQRCodes(
 		return nil, fmt.Errorf("list qr codes for %s: %w", linkID, err)
 	}
 	out := make([]QRCode, 0, len(rows)+1)
-	if len(rows) == 0 || rows[0].Slug != "" {
+	if len(rows) == 0 || (!rows[0].IsDefault && rows[0].Slug != "") {
 		out = append(out, qrCodeFrom(linkID, l.ShortURL, "", qrRow{}, false))
 	}
 	for _, row := range rows {
@@ -212,6 +292,14 @@ func (s *Service) ListQRCodes(
 // have. Nothing is copied that identifies the code it was copied from: the slug
 // is new, the label is what the caller asked for, and the two codes are
 // thereafter independent.
+//
+// **The link's default code gets its row here, and this is the moment it has to**
+// (D183). Until this reopening a link could carry a named row and a default that
+// was synthesised on every read, which is the state the owner reported: two
+// codes in the list, and the first with nothing to remove. A code with no row
+// has no slug, no flag and nothing to delete, so the second code is not added
+// until the first one exists — 04400 did the same for the links already in that
+// state, and this keeps new ones out of it.
 func (s *Service) CreateQRCode(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, label string,
 ) (*QRCode, error) {
@@ -238,23 +326,65 @@ func (s *Service) CreateQRCode(
 	// the check is against the number of codes the link *has* rather than the
 	// number of rows it holds. Otherwise a link would be allowed one code more
 	// than the cap for as long as its default went unstyled.
+	def, defaulted, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, "")
+	if err != nil {
+		return nil, err
+	}
 	held := count
-	if _, defaulted, derr := s.storedQRCode(ctx, actor.WorkspaceID, linkID, ""); derr != nil {
-		return nil, derr
-	} else if !defaulted {
+	if !defaulted {
 		held++
 	}
 	if held >= domain.MaxQRCodesPerLink {
 		return nil, qrCapError()
 	}
 
+	// **The link's default code gets a row and a slug here, and this is the one
+	// moment both are owed** (D183). It gets a row because a code with none has
+	// nothing to remove, nothing to flag and nothing to address — which is
+	// precisely the state the owner reported: two codes in the list and no way to
+	// remove the first. It gets a slug because this is the moment it stops being
+	// alone, and a tag is what tells one code from another.
+	//
+	// That is also the moment its picture changes, and the only one. A copy of it
+	// already printed carries no tag, resolves through the flag, and is counted
+	// against this same code — which is what D183 means by *nothing already
+	// printed changes what it means*. What is downloaded from here on carries the
+	// tag, and the two are the same code.
+	if !defaulted {
+		if def, err = s.materializeDefaultQRCode(ctx, actor.WorkspaceID, linkID); err != nil {
+			return nil, err
+		}
+	}
+	//
+	// **The statement writes the flag as well as the slug**, because for one kind
+	// of row it is the flag: `storedQRCode` falls back to the empty slug for a row
+	// the flag never reached — written by the previous release during a rolling
+	// deploy — and taking that slug away without putting the flag on would leave
+	// the link with no default at all.
+	if def.Slug == "" {
+		def.Slug = domain.NewQRCodeSlug()
+		if _, err := s.q.NameQRCode(ctx, dbgen.NameQRCodeParams{
+			ID: def.ID, WorkspaceID: actor.WorkspaceID, Slug: def.Slug,
+		}); err != nil {
+			// The flag moved to another of this link's codes between the read
+			// above and this write, so the row being named is no longer the
+			// default and the partial index says so. Re-read the winner rather
+			// than failing the create over a race about which code is the
+			// default, the way tag creation re-reads one.
+			if !pgerr.IsUniqueViolation(err) {
+				return nil, fmt.Errorf("name the default qr code on %s: %w", linkID, err)
+			}
+			if def, _, err = s.storedQRCode(ctx, actor.WorkspaceID, linkID, ""); err != nil {
+				return nil, err
+			}
+		} else {
+			def.IsDefault = true
+		}
+	}
+
 	// The style the link is already drawing at, so a second code looks like the
 	// first one until somebody changes it.
-	current, _, err := s.storedQRStyle(ctx, actor.WorkspaceID, linkID, "")
-	if err != nil {
-		return nil, err
-	}
-	blob, err := json.Marshal(current)
+	blob, err := json.Marshal(decodeQRStyle(def.Style))
 	if err != nil {
 		return nil, fmt.Errorf("encode qr style: %w", err)
 	}
@@ -295,34 +425,14 @@ func (s *Service) SetQRCodeLabel(
 		return nil, errs
 	}
 
-	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	// Naming the default code is the first thing that makes a row for it, which
+	// is the same trade styling one makes: a row appears when somebody expresses
+	// a preference and not before. Since D183 the row that appears carries a
+	// generated slug and the flag, so the rename below is a rename of a code with
+	// an identity rather than of the absence of one.
+	row, err := s.qrTargetRow(ctx, actor.WorkspaceID, linkID, slug)
 	if err != nil {
 		return nil, err
-	}
-	if !found {
-		if slug != "" {
-			return nil, domain.ErrNotFound
-		}
-		// Naming the default code is the first thing that makes a row for it,
-		// which is the same trade styling one makes: a row appears when somebody
-		// expresses a preference and not before.
-		style, _, serr := s.storedQRStyle(ctx, actor.WorkspaceID, linkID, "")
-		if serr != nil {
-			return nil, serr
-		}
-		blob, merr := json.Marshal(style)
-		if merr != nil {
-			return nil, fmt.Errorf("encode qr style: %w", merr)
-		}
-		upserted, uerr := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
-			ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
-			Slug: "", Label: label, Style: blob,
-		})
-		if uerr != nil {
-			return nil, fmt.Errorf("insert qr code: %w", uerr)
-		}
-		code := qrCodeFrom(linkID, l.ShortURL, "", qrRowFromUpsert(upserted), true)
-		return &code, nil
 	}
 
 	if _, err := s.q.UpdateQRCodeLabel(ctx, dbgen.UpdateQRCodeLabelParams{
@@ -335,53 +445,229 @@ func (s *Service) SetQRCodeLabel(
 	return &code, nil
 }
 
-// DeleteQRCode removes a named code from a link.
+// DeleteQRCode removes one of a link's codes, and reports which code was
+// promoted if the one removed held the default flag.
 //
-// **The default code cannot be deleted**, and the refusal is a validation error
-// rather than a 404: it is there, and what the caller almost certainly means —
-// put it back to plain black on white — is ResetQRStyle. Deleting the code every
-// already-printed picture resolves to would leave those pictures resolving to
-// nothing, which is not something an interface should offer as a button.
+// **Any code can go, and the last one cannot** (D183). It used to be the default
+// code that could not go, because the default *was* the row with no slug and
+// deleting it would have left every already-printed picture resolving to
+// nothing. The owner rejected that: *"As long as there are multiple QR codes any
+// of them should be able to be removed"* (F222). What replaces it is arithmetic
+// rather than identity — a link always has a code, so the refusal falls on
+// whichever one is the last, and what the caller almost certainly means by
+// removing it is ResetQRStyleBySlug.
+//
+// **The arithmetic counts codes rather than rows**, which is the same count the
+// list on the page shows and the same one CreateQRCode checks the cap against.
+// The two differ on exactly one shape — a link holding a named row whose default
+// has no row of its own — and counting rows there would put a Remove control on
+// two codes and refuse both.
+//
+// **Removing the flag-holder promotes the oldest code that is left**, and the
+// promotion is returned rather than performed silently, because it moves where
+// every untagged picture of this link lands. Which code to promote is a decision
+// and not a detail — oldest, first-in-list and the one the reader was looking at
+// were all defensible. Oldest wins because it is the only one that is a property
+// of the *data*: "first in list" is the same rule wearing a presentation's name,
+// since the list orders by `created_at, id` once the flag-holder is out of it,
+// and "the one the reader was looking at" cannot be expressed by a caller that
+// is not a browser, so the API and the dashboard would promote different codes
+// from the same delete. It is also the most conservative reading of what the
+// flag is for: the longest-lived code is the one most likely to have pictures of
+// it in the world, and the flag is what those pictures resolve through.
 //
 // A deleted code's scans stop accumulating; they are not reassigned. A payload
 // naming a slug that no longer exists is recorded as no code at all, which the
-// analytics show as the default code's own bare `qr`, and the rows the deleted
+// analytics attribute to whichever code holds the flag, and the rows the deleted
 // code already earned stay exactly where they are under its slug.
+//
+// The whole of it is one transaction, because a delete that promoted nothing
+// would leave a link with codes and no default — a state the read path answers
+// by inventing a code the link does not have.
 func (s *Service) DeleteQRCode(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
-) error {
+) (promoted *QRCode, err error) {
 	if !actor.Can(PermUpdate) {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: removing a QR code requires %s", domain.ErrForbidden, PermUpdate)
 	}
 	if _, err := s.Get(ctx, actor, linkID); err != nil {
-		return err
+		return nil, err
 	}
-	if slug == "" {
-		return domain.ValidationErrors{{
-			Field: "slug", Code: "invalid",
-			Message: "the default code is what every already-printed picture of this link " +
-				"resolves to, so it cannot be removed; reset its style instead",
-		}}
-	}
-	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	// The link's default is read first whatever was asked for, because the
+	// refusal below is about how many codes the link *has* and that is the one
+	// question a row count cannot answer.
+	def, defaulted, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, "")
 	if err != nil {
-		return err
+		return nil, err
+	}
+	row, found := def, defaulted
+	if slug != "" {
+		if row, found, err = s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug); err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, domain.ErrNotFound
+		}
+	}
+	count, err := s.q.CountQRCodes(ctx, dbgen.CountQRCodesParams{
+		LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count qr codes for %s: %w", linkID, err)
+	}
+	// **Codes, not rows, and it is the same arithmetic CreateQRCode's cap check
+	// does.** A link can carry one named row and a default that no row holds —
+	// the shape the previous release wrote, and the shape 04400 fixes only for
+	// the links that existed when it ran. Counting rows there would refuse to
+	// remove either of the two codes the reader is looking at, and refuse the
+	// named one by telling them it is the link's only code. The list on the page
+	// counts the same way, so the control and the refusal now agree about what
+	// "one code" means.
+	held := count
+	if !defaulted {
+		held++
+	}
+	if held <= 1 {
+		return nil, qrLastCodeError()
 	}
 	if !found {
-		return domain.ErrNotFound
+		// The default code with no row, on a link that has another code. There is
+		// nothing to delete, and what removing it *means* is the whole of what the
+		// flag means: the code every untagged picture of this link resolves
+		// through stops being this one and becomes the oldest code that is
+		// written down. That is the same promotion the delete below performs, so
+		// it is performed by the same operation rather than by a second spelling
+		// of it.
+		next, err := s.q.OldestQRCode(ctx, dbgen.OldestQRCodeParams{
+			LinkID: linkID, WorkspaceID: actor.WorkspaceID, ID: uuid.Nil,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("find a qr code to promote for %s: %w", linkID, err)
+		}
+		return s.SetDefaultQRCode(ctx, actor, linkID, next.Slug)
 	}
-	if _, err := s.q.DeleteQRCodeByID(ctx, dbgen.DeleteQRCodeByIDParams{
+	// **Whether this row is the one untagged scans resolve through**, which is
+	// GetDefaultQRCode's question and therefore its predicate: a row carrying the
+	// empty slug and not the flag is a default the previous release wrote, and
+	// removing it has to promote for the same reason removing a flagged one does.
+	wasDefault := row.IsDefault || row.Slug == ""
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	if _, err := q.DeleteQRCodeByID(ctx, dbgen.DeleteQRCodeByIDParams{
 		ID: row.ID, WorkspaceID: actor.WorkspaceID,
 	}); err != nil {
-		return fmt.Errorf("delete qr code %s: %w", row.ID, err)
+		return nil, fmt.Errorf("delete qr code %s: %w", row.ID, err)
 	}
+	var next dbgen.OldestQRCodeRow
+	if wasDefault {
+		// Excluding the row just deleted as well as filtering on what is left,
+		// because the statement is correct either way and one of the two is a
+		// belt this transaction cannot afford to be without: promoting the code
+		// that was removed would leave the link with no default at all.
+		if next, err = q.OldestQRCode(ctx, dbgen.OldestQRCodeParams{
+			LinkID: linkID, WorkspaceID: actor.WorkspaceID, ID: row.ID,
+		}); err != nil {
+			return nil, fmt.Errorf("find a qr code to promote for %s: %w", linkID, err)
+		}
+		if _, err := q.MarkDefaultQRCode(ctx, dbgen.MarkDefaultQRCodeParams{
+			ID: next.ID, WorkspaceID: actor.WorkspaceID,
+		}); err != nil {
+			return nil, fmt.Errorf("promote qr code %s: %w", next.ID, err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
 	// The other half of the create's reasoning, and the half that is visible in
 	// the data: a replica still holding the deleted slug goes on attributing
 	// that printed code to itself, so the row it stopped earning keeps growing
 	// for up to REDIRECT_TTL after somebody removed it.
 	s.invalidateQRLink(ctx, actor, linkID)
-	return nil
+	if !wasDefault {
+		return nil, nil
+	}
+	// Read back rather than assembled from what was written, so the code the
+	// caller is told about is the one the next reader will see.
+	return s.QRCodeBySlug(ctx, actor, linkID, next.Slug)
+}
+
+// SetDefaultQRCode makes one of a link's codes the one untagged scans resolve
+// through (D183).
+//
+// **No clearing operation beside it, because a link always has a default.** The
+// flag is not a preference that can be withdrawn — it answers "where does a
+// picture with no tag on it land", and that question has an answer for every
+// link whether anybody has chosen one or not. So this moves the flag and there
+// is nothing that removes it.
+//
+// The code must already have a row, which for a named code it always does. The
+// default's own row is written here if it has none, because moving the flag off
+// a code that is not written down is moving it off nothing.
+func (s *Service) SetDefaultQRCode(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
+) (*QRCode, error) {
+	if !actor.Can(PermUpdate) {
+		return nil, fmt.Errorf(
+			"%w: setting a link's default QR code requires %s", domain.ErrForbidden, PermUpdate)
+	}
+	if _, err := s.Get(ctx, actor, linkID); err != nil {
+		return nil, err
+	}
+	row, err := s.qrTargetRow(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if row.IsDefault {
+		// Already the answer. Reported as success rather than as a no-op error,
+		// on the reason ResetQRStyle gives for a link with no row: the caller
+		// asked for a state and the state holds.
+		return s.QRCodeBySlug(ctx, actor, linkID, row.Slug)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	if _, err := q.ClearDefaultQRCode(ctx, dbgen.ClearDefaultQRCodeParams{
+		LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+	}); err != nil {
+		return nil, fmt.Errorf("clear default qr code for %s: %w", linkID, err)
+	}
+	if _, err := q.MarkDefaultQRCode(ctx, dbgen.MarkDefaultQRCodeParams{
+		ID: row.ID, WorkspaceID: actor.WorkspaceID,
+	}); err != nil {
+		return nil, fmt.Errorf("set default qr code %s: %w", row.ID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	// **No snapshot invalidation, and the absence is the point.** The redirect
+	// path reads slugs and nothing else: the flag is not in the snapshot, is not
+	// consulted by `clickSource`, and does not change what any request records.
+	// Where an untagged scan is *shown* moves, and that is read from the database
+	// every time the breakdown is drawn.
+	return s.QRCodeBySlug(ctx, actor, linkID, row.Slug)
+}
+
+// qrLastCodeError is the refusal that replaced "the default cannot be removed".
+func qrLastCodeError() error {
+	return domain.ValidationErrors{{
+		Field: "slug", Code: "invalid",
+		Message: "this is the link's only QR code, and a link always has one — every " +
+			"picture of it already printed resolves through this code, so removing it " +
+			"would leave them resolving to nothing. Add another code first, or restore " +
+			"this one's defaults instead",
+	}}
 }
 
 // invalidateQRLink drops the link's cached snapshot after its code set changes.
@@ -422,9 +708,19 @@ func qrCapError() error {
 // The `found` argument is what makes the second case expressible: a default code
 // with no row is a real code drawn at the default style, and the zero row is how
 // it arrives here.
+//
+// **The slug comes off the row rather than off the argument** (D183). Callers
+// pass the empty string to mean "the default code", which is a request and no
+// longer an identity: the row that answers it carries a slug of its own, and
+// building the payload from what was asked for would draw the default code
+// without the tag it has.
 func qrCodeFrom(
 	linkID uuid.UUID, shortURL, slug string, row qrRow, found bool,
 ) QRCode {
+	isDefault := !found
+	if found {
+		slug, isDefault = row.Slug, row.IsDefault
+	}
 	style := decodeQRStyle(row.Style)
 	// The level a code with a logo is *drawn* at, which is the one a caller has
 	// to be told about (M50.6, D141). SetQRStyleBySlug writes H into the row
@@ -436,7 +732,7 @@ func qrCodeFrom(
 	}
 	content := QRContent(shortURL, slug)
 	out := QRCode{
-		LinkID: linkID, Slug: slug, Content: content,
+		LinkID: linkID, Slug: slug, Default: isDefault, Content: content,
 		Style: style, Stored: found, Size: QROutputSize(content, style),
 	}
 	if found {
@@ -481,7 +777,11 @@ func (s *Service) RenderQRBySlug(
 	if err != nil {
 		return nil, err
 	}
-	logo, err := s.qrLogoFor(ctx, actor, linkID, slug, code.HasLogo)
+	// `code.Slug` and not `slug`: the caller may have asked for the default code
+	// by the empty string, and the logo is stored against the row that answered
+	// (D183). Keying the read on what was asked for finds nothing on a link whose
+	// default has a slug, and the picture comes back without its logo.
+	logo, err := s.qrLogoFor(ctx, actor, linkID, code.Slug, code.HasLogo)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +824,7 @@ func (s *Service) RenderQRPNGBySlug(
 	if err != nil {
 		return nil, err
 	}
-	logo, err := s.qrLogoFor(ctx, actor, linkID, slug, code.HasLogo)
+	logo, err := s.qrLogoFor(ctx, actor, linkID, code.Slug, code.HasLogo)
 	if err != nil {
 		return nil, err
 	}
@@ -599,6 +899,15 @@ func (s *Service) SetQRSizeBySlug(
 	}
 	if !found && slug != "" {
 		return nil, qr.SizeFit{}, domain.ErrNotFound
+	}
+	// The row's own slug, because the fit is arithmetic over this code's module
+	// count and the module count is a property of the payload (D183). A caller
+	// reaching the default code by the empty string gets the code, and the code's
+	// picture carries whatever slug it has — fitting against the untagged payload
+	// and drawing a tagged one is how the size the reader asked for stops being
+	// the size the picture is.
+	if found {
+		slug = row.Slug
 	}
 	current := decodeQRStyle(row.Style)
 	// **Fitted against the level the picture will be drawn at, not the one the
@@ -689,6 +998,38 @@ func (s *Service) SetQRStyleBySlug(
 		return nil, errs
 	}
 
+	out, err := s.storeQRStyle(ctx, actor.WorkspaceID, l, linkID, slug, normalized)
+	// **A unique violation here is a race about which code is the default, and
+	// the answer is to look again** (D183). The caller asked for the default by
+	// passing the empty slug; between that read and the insert a concurrent
+	// CreateQRCode can write the default's row down and name it, at which point
+	// this insert no longer conflicts on `(link_id, '')` — it conflicts on
+	// `qr_codes_link_default_key`, because both rows claim the flag. The second
+	// attempt reads the winner, finds the default's row where the first attempt
+	// found none, and writes the style onto it through the upsert's conflict
+	// branch, which is what the caller asked for and what a request arriving a
+	// moment later would have done. Once only: a second violation is not a race
+	// this can reason about, and a 500 is the honest answer to it.
+	//
+	// Named codes cannot reach this. Their row exists, so the upsert takes its
+	// conflict branch and never inserts, and the branch does not touch the flag.
+	if err != nil && slug == "" && pgerr.IsUniqueViolation(err) {
+		out, err = s.storeQRStyle(ctx, actor.WorkspaceID, l, linkID, slug, normalized)
+	}
+	return out, err
+}
+
+// storeQRStyle is one attempt at writing a style onto the code `slug` names, the
+// empty slug being the link's default.
+//
+// Separate from its caller so that the attempt can be repeated: everything it
+// does depends on a read that a concurrent write can invalidate, and repeating
+// the read without repeating the size check below would check a floor against a
+// payload the code no longer has.
+func (s *Service) storeQRStyle(
+	ctx context.Context, workspaceID uuid.UUID, l *domain.Link,
+	linkID uuid.UUID, slug string, normalized qr.Style,
+) (*QRCode, error) {
 	// Stored normalized, so what is written is what will be drawn. A row holding
 	// an unchecked colour would be a row whose only validation was the form that
 	// happened to write it.
@@ -700,12 +1041,23 @@ func (s *Service) SetQRStyleBySlug(
 	// The upsert leaves `label` alone on conflict, and this is what supplies it
 	// for the insert branch — a named code that reached here exists, so this is
 	// its own label, and the default code's is empty until somebody sets one.
-	existing, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	//
+	// **The slug written is the row's own** (D183). A caller reaching the default
+	// code passes the empty string, which is a request rather than an identity
+	// since the flag replaced it, and on a link whose default has a slug the
+	// upsert has to key on that slug or it inserts a second row beside it. Where
+	// there is no row at all the empty string is also what gets written, and it
+	// is correct: a link's only code has no slug until a second one appears
+	// beside it, and this write is a style rather than the appearance of one.
+	existing, found, err := s.storedQRCode(ctx, workspaceID, linkID, slug)
 	if err != nil {
 		return nil, err
 	}
 	if !found && slug != "" {
 		return nil, domain.ErrNotFound
+	}
+	if found {
+		slug = existing.Slug
 	}
 	// **A code carrying a logo is stored at level H, whatever was asked for**
 	// (M50.6, D141). Accept-and-override rather than refuse: this endpoint is a
@@ -756,9 +1108,15 @@ func (s *Service) SetQRStyleBySlug(
 			}}
 		}
 	}
+	// **The insert branch is where a link's default code comes into being**, so
+	// it is the branch that has to set the flag: a row written here for a code
+	// that had none is the code an untagged scan resolves through, and a link
+	// with codes and no default is a link the read path answers by inventing one.
+	// `ON CONFLICT` leaves the column alone, which is what keeps a style write
+	// from moving a flag it was never asked about.
 	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
-		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
-		Slug: slug, Label: existing.Label, Style: blob,
+		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: workspaceID,
+		Slug: slug, Label: existing.Label, Style: blob, IsDefault: !found || existing.IsDefault,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("upsert qr code: %w", err)
@@ -769,11 +1127,38 @@ func (s *Service) SetQRStyleBySlug(
 }
 
 // ResetQRStyle returns a link's default code to the default style.
-//
-// Only the default code. A named code is removed rather than reset — it exists
-// because somebody made it, so "put it back to how it was" is deleting it — and
-// DeleteQRCode is that operation.
 func (s *Service) ResetQRStyle(ctx context.Context, actor *auth.Identity, linkID uuid.UUID) error {
+	return s.ResetQRStyleBySlug(ctx, actor, linkID, "")
+}
+
+// ResetQRStyleBySlug returns one of a link's codes to the default style.
+//
+// **It used to take no slug at all, and that was the second half of F222.**
+// Pressing *Restore defaults* while a named code was selected cleared the
+// *default* code's style — a control on a form about one code writing to
+// another, and then dropping the reader onto the code it had written to. D183
+// scopes it to the selection.
+//
+// **It writes the default style rather than deleting the row**, which is the
+// other thing D183 changed here. Deleting was honest while a row held nothing
+// but the preference being withdrawn; the row now holds the code's identity —
+// its slug, which is printed, and the flag that says untagged scans resolve
+// through it — and dropping those to clear two colours and a size would retire a
+// printed identity to undo a styling. A named code has never been resettable by
+// deletion for the same reason, and this is what it means for one.
+//
+// The logo stays. It is not part of the style: *Remove the logo* is its own
+// control with its own sentence, and a button labelled *Restore defaults* that
+// silently discarded an uploaded image would be doing something nobody could
+// read off it.
+//
+// No error for a link whose code has no row. "Draw this at the default style" is
+// already true, and reporting 404 for it would make the operation care whether a
+// preference had ever been expressed — and materialising a row to write the
+// style that row would have been read as anyway is a write for nothing.
+func (s *Service) ResetQRStyleBySlug(
+	ctx context.Context, actor *auth.Identity, linkID uuid.UUID, slug string,
+) error {
 	if !actor.Can(PermUpdate) {
 		return fmt.Errorf("%w: styling a QR code requires %s", domain.ErrForbidden, PermUpdate)
 	}
@@ -782,14 +1167,26 @@ func (s *Service) ResetQRStyle(ctx context.Context, actor *auth.Identity, linkID
 	if _, err := s.Get(ctx, actor, linkID); err != nil {
 		return err
 	}
-	if _, err := s.q.DeleteQRCode(ctx, dbgen.DeleteQRCodeParams{
-		LinkID: linkID, WorkspaceID: actor.WorkspaceID,
-	}); err != nil {
-		return fmt.Errorf("delete qr code: %w", err)
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return err
 	}
-	// No error for a link that had no row. "Draw this at the default style" is
-	// already true, and reporting 404 for it would make the operation care
-	// whether a preference had ever been expressed.
+	if !found {
+		if slug != "" {
+			return domain.ErrNotFound
+		}
+		return nil
+	}
+	blob, err := json.Marshal(decodeQRStyle(nil))
+	if err != nil {
+		return fmt.Errorf("encode qr style: %w", err)
+	}
+	if _, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
+		ID: row.ID, LinkID: linkID, WorkspaceID: actor.WorkspaceID,
+		Slug: row.Slug, Label: row.Label, Style: blob, IsDefault: row.IsDefault,
+	}); err != nil {
+		return fmt.Errorf("reset qr code style %s: %w", row.ID, err)
+	}
 	return nil
 }
 
@@ -818,10 +1215,15 @@ func (s *Service) ResetQRStyle(ctx context.Context, actor *auth.Identity, linkID
 // overruled D136 on 2026-08-07: *one upload operation and one to clear* counts
 // capabilities rather than routes, so the same two operations answer at the
 // `/qr` shorthand D133 kept and at `/qr/codes/{slug}`, exactly as `GET
-// …/qr.png` and `GET …/qr/codes/{slug}/image.png` are one capability. The
-// default code keeps its identity — the *absence* of a slug, which is D130 and
-// the whole reason a printed picture goes on counting as what it always was —
-// so nothing here gives it a reserved one.
+// …/qr.png` and `GET …/qr/codes/{slug}/image.png` are one capability.
+//
+// **The empty string is a request for the default code and not the name of one**
+// (D183). It was the default's identity when this was written; the identity is
+// `is_default` now, and every write and read below resolves the flag before it
+// touches a row. Passing the request through instead inserts a second row
+// against the empty slug on any link whose default has one — the picture the
+// reader downloads then has no logo in it, and the link carries a code nobody
+// made.
 //
 // **What that costs is a row that did not have to exist before.** A default
 // code with no `qr_codes` row is a real code drawn at the default style, and a
@@ -849,7 +1251,8 @@ func (f LogoFit) Resampled() bool {
 }
 
 // SetQRCodeLogo stores an uploaded image against one of a link's codes. The
-// empty slug is the link's default code.
+// empty slug asks for the link's default code, which since D183 is a flag on a
+// row rather than the absence of a slug — see the preamble above.
 //
 // Replacing is the same call: the write is a single UPDATE, so the image being
 // replaced is overwritten rather than deleted by a second statement, and there
@@ -886,6 +1289,15 @@ func (s *Service) SetQRCodeLogo(
 			return nil, LogoFit{}, err
 		}
 	}
+	// **The row's own slug, not the one asked for** (D183). The upsert below keys
+	// on `(link_id, slug)`, and a caller reaching the default code passes the
+	// empty string — which stopped being an identity when the flag replaced it.
+	// Writing it through inserts a *second* row on any link whose default has a
+	// slug, so the logo would land on the code that was addressed and the level
+	// would be raised on a phantom code beside it. It is also the payload
+	// `refitForLogo` measures, and measuring the untagged one would fit the
+	// occlusion cap against a symbol this code does not draw.
+	slug = row.Slug
 
 	logo, err := qr.NormalizeLogo(upload)
 	if err != nil {
@@ -918,7 +1330,7 @@ func (s *Service) SetQRCodeLogo(
 	}
 	stored, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
 		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: actor.WorkspaceID,
-		Slug: slug, Label: row.Label, Style: blob,
+		Slug: slug, Label: row.Label, Style: blob, IsDefault: row.IsDefault,
 	})
 	if err != nil {
 		return nil, fit, fmt.Errorf("raise qr code %s to level H: %w", row.ID, err)
@@ -1066,7 +1478,19 @@ func (s *Service) QRCodeLogo(
 	if _, err := s.Get(ctx, actor, linkID); err != nil {
 		return nil, err
 	}
-	return s.qrLogo(ctx, actor.WorkspaceID, linkID, slug)
+	// Resolved rather than passed through, for the reason the renderers pass
+	// `code.Slug` (D183): the empty string is a request for the default code and
+	// not the name of one, so keying the column read on it finds nothing on a
+	// link whose default has a slug. Absent is still nil rather than an error —
+	// a default code with no row has no logo.
+	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if !found || !row.HasLogo {
+		return nil, nil
+	}
+	return s.qrLogo(ctx, actor.WorkspaceID, linkID, row.Slug)
 }
 
 // qrLogoFor is the read the two renderers make, skipped entirely for a code that
@@ -1113,6 +1537,13 @@ func (s *Service) qrLogo(
 // about the picture changes, and the only visible consequence is `stored`
 // turning true, which is already what it means: this code now has a row.
 //
+// **The row carries the flag and no slug** (D183). The flag is what the code
+// being written down *is* — untagged scans resolve through it, which is the
+// property it has had since M41 under a different spelling. The slug is not,
+// because this row is still the link's only code: it gains one when a second
+// code appears beside it and not before, so that writing a preference down never
+// changes what a picture says.
+//
 // The upsert rather than a plain insert, for the reason SetQRStyleBySlug uses
 // one: two concurrent uploads to the same untouched default code would
 // otherwise be two inserts racing for one (link, slug), and 03700's unique
@@ -1126,12 +1557,35 @@ func (s *Service) materializeDefaultQRCode(
 	}
 	row, err := s.q.UpsertQRCode(ctx, dbgen.UpsertQRCodeParams{
 		ID: uuid.Must(uuid.NewV7()), LinkID: linkID, WorkspaceID: workspaceID,
-		Slug: "", Label: "", Style: blob,
+		Slug: "", Label: "", Style: blob, IsDefault: true,
 	})
 	if err != nil {
 		return qrRow{}, fmt.Errorf("upsert qr code: %w", err)
 	}
 	return qrRowFromUpsert(row), nil
+}
+
+// qrTargetRow resolves the row a write is about, writing the default code's row
+// down if it has none.
+//
+// For the two writes that need a row to exist before they can happen — a rename,
+// which is an UPDATE, and setting the flag, which is a flag on a row. Every other
+// write goes through the upsert, which brings the row into being as part of
+// writing what it was asked to write.
+func (s *Service) qrTargetRow(
+	ctx context.Context, workspaceID, linkID uuid.UUID, slug string,
+) (qrRow, error) {
+	row, found, err := s.storedQRCode(ctx, workspaceID, linkID, slug)
+	if err != nil {
+		return qrRow{}, err
+	}
+	if found {
+		return row, nil
+	}
+	if slug != "" {
+		return qrRow{}, domain.ErrNotFound
+	}
+	return s.materializeDefaultQRCode(ctx, workspaceID, linkID)
 }
 
 // qrLogoError turns internal/qr's refusals into the 422 a caller can act on.
@@ -1202,9 +1656,28 @@ func qrLogoError(err error) error {
 // storedQRCode reads one code's row. Absent is not an error: for the default
 // code it means the default style, and every caller that cares whether a named
 // code exists reads the second return.
+//
+// **The empty slug still means "the link's default code", and that is the one
+// seam this reopening needed** (D183). It used to be a column value and it is
+// now a flag, so the empty string stopped being something to look up and became
+// something to dispatch on — which keeps every caller that already passed it
+// meaning what it always meant, at one branch here rather than at each of them.
+// A caller holding a real slug never reaches the second query.
 func (s *Service) storedQRCode(
 	ctx context.Context, workspaceID, linkID uuid.UUID, slug string,
 ) (qrRow, bool, error) {
+	if slug == "" {
+		row, err := s.q.GetDefaultQRCode(ctx, dbgen.GetDefaultQRCodeParams{
+			LinkID: linkID, WorkspaceID: workspaceID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return qrRow{}, false, nil
+			}
+			return qrRow{}, false, fmt.Errorf("get default qr code: %w", err)
+		}
+		return qrRowFromDefault(row), true, nil
+	}
 	row, err := s.q.GetQRCode(ctx, dbgen.GetQRCodeParams{
 		LinkID: linkID, WorkspaceID: workspaceID, Slug: slug,
 	})
@@ -1215,17 +1688,6 @@ func (s *Service) storedQRCode(
 		return qrRow{}, false, fmt.Errorf("get qr code: %w", err)
 	}
 	return qrRowFromGet(row), true, nil
-}
-
-// storedQRStyle reads one code's style, falling back to the default.
-func (s *Service) storedQRStyle(
-	ctx context.Context, workspaceID, linkID uuid.UUID, slug string,
-) (qr.Style, bool, error) {
-	row, found, err := s.storedQRCode(ctx, workspaceID, linkID, slug)
-	if err != nil {
-		return qr.Style{}, false, err
-	}
-	return decodeQRStyle(row.Style), found, nil
 }
 
 // decodeQRStyle reads a stored blob back into a style.

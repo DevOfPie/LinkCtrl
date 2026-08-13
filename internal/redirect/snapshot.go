@@ -178,6 +178,21 @@ type Snapshot struct {
 	// omitempty, so a link with no named codes — the default, and every link that
 	// existed before this milestone — carries exactly the payload it carried
 	// before.
+	//
+	// **Named still means "carries a slug", and M50's reopening moved which codes
+	// that is rather than what it means** (D183). A link's default code now has a
+	// slug of its own once a second code appears beside it, so it is in here like
+	// any other; a link's *only* code keeps the empty slug and stays out of this
+	// slice, which is what keeps the paragraph above — the one this milestone did
+	// not bump the version on — true of exactly the links it names.
+	//
+	// Two things keep it out and the order matters. `Resolver.attachCodes` drops
+	// every value ValidQRCodeSlug refuses, and it refuses the empty string, so
+	// nothing else in this file has to defend against one. The query's
+	// `q.slug <> ''` is upstream of that: it stops the value being aggregated,
+	// serialized out of Postgres and thrown away on the hot path once per
+	// resolve, for a link that could never have matched it — CodeSlug returns
+	// before it scans when the parameter is empty.
 	Codes []string `json:"qc,omitempty"`
 
 	// NotFound marks a negative cache entry. Storing misses matters: an

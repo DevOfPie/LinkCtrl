@@ -717,15 +717,20 @@ func pageData(t *testing.T) map[string]any {
 			// Two codes (M50), because the fixture has to render the state the
 			// milestone exists for: a link with one code and a link with two are
 			// different markup, and the theme scan, the overflow check and the
-			// fold measurement all read whichever this fixture is. The first row
-			// is the default code — no slug, and no remove control, because it is
-			// the one every already-printed picture resolves to.
+			// fold measurement all read whichever this fixture is.
+			//
+			// **Both rows carry a slug and both are removable since M50's
+			// reopening** (D183). The first row was the default code and its
+			// slug was empty, because the default *was* the absence of one —
+			// which is what made it the one row with no remove control. The flag
+			// carries the identity now, so the fixture's first row is a code
+			// with a slug that happens to hold `Default`.
 			"QRCodes": []map[string]any{
-				{"Slug": "", "Label": "", "Name": "The original code", "Size": 740,
+				{"Slug": "d3f4u1t0", "Label": "", "Name": "The original code", "Size": 740,
 					"Default": true, "Selected": true,
-					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr",
-					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
-					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
+					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
 					"Clicks":      412, "Counted": true},
 				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
 					"Default": false, "Selected": false,
@@ -734,7 +739,7 @@ func pageData(t *testing.T) map[string]any {
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
 					"Clicks":      37, "Counted": true},
 			},
-			"QRSlug":      "",
+			"QRSlug":      "d3f4u1t0",
 			"QRLabel":     "",
 			"QRMaxCodes":  20,
 			"QRMaxLabel":  60,
@@ -791,15 +796,20 @@ func pageData(t *testing.T) map[string]any {
 			// Two codes (M50), because the fixture has to render the state the
 			// milestone exists for: a link with one code and a link with two are
 			// different markup, and the theme scan, the overflow check and the
-			// fold measurement all read whichever this fixture is. The first row
-			// is the default code — no slug, and no remove control, because it is
-			// the one every already-printed picture resolves to.
+			// fold measurement all read whichever this fixture is.
+			//
+			// **Both rows carry a slug and both are removable since M50's
+			// reopening** (D183). The first row was the default code and its
+			// slug was empty, because the default *was* the absence of one —
+			// which is what made it the one row with no remove control. The flag
+			// carries the identity now, so the fixture's first row is a code
+			// with a slug that happens to hold `Default`.
 			"QRCodes": []map[string]any{
-				{"Slug": "", "Label": "", "Name": "The original code", "Size": 740,
+				{"Slug": "d3f4u1t0", "Label": "", "Name": "The original code", "Size": 740,
 					"Default": true, "Selected": true,
-					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr",
-					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
-					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
+					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
 					"Clicks":      412, "Counted": false},
 				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
 					"Default": false, "Selected": false,
@@ -808,7 +818,7 @@ func pageData(t *testing.T) map[string]any {
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
 					"Clicks":      37, "Counted": false},
 			},
-			"QRSlug":     "",
+			"QRSlug":     "d3f4u1t0",
 			"QRLabel":    "",
 			"QRMaxCodes": 20,
 			"QRMaxLabel": 60,

@@ -288,6 +288,13 @@ func collapseQRReferrers(dimensions map[string][]DimensionValue) {
 // and no code is also a row, marked Removed, for the reason a removed
 // destination is: retiring a poster must not change what the link's history
 // says.
+//
+// **Every code has a slug now and the breakdown tells them apart by it** (D183).
+// What it does *not* have a slug for is the untagged bucket — the bare `qr` the
+// redirect records for a picture carrying no code parameter — and that is folded
+// onto the flag-holder below rather than shown as a row of its own. A reader
+// asking "which of my posters is working" is not asking about the difference
+// between two payloads that resolve to the same code.
 func (r *Reader) qrCodeSplit(
 	ctx context.Context, workspaceID, linkID uuid.UUID, from, to time.Time,
 ) ([]QRCodeSplit, error) {
@@ -323,13 +330,36 @@ func (r *Reader) qrCodeSplit(
 	seen := make(map[string]struct{}, len(known)+1)
 	// The default code exists whether or not a row holds it, so it leads the
 	// list even for a link whose codes were all added later.
-	if len(known) == 0 || known[0].Slug != "" {
+	if len(known) == 0 || (!known[0].IsDefault && known[0].Slug != "") {
 		out = append(out, counted[""])
 		seen[""] = struct{}{}
 	}
 	for _, code := range known {
 		split := counted[code.Slug]
 		split.Slug, split.Label = code.Slug, code.Label
+		// **The untagged bucket lands on whichever code holds the flag** (D183),
+		// and this is the whole of how a picture printed before that flag existed
+		// goes on being counted where it always was. The bare `qr` value is what
+		// the redirect path records for a scan carrying no `qrc` — every picture
+		// this product drew before M50, every one it drew of a default code
+		// before this reopening, and every scan whose `qrc` names a code the link
+		// no longer has. None of that history was rewritten to give the default
+		// code a slug: it is added here, to the row the flag is on when somebody
+		// looks.
+		//
+		// So the flag moving moves this bucket with it, which is exactly what the
+		// flag means — *where does a picture with no code on it land* — and is
+		// why the surface says so when it moves rather than letting a reader find
+		// out from a number.
+		if code.IsDefault {
+			split.Clicks += counted[""].Clicks
+			// Summed rather than distinct-counted, on collapseQRReferrers'
+			// reasoning: two buckets' visitor hashes cannot be intersected from a
+			// rollup, so somebody who scanned both the old picture and the new one
+			// counts twice. The page's caveat covers it.
+			split.UniqueVisitors += counted[""].UniqueVisitors
+			seen[""] = struct{}{}
+		}
 		out = append(out, split)
 		seen[code.Slug] = struct{}{}
 	}
