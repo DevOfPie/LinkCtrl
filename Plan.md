@@ -1052,13 +1052,13 @@ a row there is a pointer back to this list plus an area.
 
 ## Phase 3 build plan
 
-**Twenty-two milestones, M46–M58, continuing Phase 2's numbering.** **Twelve
+**Twenty-three milestones, M46–M58, continuing Phase 2's numbering.** **Twelve
 integers of work**, two adversarial reviews (`X.9`, as reserved), one close, and
-**seven insertions** — M50.5 and M50.6 during the build on 2026-08-07, M50.7 on
-2026-08-12, and M46.5,
-M47.5, [M57.5](docs/build-notes/phase-details/m57.5.md) and
+**eight insertions** — M50.5 and M50.6 during the build on 2026-08-07, M50.7 on
+2026-08-12, [M50.8](docs/build-notes/phase-details/m50.8.md) on 2026-08-14, and
+M46.5, M47.5, [M57.5](docs/build-notes/phase-details/m57.5.md) and
 [M46.6](docs/build-notes/phase-details/m46.6.md) on 2026-08-11.
-12 + 2 + 1 + 6 = 21, which is the headline above under the reading [W40](docs/build-notes/workflow-changes.md#made)
+12 + 2 + 1 + 8 = 23, which is the headline above under the reading [W40](docs/build-notes/workflow-changes.md#made)
 settled: the target binds the plan, not the build. The size target is
 **fifteen** — *a phase stays under sixteen, insertions counted*, set by the owner
 on 2026-08-06 and recorded in
@@ -1107,7 +1107,8 @@ walkthrough that specifies them is planning's first input (D112).
 | [M50](docs/build-notes/phase-details/m50.md) | More than one QR code per link, told apart in the analytics | M49 | *More than one QR code per link, and per-code scan counts* |
 | [M50.5](docs/build-notes/phase-details/m50.5.md) | The first file this product accepts | M50 | — *(owner-added scope, 2026-08-07)* |
 | [M50.6](docs/build-notes/phase-details/m50.6.md) | A logo in the middle of a QR code | M50.5 | — *(owner-added scope, 2026-08-07)* |
-| [M50.7](docs/build-notes/phase-details/m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | [F224](docs/build-notes/deferred-findings.md#open) — *(owner-added scope, 2026-08-12)* |
+| [M50.7](docs/build-notes/phase-details/m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | [F224](docs/build-notes/deferred-findings.md#closed) — *(owner-added scope, 2026-08-12)* |
+| [M50.8](docs/build-notes/phase-details/m50.8.md) | The QR tab's third report, and the first script this product writes | M50 · M50.6 · M50.7 | [F238](docs/build-notes/deferred-findings.md#open) — *(owner-added scope, 2026-08-14)* |
 | [M51](docs/build-notes/phase-details/m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | F141 · *Account recovery, of any kind, for anybody* |
 | [M51.9](docs/build-notes/phase-details/m51.9.md) | **Mid-phase adversarial review** | M46–M51 | — |
 | [M52](docs/build-notes/phase-details/m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | F44 · *Account deletion and erasure* · compliance (erasure limb) |

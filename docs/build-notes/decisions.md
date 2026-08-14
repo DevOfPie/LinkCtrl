@@ -352,6 +352,8 @@ file. Append a row when you append an entry.
 | [M50.7's plan, three answers taken before a worker exists](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists) | D188 — the QR tab's prose is bounded at **900** characters, over 1200 and 1500, with the cost of reaching it named and taken. The default control becomes a filled/empty icon on **every** row, which is neither shape offered — the state becomes readable without reading, at the price of an inert control on the default's own row and a radio group's semantics. Rename's server side stays when its button goes, commented as deliberately unreachable |
 | [M50.7 built: one anchor name serves twenty menus, and four explanations were spent](#2026-08-14--m507-built-one-anchor-name-serves-twenty-menus-and-four-explanations-were-spent) | D189 — the per-row popover menus take **one** shared anchor name scoped per row (`anchor-scope`) rather than the twenty slug-derived names m50.7.md describes, which cannot exist: Tailwind generates only the classes it scans and `style-src 'self'` refuses the inline attribute, so a name built from a slug reaches no stylesheet at all. Verified in all three pinned engines. Which explanations the 900-character bound cost, all four, named as D188 requires: the size half of the size-and-contrast paragraph and *why* level H helps under a logo, which the derivation predicted, plus the logo paragraph's promise that you are told what an oversized image became and the last-code sentence's clause about pictures already printed, which it did not. And a proxy corrected rather than a claim broken — *no panel on this tab* had been asserted as *no popover inside `<main>`*, which stopped fitting the moment a control that is not a panel used the platform's popover API, so the assertion now names the exception (the row menus, only where the codes list renders) rather than dropping the rule at the three sites that carried it |
 | [M50.7, two answers its reviewer's findings needed](#2026-08-14--m507-two-answers-its-reviewers-findings-needed) | D190 — the default indicator renders for a `links.read` viewer as the static filled/empty pair, because D188 bought legibility rather than a control and a gated icon delivered it only to editors; and the download menu's fallback, where `anchor-scope` is unsupported, is the UA's own centred placement, over the header's viewport pin and over keeping the two-button row alive |
+| [M50.8 added: the QR tab's third report, and the first script](#2026-08-14--m508-added-the-qr-tabs-third-report-and-the-first-script) | D191 — the owner's third QR-tab report becomes **one new milestone built before M57.9**, not four reopenings: most limbs are not defects, two belong to no existing milestone, and building after the review would tag 0.3.0 over code no review covered. M50.8 is the **last slot** between M50 and M51, `M50.9` being reserved. The size slider gets this product's **first hand-written interactive script** — `script-src 'self'` unchanged, no Node, no CDN, no build step — with what the file may contain bounded in the milestone, because the precedent outlives the feature |
+| [M50.8, the two its plan review turned into questions](#2026-08-14--m508-the-two-its-plan-review-turned-into-questions) | D192 — the tab gets a **tooltip this product owns**, shown on hover *and* focus with `aria-describedby`, over moving the native `title` onto the button: a native tooltip has no DOM presence so nothing can assert it appears, and a `disabled` button is unfocusable so a keyboard user never sees the one explaining a refusal. And the `+` add control is **disabled with its reason at capacity** rather than absent, so one list stops carrying two conventions |
 
 ---
 
@@ -29221,3 +29223,106 @@ The milestone file is amended to say so, and the *twenty distinct anchor names*
 it asserted is amended with it — `anchor-scope` is a third route the bullet's
 disjunction did not know about, and one shared name scoped per row is what
 shipped ([D189](#2026-08-14--m507-built-one-anchor-name-serves-twenty-menus-and-four-explanations-were-spent)).
+
+## 2026-08-14 — M50.8 added: the QR tab's third report, and the first script
+
+**D191 — the third report becomes one new milestone, [M50.8](phase-details/m50.8.md),
+built before [M57.9](phase-details/m57.9.md); and the size slider gets a script.**
+Owner-answered 2026-08-14, both.
+
+**Why a milestone and not four reopenings.** [F238](deferred-findings.md#open)'s
+ten limbs reach M50 (a, the list's sort; g, the last code's remove button),
+M50.5/M50.6 (f, the logo section) and M50.7 (d, e, h, i, j — five more).
+Reopening each was offered and refused for the reason the second report's answer
+gave: most of these are not defects, so a reopening would put a correction on a
+milestone whose claim is true. **The remaining two — (b) the live slider and (c)
+the scroll position — belong to no existing milestone at all**, since nothing
+ever claimed either, so reopening could not have housed them. *(2 + 1 + 5 + 2 =
+10. The first draft of this entry said "six more" and named the orphans as the
+slider and the contrast check, which sums to eleven and misassigns (d); the plan
+review caught both.)*
+
+**Why before the review.** M57.9's owed-list has been caught short four times
+this phase, and building after it would guarantee a fifth: the review would ship
+having never seen the tab it reviews, and 0.3.0 would be tagged over code no
+review covered. The alternative was offered in those terms and declined.
+
+**The placement costs the band.** `M50.9` is reserved for reviews
+([planning.md §4](planning.md#4-numbering)), so **M50.8 is the last slot between
+M50 and M51**. An eleventh item on this tab is a reopening or a Phase 4 row.
+That is now a fact about the numbering rather than a preference, and the
+milestone file says so where a planner will meet it.
+
+**The script.** The slider and the number are two inputs and nothing binds them,
+so the number lies until save — which is the defect shape that reopened M49
+three times: a control reporting something other than what it will do. Offered
+against dropping one of the two inputs, and against leaving it; the owner chose
+the script.
+
+It is the **first script this product's dashboard depends on** — not the first it
+writes, since `internal/ui/static/js/docs.js` already boots Swagger UI on a page
+of its own, which the plan review caught — and
+what it does not cost is worth stating precisely, because the inherited rule is
+easy to read as a ban on all script: `ui` stays stdlib-only means **no Node, no
+CDN, no build step, CSP unchanged, no `unsafe-` waivers**. A hand-written file
+served under `script-src 'self'` clears every limb — `htmx.min.js` and
+`docs.js` are already served from that directory. [D188](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists)'s
+*no swap and no script* was about M50.7's default icons, where the
+post-and-redirect already redrew them, and is not a standing rule.
+
+**What it is allowed to contain is bounded in the milestone**, because ten lines
+binding two inputs is easy and the precedent is not: every later control can now
+cite this file. The bound is in `m50.8.md`'s *deliberately not done*, so the
+next request argues against something written rather than against nobody.
+
+**Two limbs the milestone deliberately does not take**, both recorded rather
+than dropped:
+
+- **The contrast warning** (F238(d)). The product has no contrast metric —
+  `grep -rn -i contrast` over `internal/qr`, `internal/link` and
+  `internal/httpx` returns nothing, and its one hit anywhere else in non-test Go
+  is a comment at `cmd/lctl/demo_phase2.go:1329` — so the sentence at
+  `partials/link_qr.html:573` describes what QR *readers* refuse, not what this
+  product does. Drawing the icon is easy; choosing between a WCAG ratio and a
+  QR-specific luminance delta, and defending the threshold, is a decision the
+  owner has not been asked. The advisory sentence stays until it is.
+- **Nothing about what a logo does** — only where its control sits.
+
+## 2026-08-14 — M50.8, the two its plan review turned into questions
+
+**D192 — the tab gets a real tooltip, and the add control grays out at
+capacity.** Owner-answered 2026-08-14, on the two findings from
+[M50.8](phase-details/m50.8.md)'s independent plan review that were
+definition-of-done changes rather than corrections.
+
+**A tooltip this product owns, not the browser's.** F238(g) and (i) both ask for
+hover tooltips, and today's are `<title>` elements inside a `h-3 w-3` glyph. The
+review's finding was that this cannot be enforced and does not reach everybody:
+a native tooltip is drawn by the operating system with no DOM presence, so no
+browser assertion can watch it appear, and a `disabled` button is unfocusable,
+so a keyboard user never triggers one at all — on the very control whose whole
+purpose is to explain a refusal.
+
+Offered against moving the native `title` onto the button (cheap, fixes the
+hover zone, enforceable only as *the attribute is there*) and against doing that
+now and filing the rest. The owner took the build: **a styled element the page
+owns, shown on hover and on focus, with `aria-describedby` tying it to its
+control.**
+
+What that costs is a UI pattern this product has never had, in both themes, and
+the standing risk that it becomes a second way to say what the page already
+says. What it buys is the thing the cheap option could not: the kept browser
+suite can assert the tooltip **appears**, so (g)'s explanation and (i)'s hover
+zone stop being claims and become tests. It also reaches keyboard users, which
+matters most exactly where the owner asked for it.
+
+**The `+` control is disabled at capacity, with its reason on it.** Today's add
+form is *absent* at 20/20 and a comment says the counter explains it. That is
+the same absent-versus-disabled choice F238(g) reverses two bullets earlier, so
+answering it the other way would have left one list carrying both conventions.
+Owner-set: **grayed out with the reason**, which makes the rule one rule.
+
+Both answers fold into the same mechanism, which is why they were asked
+together: the reason on a disabled `+` and the reason on a disabled remove
+button are the same pattern, and neither would have been assertable under the
+native-title option.

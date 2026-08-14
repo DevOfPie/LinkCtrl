@@ -27,14 +27,18 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Four rows are open, from the owner's second QR-tab report of 2026-08-12 —
-[M49](m49.md) and [M50.6](m50.6.md) reopened a second time, [M50](m50.md)
-reopened, and [M50.7](m50.7.md) added — then [M57.9](m57.9.md)'s reopened run,
-in its own session. The first report's three reopenings landed the same day at
-`ad28c5f`, `e244cf2` and `272f108`. 0.3.0 is written and not yet tagged.** Four work areas, chosen 2026-08-06: identity and account
+**Two rows are open.** [M50.8](m50.8.md) — the owner's **third** QR-tab report,
+added 2026-08-14 — and then [M57.9](m57.9.md)'s reopened run, in its own
+session. Everything the first two reports produced has landed: the first's three
+reopenings at `ad28c5f`, `e244cf2` and `272f108`, the second's at `2d4f424`,
+`69ef097` and `d7107b1`, and [M50.7](m50.7.md) at `ea656bd`. `fc9aeef` is
+[M49](m49.md)'s **third** reopening, which is neither report's — it came from
+the owner's answers of 2026-08-13. **M50.8 exhausts
+the M50 band** — `M50.9` is reserved for reviews, so nothing can be inserted
+between M50 and M51 after it. 0.3.0 is written and not yet tagged. Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns. **Twenty-two milestones** — **twelve integers of work**, two adversarial
-reviews, one close, and **seven insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5, M50.7) — against the size target in
+campaigns. **Twenty-three milestones** — **twelve integers of work**, two adversarial
+reviews, one close, and **eight insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5, M50.7, M50.8) — against the size target in
 [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
 The phase was planned at **fifteen with every slot spent**. On 2026-08-07 it went
 to sixteen when [M50.5](m50.5.md) was added, and to seventeen when a review found
@@ -71,6 +75,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | done |
+| [M50.8](m50.8.md) | The QR tab's third report, and the first script this product writes | M50 · M50.6 · M50.7 | todo |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
@@ -84,7 +89,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
 
 Work areas, so a blocked milestone has an independent row to fall back to per
-[W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50.6, **A** is
+[W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50.8, **A** is
 M51–M54, **E** is M55–M57. An area boundary buys a fallback destination, not
 concurrency — the worker is still forbidden from starting a second milestone.
 
