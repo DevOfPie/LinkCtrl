@@ -13,6 +13,22 @@
        script is not. */}}
   <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
   <script src="{{asset "js/htmx.min.js"}}" defer></script>
+  {{/* The QR tab's size control and its scroll restoration (M50.8, D191/D193) —
+       this product's first hand-written interactive script, served from the same
+       directory htmx and the /docs initialiser already come from, so
+       `script-src 'self'` is untouched and there is no build step, no CDN and no
+       Node in the path.
+
+       **On every page rather than on the tab.** The QR tab arrives by an htmx
+       swap as often as by a load, so a script tag inside the partial would run
+       again on each swap and would need to be idempotent about it; delegating
+       from `document` and loading once is the cheaper half of that trade. The
+       file does nothing at all on a page with no `#qr` on it — the two
+       delegated handlers test for the section before they act.
+
+       `defer`, like htmx above, so parsing is not blocked and the document is
+       there when it runs. */}}
+  <script src="{{asset "js/qr-size.js"}}" defer></script>
 </head>
 <body class="min-h-full bg-surface text-ink antialiased">
 {{if .Identity}}

@@ -354,6 +354,10 @@ file. Append a row when you append an entry.
 | [M50.7, two answers its reviewer's findings needed](#2026-08-14--m507-two-answers-its-reviewers-findings-needed) | D190 — the default indicator renders for a `links.read` viewer as the static filled/empty pair, because D188 bought legibility rather than a control and a gated icon delivered it only to editors; and the download menu's fallback, where `anchor-scope` is unsupported, is the UA's own centred placement, over the header's viewport pin and over keeping the two-button row alive |
 | [M50.8 added: the QR tab's third report, and the first script](#2026-08-14--m508-added-the-qr-tabs-third-report-and-the-first-script) | D191 — the owner's third QR-tab report becomes **one new milestone built before M57.9**, not four reopenings: most limbs are not defects, two belong to no existing milestone, and building after the review would tag 0.3.0 over code no review covered. M50.8 is the **last slot** between M50 and M51, `M50.9` being reserved. The size slider gets this product's **first hand-written interactive script** — `script-src 'self'` unchanged, no Node, no CDN, no build step — with what the file may contain bounded in the milestone, because the precedent outlives the feature |
 | [M50.8, the two its plan review turned into questions](#2026-08-14--m508-the-two-its-plan-review-turned-into-questions) | D192 — the tab gets a **tooltip this product owns**, shown on hover *and* focus with `aria-describedby`, over moving the native `title` onto the button: a native tooltip has no DOM presence so nothing can assert it appears, and a `disabled` button is unfocusable so a keyboard user never sees the one explaining a refusal. And the `+` add control is **disabled with its reason at capacity** rather than absent, so one list stops carrying two conventions |
+| [M50.8 built: a remembered position, and two readers that mistook the flag for a place](#2026-08-14--m508-built-a-remembered-position-and-two-readers-that-mistook-the-flag-for-a-place) | D193 — a save on the QR tab returns to a **remembered scroll position** rather than to a fragment on the redirect: the owner asked for *"its current position"*, and a fragment lands every reader on one element whichever control they were using. Kept in `sessionStorage`, applied once, and yielded back the moment the reader scrolls. And the sort change's hidden edge, named because it was a defect this milestone would otherwise have shipped: `link.ListQRCodes` and `analytics.qrCodeSplit` both read **position 0** to decide whether any row held the default, which was the whole set's answer only while the query put the flag-holder first. And the tab's prose bound, **900 → 750**: two owner-set cuts left it measuring 715 by [D188](../../Plan.md#phase-3-decisions)'s unchanged method, rounded up to the next fifty |
+| [M50.8, two amendments its reviewer forced](#2026-08-14--m508-two-amendments-its-reviewer-forced) | Fact-level orchestrator amendments on a milestone file, both **enumerations that were short**. The records citing the reversed sort order are **three**, not two — `internal/httpx/web_links.go:675` documents the view field filled from the service whose order changed. And the default control's strings are **two pairs at four sites**, not one pair at two: the `links.read` branch renders the same control unwritable, and the glyph going decorative on both branches is what obliged it to move. `Not the Default QR Code` is the build's wording rather than the owner's, the report naming only a control a reader can press |
+| [M50.8, five more amendments, three of them on a shipped milestone](#2026-08-14--m508-five-more-amendments-three-of-them-on-a-shipped-milestone) | Fact-level orchestrator amendments, three of them on **`m50.7.md`, which is `done`** — and that is not a reopening, because reopening is for a claim false by *defect* and F238(i) is the owner asking M50.7's claims to stop being true. A shipped file superseded by a later milestone is amended where it is superseded, naming which one did it. The default icons' accessible name is on the **button** and names no code; `icons.html` now draws a decorative shape as well as a named one. M50.8's own order test is an **integration** test, the order being SQL, and its scroll case asserts the **Save** button, far enough down the tab to tell a restored position from the `#qr` fragment's landing |
+| [M50.8, the prose bound moved and the file that derives it did not](#2026-08-14--m508-the-prose-bound-moved-and-the-file-that-derives-it-did-not) | The third review's three findings, all records and all the orchestrator's. `m50.7.md`'s bound section — the one that says *move the number in this file* — still derived **900** while the index and the log carried 750; the number had been moved everywhere except the file that gave the instruction. The milestone's title in `Plan.md` and the phase-details README still carried the *"first script this product writes"* overclaim its own plan review struck. And `docs/usage.md` claimed alphabetical *by name* where the sort is on the stored **label** and an unnamed code draws a substitute — corrected, with the design question behind it filed as [F243](deferred-findings.md#open) |
 
 ---
 
@@ -29326,3 +29330,286 @@ Both answers fold into the same mechanism, which is why they were asked
 together: the reason on a disabled `+` and the reason on a disabled remove
 button are the same pattern, and neither would have been assertable under the
 native-title option.
+
+## 2026-08-14 — M50.8 built: a remembered position, and two readers that mistook the flag for a place
+
+**D193 — a save returns to a remembered scroll position, not to a fragment; and
+two readers that took the default's *place* for the default are corrected in the
+same diff.** Taken by the build, which [m50.8.md](phase-details/m50.8.md) asks
+for in as many words on the first of them: *"The milestone does not specify the
+mechanism — a fragment on the redirect and a scroll restoration in the script
+are both available… The build chooses, argues it in a decision entry, and says
+what it rejected."*
+
+**The position, over the fragment.** Both were available and both work. A
+fragment on `qrReturn`'s redirect is the cheaper one — no script at all — and it
+answers a different question from the one that was asked: it lands every reader
+on one named element, so somebody who was on the size control and somebody who
+was on the logo upload both come back to whichever element the fragment names.
+The owner asked for *"If the page needs to be reloaded it should keep its
+current position whenever possible"*, and a position is what that is. The
+fragment is also already there and already insufficient — the link-page branch of
+`qrReturn` has carried `#qr` since D178, which is why a save lands at the top of
+the QR card rather than at the very top of the document, and the report is about
+that landing.
+
+So `static/js/qr-size.js` stores `window.scrollY` in `sessionStorage` on the way
+out of any write inside `#qr` — a native submit, and htmx's own
+`htmx:beforeRequest` for the logo upload, which posts on `change` and fires no
+submit event — and applies it once on the way in. Three properties are worth
+stating because each is a way this shape goes wrong elsewhere:
+
+- **It is applied twice, unconditionally, and an earlier draft was wrong to
+  guard the second one.** The browser performs its own `#qr` fragment scroll
+  during load, after `DOMContentLoaded`, so applying once is simply overwritten
+  by it. The first draft applied again on `load` but skipped it if the page had
+  moved since — meaning to yield to a reader who had scrolled in between, and in
+  fact yielding to the fragment jump every single time, because that is the one
+  thing which reliably happens in that window. **The browser case caught it and
+  only after the case was itself fixed**: asserting the control was *on screen*
+  after a save passed on the fragment's own landing, with the restoration
+  deleted. It asserts the offset against both landings now. What the
+  unconditional second application gives up is a reader who scrolls in the
+  sub-second between `DOMContentLoaded` and `load` on a page whose only pictures
+  are inline SVG.
+- **It is taken out of storage once**, whether or not it is ever used. An offset
+  that survived would drop a later, unrelated load somewhere nobody scrolled to.
+- **Every storage access is guarded.** A browser with storage disabled throws
+  rather than returning null, and losing a scroll position is not a reason to
+  break the page.
+
+What it costs is the precedent, which is D191's concern and is bounded there: the
+file does this and binds the size control, and m50.8.md's *deliberately not done*
+is what the next request argues against.
+
+**And the mirror is deliberately one-way at the edges, under a condition worth
+stating.** The number moves the slider only for a value inside the slider's
+range. A range input clamps, so mirroring a typed 9999 would leave the slider at
+2048 — off the `size_shown` witness, which is what `httpx.requestedQRSize` takes
+as *the slider moved* — and the server would store 2048. Leaving the slider
+alone keeps the box winning the arbitration **while the slider is still on the
+witness**, which is every typed size on a form nobody has dragged, and the
+service then refuses 9999 with a sentence naming the range. Silently storing a
+clamped size is the exact defect shape that reopened M49 three times.
+
+**The condition is not decoration: drag the slider first and the refusal does
+not happen.** Drag to some X, then type 9999, then save — the slider is already
+off `size_shown`, so `requestedQRSize` returns the slider whatever the box says,
+X is stored, and nothing is refused. The one-way mirror keeps the common case
+right and cannot reach that one. **This is M49's arbitration (D182) and it
+predates every line of this milestone** — what M50.8 changed is that the two
+inputs now follow each other, so a reader watches them agree and then watches
+the box disagree, where before neither ever moved on its own and the divergence
+was invisible. Out of spec here and therefore filed rather than fixed:
+[F240](deferred-findings.md#open) carries the reproduction, which the browser
+case in `qr-tab-controls.spec.mjs` drives up to the save and deliberately stops
+short of.
+
+**The sort's hidden edge, and it was a defect rather than a risk.** F238(a)
+moves `ListQRCodes` from `ORDER BY (NOT (is_default OR slug = '')), created_at,
+id` to `ORDER BY lower(label), id`. Two readers then became wrong, and neither
+is in the query or the template:
+
+- `link.ListQRCodes` synthesised the default code when `!rows[0].IsDefault &&
+  rows[0].Slug != ""`. That was the whole set's answer *by construction* — the
+  one row that could hold the flag was the row the query put first. Alphabetical
+  order breaks the identity, so a link whose flag-holder does not sort first
+  would have listed a **fourth, invented** default beside its three real codes.
+- `analytics.qrCodeSplit` asked the same question the same way, and then added
+  the untagged bucket's clicks onto the flag-holder's row further down. So the
+  same scans would have been reported **twice** on one page: once in a
+  synthesised row and once on the code that actually holds the flag.
+
+Both are now a scan over every row, both are commented where they are, and both
+are pinned by an integration test that puts the flag on the alphabetically last
+code — the arrangement the old code got wrong — and asserts one bucket and one
+click. The sabotage for each was to restore `rows[0]`, and each fails on exactly
+the symptom above.
+
+**The order test is an integration test and not the `internal/link` one the
+milestone asks for.** The order is produced by SQL. A unit test in that package
+would have to fake `dbgen.Querier` whole to see it and would then be asserting a
+fake's ordering rather than Postgres's. It drives `link.Service.ListQRCodes`,
+which is the surface the bullet names, against the database that does the
+sorting.
+
+**The prose bound moves 900 → 750, and the number is arithmetic rather than a
+choice.** This is the one part of the milestone where a gate is moved by the
+work that has to meet it, so the rule matters more than the figure: measure the
+tab by [D188](../../Plan.md#phase-3-decisions)'s stated method — the text inside
+`<p>` elements, template actions and tags stripped, whitespace collapsed,
+anything under forty characters dropped as a label — and round the measurement
+**up to the next fifty**. Two paragraphs left the tab on the owner's own cuts:
+the last-code sentence, whose reason moved onto the remove control (F238g), and
+*"What a second code buys is knowing which one people scanned"*, which the owner
+judged help-page material (F238e). The tab then measures **715** across four
+paragraphs — analytics 100, code meta 153, contrast 191, logo 271 — so the bound
+is 750. The logo paragraph moved into the style section unchanged and is counted
+exactly as it was. `qrProseBound` in `internal/ui/link_qr_prose_test.go` carries
+the number with that arithmetic beside it, and D188's row records the
+supersession; **what is superseded is the number and nothing else** — the method
+is D188's, and a later milestone wanting a sentence still has to raise the bound
+deliberately and say what it bought.
+
+**Two more facts the build had to settle, both smaller.** The `<title>` inside a
+glyph is a *native* tooltip, so any control that carries one of this page's own
+tooltips would show two — icons.html therefore draws a glyph decoratively when
+its dot is empty, and the button names itself. And the kept browser suite signs
+in once per test: `LOGIN_RATE_PER_MIN` is **10**, the suite runs in well under a
+minute from one address, and a new spec file with a sign-in per case put it
+over — every spec then failed at sign-in claiming the credentials were wrong.
+M50.8's spec shares one signed-in page across its scripted cases for that reason
+and says so where it does it.
+
+**The number after that, because a note saying "a new spec put it over" tells
+nobody how much room is left.** Counted against the tree rather than
+remembered — one sign-in each from `link-tabs`, `workspace-control` and
+`qr-logo`, three from `qr-codes-list`, two from `qr-tab-controls` — `make
+verify-ui` now performs **8 sign-ins against a limit of 10**. Two spare, and the
+next spec that adds a third is one short of a suite-wide red whose message names
+every file except the one that caused it. The headroom itself is
+[F242](deferred-findings.md#open): the limit is a production default nobody
+should tune for a test harness, and the suite has no way to say *this run is one
+address* to it.
+
+## 2026-08-14 — M50.8, two amendments its reviewer forced
+
+Orchestrator amendments at step 3.4, both fact-level, both on a milestone file a
+worker may not touch. Each is an **enumeration that was short**, which is the
+one shape this project keeps re-learning: workflow.md requires an enumeration to
+be counted rather than trusted, and both of these were written by counting the
+sites a report named instead of the sites a tree has.
+
+**One — the records citing the old order.** As it stood: *"**Two records cite
+the old order and are part of this milestone, not cleanup.**"*, naming
+`internal/store/query/campaigns.sql:169-176` and `internal/link/qr.go:247`. As
+amended: **three**, the third being `internal/httpx/web_links.go:675` —
+*"The link's codes (M50), default first, and which of them the form below them
+is editing."* Tree fact: that comment documents `linkQRView.QRCodes`, which
+`web_links.go:1140` fills straight from `link.ListQRCodes`, whose order this
+milestone reverses to alphabetical. The bullet's own logic put it in scope and
+the plan review's sweep had not reached it.
+
+**Two — the default control's strings.** As it stood: *"Owner-set, replacing
+*"%s is the default code"* / *"Make %s the default code"*
+(`partials/link_qr.html:257`, `:262`)."* As amended: two pairs and four sites,
+adding the `links.read` branch at `:301` and `:306` —
+*"%s is the default code"* / *"%s is not the default code"*. Tree fact: at
+`ea656bd` the template renders the control twice, once writable and once not,
+and `grep -n 'the default code'` over that file returns four lines rather than
+two. The build had already moved all four, correctly and for a reason the bullet
+did not carry: the glyph goes decorative on both branches, so a read-only button
+left behind would have had to name itself in the very wording being replaced.
+
+**The amendment is the count, not the change.** Neither of these is a choice
+anyone could have made differently — a comment that says *default first* about a
+list that is now alphabetical is wrong whoever reads it, and a rename that skips
+half its sites is half a rename. That is what keeps them
+[amendments rather than prompts](phase-loop.md#amending-a-bullet). The second
+one's *second* string is the near miss: `Not the Default QR Code` is the build's
+wording and not the owner's, because the owner's report names only a control
+they can press. It is recorded here so that a later reader knows which of the
+four strings has no report behind it.
+
+## 2026-08-14 — M50.8, five more amendments, three of them on a shipped milestone
+
+Orchestrator amendments at step 3.4, all fact-level, forced by the second
+attempt's reviewer. Three are on [m50.7.md](phase-details/m50.7.md), which is
+`done` — and that is the point worth recording, because a shipped file
+describing a tree a later milestone deliberately changed is the case this
+project has no other name for. It is **not** a reopening: reopening is for a
+milestone whose claim is false *by defect*, and M50.7's claims were true when it
+shipped. F238(i) is the owner asking for them to stop being true. So the file is
+amended where it is superseded, saying which milestone did it, exactly as
+[README.md](phase-details/README.md)'s rules table has been amended twice
+before. A `done` row that silently describes a tree nobody has any longer is the
+outcome the amendment rule exists to prevent.
+
+**One, two and three — m50.7.md, on the default icons.** As they stood: *"each
+icon carries an accessible name naming **its** code and the pressed state is
+exposed"*; the *Enforced by* clause asserting *"that each carries an accessible
+name"*; and the icon-file paragraph's *"They follow that file's shape exactly:
+… an `aria-label` and a `<title>` fed from the template argument."* As amended:
+the name is on the **button** and names no code, the assertion is of the button,
+and `icons.html` now draws two shapes — decorative when its dot is empty, named
+otherwise. Tree fact: `partials/link_qr.html:441` and `:450` call
+`icon_default_on`/`icon_default_off` with `""`, and the glyph renders
+`aria-hidden="true"` with no `<title>`; the seven such callers are all inside a
+`.qr-tip-host`, so no control lost its name. The reason the glyph had to go
+decorative is in D193 — a `<title>` is a *native* tooltip and would draw a
+second one over the page's own.
+
+**Four — m50.8's order test.** As it stood: *"an `internal/link` test asserting
+the returned order"*. As amended: an **integration** test. Tree fact: the order
+is `ORDER BY lower(q.label), q.id` in `campaigns.sql`, so a test in that package
+would have to fake `dbgen.Querier` whole and would then be asserting the fake.
+The test drives `link.Service.ListQRCodes` — the surface the bullet names —
+against Postgres, which is the same claim tested one layer out rather than a
+different claim.
+
+**Five — m50.8's scroll case.** As it stood: *"a browser case scrolling to the
+size control, saving, and asserting the control is still in the viewport"*. As
+amended: it scrolls to and asserts the **Save** button. Tree fact: the case was
+written against the size control and passed with the restoration *deleted*,
+because `#qr`'s own fragment lands near enough to it — the Save button is far
+enough down the tab to tell a restored position from the fragment's landing, and
+is where a reader actually is when a write happens. The bullet's claim, that a
+save returns you to where you were, is unchanged.
+
+**The count is the recurring failure and this is its third instance in one
+milestone.** Two enumerations were amended earlier today for naming fewer sites
+than the tree has; these five are the same shape one level up — a milestone that
+changes a surface must ask which *records* of that surface it falsifies, and
+answering it by grepping the thing that changed finds only the records phrased
+the way the change was phrased. Both sweeps this milestone ran were over the
+sort order. Neither would have found a comment about tooltips.
+
+## 2026-08-14 — M50.8, the prose bound moved and the file that derives it did not
+
+The third review's findings, all three of them records rather than code, and all
+three the orchestrator's to make: two amendments and a documentation correction
+that workflow.md approves in advance. No fourth worker was spawned for them,
+because a worker never amends a milestone file and the remaining item is the
+wording of a document.
+
+**One — m50.7.md's bound section, which is where the number is derived.**
+As it stood: *"**The bound is 900**, owner-set 2026-08-13 over 1200 and 1500"*,
+with a derivation reaching 1081, a note that *"the bound has ~23 characters of
+headroom"*, and the instruction that *"a build that lands above 900 with a
+reason states the reason and **moves the number in this file**"*. As amended:
+750 since M50.8, measured 715 by the same method, headroom 35 — and the
+911-against-900 arithmetic marked spent, because it was computed against the
+last-code and second-code paragraphs that M50.8 deletes. Tree fact:
+`qrProseBound = 750` at `internal/ui/link_qr_prose_test.go:39`, and the four
+surviving paragraphs measure 100, 153, 191 and 271.
+
+**The instruction was followed everywhere except the file that gave it.**
+`Plan.md`'s D188 row was superseded correctly and D193 records the measurement,
+so the number was moved in the index and in the log while the sentence saying
+*move the number in this file* sat unmoved in the file it meant. That is the
+same failure as the two enumerations amended earlier today, in its most exact
+form: a milestone asked which records it falsified and answered by grepping what
+it had changed. It had changed a bound, and the record it missed was the one
+that set it.
+
+**Two — the milestone's title in two indexes.** `Plan.md` and
+[phase-details/README.md](phase-details/README.md) both read *"and the first
+script this product writes"*, which
+[m50.8.md](phase-details/m50.8.md) itself struck at its plan review:
+`internal/ui/static/js/docs.js` has booted Swagger UI for two phases. Both rows
+now carry the file's own title — *"the first script the dashboard depends on"*.
+Tree fact: `docs.js` is 34 lines and predates this phase. A corrected overclaim
+that survives in the two places a reader meets first is not corrected.
+
+**Three — `docs/usage.md` on what the sort sorts by**, which is a documentation
+correction and not an amendment. It read *"**The list is in alphabetical order
+by name** and stays there"*; the sort is `lower(q.label)` on the **stored**
+label, and a code with no label draws a substitute — *The original code*, or
+*Unnamed code*. `api/openapi.yaml:5937` has always stated the carve-out and the
+UI document did not. It does now.
+
+**The question underneath it is not settled and is [F243](deferred-findings.md#open).**
+Sorting on a value the reader cannot see is defensible while at most one row can
+have it, and the add form requires no name, so two are reachable. Whether
+*alphabetical by name* should mean the name on the row is the owner's, and it
+reaches the API rather than only the tab.

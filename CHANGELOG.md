@@ -108,6 +108,58 @@ migrations run at boot.
   why the picture keeps its own background whatever the page theme is, and what
   a logo does to a code's error correction.
 
+- **The QR tab, after a third read of it: the list holds still, the size control
+  tells the truth while you drag it, and a save keeps your place.**
+
+  **The codes list is alphabetical by name** and stays put. It used to lead with
+  whichever code was the default, so choosing a different one re-ordered the
+  list under you and the change read as nothing having happened. Which code is
+  the default is the filled dot on its row — that is what says it now, and the
+  list does not move. The same order comes back from
+  `GET /api/v1/links/{id}/qr/codes`, where it was default-first before.
+
+  **Dragging the size slider moves the number beside it, and typing a number
+  moves the slider.** The two are one setting and until now neither followed the
+  other, so the box said one thing while the slider was about to save another.
+  This is the first piece of interactive JavaScript this dashboard carries: a
+  single file this server serves, with the Content-Security-Policy unchanged and
+  nothing added to the build. **With scripts off nothing is lost but the live
+  echo** — both inputs still carry their values, the form still saves, and a size
+  outside the range is still refused with a sentence rather than quietly
+  clamped.
+
+  **Saving no longer throws you back to the top of the page.** Every write on the
+  tab now returns to the position you were reading at.
+
+  **The remove button stays on a link's only code, grayed out**, with *Every link
+  must have at least 1 QR code.* on it — where before it simply was not there and
+  a sentence under the list explained why. **Adding a code is a `+` beside the
+  count**, opening a small prompt with a name field, in place of the label, box
+  and button that stood under the list; at twenty of twenty it grays out with
+  its reason instead of disappearing.
+
+  **The default control's tooltip is the page's own**, shown anywhere over the
+  button rather than only over the twelve-pixel glyph inside it, and shown to a
+  keyboard as well as to a pointer. It reads **Default QR Code** and **Make
+  Default QR Code**. The `+` button and the grayed-out remove button carry the
+  same kind of tooltip, which is what lets a disabled control explain itself at
+  all — the browser's own tooltips never appear on one. The download button and
+  a remove button that is not grayed out are unchanged: their tooltip is still
+  the browser's, inside the glyph. Hovering a download or remove button on the
+  row you have selected now shows, which it did not: the highlight was the same
+  colour as the selected row itself.
+
+  **The logo upload has moved into the style section** and its own heading and
+  panel are gone. Nothing about what a logo does changed, only where its control
+  sits. Two more explanatory paragraphs went with all of this, and the tab's
+  prose is now under 750 characters against 900 before and about 1900 two
+  releases ago.
+
+  **Not done, and stated rather than left to be noticed**: there is still no
+  automatic warning when a code's two colours are too close together. The
+  advisory sentence stays until this product has a contrast measure it can
+  defend, which is a choice rather than a control to draw.
+
 - **The header's workspace label and workspace switcher read as one control.**
   They were two adjacent fragments — a name, then an unlabelled dropdown beside
   it — and nothing said the two were one claim. They now share a single

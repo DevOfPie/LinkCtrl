@@ -330,7 +330,21 @@ func (r *Reader) qrCodeSplit(
 	seen := make(map[string]struct{}, len(known)+1)
 	// The default code exists whether or not a row holds it, so it leads the
 	// list even for a link whose codes were all added later.
-	if len(known) == 0 || (!known[0].IsDefault && known[0].Slug != "") {
+	//
+	// **Every row is asked, not the first one** (M50.8). ListQRCodes led with
+	// the flag-holder until that milestone made it alphabetical, so `known[0]`
+	// was the whole set's answer by construction; afterwards it is one row's.
+	// Left alone this would have added a bucket for an untagged scan *and* then
+	// added the same clicks onto the flag-holder's row below — the same scans
+	// reported twice, on any link whose default does not sort first.
+	held := false
+	for _, code := range known {
+		if code.IsDefault || code.Slug == "" {
+			held = true
+			break
+		}
+	}
+	if !held {
 		out = append(out, counted[""])
 		seen[""] = struct{}{}
 	}
@@ -363,11 +377,11 @@ func (r *Reader) qrCodeSplit(
 		out = append(out, split)
 		seen[code.Slug] = struct{}{}
 	}
-	// The known codes keep the order ListQRCodes gave them — default first, then
-	// creation order — because that is the order the panel lists them in, and a
-	// breakdown that reordered itself by traffic would not line up with the list
-	// beside it. Removed codes follow, sorted by slug so that a map's iteration
-	// order never reaches the response.
+	// The known codes keep the order ListQRCodes gave them — alphabetical by
+	// name since M50.8, and default-first before it — because that is the order
+	// the panel lists them in, and a breakdown that reordered itself by traffic
+	// would not line up with the list beside it. Removed codes follow, sorted by
+	// slug so that a map's iteration order never reaches the response.
 	removed := make([]QRCodeSplit, 0, len(counted))
 	for slug, split := range counted {
 		if _, ok := seen[slug]; ok {

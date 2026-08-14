@@ -307,9 +307,29 @@ func TestHeaderMenusAreScriptFreePopovers(t *testing.T) {
 			"to run it, so the control it belongs to would be dead in a browser and "+
 			"alive in a test", strings.TrimSpace(m))
 	}
-	// One script tag, the deferred htmx bundle, and it is external.
-	if got := strings.Count(signedIn, "<script"); got != 1 {
-		t.Errorf("the page renders %d script tags, want 1 (htmx, external)", got)
+	// **Two script tags since M50.8, and both are external and deferred.** The
+	// count is asserted rather than left open because what this test guards is a
+	// *script-free* header — a menu that grew a handler would still render and
+	// simply not open — and the way that regresses is a third tag arriving with
+	// nobody counting.
+	//
+	// The second is static/js/qr-size.js, the QR tab's size binding and its
+	// scroll restoration (D191). It is on every page for the reason layout.html
+	// gives — the tab arrives by htmx swap as often as by load, so the handlers
+	// are delegated from the document and the file is loaded once — and it does
+	// nothing on a page without a `#qr` on it, which the dashboard is.
+	//
+	// **What is asserted is still the whole claim**: no inline script, so the
+	// CSP's `script-src 'self'` is untouched and no `unsafe-inline` waiver is
+	// needed for either file.
+	if got := strings.Count(signedIn, "<script"); got != 2 {
+		t.Errorf("the page renders %d script tags, want 2 (htmx and qr-size, both "+
+			"external and deferred)", got)
+	}
+	for _, want := range []string{"js/htmx.min.js", "js/qr-size.js"} {
+		if !strings.Contains(signedIn, want) {
+			t.Errorf("the page does not load %s", want)
+		}
 	}
 	if strings.Contains(signedIn, "<script>") {
 		t.Error("the page carries an inline script")

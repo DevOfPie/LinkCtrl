@@ -308,12 +308,10 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 // requestedQRSize reads the size control, which is two inputs and a witness
 // since the second M49 reopening (D182).
 //
-// **A slider and a number for one value, and no script to keep them in step.**
-// The dashboard runs on htmx and nothing else, so nothing in the browser can
-// copy a dragged slider into the number beside it — and the milestone's own risk
-// names the failure that invites: the number becoming a second source of truth
-// for the same setting. The rule here is what stops it, and it is decided on the
-// server where it can be tested:
+// **A slider and a number for one value, and one rule deciding which spoke.**
+// M49's risk named the failure two inputs invite: the number becoming a second
+// source of truth for the same setting. This is what stops it, and it is decided
+// on the server where it can be tested:
 //
 //	`size_shown` is the value the form was rendered with.
 //	The slider wins when it has moved off that; otherwise the number does.
@@ -324,6 +322,27 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 //
 // A form with no slider at all — an API-shaped post, or a page cached from
 // before this reopening — is the number alone, which is what M49 shipped.
+//
+// **This function said "no script to keep them in step" and M50.8 added one**
+// (D191): `static/js/qr-size.js` copies whichever input moved into the other, so
+// on a browser running it the two agree before anything is posted. Nothing here
+// changes and nothing here is redundant. It is still the whole of the rule for a
+// reader with scripts off, for the API-shaped post above, and — the case that is
+// not obvious — for a **typed size outside the range**, which the script
+// deliberately does not mirror onto the slider: a range input would clamp it, the
+// clamped value would sit off `size_shown`, and this function would then take a
+// size nobody asked for over the refusal the reader should get.
+//
+// **That last one holds only while the slider is still on the witness**, and the
+// condition is worth stating because the rule above is what produces it: a
+// reader who drags the slider *and then* types 9999 has already moved the slider
+// off `size_shown`, so the slider wins whatever the box says and the dragged
+// size is stored with no refusal at all. Not mirroring the typed value is what
+// keeps the box winning in the case where the slider has not moved — which is
+// every typed size on a freshly rendered form — and it cannot recover the case
+// where it has. The arbitration is M49's (D182) and is unchanged here; M50.8
+// only made the disagreement visible, because until the script existed the two
+// inputs never followed each other and nobody watched them diverge.
 //
 // The fallback for an empty or unreadable box is -1 and not a default: a size
 // box submitted empty is somebody who cleared it, not somebody asking for the
@@ -363,7 +382,13 @@ func requestedQRSize(r *http.Request) int {
 // what made the default addressable for a logo at all.
 //
 // **The form submits itself the moment a file is chosen** (F214c), through an
-// htmx `change` trigger on the form and no script of this product's own. Nothing
+// htmx `change` trigger on the form. Nothing of this product's own submits it
+// and nothing new is asked of `script-src 'self'` — which is what that sentence
+// was defending and is still true, though since M50.8 it is no longer true that
+// no script of this product's runs at all: `static/js/qr-size.js` listens on
+// `htmx:beforeRequest` and this post is one of the requests it sees, purely to
+// remember where the reader was standing (D193). It neither triggers this
+// request nor touches its body. Nothing
 // about this handler changes for it: htmx sends the same multipart body, and
 // `seeOther` already answers an htmx request with `HX-Redirect`, which is a full
 // page load rather than a swap. What *did* change is the refusal — see

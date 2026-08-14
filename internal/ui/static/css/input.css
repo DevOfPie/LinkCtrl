@@ -178,6 +178,34 @@ form.htmx-request .file-pick::file-selector-button {
 .qr-menu-anchor {
   anchor-name: --linkctrl-qr-menu;
 }
+/* The add prompt's invoker (M50.8, F238h). A name of its own rather than the
+ * list's, and the reason is the scoping above: `--linkctrl-qr-menu` is declared
+ * by twenty buttons and bounded to twenty rows, and this one control sits
+ * outside every one of those subtrees. Sharing the name would make the add
+ * prompt's placement depend on which declarations happen to be in scope from the
+ * top layer, which is a question nobody should have to answer to read this file.
+ * One counter, one anchor, one name. */
+.qr-add-anchor {
+  anchor-name: --linkctrl-qr-add;
+}
+/* **Gated on what it uses, which is not what the list's menus use.** The add
+ * prompt needs `position-anchor` and `anchor()` and nothing else — it has one
+ * anchor, declared once, so no scoping is involved and `anchor-scope` is not
+ * asked for. Sharing the block below would make this control fall back to the
+ * UA's centred placement on an engine that ships anchor positioning without
+ * `anchor-scope`, for a reason that does not apply to it. Two guards, two
+ * features, and each control degrades only on the thing it actually needs. */
+@supports (position-anchor: --linkctrl-qr-add) {
+  .qr-add-menu {
+    position-anchor: --linkctrl-qr-add;
+    top: anchor(bottom);
+    right: anchor(right);
+    bottom: auto;
+    left: auto;
+    margin: 0.25rem 0 0 0;
+    max-width: calc(100vw - 2rem);
+  }
+}
 @supports (anchor-scope: --linkctrl-qr-menu) {
   .qr-menu {
     position-anchor: --linkctrl-qr-menu;
@@ -194,6 +222,71 @@ form.htmx-request .file-pick::file-selector-button {
     margin: 0.25rem 0 0 0;
     max-width: calc(100vw - 2rem);
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * The tooltip this product owns (M50.8, D192).
+ *
+ * The QR tab's icon controls carried the browser's tooltip — a `<title>` inside
+ * the glyph — and the owner reported two things about it: that it says the wrong
+ * words, and that it is *"difficult to get the tooltip to show. Anywhere a click
+ * on the button would be accepted should also show the tooltip when hovered."*
+ * The second is geometry: the glyph is `h-3 w-3` inside a `p-1.5` button, so the
+ * hover target for the tooltip was about 12px inside a control about 30px wide.
+ *
+ * **Two things the native tooltip could not be made to do, and they are why this
+ * exists rather than the attribute moving onto the button.** It has no DOM
+ * presence, so no browser assertion can watch it appear — the claim would ship
+ * untested on the one surface this milestone leans on a browser for. And a
+ * `disabled` button is unfocusable, so a keyboard reader never triggers one at
+ * all, on the two controls whose whole purpose is to explain a refusal.
+ *
+ * So: a `<span role="tooltip">` the page draws, tied to its control by
+ * `aria-describedby`, shown on `:hover` and on `:focus-within`. The host carries
+ * `tabindex="0"` wherever the control it wraps is disabled — that is what gives
+ * the keyboard somewhere to land when the button itself refuses focus.
+ *
+ * **The delay is the "hovered for a short period" the owner asked for**, and it
+ * is on the transition rather than in script: 300ms in, none out, so sweeping
+ * the pointer across a row of controls does not trail tooltips behind it while
+ * resting on one still answers. `visibility` transitions with a delay rather
+ * than being switched, because `opacity` alone leaves an invisible box over the
+ * page and `display` cannot transition at all.
+ *
+ * `pointer-events: none` so the bubble cannot itself be hovered — a tooltip that
+ * keeps itself open under the pointer is a tooltip that will not close.
+ *
+ * **Written here rather than as utilities**, on `.file-pick`'s and `.qr-slider`'s
+ * reason: this is a state style with a transition and two pseudo-classes, and
+ * `style-src 'self'` refuses an injected stylesheet. Theme tokens, never palette
+ * values.
+ * ------------------------------------------------------------------------- */
+.qr-tip {
+  position: absolute;
+  bottom: calc(100% + 0.375rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: 16rem;
+  width: max-content;
+  border-radius: 0.375rem;
+  border: 1px solid var(--t-line-strong);
+  background-color: var(--t-raised);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--t-ink);
+  box-shadow: 0 4px 6px -1px var(--t-press-shadow);
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 120ms ease, visibility 0s linear 120ms;
+}
+.qr-tip-host:hover > .qr-tip,
+.qr-tip-host:focus-within > .qr-tip {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 120ms ease 300ms, visibility 0s linear 300ms;
 }
 
 /* ---------------------------------------------------------------------------

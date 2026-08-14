@@ -139,9 +139,75 @@
        is spent — off one `len(QRCodes)`, so there is one value and two
        renderings of it. Owner-answered 2026-08-13; the maximum stays off the
        strip, where space is scarce. */}}
-  <div class="mb-2 flex items-baseline justify-between gap-2">
+  <div class="mb-2 flex items-center justify-between gap-2">
     <h3 class="text-sm font-medium text-ink">Codes</h3>
-    <p class="shrink-0 text-xs tabular-nums text-subtle">{{len .QRCodes}}/{{.QRMaxCodes}}</p>
+    <div class="flex shrink-0 items-center gap-2">
+      <p class="text-xs tabular-nums text-subtle">{{len .QRCodes}}/{{.QRMaxCodes}}</p>
+      {{if $.Identity.Can "links.update"}}
+      {{/* **Adding a code is a prompt beside the counter** (M50.8, F238h),
+           owner-set: *"Add a button with a '+' icon near the code count that
+           provides a prompt with a text field and add button when pressed."*
+           What it replaced was a label, a text box and an *Add the code* submit
+           sitting permanently below the list — three elements of chrome for an
+           action nobody takes twice in a session, on the tab whose whole
+           complaint is that it costs more attention than it returns.
+
+           **The mechanism is the popover this file already uses**, not a new
+           one: the row menus above and nav.html's header menus are both
+           `popovertarget`/`popover="auto"`, so Escape and a click outside close
+           it and `script-src 'self'` is untouched. It anchors to one element
+           rather than twenty, so it needs no `anchor-scope` — that machinery is
+           D189's answer to twenty rows wanting twenty anchors, and one counter
+           wants one. Its name is its own (`--linkctrl-qr-add`) rather than the
+           list's, so the scoped name and this one cannot resolve into each
+           other.
+
+           **Disabled with the reason at capacity, rather than absent** (D192).
+           The add form used to disappear at 20/20 and the counter was left to
+           explain it, which is the same absent-versus-disabled choice the
+           remove button below reverses — answering it the other way here would
+           leave one list carrying two conventions. */}}
+      {{if lt (len .QRCodes) .QRMaxCodes}}
+      <span class="qr-tip-host relative inline-flex">
+        <button type="button" popovertarget="qr-add"
+                aria-label="Add a QR code" aria-describedby="qr-tip-add"
+                class="qr-add-anchor cursor-pointer rounded-md border border-line-strong p-1.5 text-ink hover:bg-line">
+          {{template "icon_plus" ""}}
+        </button>
+        <span id="qr-tip-add" role="tooltip" class="qr-tip">Add a QR code</span>
+      </span>
+      {{/* One field, because a code has one thing to decide at the moment it is
+           made. Its identity is generated rather than asked for: it is printed,
+           and a name somebody chose is a name they have to keep unique here and
+           correct on every copy already in the world. The style is copied from
+           the code the link is already drawing at, so a second poster looks like
+           the first one until somebody changes it. */}}
+      <div id="qr-add" popover="auto"
+           class="qr-add-menu z-20 rounded-md border border-line-strong bg-raised p-3 text-left shadow-lg">
+        <form method="post" action="/links/{{$.Link.ID}}/qr" class="flex flex-wrap items-end gap-2">
+          <input type="hidden" name="next" value="{{$.QRReturn}}">
+          <div>
+            <label for="qr_label" class="block text-sm font-medium text-ink">Name</label>
+            <input id="qr_label" name="label" type="text" maxlength="{{$.QRMaxLabel}}"
+                   placeholder="Autumn poster"
+                   class="mt-1 block w-56 max-w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+          </div>
+          <button type="submit" name="add" value="1"
+                  class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Add the code</button>
+        </form>
+      </div>
+      {{else}}
+      <span class="qr-tip-host relative inline-flex" tabindex="0">
+        <button type="button" disabled
+                aria-label="Add a QR code" aria-describedby="qr-tip-add"
+                class="cursor-not-allowed rounded-md border border-line-strong p-1.5 text-ink opacity-50">
+          {{template "icon_plus" ""}}
+        </button>
+        <span id="qr-tip-add" role="tooltip" class="qr-tip">A link carries at most {{$.QRMaxCodes}} QR codes.</span>
+      </span>
+      {{end}}
+      {{end}}
+    </div>
   </div>
   <ul class="divide-y divide-line rounded-md border border-line">
     {{range .QRCodes}}
@@ -207,8 +273,19 @@
              cannot be positioned against without it — nav.html's viewport pin
              is meaningless halfway down a list, and a centred sheet at least
              lands somewhere a reader can see. */}}
+        {{/* `hover:bg-line` and not `hover:bg-sunken` (M50.8, F238j),
+             owner-reported: *"The highlighting for the download and remove
+             buttons is only visible when not on the selected row."* The row
+             above paints `bg-sunken` when it is the selected one, so a control
+             hovering to the same token resolved to the background it sits on —
+             the affordance was written and, on the one row a reader is most
+             likely to be pointing at, drew nothing. `line` is a step from both
+             `raised` and `sunken` in either theme, which is what makes it
+             visible on a selected row and on an unselected one. The menu's own
+             entries below keep `bg-sunken`: they are drawn on `raised` inside a
+             popover, never on a row. */}}
         <button type="button" popovertarget="qr-download-{{.Slug}}"
-                class="qr-menu-anchor cursor-pointer rounded-md border border-line-strong p-1.5 text-ink hover:bg-sunken">
+                class="qr-menu-anchor cursor-pointer rounded-md border border-line-strong p-1.5 text-ink hover:bg-line">
           {{template "icon_download" (printf "Download %s" .Name)}}
         </button>
         <div id="qr-download-{{.Slug}}" popover="auto"
@@ -250,34 +327,85 @@
 
                **On every row for every reader**, so the pair is drawn twice in
                this file: this branch for an editor, and the form's `{{"{{else}}"}}`
-               below for somebody holding only `links.read` (D190). */}}
+               below for somebody holding only `links.read` (D190).
+
+               **The name is `Default QR Code` and `Make Default QR Code`**
+               (M50.8, F238i), owner-set over *"%s is the default code"* and
+               *"Make %s the default code"*. It loses the code's own name and
+               that is the owner's call, taken knowing a screen-reader user
+               hears the same string on up to twenty rows; the row's own link
+               carries the name immediately before it, so the name is one
+               element away rather than gone.
+
+               **And the tooltip is this page's rather than the operating
+               system's** (D192). It was a `<title>` inside a `h-3 w-3` glyph
+               drawn inside a `p-1.5` button — a ~12px target inside a ~30px
+               control, which is why the owner reported it as *"difficult to get
+               the tooltip to show"*. A `.qr-tip-host` wrapper shows it on hover
+               anywhere over the button and on focus, which the native one could
+               not do at all here: a `disabled` button is unfocusable, so the
+               keyboard path to the tooltip explaining a refusal did not exist.
+               The glyph is drawn decoratively for that — see icons.html — and
+               the button carries the name itself. */}}
           {{if .Default}}
-          <button type="button" disabled aria-pressed="true"
-                  class="cursor-default rounded-md p-1.5 text-accent-ink">
-            {{template "icon_default_on" (printf "%s is the default code" .Name)}}
-          </button>
+          <span class="qr-tip-host relative inline-flex" tabindex="0">
+            <button type="button" disabled aria-pressed="true"
+                    aria-label="Default QR Code" aria-describedby="qr-tip-default-{{.Slug}}"
+                    class="cursor-default rounded-md p-1.5 text-accent-ink">
+              {{template "icon_default_on" ""}}
+            </button>
+            <span id="qr-tip-default-{{.Slug}}" role="tooltip" class="qr-tip">Default QR Code</span>
+          </span>
           {{else}}
-          <button type="submit" name="make_default" value="1" aria-pressed="false"
-                  class="cursor-pointer rounded-md p-1.5 text-subtle hover:bg-sunken hover:text-ink">
-            {{template "icon_default_off" (printf "Make %s the default code" .Name)}}
-          </button>
+          <span class="qr-tip-host relative inline-flex">
+            <button type="submit" name="make_default" value="1" aria-pressed="false"
+                    aria-label="Make Default QR Code" aria-describedby="qr-tip-default-{{.Slug}}"
+                    class="cursor-pointer rounded-md p-1.5 text-subtle hover:bg-line hover:text-ink">
+              {{template "icon_default_off" ""}}
+            </button>
+            <span id="qr-tip-default-{{.Slug}}" role="tooltip" class="qr-tip">Make Default QR Code</span>
+          </span>
           {{end}}
-          {{/* Present on every row since D183, the default included, and absent
-               on the only row a link can have — a link always has a code, so
-               the last one is refused. Absent rather than disabled: the
-               sentence below the list is where the reason goes, because a
-               disabled control with no explanation reads as a bug.
+          {{/* Present on every row since D183, the default included.
+
+               **Disabled rather than absent on the only row a link can have**
+               (M50.8, F238g), owner-set: *"leave the remove button on the row
+               but have it grayed out if it is the last item. A hover tooltip on
+               the disabled button can say 'Every link must have at least 1 QR
+               code.'"* — and that sentence is the owner's wording.
+
+               **This reverses what stood here**, which read *"Absent rather
+               than disabled: the sentence below the list is where the reason
+               goes, because a disabled control with no explanation reads as a
+               bug."* The reversal is narrow and the old objection survives it:
+               that comment's complaint was about a disabled control **with no
+               explanation**, and this one carries its explanation. The sentence
+               it pointed at is deleted in the same milestone, so the reason has
+               moved onto the control from below the list — which is also what
+               stops the list carrying two conventions, since the `+` above it
+               grays out with its reason for the same reason (D192).
 
                A `−` since M50.7, owner-set. The word went and the accessible
-               name is what still says what it removes, which is why the icon's
-               argument names the code rather than reading "Remove". `ml-1` is
-               the second half of F224f: the destructive control sat 8px from a
-               download button on a 22px-tall row. */}}
+               name is what still says what it removes, which is why it names
+               the code rather than reading "Remove". `ml-1` is the second half
+               of F224f: the destructive control sat 8px from a download button
+               on a 22px-tall row — and it is on the *button* in both branches,
+               not on the wrapper, because the margin is owed at the seam
+               between two controls whichever shape this one takes. */}}
           {{if gt (len $.QRCodes) 1}}
           <button type="submit" name="remove" value="1"
-                  class="ml-1 cursor-pointer rounded-md border border-line-strong p-1.5 text-danger hover:bg-sunken">
+                  class="ml-1 cursor-pointer rounded-md border border-line-strong p-1.5 text-danger hover:bg-line">
             {{template "icon_minus" (printf "Remove %s" .Name)}}
           </button>
+          {{else}}
+          <span class="qr-tip-host relative inline-flex" tabindex="0">
+            <button type="submit" name="remove" value="1" disabled
+                    aria-label="Remove {{.Name}}" aria-describedby="qr-tip-remove-{{.Slug}}"
+                    class="ml-1 cursor-not-allowed rounded-md border border-line-strong p-1.5 text-danger opacity-50">
+              {{template "icon_minus" ""}}
+            </button>
+            <span id="qr-tip-remove-{{.Slug}}" role="tooltip" class="qr-tip">Every link must have at least 1 QR code.</span>
+          </span>
           {{end}}
         </form>
         {{else}}
@@ -294,64 +422,60 @@
              default's own row already draws for an editor. Two render paths
              for one thing is the cost and the owner took it knowingly; the
              empty icon's name says the state rather than offering the write,
-             because here there is no write to offer. */}}
+             because here there is no write to offer.
+
+             **The names move with the editor's** (M50.8, F238i): `Default QR
+             Code`, and `Not the Default QR Code` where the editor is offered
+             `Make Default QR Code`. The owner set two strings for two states of
+             a control; this pair is the same two states of a reading, so it
+             follows the same wording rather than keeping the sentence form the
+             other branch just dropped. Both are disabled here — which is
+             exactly why they are tooltip hosts too: a disabled button cannot be
+             focused, so without the wrapper a keyboard reader meets no tooltip
+             at all on either. */}}
         {{if .Default}}
-        <button type="button" disabled aria-pressed="true"
-                class="cursor-default rounded-md p-1.5 text-accent-ink">
-          {{template "icon_default_on" (printf "%s is the default code" .Name)}}
-        </button>
+        <span class="qr-tip-host relative inline-flex" tabindex="0">
+          <button type="button" disabled aria-pressed="true"
+                  aria-label="Default QR Code" aria-describedby="qr-tip-default-{{.Slug}}"
+                  class="cursor-default rounded-md p-1.5 text-accent-ink">
+            {{template "icon_default_on" ""}}
+          </button>
+          <span id="qr-tip-default-{{.Slug}}" role="tooltip" class="qr-tip">Default QR Code</span>
+        </span>
         {{else}}
-        <button type="button" disabled aria-pressed="false"
-                class="cursor-default rounded-md p-1.5 text-subtle">
-          {{template "icon_default_off" (printf "%s is not the default code" .Name)}}
-        </button>
+        <span class="qr-tip-host relative inline-flex" tabindex="0">
+          <button type="button" disabled aria-pressed="false"
+                  aria-label="Not the Default QR Code" aria-describedby="qr-tip-default-{{.Slug}}"
+                  class="cursor-default rounded-md p-1.5 text-subtle">
+            {{template "icon_default_off" ""}}
+          </button>
+          <span id="qr-tip-default-{{.Slug}}" role="tooltip" class="qr-tip">Not the Default QR Code</span>
+        </span>
         {{end}}
         {{end}}
       </div>
     </li>
     {{end}}
   </ul>
-  {{if eq (len .QRCodes) 1}}
-  <p class="mt-2 text-xs text-subtle">
-    A link always has a QR code, so this one cannot be removed. Add a second and either becomes removable.
-  </p>
-  {{end}}
+  {{/* **Two paragraphs stood below this list and both are gone** (M50.8), the
+       second and third the owner has taken off this tab.
 
-  {{if $.Identity.Can "links.update"}}
-  {{if lt (len .QRCodes) .QRMaxCodes}}
-  {{/* One field, because a code has one thing to decide at the moment it is
-       made. Its identity is generated rather than asked for: it is printed, and
-       a name somebody chose is a name they have to keep unique here and correct
-       on every copy already in the world. The style is copied from the code the
-       link is already drawing at, so a second poster looks like the first one
-       until somebody changes it. */}}
-  <form method="post" action="/links/{{.Link.ID}}/qr" class="mt-3 flex flex-wrap items-end gap-2">
-    <input type="hidden" name="next" value="{{.QRReturn}}">
-    <div class="grow">
-      <label for="qr_label" class="block text-sm font-medium text-ink">Add another code</label>
-      <input id="qr_label" name="label" type="text" maxlength="{{.QRMaxLabel}}"
-             placeholder="Autumn poster"
-             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-    </div>
-    <button type="submit" name="add" value="1"
-            class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Add the code</button>
-  </form>
-  {{/* Halved at M50.7. What went is *every code points at this same link, so
-       changing the destination changes all of them at once* — which the add
-       form's own label, sitting under a heading about one link, already says,
-       and which docs/usage.md and the changelog both state at length for
-       somebody who wants it. What a second code *buys* is the part a reader
-       cannot deduce from the control beside it, so it stays. */}}
-  <p class="mt-1 text-xs text-subtle">
-    What a second code buys is knowing which one people scanned.
-  </p>
-  {{else}}
-  {{/* The at-capacity sentence is gone with the cap sentence above it (F224a):
-       the counter at the top of this list reads {{"20/20"}} when a link is
-       here, which says what this paragraph said and says it where the reader
-       was already looking. The add form's absence is what says the rest. */}}
-  {{end}}
-  {{end}}
+       *"A link always has a QR code, so this one cannot be removed. Add a
+       second and either becomes removable."* went with the change above it: the
+       remove control is drawn on the only row now and says why it refuses, on
+       itself, so a sentence under the list saying the same thing is the
+       explanation in the place the owner did not look. That is the trade F238(g)
+       makes — the reason moves onto the control, and this is the half of it
+       that is a deletion.
+
+       *"What a second code buys is knowing which one people scanned."* went on
+       the owner's judgement that *"this is something that would only be
+       appropriate on a help page"*. docs/usage.md and the changelog both say it
+       at length for somebody who wants it.
+
+       **The add form went with them and is the prompt beside the counter
+       above** (F238h), so what used to live under this list — a label, a field,
+       a submit and two sentences — is now one `+` and nothing. */}}
 </div>
 {{end}}
 
@@ -418,7 +542,23 @@
   </div>
 
   {{if .Identity.Can "links.update"}}
-  <form method="post" action="/links/{{.Link.ID}}/qr" class="grid flex-1 gap-4 sm:grid-cols-2">
+  {{/* **The style section, and it holds the logo controls too since M50.8**
+       (F238f), owner-set: *"Upload a logo should be moved into the style
+       section and the header/text/section it is currently in should be fully
+       removed."* The `Logo` heading and the bordered block under this whole row
+       are gone; what was inside them renders below the style form, in the same
+       section, under the same column.
+
+       **Section, and not the form — the distinction is load-bearing.** A file
+       needs `enctype="multipart/form-data"`, which the style form cannot carry
+       without every one of its other buttons arriving in a body the handler
+       does not read, and HTML forbids nesting one form inside another. So the
+       upload keeps its own `<form>` and its own route; what moved is where on
+       the page it sits. The wrapper is what the section *is*, which is why it
+       has an id: a test asserting the file input is inside the style section
+       has to have something to be inside. */}}
+  <div id="qr-style" class="flex-1">
+  <form method="post" action="/links/{{.Link.ID}}/qr" class="grid gap-4 sm:grid-cols-2">
     {{/* Where the save lands, carried on the form the way the workspace
          switcher and the appearance control already carry theirs. The panel is
          a route, so a write from inside it has two honest destinations — the
@@ -483,14 +623,38 @@
          reachable.
 
          **Two inputs, one setting, and the server decides which spoke.**
-         Nothing in this browser can copy a dragged slider into the box beside
-         it: this dashboard runs htmx and no script of its own, and a
-         `script-src 'self'` page is not the place to introduce one for a form
-         control. So `size_shown` witnesses the value the page was rendered
-         with and httpx.requestedQRSize applies one stated rule — the slider
-         wins when it has moved off that, the box wins otherwise. The
-         alternative was two fields that silently disagree, which is the risk
-         the milestone named.
+         `size_shown` witnesses the value the page was rendered with and
+         httpx.requestedQRSize applies one stated rule — the slider wins when it
+         has moved off that, the box wins otherwise. The alternative was two
+         fields that silently disagree, which is the risk M49 named.
+
+         **A script keeps them in step now, and that reverses what stood here**
+         (M50.8, D191). This comment read *"Nothing in this browser can copy a
+         dragged slider into the box beside it: this dashboard runs htmx and no
+         script of its own, and a `script-src 'self'` page is not the place to
+         introduce one for a form control."* The owner overruled it —
+         *"Dragging the Size slider doesn't change the number next to it until
+         you save. The number should change with the slider as well as the
+         reverse."* — and the sentence was wrong on its own terms besides:
+         `script-src 'self'` is exactly the place a served file is allowed, and
+         static/js/docs.js has been one for two phases.
+
+         **The rule above survives as the script-blocked path and is not
+         redundant.** static/js/qr-size.js mirrors whichever input moved, so the
+         two agree before anything is posted; with the script blocked the number
+         keeps its own value, the form still submits it, and requestedQRSize
+         arbitrates exactly as it did. The mirror is also deliberately one-way
+         at the edges: a number outside the range does **not** move the slider,
+         so a typed 9999 stays 9999 and the slider is left where it was. On a
+         form nobody has dragged, that leaves the slider on the witness, the box
+         wins the arbitration and the server refuses with a sentence — where
+         mirroring it would have clamped the slider to 2048 and stored a size
+         nobody asked for. **Drag first and then type 9999 and the refusal does
+         not come**: the slider is already off the witness, so requestedQRSize
+         takes it and stores the dragged size. That is D182's arbitration and it
+         predates this script, which only made the disagreement watchable; the
+         one-way mirror is what keeps the common case right, not a fix for the
+         other one.
 
          The bounds are passed in rather than typed, so the numbers the browser
          enforces and the ones internal/qr enforces cannot drift; the server
@@ -537,10 +701,18 @@
            so a code nobody has styled showed no control and no explanation —
            and *the control you are looking for is absent because it would do
            nothing* is not something a reader can work out from an empty space.
-           A disabled control with a reason beside it is the shape this file
-           already refuses for **Remove** on a link's last code; the difference
-           is that this one has somewhere to put the reason, because there is
-           one control rather than one per row. */}}
+           **This was the file's only instance and it is now the file's rule**
+           (M50.8, D192). It read that a disabled control with a reason beside
+           it was a shape this file *refused* for **Remove** on a link's last
+           code, on the argument that only one control has somewhere to put its
+           reason. Both halves went: the remove button above is drawn disabled
+           with its reason at `:401-408` and the `+` at capacity at `:200-207`,
+           and the
+           tooltip D192 built is the somewhere — a per-row control has one now
+           too. What is left is a difference of shape and not of principle: this
+           one's reason is a visible `<p>` below, because it is one control at
+           the foot of a form rather than one of twenty on a row, and a
+           permanent sentence there costs nothing the tab is short of. */}}
       <button type="submit" name="reset" value="1" {{if not .QRStored}}disabled{{end}}
               class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">Restore defaults</button>
       {{if not .QRStored}}
@@ -573,18 +745,19 @@
       Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background. Restyling never changes what the code says.
     </p>
   </form>
-  {{end}}
-</div>
 
-{{if .Identity.Can "links.update"}}
-{{- /* A logo on the code being edited (M50.5).
+{{- /* A logo on the code being edited (M50.5), inside the style section since
+       M50.8 (F238f).
 
        **Its own form, and it has to be.** A file needs
        `enctype="multipart/form-data"`, which the style form above cannot carry
        without every one of its other buttons arriving in a body the handler
-       does not read. So the upload posts to its own route and the removal
-       stays on the style form's, under its own button name the way reset and
-       remove already do.
+       does not read, and HTML forbids nesting one form inside another. So the
+       upload posts to its own route and the removal stays on the style form's,
+       under its own button name the way reset and remove already do. **The
+       owner's word was section**, and that is what moved: this markup sits in
+       the same column as the style form, under the same heading-less section,
+       and posts exactly where it always did.
 
        **This reaches the default code as well as a named one.** `code` is
        whichever row the panel is open on, and for a link whose single code has
@@ -618,8 +791,14 @@
        was a *Upload a logo* / *Replace the logo* button beside this input and
        it was a second step for a decision already made: nobody picks a file
        and then declines to apply it. `hx-trigger="change"` on the form is what
-       replaces it &mdash; htmx's own attribute, no script of this product's,
-       and therefore nothing new for `script-src 'self'` to allow. On success
+       replaces it &mdash; htmx's own attribute, so nothing of this product's
+       submits this form and nothing new is asked of `script-src 'self'`. That
+       is what this sentence defended and it still holds; what stopped holding
+       at M50.8 is the stronger reading, that no script of this product's runs
+       here at all. static/js/qr-size.js sees this post on
+       `htmx:beforeRequest` and does one thing with it &mdash; remembers the
+       scroll position, so a refusal comes back where the reader was (D193).
+       It does not trigger the request and does not touch its body. On success
        `seeOther` answers an htmx request with `HX-Redirect`, which is a full
        page load; on a refusal the handler renders the page and this swaps
        `#qr` out of it, which is why both surfaces carry that id.
@@ -631,8 +810,12 @@
        focus is the one that lasts, because the input keeps it for as long as
        the dialog is up, and the `:not()` is what keeps a reader who merely
        tabbed here out of a pressed state that would never end. */ -}}
-<div class="mt-6 border-t border-line pt-4">
-  <h3 class="text-sm font-medium text-ink">Logo</h3>
+{{/* **The `Logo` heading and the block around it are gone** (M50.8, F238f). It
+     was `<h3>Logo</h3>` inside its own `mt-6 border-t pt-4` panel below the row
+     that holds the preview and the style form, which made a two-control upload
+     read as a third section of the tab. The controls are unchanged and their
+     routes are unchanged; what went is the furniture around them. */}}
+<div class="mt-4 border-t border-line pt-4">
   {{/* **Cut from five sentences to two at M50.7** (D188), which is the largest
        single saving the 900-character bound is paid for out of. What each cut
        sentence said is still said, and where it is said is the test:
@@ -688,6 +871,8 @@
     </form>
     {{end}}
   </div>
+  </div>
+  </div>
+  {{end}}
 </div>
-{{end}}
 {{end}}

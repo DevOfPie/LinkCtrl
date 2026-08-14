@@ -197,7 +197,9 @@ func (a *LinkAPI) DeleteQR(w http.ResponseWriter, r *http.Request) {
 // follows the flag wherever `PUT …/{slug}/default` puts it, and a slug does not
 // move. A client that wants a particular picture names the slug.
 
-// ListQRCodes answers with every code a link carries, default first.
+// ListQRCodes answers with every code a link carries, alphabetically by name
+// (M50.8). Which one is the default is the `default` field on each entry rather
+// than the first position, which is what it was until that milestone.
 func (a *LinkAPI) ListQRCodes(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id")
 	if err != nil {

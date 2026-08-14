@@ -1,0 +1,214 @@
+// The QR tab's size control, and where a save on that tab comes back to
+// (M50.8, D191, D193).
+//
+// **This is the first script this product's dashboard depends on**, and what it
+// is allowed to contain is bounded in m50.8.md rather than left to whoever
+// arrives next: it binds the two halves of the size control, and it puts the
+// page back where it was after a write. Anything else wanting script on this
+// dashboard is a decision, not a follow-on from this file.
+//
+// It is not the first script this product writes — static/js/docs.js has booted
+// Swagger UI on /docs for two phases — and nothing about the policy moves for
+// it. Served from the same directory under `script-src 'self'`, no Node, no
+// CDN, no build step, no `unsafe-` waiver, which is the whole of what the
+// inherited *`ui` stays stdlib-only* rule asks.
+//
+// **Delegated from `document`, not bound to the elements.** The QR tab arrives
+// by an htmx swap of `#link-tabs` as often as by a page load, so anything that
+// held a reference to `#qr_size` would be holding a node the next swap
+// discarded. Listening on the document costs two handlers for the whole
+// application and survives every swap without re-running.
+(function () {
+	"use strict";
+
+	// --- the slider and the number ------------------------------------------
+	//
+	// One value, two inputs, and until this file nothing copied either into the
+	// other: the number lied about what the slider would post until the moment
+	// somebody saved. `httpx.requestedQRSize` still arbitrates on the server and
+	// is still what a browser with this script blocked falls back to.
+	//
+	// **The number moves the slider only when it is a value the slider could
+	// hold**, and that asymmetry is the one piece of judgement in here. A range
+	// input clamps: typing 9999 into the box and mirroring it would leave the
+	// slider on 2048, which is off the `size_shown` witness, so the server's rule
+	// would take the slider and store a size nobody asked for. Leaving the slider
+	// alone leaves it wherever it already was — and where that is still the
+	// witness, which is every typed size on a form nobody has dragged, the box
+	// wins the arbitration and the service refuses 9999 with a sentence naming
+	// the range.
+	//
+	// Where the slider *has* been dragged, it is already off the witness and it
+	// wins whatever the box says, so no refusal is produced and the dragged size
+	// is stored. That is D182's arbitration, unchanged and out of this
+	// milestone's spec — F240 carries it. Nothing here can fix it: the slider
+	// cannot both hold a value it clamps and stay on a witness it left.
+	function mirror(event) {
+		var moved = event.target;
+		if (!moved || !moved.id) {
+			return;
+		}
+		var slider = document.getElementById("qr_size_slider");
+		var number = document.getElementById("qr_size");
+		if (!slider || !number) {
+			return;
+		}
+		if (moved === slider) {
+			number.value = slider.value;
+			return;
+		}
+		if (moved !== number) {
+			return;
+		}
+		var want = parseInt(number.value, 10);
+		var lo = parseInt(slider.min, 10);
+		var hi = parseInt(slider.max, 10);
+		if (isNaN(want) || isNaN(lo) || isNaN(hi) || want < lo || want > hi) {
+			return;
+		}
+		slider.value = String(want);
+	}
+
+	document.addEventListener("input", mirror);
+
+	// --- where a save lands --------------------------------------------------
+	//
+	// Every write on this tab is a POST answered with a redirect, so the browser
+	// loads a fresh page and starts it at the top — or at `#qr`, which the
+	// link-page branch of `qrReturn` carries and which is the top of the QR card
+	// rather than the control that was being used. The owner reported the
+	// consequence: *"The whole page resets to the top every time the save button
+	// is used… a force to top is jarring and bad UX."*
+	//
+	// **A remembered position rather than a fragment**, which is D193 and is
+	// argued there: a fragment lands every reader on one element, and what was
+	// asked for is *"keep its current position whenever possible"*. The position
+	// is stored on the way out and applied once on the way in.
+	//
+	// `sessionStorage` because the value must not outlive the tab and must not
+	// travel: it is a scroll offset, which is nobody's business but this
+	// browser's. Every access is guarded — a browser with storage disabled or a
+	// quota exhausted throws rather than returning null, and losing the scroll
+	// position is not a reason to break the page.
+	var key = "linkctrl:qr-scroll";
+
+	function remember() {
+		try {
+			window.sessionStorage.setItem(key, JSON.stringify({
+				path: window.location.pathname,
+				y: Math.round(window.scrollY || window.pageYOffset || 0),
+			}));
+		} catch (e) {
+			/* storage refused; the save still works, it just lands at the top */
+		}
+	}
+
+	// Both ways a write leaves this tab. A native submit covers the style form,
+	// the add prompt and every control on a row; `htmx:beforeRequest` covers the
+	// logo upload, which posts on `change` and never fires a submit event at all.
+	// Capture on the submit listener, because a handler that cancelled the event
+	// on the way up would otherwise decide whether the position is stored.
+	document.addEventListener("submit", function (event) {
+		var form = event.target;
+		if (form && form.closest && form.closest("#qr")) {
+			remember();
+		}
+	}, true);
+
+	document.body.addEventListener("htmx:beforeRequest", function (event) {
+		var from = event.target;
+		if (from && from.closest && from.closest("#qr")) {
+			remember();
+		}
+	});
+
+	// **And forgotten again the moment it is clear no load is coming.** Only a
+	// document load reads this back, so an offset stored for a request that never
+	// produces one would sit in storage keyed to this pathname until *some* later
+	// load of it — plausibly the reader's own reload half an hour on, which would
+	// then jump to where they stood during an upload they have forgotten about.
+	//
+	// A swap is exactly that proof. htmx answers a successful write here with
+	// `HX-Redirect`, which navigates and swaps nothing; a **refused** logo upload
+	// answers 200 and swaps `#qr` in place, and after that swap the reader is
+	// already where they were, with no load left to restore them. So any swap
+	// that happens while an offset is stored says the offset is stale, and the
+	// listener is on the swap rather than on the response header because the swap
+	// is the observable fact and does not depend on which htmx event runs first.
+	function forget() {
+		try {
+			window.sessionStorage.removeItem(key);
+		} catch (e) {
+			/* storage refused; there was nothing to forget */
+		}
+	}
+
+	document.body.addEventListener("htmx:afterSwap", forget);
+
+	// Taken out of storage once, on the way in, and cleared whether or not it is
+	// ever applied: an offset that survived would put a later, unrelated load
+	// somewhere nobody scrolled to.
+	function take() {
+		var raw = null;
+		try {
+			raw = window.sessionStorage.getItem(key);
+			window.sessionStorage.removeItem(key);
+		} catch (e) {
+			return null;
+		}
+		if (!raw) {
+			return null;
+		}
+		var at;
+		try {
+			at = JSON.parse(raw);
+		} catch (e) {
+			return null;
+		}
+		if (!at || at.path !== window.location.pathname || typeof at.y !== "number") {
+			return null;
+		}
+		return at;
+	}
+
+	var pending = take();
+
+	// Applied twice, and the second time is not belt and braces: the link page's
+	// redirect carries `#qr`, so the browser performs a fragment scroll of its own
+	// during load, *after* DOMContentLoaded. Applying once leaves the reader at
+	// the top of the QR card, which is the thing being fixed — measured, on this
+	// milestone's own browser case, which passed with the restoration deleted
+	// until it was made to tell the two landings apart.
+	//
+	// **Unconditional both times, and an earlier draft guarded the second one**
+	// against a reader who had scrolled in between. That guard could not tell a
+	// reader from the browser's own fragment jump, which is the only thing that
+	// reliably happens in that window — so it yielded to the fragment every time
+	// and the feature did nothing. The window is between DOMContentLoaded and
+	// load on a page whose only pictures are inline SVG, so what it gives up is
+	// sub-second and hypothetical.
+	function restore() {
+		if (!pending) {
+			return;
+		}
+		// Only where the tab actually rendered. A refusal renders the page with
+		// the section on it and is exactly the case where the reader wants their
+		// place back; a redirect that landed somewhere else is not.
+		if (!document.getElementById("qr")) {
+			return;
+		}
+		window.scrollTo(0, pending.y);
+	}
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", restore);
+	} else {
+		restore();
+	}
+	window.addEventListener("load", function () {
+		restore();
+		// Once. A position that outlived its own load would follow the reader
+		// into whatever they did next.
+		pending = null;
+	});
+})();

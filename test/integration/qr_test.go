@@ -528,13 +528,19 @@ func TestTheStyleFormOnThePageStoresWhatTheAPIWouldStore(t *testing.T) {
 // driven through the handler rather than asserted of the function that decides
 // (D182, F221).
 //
-// **Nothing in the browser keeps the two in step**, because this dashboard runs
-// htmx and no script of its own, so the rule lives on the server: `size_shown`
-// is what the form was rendered with, the slider wins when it has moved off
-// that, and the number wins otherwise. Both directions are driven, because a
-// rule that only ever took one of them would pass a test for either alone — and
-// so is the form with no slider at all, which is what an API-shaped post and a
-// page cached from before this reopening look like.
+// **The rule lives on the server**: `size_shown` is what the form was rendered
+// with, the slider wins when it has moved off that, and the number wins
+// otherwise. Both directions are driven, because a rule that only ever took one
+// of them would pass a test for either alone — and so is the form with no slider
+// at all, which is what an API-shaped post and a page cached from before this
+// reopening look like.
+//
+// **This comment said nothing in the browser keeps the two in step, and M50.8
+// made that false**: `static/js/qr-size.js` mirrors whichever input moved. The
+// rule is not redundant for it and this test is not weaker — it is the
+// script-blocked path, it is what an API-shaped post meets, and it is what
+// decides a typed size the slider deliberately did not follow because the value
+// is outside its range.
 func TestTheSliderAndTheNumberResolveToOneSize(t *testing.T) {
 	f := newRules(t)
 	f.claim()
@@ -2149,5 +2155,163 @@ func TestARefusedLogoStaysOnThePageItWasUploadedFrom(t *testing.T) {
 	if !strings.Contains(string(page), ">QR code</h1>") {
 		t.Errorf("a refused upload from the panel's page came back as some other "+
 			"page:\n%.400s", page)
+	}
+}
+
+// --- M50.8: the list stops moving under the reader ---------------------------
+
+// TestTheCodesListIsAlphabeticalAndStaysPutWhenTheDefaultMoves is F238(a),
+// owner-reported: *"Selecting a different default code re-orders the list of
+// codes which can make it seem like the selection didn't change. Keeping them in
+// Alphabetical order by name is probably the best option."*
+//
+// **It reverses `ListQRCodes`' stated design and the reversal is the point.**
+// The query led with the flag-holder and its comment defended exactly that —
+// *"the list re-orders when the reader moves it, which is the visible half of
+// what setting a default does"*. That argument is answered rather than
+// withdrawn: M50.7 put a filled icon on the row that holds the flag, so the
+// change is visible without the list moving, and the movement was what made the
+// change look like nothing had happened.
+//
+// **It is an integration test and not an `internal/link` one.** m50.8.md asks
+// for the latter, and the order is produced by `ORDER BY lower(q.label), q.id`
+// in campaigns.sql — a Go unit test in that package would have to fake
+// `dbgen.Querier` whole to see it, and would then be asserting a fake's
+// behaviour rather than the query's. This drives `link.Service.ListQRCodes`,
+// which is the `internal/link` surface the bullet names, against the database
+// that actually sorts.
+//
+// The labels are chosen so alphabetical and creation order are **opposite**, and
+// so that neither matches the order the flag is moved through: a list that
+// happened to satisfy two of the three would prove nothing.
+func TestTheCodesListIsAlphabeticalAndStaysPutWhenTheDefaultMoves(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("sorted", "https://example.com/x")
+
+	// Created newest-first alphabetically, so creation order reversed is the
+	// answer and any surviving `created_at` in the key shows up immediately.
+	zulu := f.createQRCode(t, id, "Zulu poster")
+	mike := f.createQRCode(t, id, "Mike poster")
+	alpha := f.createQRCode(t, id, "alpha poster")
+
+	// The link's own default has no label at all and therefore sorts first,
+	// which is also where it used to be for the other reason entirely.
+	def := f.qrCode(id)
+
+	names := func() []string {
+		t.Helper()
+		codes, err := f.links.ListQRCodes(t.Context(), f.owner, id)
+		if err != nil {
+			t.Fatalf("list qr codes: %v", err)
+		}
+		out := make([]string, 0, len(codes))
+		for _, c := range codes {
+			out = append(out, c.Label)
+		}
+		return out
+	}
+
+	want := []string{"", "alpha poster", "Mike poster", "Zulu poster"}
+	got := names()
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("the codes list reads %q, want %q — alphabetical by name and "+
+			"case-insensitively, which is why \"alpha\" leads \"Mike\" (F238a)", got, want)
+	}
+
+	// And it does not move when the default does. Three moves, because one is
+	// indistinguishable from a list that happens to be right once.
+	for _, slug := range []string{zulu.Slug, alpha.Slug, mike.Slug, def.Slug} {
+		resp := f.putJSON("/api/v1/links/"+id.String()+"/qr/codes/"+slug+"/default", "")
+		status := resp.StatusCode
+		_ = resp.Body.Close()
+		if status != http.StatusOK {
+			t.Fatalf("setting %q as the default answered %d", slug, status)
+		}
+		if got := names(); strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("after making %q the default the list reads %q, want %q. The "+
+				"order moving under the reader is the whole of what was reported",
+				slug, got, want)
+		}
+		// The flag did move — otherwise the assertion above is passing because
+		// nothing happened at all.
+		if now := f.qrCode(id); now.Slug != slug {
+			t.Fatalf("the default is %q after asking for %q", now.Slug, slug)
+		}
+	}
+}
+
+// TestTheUntaggedBucketFollowsTheFlagWhereverItSorts is the hidden edge the
+// sort change opens, asserted rather than hoped for.
+//
+// `link.ListQRCodes` and `analytics.qrCodeSplit` both tested `rows[0]` to decide
+// whether any row held the default — which was the whole set's answer only
+// because the query put the flag-holder first. Alphabetical order breaks that
+// identity: with the flag on a code that sorts last, the old test would have
+// synthesised a second default *and* added every untagged scan to the real one,
+// reporting the same clicks twice on one page.
+//
+// So the link here holds the flag on the alphabetically **last** code, which is
+// exactly the arrangement the old code got wrong.
+func TestTheUntaggedBucketFollowsTheFlagWhereverItSorts(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("bucketed", "https://example.com/x")
+
+	// The picture as printed before this link's codes had identities.
+	printed := f.codeContent(t, id, "")
+
+	first := f.createQRCode(t, id, "Alpha poster")
+	last := f.createQRCode(t, id, "Zulu poster")
+	def := f.qrCode(id)
+
+	// The flag onto the code that sorts last, and off the unlabelled row that
+	// sorts first — which is what makes rows[0] the wrong question.
+	resp := f.putJSON("/api/v1/links/"+id.String()+"/qr/codes/"+last.Slug+"/default", "")
+	status := resp.StatusCode
+	_ = resp.Body.Close()
+	if status != http.StatusOK {
+		t.Fatalf("setting the default answered %d", status)
+	}
+
+	codes, err := f.links.ListQRCodes(t.Context(), f.owner, id)
+	if err != nil {
+		t.Fatalf("list qr codes: %v", err)
+	}
+	if len(codes) != 3 {
+		t.Fatalf("the link lists %d codes, want 3 (%q, %q and the one it started "+
+			"with) — a fourth is the default being invented a second time because "+
+			"the flag-holder does not sort first", len(codes), first.Label, last.Label)
+	}
+	if codes[len(codes)-1].Slug != last.Slug || !codes[len(codes)-1].Default {
+		t.Fatalf("the flag is not on the last row: %+v", codes)
+	}
+
+	f.scan(t, printed)
+	waitForClicks(t, f.pool, id, 1)
+	if err := analytics.NewRoller(f.pool, nil).
+		RunRecentDimensions(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	var total int64
+	var onFlag int64
+	for _, c := range f.linkStats(t, id).QRCodes {
+		total += c.Clicks
+		if c.Slug == last.Slug {
+			onFlag = c.Clicks
+		}
+		if c.Slug == def.Slug && c.Clicks != 0 {
+			t.Errorf("the row that used to hold the flag reads %d scans; the untagged "+
+				"bucket follows the flag, and the flag moved", c.Clicks)
+		}
+	}
+	if onFlag != 1 {
+		t.Errorf("the code holding the flag reads %d untagged scans, want 1", onFlag)
+	}
+	if total != 1 {
+		t.Errorf("the breakdown reports %d scans over one scan. A second untagged "+
+			"bucket beside the flag-holder's is the same click counted twice, which "+
+			"is what reading position 0 as the default would have produced", total)
 	}
 }

@@ -32,10 +32,14 @@ import { fileURLToPath } from 'node:url';
 //                              holds the flag and the whole list re-renders on
 //                              a post, so clicking an empty one has to leave
 //                              exactly one filled and it has to be the row that
-//                              was clicked. No swap and no script do this
-//                              (D188), which is precisely why it is worth
+//                              was clicked. No swap and nothing scripted draws
+//                              it (D188), which is precisely why it is worth
 //                              driving: the claim is that a plain
-//                              post-and-redirect is enough.
+//                              post-and-redirect is enough. Since M50.8 a
+//                              script does *run* on this page — `qr-size.js`
+//                              notes the scroll position on the way out — but
+//                              it neither posts this nor paints anything, and
+//                              the redraw is still the server's alone.
 //
 // The spec restores the default it moved before it ends, so a second run starts
 // where the first one did and the other specs see the instance they expect.
@@ -228,18 +232,29 @@ test('each row\'s download menu opens on its own row and reaches both formats', 
   ).toMatch(/\.png$/);
 });
 
-// The two accessible names an icon can carry, which are also how this spec
-// addresses a row: the filled one names the code and its role, the empty one
-// names the action and the code it would act on.
+// **The names stopped carrying the code and this spec stopped addressing rows by
+// them** (M50.8, F238i). They read `Default QR Code` and `Make Default QR Code`
+// now, owner-set, replacing *"%s is the default code"* / *"Make %s the default
+// code"* — so every row's control says the same thing and a name is no longer
+// an address. The owner took that knowing a screen-reader user hears one string
+// on twenty rows; the row's own link carries the name immediately before it.
 //
-// **The name is on the glyph, not on the button**, which is icons.html's own
-// convention — *"a define's dot is its accessible name"* — and the buttons carry
-// no text at all, so the `<svg>`'s `aria-label` is what a screen reader reads
-// off them and what this spec addresses them by.
-const isDefault = (code) => `${code} is the default code`;
-const makeDefault = (code) => `Make ${code} the default code`;
-const codeOf = (label) => label.replace(/ is the default code$/, '');
-const nameOf = (button) => button.locator('svg').getAttribute('aria-label');
+// **And the name moved from the glyph to the button.** icons.html's convention
+// is that a define's dot is its accessible name, and a control inside a
+// `.qr-tip-host` is the one exception: a `<title>` in the glyph is a *native*
+// tooltip the operating system draws beside the one this page draws, over the
+// same button, saying the same words (D192). So the glyph is decorative there
+// and the button names itself, which is also what `aria-describedby` needs
+// something to describe.
+//
+// A row is therefore addressed by the code's own link text, which is the one
+// thing on it that is still unique.
+const nameOf = (button) => button.getAttribute('aria-label');
+const codeOf = (row) => row.locator('a[href*="/qr"]').first().innerText();
+// The row a control sits in, addressed by the control's own state rather than
+// by a `has:` filter — a filter's inner locator is resolved against the row, so
+// a page-rooted selector inside one matches nothing and times out.
+const rowWith = (page, control) => page.locator(`main ul li:has(${control})`);
 
 test('clicking an empty default icon moves the fill, and only one stays filled', async ({ page }) => {
   await signIn(page);
@@ -247,17 +262,27 @@ test('clicking an empty default icon moves the fill, and only one stays filled',
 
   const filled = () => page.locator('main ul li button[aria-pressed="true"]');
   const empty = () => page.locator('main ul li button[aria-pressed="false"][name="make_default"]');
+  const rowOf = (control) => rowWith(page, control);
 
   await expect(filled(), 'the list does not draw exactly one filled default icon').toHaveCount(1);
-  const was = codeOf(await nameOf(filled()));
+  expect(
+    await nameOf(filled()),
+    'the filled default control does not carry the owner\'s wording (F238i)',
+  ).toBe('Default QR Code');
+  const was = await codeOf(rowOf('button[aria-pressed="true"]'));
   const others = await empty().count();
   expect(others, 'no empty default icon to click').toBeGreaterThan(0);
 
   // The owner's words: *"It should update all the icons when any of the icons
-  // is changed."* Nothing swaps and no script runs — the control posts, the
-  // handler redirects, and the list is drawn again from the row that now holds
-  // the flag. That is the claim, and this is what checks it is enough.
-  const moved = (await nameOf(empty().first())).replace(/^Make (.*) the default code$/, '$1');
+  // is changed."* Nothing swaps and nothing scripted draws it — the control
+  // posts, the handler redirects, and the list is drawn again from the row that
+  // now holds the flag. That is the claim, and this is what checks it is enough.
+  // (`qr-size.js` does see this submit since M50.8, to remember where the reader
+  // was; it does not decide what any icon shows.)
+  const moved = await codeOf(
+    rowOf('button[aria-pressed="false"][name="make_default"]').first(),
+  );
+  expect(moved, 'the row being clicked has no name to address it by').not.toBe(was);
   await empty().first().click();
   await page.waitForURL('**qr=defaulted**', { timeout: 15000 });
 
@@ -267,9 +292,9 @@ test('clicking an empty default icon moves the fill, and only one stays filled',
       'a link always has exactly one default (D183) and the icons are drawn from it',
   ).toHaveCount(1);
   expect(
-    await nameOf(filled()),
+    await codeOf(rowOf('button[aria-pressed="true"]')),
     'the fill did not move to the row that was clicked',
-  ).toBe(isDefault(moved));
+  ).toBe(moved);
   await expect(
     empty(),
     'the icons on the other rows did not all come back empty',
@@ -277,8 +302,9 @@ test('clicking an empty default icon moves the fill, and only one stays filled',
 
   // Put it back, so a second run of this file starts where the first one did.
   const restore = page
-    .locator('main ul li button[name="make_default"]')
-    .filter({ has: page.locator(`svg[aria-label="${makeDefault(was)}"]`) });
+    .locator('main ul li')
+    .filter({ hasText: was })
+    .locator('button[name="make_default"]');
   await expect(
     restore,
     'the code the default was moved away from has no icon to move it back with',
@@ -286,7 +312,7 @@ test('clicking an empty default icon moves the fill, and only one stays filled',
   await restore.click();
   await page.waitForURL('**qr=defaulted**', { timeout: 15000 });
   expect(
-    await nameOf(filled()),
+    await codeOf(rowOf('button[aria-pressed="true"]')),
     'the default was not restored, so the instance is left different from how it was found',
-  ).toBe(isDefault(was));
+  ).toBe(was);
 });

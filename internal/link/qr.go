@@ -244,7 +244,12 @@ func (s *Service) QRCodeBySlug(
 	return &code, nil
 }
 
-// ListQRCodes returns every code a link carries, default first.
+// ListQRCodes returns every code a link carries, in alphabetical order by name.
+//
+// **The order is the query's and it is alphabetical since M50.8**, not
+// default-first: `ORDER BY lower(q.label), q.id`, which campaigns.sql argues
+// where it is written. What changed here is the consequence — this function may
+// no longer read position 0 as the default, and did.
 //
 // **The default is synthesised when no row holds it**, for the same reason
 // QRCodeBySlug answers for it: the link has that code whether or not anybody has
@@ -256,9 +261,15 @@ func (s *Service) QRCodeBySlug(
 // (D183). It read `rows[0].Slug != ""`, which was the same question while the
 // default was the empty slug; it is now the flag, falling back to that slug for
 // the reason GetDefaultQRCode falls back to it — a row can still arrive carrying
-// the old spelling and not the new one. Either way the list is ordered so that
-// the default leads, and a link with rows and none of them the default is the
-// only case that still needs a code invented.
+// the old spelling and not the new one.
+//
+// **Every row is asked, not the first one** (M50.8). While the list led with the
+// flag-holder, asking `rows[0]` was asking the whole set — the one row that
+// could hold the flag was the one that would be first. Alphabetical order breaks
+// that identity, and left alone the test would have invented a second default
+// for every link whose flag-holder does not sort first, then counted every
+// untagged scan against both. The synthesised code carries no label, so
+// prepending it keeps the list alphabetical.
 func (s *Service) ListQRCodes(
 	ctx context.Context, actor *auth.Identity, linkID uuid.UUID,
 ) ([]QRCode, error) {
@@ -276,7 +287,14 @@ func (s *Service) ListQRCodes(
 		return nil, fmt.Errorf("list qr codes for %s: %w", linkID, err)
 	}
 	out := make([]QRCode, 0, len(rows)+1)
-	if len(rows) == 0 || (!rows[0].IsDefault && rows[0].Slug != "") {
+	held := false
+	for _, row := range rows {
+		if row.IsDefault || row.Slug == "" {
+			held = true
+			break
+		}
+	}
+	if !held {
 		out = append(out, qrCodeFrom(linkID, l.ShortURL, "", qrRow{}, false))
 	}
 	for _, row := range rows {

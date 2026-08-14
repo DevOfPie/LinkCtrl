@@ -793,14 +793,33 @@ func TestTheDefaultIsAnIconOnEveryRow(t *testing.T) {
 		if !strings.Contains(rows[0], qrDefaultFilled) {
 			t.Errorf("%s fills a default icon on a row that does not hold the flag", page)
 		}
-		// And each names its own code.
+		// And the two names, which are the owner's own words (M50.8, F238i)
+		// and no longer name the code.
+		//
+		// **They are on the button now, not on the glyph**, which is what the
+		// tooltip pattern requires and is asserted here rather than left to
+		// TestTheQRTooltipsAreThisPagesOwn: a name that stayed on a `h-3 w-3`
+		// <svg> would also be a native tooltip drawn beside the page's own,
+		// saying the same words twice (D192).
 		for _, want := range []string{
-			`aria-label="The original code is the default code"`,
-			`aria-label="Make Autumn poster the default code"`,
+			`aria-label="Default QR Code"`,
+			`aria-label="Make Default QR Code"`,
 		} {
 			if !strings.Contains(body, want) {
-				t.Errorf("%s: no default icon carries %s. Twenty icons called "+
-					"\"default\" are one control repeated", page, want)
+				t.Errorf("%s: no default control carries %s (F238i, owner-set over "+
+					"\"%%s is the default code\")", page, want)
+			}
+		}
+		// The strings they replace, gone from the whole page. A test for the new
+		// wording alone passes on a page carrying both.
+		for _, gone := range []string{
+			"is the default code", "Make Autumn poster the default code",
+		} {
+			if strings.Contains(body, gone) {
+				t.Errorf("%s still carries %q. The owner replaced the sentence form "+
+					"with two fixed names, knowing the code's own name goes with it — "+
+					"the row's link carries that name immediately before the control",
+					page, gone)
 			}
 		}
 	}
@@ -876,17 +895,17 @@ func TestTheDefaultIconRendersForAReaderWhoCannotChangeIt(t *testing.T) {
 			t.Errorf("%s fills a reader's default icon on a row that does not hold "+
 				"the flag", page)
 		}
-		// Each names its own code, and the empty one names the state rather
-		// than an action nobody here can take.
+		// The names move with the editor's (M50.8, F238i) and the empty one
+		// still names the state rather than an action nobody here can take.
 		for _, want := range []string{
-			`aria-label="The original code is the default code"`,
-			`aria-label="Autumn poster is not the default code"`,
+			`aria-label="Default QR Code"`,
+			`aria-label="Not the Default QR Code"`,
 		} {
 			if !strings.Contains(body, want) {
-				t.Errorf("%s: no default icon carries %s", page, want)
+				t.Errorf("%s: no default control carries %s", page, want)
 			}
 		}
-		if strings.Contains(body, `aria-label="Make Autumn poster the default code"`) {
+		if strings.Contains(body, `aria-label="Make Default QR Code"`) {
 			t.Errorf("%s offers a reader a name that promises a write they cannot "+
 				"make", page)
 		}
@@ -1062,16 +1081,23 @@ func TestTheEncodedURLIsNotPrintedUnderThePicture(t *testing.T) {
 // the tab used the platform's popover API for something that is not a panel. So
 // the claim is checked directly instead: the only popovers here are the per-row
 // download menus, and the settings themselves are ordinary markup.
+// **Widened for the add prompt in M50.8's own diff** (F238h, D189). The prompt
+// is a third popover on this surface and it is named here rather than
+// discovered as a red assertion: extending an exception because a test went red
+// is exactly the silent widening D189 was written to prevent, and the two look
+// identical in the diff a month later. The settings themselves are still
+// asserted to be in flow, which is the claim; what moved is the list of things
+// that legitimately are not.
 func TestTheQRSettingsRenderInTheTabsFlow(t *testing.T) {
 	popovers := regexp.MustCompile(`<div id="([a-z0-9-]+)" popover="auto"`)
 	for _, page := range qrPanelPages {
 		body := renderQRPanel(t, page)
 		for _, m := range popovers.FindAllStringSubmatch(body, -1) {
-			if !strings.HasPrefix(m[1], "qr-download-") {
-				t.Errorf("%s renders a popover %q that is not a row's download menu. "+
-					"The QR settings live in the tab's flow since the F212 reopening, "+
-					"and a popup here is that mechanism returning under another name",
-					page, m[1])
+			if !strings.HasPrefix(m[1], qrRowMenuID) && m[1] != qrAddID {
+				t.Errorf("%s renders a popover %q that is neither a row's download menu "+
+					"nor the add prompt. The QR settings live in the tab's flow since "+
+					"the F212 reopening, and a popup here is that mechanism returning "+
+					"under another name", page, m[1])
 			}
 		}
 		// And the settings are on the page, outside anything that has to be
@@ -1110,36 +1136,515 @@ func TestTheDefaultCodeSaysWhatBeingTheDefaultMeans(t *testing.T) {
 	}
 }
 
-// TestALinkWithOneCodeSaysWhyItCannotBeRemoved is the other end of the same
-// bullet: *the last remaining code cannot be removed, and that refusal says
-// why.*
-//
-// The control is absent rather than disabled, so without this sentence the page
-// would be back to the shape the owner reported — a row with no way to remove it
-// and nothing saying so. The one-code state is the state nearly every link on an
-// instance is in, so it is also the state most readers meet first.
-func TestALinkWithOneCodeSaysWhyItCannotBeRemoved(t *testing.T) {
-	for _, page := range qrPanelPages {
-		body := mainOf(t, renderPage(t, page, map[string]any{
-			"Tab": "qr",
-			"QRCodes": []map[string]any{{
-				"Slug": "d3f4u1t0", "Label": "", "Name": "The original code",
-				"Size": 740, "Default": true, "Selected": true,
-				"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
-				"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
-				"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
-			}},
-		}))
+// oneCodeList renders either surface with a link that carries a single code,
+// which is the state nearly every link on an instance is in and therefore the
+// one most readers meet first.
+func oneCodeList(t *testing.T, page string) string {
+	t.Helper()
+	return mainOf(t, renderPage(t, page, map[string]any{
+		"Tab": "qr",
+		"QRCodes": []map[string]any{{
+			"Slug": "d3f4u1t0", "Label": "", "Name": "The original code",
+			"Size": 740, "Default": true, "Selected": true,
+			"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+			"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
+			"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
+		}},
+	}))
+}
 
-		if strings.Contains(body, `name="remove"`) {
-			t.Errorf("%s offers to remove a link's only QR code. A link always has "+
-				"one, and the service refuses — a control whose only outcome is a "+
-				"refusal is a control that should not be drawn", page)
+// TestTheLastCodesRemoveButtonIsDisabledRatherThanAbsent is F238(g), owner-set:
+// *"leave the remove button on the row but have it grayed out if it is the last
+// item. A hover tooltip on the disabled button can say 'Every link must have at
+// least 1 QR code.'"*
+//
+// **This replaces TestALinkWithOneCodeSaysWhyItCannotBeRemoved and reverses
+// it.** That test asserted the control was *absent* and that a sentence under
+// the list carried the reason, which is what `link_qr.html` argued in writing:
+// *"Absent rather than disabled: the sentence below the list is where the reason
+// goes, because a disabled control with no explanation reads as a bug."* The
+// objection in that sentence is to a disabled control **with no explanation**,
+// and the owner's tooltip is precisely the explanation it says is missing — so
+// the reversal is narrow and the old reasoning survives it. The sentence it
+// pointed at is deleted in the same milestone, which is why both halves are
+// asserted here: a page that grew the button and kept the paragraph would be
+// saying it twice.
+//
+// The sentence is the owner's wording, character for character, and is asserted
+// as such rather than paraphrased.
+func TestTheLastCodesRemoveButtonIsDisabledRatherThanAbsent(t *testing.T) {
+	const reason = "Every link must have at least 1 QR code."
+
+	for _, page := range qrPanelPages {
+		// One code: the button is drawn, and it refuses.
+		body := oneCodeList(t, page)
+		at := strings.Index(body, `name="remove" value="1"`)
+		if at < 0 {
+			t.Errorf("%s draws no remove control on a link's only code. It is drawn on "+
+				"every row now and disabled on this one (F238g); absent is the shape "+
+				"the owner asked to replace", page)
+			continue
 		}
-		if !strings.Contains(body, "A link always has a QR code, so this one cannot be removed") {
-			t.Errorf("%s draws a single-code list with no remove control and no reason. "+
-				"The absence is exactly what the owner reported as the defect, so "+
-				"the reason is what distinguishes this from it (D183)", page)
+		button := body[at : at+strings.Index(body[at:], ">")]
+		if !bareDisabled.MatchString(button) {
+			t.Errorf("%s: the only code's remove control is not disabled:\n  %s. A "+
+				"control whose only outcome is a refusal has to say so before it is "+
+				"pressed", page, button)
+		}
+		if !strings.Contains(body, reason) {
+			t.Errorf("%s disables the only code's remove control and gives no reason. "+
+				"A disabled control with no explanation reads as a bug, which is what "+
+				"the comment this bullet reverses was defending against", page)
+		}
+		// The reason is the tooltip's, tied to the button, and not a paragraph
+		// under the list: that paragraph is what this milestone deleted.
+		if strings.Contains(body, "A link always has a QR code, so this one cannot be removed") {
+			t.Errorf("%s still carries the sentence under the list. The reason moved "+
+				"onto the control; carrying both is saying it twice", page)
+		}
+		if !strings.Contains(button, `aria-describedby="qr-tip-remove-`) {
+			t.Errorf("%s: the disabled remove control is not tied to its reason by "+
+				"aria-describedby, so the explanation is visible and unannounced:\n  %s",
+				page, button)
+		}
+
+		// Two codes: both are drawn and neither refuses, so the disabled state
+		// is a property of being last rather than of being drawn.
+		two := renderQRPanel(t, page)
+		if n := strings.Count(two, `name="remove" value="1"`); n != 2 {
+			t.Errorf("%s draws %d remove controls over a two-code list, want 2", page, n)
+		}
+		if strings.Contains(two, reason) {
+			t.Errorf("%s tells a two-code link that a link must have at least one "+
+				"code. The reason belongs to the refusal, and there is none here", page)
+		}
+		for _, row := range qrRows(t, two) {
+			rm := strings.Index(row, `name="remove" value="1"`)
+			if rm < 0 {
+				continue
+			}
+			if b := row[rm : rm+strings.Index(row[rm:], ">")]; bareDisabled.MatchString(b) {
+				t.Errorf("%s disables a remove control on a link with two codes:\n  %s. "+
+					"Any code may be removed while another is left (D183)", page, b)
+			}
+		}
+	}
+}
+
+// --- the QR tab's third report (M50.8) ---------------------------------------
+
+// qrTip matches one of this page's own tooltips: the span a `.qr-tip-host`
+// wraps around its control, addressed by the two attributes that make it one
+// rather than by its class alone.
+var qrTip = regexp.MustCompile(`<span id="([a-z0-9-]+)" role="tooltip" class="qr-tip">([^<]*)</span>`)
+
+// TestTheQRTooltipsAreThisPagesOwn is D192, owner-answered on the plan review's
+// finding that the cheap fix could not be checked and did not reach everybody.
+//
+// **Why the browser's tooltip could not be moved onto the button and left at
+// that.** A native tooltip is drawn by the operating system and has no DOM
+// presence, so no assertion anywhere — here or in a browser — can watch it
+// appear; and a `disabled` button is unfocusable, so a keyboard reader never
+// triggers one at all, on the two controls whose entire purpose is to explain a
+// refusal. The owner took the build over the attribute.
+//
+// Four claims, and each is a way the pattern could ship broken:
+//
+//   - every tooltip is tied to a control by `aria-describedby`, so what a
+//     sighted reader hovers and what a screen reader announces are one string;
+//   - every `aria-describedby` on this tab resolves to a tooltip that is
+//     actually rendered, because a description pointing at nothing is silence;
+//   - a host wrapping a **disabled** control is focusable itself, which is the
+//     whole of what the native tooltip could not do;
+//   - the glyph inside a tooltip host is decorative, because a `<title>` there
+//     is a second tooltip over the same control saying the same words.
+func TestTheQRTooltipsAreThisPagesOwn(t *testing.T) {
+	hosts := regexp.MustCompile(`(?s)<span class="qr-tip-host[^"]*"([^>]*)>(.*?)</span>\s*</span>`)
+	described := regexp.MustCompile(`aria-describedby="([a-z0-9-]+)"`)
+
+	for _, page := range qrPanelPages {
+		for _, body := range []string{renderQRPanel(t, page), oneCodeList(t, page)} {
+			tips := map[string]string{}
+			for _, m := range qrTip.FindAllStringSubmatch(body, -1) {
+				tips[m[1]] = m[2]
+			}
+			if len(tips) == 0 {
+				t.Errorf("%s renders no tooltip of its own. D192 is a styled element "+
+					"this page owns, not the browser's <title>", page)
+				continue
+			}
+			// Every description resolves. A dangling one is a control that says
+			// nothing to a screen reader and everything to a hovering pointer.
+			for _, m := range described.FindAllStringSubmatch(body, -1) {
+				if _, ok := tips[m[1]]; !ok {
+					t.Errorf("%s: aria-describedby=%q names no tooltip that renders",
+						page, m[1])
+				}
+			}
+			found := hosts.FindAllStringSubmatch(body, -1)
+			if len(found) == 0 {
+				t.Errorf("%s renders a tooltip with no .qr-tip-host around it, so "+
+					"nothing hovers or focuses it into view", page)
+			}
+			for _, m := range found {
+				open, inner := m[1], m[2]
+				if !strings.Contains(inner, "aria-describedby=") {
+					t.Errorf("%s: a tooltip host wraps a control that is not tied to "+
+						"its tooltip:\n  %s", page, strings.TrimSpace(inner))
+				}
+				if !strings.Contains(inner, "aria-label=") {
+					t.Errorf("%s: a tooltip host wraps a control with no accessible "+
+						"name of its own. The glyph inside is decorative, so the "+
+						"button is the only thing left to carry one:\n  %s",
+						page, strings.TrimSpace(inner))
+				}
+				// The glyph is decorative. `<title>` inside it would be a native
+				// tooltip beside this page's, on the same control.
+				if strings.Contains(inner, "<title>") || strings.Contains(inner, "role=\"img\"") {
+					t.Errorf("%s: the glyph inside a tooltip host is not decorative, so "+
+						"the operating system draws a second tooltip over the same "+
+						"button:\n  %s", page, strings.TrimSpace(inner))
+				}
+				// A disabled control cannot take focus, so the host has to.
+				if bareDisabled.MatchString(inner) && !strings.Contains(open, `tabindex="0"`) {
+					t.Errorf("%s: a tooltip host wrapping a disabled control is not "+
+						"focusable, so a keyboard reader never reaches the tooltip "+
+						"explaining the refusal — which is the one thing the native "+
+						"tooltip could not do either (D192):\n  %s<%s>",
+						page, open, strings.TrimSpace(inner))
+				}
+			}
+		}
+	}
+}
+
+// TestTheTooltipShipsInTheStylesheet is the half of the pattern that lives in
+// CSS, asserted here for the reason TestTheBrowseControlAcknowledgesTheClick
+// asserts `.file-pick`'s rules: `style-src 'self'` refuses an injected
+// stylesheet, so a rule that never reached app.css is a tooltip that is
+// permanently invisible and nothing in the markup would say so.
+//
+// Both triggers are named because they fail differently. Without `:hover` the
+// tooltip never appears for a pointer, which is what the owner asked for.
+// Without `:focus-within` it never appears for a keyboard, which is the reason
+// this pattern exists at all rather than the native one.
+func TestTheTooltipShipsInTheStylesheet(t *testing.T) {
+	css := builtStylesheet(t)
+	for _, want := range []string{
+		".qr-tip-host:hover>.qr-tip",
+		".qr-tip-host:focus-within>.qr-tip",
+	} {
+		if !strings.Contains(strings.ReplaceAll(css, " ", ""), want) {
+			t.Errorf("the built stylesheet has no rule for %s. A tooltip with no "+
+				"trigger is markup nobody can see, and no template scan catches it", want)
+		}
+	}
+	// Hidden by default, or it is a label. Both properties, because opacity
+	// alone leaves an invisible box over the control beside it.
+	flat := strings.ReplaceAll(css, " ", "")
+	for _, want := range []string{"visibility:hidden", "pointer-events:none"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the tooltip's resting state is missing %s", want)
+		}
+	}
+}
+
+// TestAddingACodeIsAPromptRatherThanAFormInThePage is F238(h), owner-set: *"Add
+// a button with a '+' icon near the code count that provides a prompt with a
+// text field and add button when pressed. This replaces the current 'Add
+// another code' label/text field/Add code button."*
+//
+// **Three claims, and the second is what makes it a replacement rather than an
+// addition.** One add control, invoking a popover — the mechanism this file
+// already uses for the row menus and nav.html for the header's, so nothing new
+// reaches `script-src 'self'`. The label and the submit it replaces are gone
+// from the page. And the field inside it posts what `LinkQRStyle` actually
+// reads — `label` under an `add` submit — because a prompt whose field the
+// handler ignores is a prompt that swallows what somebody typed.
+func TestAddingACodeIsAPromptRatherThanAFormInThePage(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+
+		if n := strings.Count(body, `popovertarget="qr-add"`); n != 1 {
+			t.Errorf("%s draws %d add controls, want exactly 1 beside the counter "+
+				"(F238h)", page, n)
+		}
+		if !strings.Contains(body, `<div id="qr-add" popover="auto"`) {
+			t.Errorf("%s: the add control opens no popover. The prompt is the "+
+				"mechanism the row menus already use, so Escape and a click outside "+
+				"close it and no script is added (D24)", page)
+		}
+		// The `+` glyph itself, so a caller that drew its own path fails here
+		// rather than the icon vocabulary quietly growing a second copy.
+		if !strings.Contains(body, `<path d="M5 12h14M12 5v14"/>`) {
+			t.Errorf("%s does not render icon_plus's glyph", page)
+		}
+		// What it replaced.
+		for _, gone := range []string{"Add another code", "What a second code buys"} {
+			if strings.Contains(body, gone) {
+				t.Errorf("%s still carries %q. The prompt replaces the label, the "+
+					"field and the submit that stood under the list, and the sentence "+
+					"beside them went with them (F238e, F238h)", page, gone)
+			}
+		}
+		// And the prompt posts what the handler reads.
+		menu := body[strings.Index(body, `<div id="qr-add" popover="auto"`):]
+		menu = menu[:strings.Index(menu, "</form>")]
+		for _, want := range []string{
+			`action="/links/`, `name="next"`, `name="label"`, `name="add" value="1"`,
+		} {
+			if !strings.Contains(menu, want) {
+				t.Errorf("%s: the add prompt is missing %s, so pressing it posts a body "+
+					"LinkQRStyle does not branch on:\n%s", page, want, menu)
+			}
+		}
+	}
+}
+
+// TestTheAddControlIsDisabledAtCapacityRatherThanAbsent is the other half of
+// D192, and it exists so that one list does not carry two conventions.
+//
+// The add form used to vanish at 20/20 with the counter left to explain it,
+// which is the same absent-versus-disabled question F238(g) answers the other
+// way one control along. The owner settled it: grayed out with the reason.
+func TestTheAddControlIsDisabledAtCapacityRatherThanAbsent(t *testing.T) {
+	data, ok := pageData(t)["link_qr"].(map[string]any)
+	if !ok {
+		t.Fatal("the link_qr fixture is not a map")
+	}
+	max, ok := data["QRMaxCodes"].(int)
+	if !ok || max < 2 {
+		t.Fatalf("the fixture carries no usable QRMaxCodes (%v)", data["QRMaxCodes"])
+	}
+	full := make([]map[string]any, 0, max)
+	for i := range max {
+		slug := "code" + strconv.Itoa(i)
+		full = append(full, map[string]any{
+			"Slug": slug, "Label": slug, "Name": slug, "Size": 740,
+			"Default": i == 0, "Selected": i == 0,
+			"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=" + slug,
+			"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/" + slug + "/image.svg",
+			"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/" + slug + "/image.png",
+		})
+	}
+
+	for _, page := range qrPanelPages {
+		body := mainOf(t, renderPage(t, page,
+			map[string]any{"Tab": "qr", "QRCodes": full}))
+
+		if !strings.Contains(body, ">"+strconv.Itoa(max)+"/"+strconv.Itoa(max)+"</p>") {
+			t.Errorf("%s does not read %d/%d at capacity, so the fixture is not "+
+				"exercising the state this test is about", page, max, max)
+		}
+		at := strings.Index(body, `aria-label="Add a QR code"`)
+		if at < 0 {
+			t.Errorf("%s draws no add control at capacity. It grays out rather than "+
+				"disappearing (D192), so that this list answers absent-versus-disabled "+
+				"the same way for both of its controls", page)
+			continue
+		}
+		start := strings.LastIndex(body[:at], "<button")
+		button := body[start : at+strings.Index(body[at:], ">")]
+		if !bareDisabled.MatchString(button) {
+			t.Errorf("%s: the add control is enabled at capacity:\n  %s", page, button)
+		}
+		if !strings.Contains(body, "A link carries at most "+strconv.Itoa(max)+" QR codes.") {
+			t.Errorf("%s grays out the add control at capacity and gives no reason", page)
+		}
+		if strings.Contains(body, `popovertarget="qr-add"`) {
+			t.Errorf("%s still renders a prompt the disabled control cannot open. A "+
+				"form nothing can reach is a form that will be wrong before anybody "+
+				"notices", page)
+		}
+	}
+}
+
+// TestTheRowControlsAnswerThePointerOnTheSelectedRow is F238(j),
+// owner-reported: *"The highlighting for the download and remove buttons is
+// only visible when not on the selected row."*
+//
+// **This one is a defect rather than a preference** — the affordance is written
+// and does not appear. The selected `<li>` paints `bg-sunken` and the controls
+// inside it hovered to `hover:bg-sunken`, so on the row a reader is most likely
+// to be pointing at, the two controls they use most resolved to the background
+// they sit on.
+//
+// The row's own class is read out of the markup rather than typed here, so this
+// cannot pass by both sides being changed to the same new token — which is the
+// only way the defect comes back.
+func TestTheRowControlsAnswerThePointerOnTheSelectedRow(t *testing.T) {
+	selectedBG := regexp.MustCompile(`\bbg-([a-z-]+)\b`)
+	hoverBG := regexp.MustCompile(`\bhover:bg-([a-z-]+)\b`)
+
+	for _, page := range qrPanelPages {
+		rows := qrRows(t, renderQRPanel(t, page))
+		var painted string
+		for _, row := range rows {
+			open := row[:strings.Index(row, ">")]
+			if m := selectedBG.FindStringSubmatch(open); m != nil {
+				painted = m[1]
+				break
+			}
+		}
+		if painted == "" {
+			t.Fatalf("%s paints no selected row, so there is nothing for a control's "+
+				"hover to disappear into and this test is asserting nothing", page)
+		}
+		for i, row := range rows {
+			// The buttons in the action cluster, and only those. The selecting
+			// anchor's hover is a text colour, and the entries *inside* a
+			// download menu are drawn on `bg-raised` in the top layer rather
+			// than on the row — they are the one place `hover:bg-sunken` on this
+			// tab is still correct, which is why the scan is by element rather
+			// than over the row's whole markup.
+			at := strings.Index(row, `<div class="relative z-10`)
+			if at < 0 {
+				continue
+			}
+			for _, tag := range qrButtonTags(row[at:]) {
+				for _, m := range hoverBG.FindAllStringSubmatch(tag, -1) {
+					if m[1] == painted {
+						t.Errorf("%s row %d: a control hovers to bg-%s, which is what the "+
+							"selected row is painted. On the one row a reader is most "+
+							"likely to be on, the control gives no feedback at all "+
+							"(F238j):\n  %s", page, i, painted, tag)
+					}
+				}
+			}
+		}
+	}
+}
+
+// qrButtonTags returns the opening tag of every <button> in some markup.
+func qrButtonTags(body string) []string {
+	var out []string
+	for at := strings.Index(body, "<button"); at >= 0; at = strings.Index(body, "<button") {
+		end := strings.Index(body[at:], ">")
+		if end < 0 {
+			break
+		}
+		out = append(out, body[at:at+end+1])
+		body = body[at+end+1:]
+	}
+	return out
+}
+
+// TestTheLogoControlsRenderInsideTheStyleSection is F238(f), owner-set:
+// *"Upload a logo should be moved into the style section and the
+// header/text/section it is currently in should be fully removed."*
+//
+// **Section, and not form, and the distinction is load-bearing** — which is why
+// the third assertion is here rather than only the first two. A file needs
+// `enctype="multipart/form-data"`, which the style form cannot carry without
+// every one of its other buttons arriving in a body the handler does not read,
+// and HTML forbids nesting one form inside another. So what moved is where the
+// upload sits, and what must not have moved is which route it posts to or what
+// it declares. The plan's first draft asserted the input was *inside the style
+// form*, which the tree argues is impossible; the review caught it.
+func TestTheLogoControlsRenderInsideTheStyleSection(t *testing.T) {
+	for _, page := range qrPanelPages {
+		for _, hasLogo := range []bool{true, false} {
+			body := mainOf(t, renderPage(t, page,
+				map[string]any{"Tab": "qr", "QRHasLogo": hasLogo}))
+
+			if strings.Contains(body, ">Logo</h3>") {
+				t.Errorf("%s (QRHasLogo=%v) still draws a Logo heading. The owner asked "+
+					"for the header and its section to be fully removed", page, hasLogo)
+			}
+			// The section, and the input **inside** it. `elementAt` counts div
+			// nesting to `#qr-style`'s own close, which is the whole assertion:
+			// that div is the last container in <main>, so a scan from its
+			// opening tag to the end of the string passes for an input placed
+			// anywhere after it — including outside the section entirely, which
+			// is exactly the placement the bullet forbids. Verified by moving
+			// the upload one line past `</div>` and watching this go red.
+			at := strings.Index(body, `<div id="qr-style"`)
+			if at < 0 {
+				t.Errorf("%s renders no style section to move the upload into", page)
+				continue
+			}
+			section := elementAt(t, body, at)
+			if !strings.Contains(section, `id="qr_logo"`) {
+				t.Errorf("%s (QRHasLogo=%v): the file input does not render inside the "+
+					"style section", page, hasLogo)
+			}
+			// Its own form, still, and still multipart. This is the claim the
+			// bullet was corrected to make.
+			form := logoForm(t, body)
+			for _, want := range []string{
+				`enctype="multipart/form-data"`, `/qr/logo"`, `hx-trigger="change"`,
+			} {
+				if !strings.Contains(form, want) {
+					t.Errorf("%s (QRHasLogo=%v): the upload lost %s in the move. It moved "+
+						"section, not form — a file cannot travel in the style form's "+
+						"body at all", page, hasLogo, want)
+				}
+			}
+			// And the logo's other two controls still post where they did.
+			label := "Upload a logo"
+			if hasLogo {
+				label = "Replace the logo"
+				if !strings.Contains(body, `name="remove_logo" value="1"`) {
+					t.Errorf("%s: the remove-logo control did not survive the move", page)
+				}
+			}
+			if !strings.Contains(body, ">"+label+"<") {
+				t.Errorf("%s (QRHasLogo=%v) does not label the upload %q", page, hasLogo, label)
+			}
+		}
+	}
+}
+
+// TestTheSizeControlStillWorksWithTheScriptBlocked is M50.8's degradation
+// bullet, and it is the one assertion that keeps the script from becoming a
+// dependency rather than an improvement.
+//
+// static/js/qr-size.js copies whichever of the two inputs moved into the other.
+// With it blocked — a reader with JavaScript off, a CSP a proxy tightened, a
+// file that failed to load — the two inputs must still be two ordinary form
+// fields carrying their own values, and `httpx.requestedQRSize` must still have
+// its witness to arbitrate against. That is exactly what M49 shipped, so what is
+// asserted is that nothing was taken away to make room for the script.
+func TestTheSizeControlStillWorksWithTheScriptBlocked(t *testing.T) {
+	for _, page := range qrPanelPages {
+		data, ok := pageData(t)[page].(map[string]any)
+		if !ok {
+			t.Fatalf("the %s fixture is not a map", page)
+		}
+		size, ok := data["QRSize"].(int)
+		if !ok || size == 0 {
+			t.Fatalf("the %s fixture carries no QRSize", page)
+		}
+		body := renderQRPanel(t, page)
+		value := `value="` + strconv.Itoa(size) + `"`
+
+		for id, name := range map[string]string{
+			"qr_size":        `name="size"`,
+			"qr_size_slider": `name="size_slider"`,
+		} {
+			el := elementWithID(t, body, id)
+			if !strings.Contains(el, name) {
+				t.Errorf("%s: %s no longer posts %s, so with the script blocked the "+
+					"form submits one input instead of two:\n  %s", page, id, name, el)
+			}
+			if !strings.Contains(el, value) {
+				t.Errorf("%s: %s does not carry the rendered size %s. The script is what "+
+					"copies one into the other while somebody is looking; the value "+
+					"attribute is what the form posts when it never ran:\n  %s",
+					page, id, value, el)
+			}
+		}
+		if !strings.Contains(body, `name="size_shown" value="`+strconv.Itoa(size)+`"`) {
+			t.Errorf("%s carries no size_shown witness at the rendered size. Without "+
+				"it requestedQRSize cannot tell which of the two inputs moved, which "+
+				"is the whole script-blocked path", page)
+		}
+		// Nothing on this tab is script-only: no control whose markup says it
+		// needs one, and no inline handler for the CSP to refuse.
+		if strings.Contains(body, "onchange=") || strings.Contains(body, "oninput=") {
+			t.Errorf("%s carries an inline handler on the size control. `script-src "+
+				"'self'` refuses it, so the control would be dead in a browser and "+
+				"alive in this test", page)
 		}
 	}
 }

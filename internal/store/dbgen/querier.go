@@ -1796,21 +1796,35 @@ type Querier interface {
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
-	// Every code a link carries (M50), default first.
+	// Every code a link carries (M50), in alphabetical order by name.
 	//
 	// Unpaginated, and bounded instead by domain.MaxQRCodesPerLink, which is the
 	// same trade ListCampaigns makes: the cap is small enough that a page of them is
 	// the whole set, and a pager over a list that cannot exceed it would be a
 	// control nobody ever operates.
 	//
-	// `NOT (is_default OR slug = '')` sorts false before true, so the default code
-	// leads whatever order the rest were created in — it is the one every untagged
-	// scan attributes to, and a list that buried it would bury the answer to "which
-	// of these is the one my existing posters land on". The sort key used to be
-	// `q.slug <> ''` alone, and it moved with the identity (D183): the flag can now
-	// be set on any row, so the list re-orders when the reader moves it, which is
-	// the visible half of what setting a default does. The empty slug stays in the
-	// key as GetDefaultQRCode's fallback, and for the same reason.
+	// **The default no longer leads, and that reverses what this comment argued**
+	// (M50.8). The key was `NOT (is_default OR slug = '')` — false before true, so
+	// the flag-holder led whatever order the rest were created in — and the defence
+	// written here was that *"the list re-orders when the reader moves it, which is
+	// the visible half of what setting a default does"*. The owner reported the
+	// other half of that: *"Selecting a different default code re-orders the list of
+	// codes which can make it seem like the selection didn't change."* The argument
+	// is answered rather than withdrawn. M50.7 put a filled icon on the row that
+	// holds the flag, so being visible is now the icon's job; the sort was carrying
+	// it as a side effect, and carrying it was what made the change look like
+	// nothing had happened.
+	//
+	// `lower(q.label)` with `q.id` behind it, which is exactly `ORDER BY
+	// lower(c.name), c.id` at ListCampaigns above: one collation for one product,
+	// and a tie-break so two codes sharing a name have a stable order rather than
+	// whatever the plan returns. An unnamed code sorts first, which is where the
+	// default of a link nobody has named codes on already was.
+	//
+	// **Nothing may read position 0 as the default any more.** link.ListQRCodes and
+	// analytics.qrCodeSplit both did — `!rows[0].IsDefault && rows[0].Slug != ""`
+	// as the test for "no row holds the flag" — and both scan every row since this
+	// milestone. The flag is a column; it was never a position.
 	ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]ListQRCodesRow, error)
 	// The management list: every rule on a link, enabled or not, in the order the
 	// redirect path would evaluate them.
@@ -2438,9 +2452,18 @@ type Querier interface {
 	// The code that has existed longest, which is what a removed default promotes to
 	// (M50's reopening).
 	//
-	// `created_at, id` is the order ListQRCodes and ResolveAliasForRedirect already
-	// enumerate codes in, so the promoted code is the one at the top of the list the
-	// reader is looking at. Excluding a row by id rather than filtering on
+	// `created_at, id` is the order ResolveAliasForRedirect enumerates codes in, and
+	// the oldest code is the one whose pictures have been in the world longest —
+	// which is what makes it the right one to inherit every untagged scan.
+	//
+	// **The rule is unchanged and the sentence that explained it is** (M50.8). This
+	// comment used to add *"so the promoted code is the one at the top of the list
+	// the reader is looking at"*, which was true while ListQRCodes ordered by
+	// creation. That list is alphabetical now, so the promoted code is wherever its
+	// name puts it. D183 chose the oldest and nothing here reverses that; what went
+	// is a claim about where the reader's eye lands, which had stopped being true.
+	//
+	// Excluding a row by id rather than filtering on
 	// `is_default`, because the caller runs this *after* deleting the flag-holder in
 	// the same transaction and inside it that row is already gone — the exclusion is
 	// what makes the statement correct if it is ever called before one.

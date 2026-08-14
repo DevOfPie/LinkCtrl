@@ -5933,9 +5933,11 @@ components:
           items:
             $ref: "#/components/schemas/QRCode"
           description: >
-            The link's codes, default first, then in creation order. The first
-            entry is whichever code carries `default`, so the order moves when
-            the default does.
+            The link's codes, in alphabetical order by name, compared without
+            regard to case and tie-broken by id. A code nobody has named sorts
+            first. The order does **not** move when the default does: which code
+            carries `default` is a field on each entry, not a position. It was
+            default-first-then-creation-order until 0.3.0.
         max:
           type: integer
           description: >

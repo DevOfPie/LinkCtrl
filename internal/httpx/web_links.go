@@ -672,8 +672,15 @@ type linkQRView struct {
 	// it builds itself rather than following it.
 	QRReturn string
 
-	// The link's codes (M50), default first, and which of them the form below
-	// them is editing.
+	// The link's codes (M50), in alphabetical order by name, and which of them
+	// the form below them is editing.
+	//
+	// **The order is the service's and it is alphabetical since M50.8**, not
+	// default-first: this field is filled straight from `link.ListQRCodes`
+	// below, so the panel draws whatever order that answers in, and the
+	// sentence that used to sit here — *default first* — described a query that
+	// no longer sorts that way. Which code is the default is the `Default` flag
+	// on the row and the filled icon it draws, never a position in this slice.
 	//
 	// **The list is the section and the form is one row of it.** m50.md asks for
 	// the codes with their labels, sizes and downloads, inside whatever M48

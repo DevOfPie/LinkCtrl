@@ -66,12 +66,24 @@ func panelsIn(body string) [][]string {
 	return out
 }
 
-// qrRowMenuID is the id prefix M50.7's per-row download menus write, and it is
-// the *whole* of what is allowed to use the popover API inside <main>.
-const qrRowMenuID = "qr-download-"
+// qrRowMenuID is the id prefix M50.7's per-row download menus write, and
+// qrAddID is the id M50.8's add prompt writes. Together they are the *whole* of
+// what is allowed to use the popover API inside <main>.
+//
+// **The exception widened deliberately and in the milestone's own diff**
+// (M50.8, F238h). The add prompt is the third popover on this surface, and
+// D189's exception as written named only the first two — so it would have
+// arrived as three red assertions somebody widened to make green, which is the
+// silent-extension shape D189 exists to prevent. It is named here instead, and
+// F237's warning still stands: this matcher reads one spelling of a popover
+// declaration, so a fourth one written differently is a popover nobody counts.
+const (
+	qrRowMenuID = "qr-download-"
+	qrAddID     = "qr-add"
+)
 
 // strayPopoversIn returns the ids of popovers inside a rendered page that are
-// neither a panel nor one of those row menus.
+// neither a panel nor one of the QR tab's own two.
 //
 // **Why this exists rather than panelsIn alone.** Until M50.7 the absence
 // assertions read "no popover inside <main>" and that was exact. Widening them
@@ -86,7 +98,7 @@ const qrRowMenuID = "qr-download-"
 func strayPopoversIn(body string) []string {
 	var out []string
 	for _, m := range panelOpen.FindAllStringSubmatch(body, -1) {
-		if strings.Contains(m[2], panelSheet) || strings.HasPrefix(m[1], qrRowMenuID) {
+		if strings.Contains(m[2], panelSheet) || qrListPopover(m[1]) {
 			continue
 		}
 		out = append(out, m[1])
@@ -94,20 +106,26 @@ func strayPopoversIn(body string) []string {
 	return out
 }
 
-// qrRowMenusIn returns the ids of the per-row download menus a page renders.
+// qrListPopover says whether an id is one the codes list is allowed to write.
+func qrListPopover(id string) bool {
+	return strings.HasPrefix(id, qrRowMenuID) || id == qrAddID
+}
+
+// qrCodesListPopoversIn returns the ids of the popovers the QR codes list draws
+// — one download menu per row, and the add prompt beside the counter.
 //
 // **Every caller of strayPopoversIn owes this one too.** That function answers
-// *is this a popup arriving under another name*, and a row menu never is, so it
-// waves them through wherever they appear. *Where they are allowed* is the
+// *is this a popup arriving under another name*, and neither of these ever is,
+// so it waves them through wherever they appear. *Where they are allowed* is the
 // second question, and without it the exception is unbounded: a `qr-download-`
 // popover would pass on a page that renders no codes list at all, which is the
-// hole the exception was written to avoid rather than open. The menus belong to
-// the codes list, so a page without the list must hold none — and the page with
-// it must hold some, or the exception is guarding nothing.
-func qrRowMenusIn(body string) []string {
+// hole the exception was written to avoid rather than open. Both belong to the
+// codes list, so a page without the list must hold none — and the page with it
+// must hold some, or the exception is guarding nothing.
+func qrCodesListPopoversIn(body string) []string {
 	var out []string
 	for _, m := range panelOpen.FindAllStringSubmatch(body, -1) {
-		if strings.HasPrefix(m[1], qrRowMenuID) {
+		if qrListPopover(m[1]) {
 			out = append(out, m[1])
 		}
 	}
@@ -148,7 +166,8 @@ var panelPages = []struct {
 	href   string
 	marker string
 	// codes says the page renders the QR codes list, which is the only thing
-	// that renders the per-row download menus. It bounds M50.7's popover
+	// that renders the per-row download menus or the add prompt beside the
+	// counter. It bounds M50.7's popover
 	// exception to the page it was written for, exactly as the link page's loop
 	// bounds it to the QR tab.
 	codes bool
@@ -189,14 +208,14 @@ func TestThePanelMechanismIsDefinedOnce(t *testing.T) {
 		// through in silence. The rule is kept and the exception named (D189).
 		if stray := strayPopoversIn(page); len(stray) > 0 {
 			t.Errorf("%s renders the popovers %v inside <main> beside its panel, "+
-				"which are neither the panel mechanism nor M50.7's per-row download "+
-				"menus. A second popup on one surface is the pattern being invented "+
+				"which are neither the panel mechanism nor the QR codes list's own "+
+				"two. A second popup on one surface is the pattern being invented "+
 				"twice, whatever it calls itself", s.page, stray)
 		}
-		if menus := qrRowMenusIn(page); len(menus) > 0 {
-			t.Errorf("%s renders the QR row menus %v; they belong to the codes list, "+
-				"which this page does not render, so the exception is being borrowed "+
-				"by a page it was not written for", s.page, menus)
+		if menus := qrCodesListPopoversIn(page); len(menus) > 0 {
+			t.Errorf("%s renders the QR codes list's popovers %v; they belong to that "+
+				"list, which this page does not render, so the exception is being "+
+				"borrowed by a page it was not written for", s.page, menus)
 		}
 
 		// The signature the absence assertions key on, checked against the real
@@ -291,23 +310,25 @@ func TestEveryPanelIsAlsoACompletePage(t *testing.T) {
 					"mechanism in itself", s.body, n)
 			}
 			// And no other popover than the exception D189 names. The QR
-			// contents' page carries the codes list, so its row menus are
-			// expected here; anything else is the popup arriving by a side door.
+			// contents' page carries the codes list, so its row menus and its
+			// add prompt are expected here; anything else is the popup arriving
+			// by a side door.
 			if stray := strayPopoversIn(inMain); len(stray) > 0 {
 				t.Errorf("%s renders the popovers %v, which are neither the panel "+
-					"mechanism nor M50.7's per-row download menus", s.body, stray)
+					"mechanism nor the QR codes list's own two (D189, widened for "+
+					"M50.8's add prompt)", s.body, stray)
 			}
 			// The exception bounded, both ways, as the link page's tabs bound it:
-			// the menus are the codes list's and go where it goes.
-			menus := qrRowMenusIn(inMain)
+			// these belong to the codes list and go where it goes.
+			menus := qrCodesListPopoversIn(inMain)
 			if !s.codes && len(menus) > 0 {
-				t.Errorf("%s renders the QR row menus %v; they belong to the codes "+
-					"list, which this page does not render", s.body, menus)
+				t.Errorf("%s renders the QR codes list's popovers %v; they belong to "+
+					"that list, which this page does not render", s.body, menus)
 			}
 			if s.codes && len(menus) == 0 {
-				t.Error("the codes list's own page renders no row download menus, so " +
-					"the exception above is guarding nothing and would pass on a page " +
-					"that had lost the list")
+				t.Error("the codes list's own page renders none of the popovers that " +
+					"list draws, so the exception above is guarding nothing and would " +
+					"pass on a page that had lost the list")
 			}
 		})
 	}

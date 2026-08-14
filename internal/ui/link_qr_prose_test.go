@@ -18,11 +18,25 @@ import (
 //
 // **Measured 2026-08-13 at `d7107b1`: 1906 characters across seven paragraphs** —
 // analytics 208, code meta 153, last-code 171, second-code 179, cap 85, size and
-// contrast 391, logo 719. The bound of 900 is owner-set over 1200 and 1500,
+// contrast 391, logo 719. The bound of 900 was owner-set over 1200 and 1500,
 // knowing that the four obvious cuts reach only 1081 and that the rest has to
 // come out of the size-and-contrast paragraph, whose *contrast* half explains a
 // refusal no control on the tab states.
-const qrProseBound = 900
+//
+// **750 since M50.8**, and the number is arrived at by a rule rather than
+// chosen, because this is a gate being moved by the milestone that has to meet
+// it. Two more paragraphs went — the last-code sentence, whose reason moved onto
+// the remove control itself (F238g), and *"What a second code buys is knowing
+// which one people scanned"*, which the owner judged help-page material
+// (F238e). The tab measures **715** across four paragraphs after them: analytics
+// 100, code meta 153, contrast 191, logo 271. The bound is that measurement
+// rounded **up to the next fifty**, so it stays a number a later milestone has
+// to work at rather than one it clears by accident, and so that what set it is
+// arithmetic rather than whatever the build happened to land on.
+//
+// The logo paragraph moved into the style section in the same milestone and did
+// not change; it is counted here exactly as it was.
+const qrProseBound = 750
 
 // qrProseMinimum is where a paragraph stops being prose and starts being a
 // label. Forty characters is about a short sentence; "PNG or JPEG, at most N
@@ -89,8 +103,9 @@ func TestTheQRTabsProseIsUnderItsBound(t *testing.T) {
 			t.Logf("%4d  %s", len([]rune(p)), p)
 		}
 		t.Errorf("the QR tab carries %d characters of prose across %d paragraphs, "+
-			"over the bound of %d (D188). It was 1906 before M50.7. Cut a "+
-			"paragraph, or raise the bound here and say in the commit what the "+
-			"words bought", total, len(each), qrProseBound)
+			"over the bound of %d (D188, lowered at M50.8). It was 1906 before "+
+			"M50.7 and 715 after M50.8. Cut a paragraph, or raise the bound here "+
+			"and say in the commit what the words bought",
+			total, len(each), qrProseBound)
 	}
 }

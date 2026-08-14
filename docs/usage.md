@@ -335,9 +335,15 @@ One thing follows: somebody who types `?src=qr` by hand is counted as a scan.
 ### More than one code for a link
 
 A print run and a shop-window card pointing at the same link used to be the same
-picture, so their scans were the same number. **Add another code** on the QR tab,
-give it a name, and it becomes a code of its own — the same destination, its own
-row in the breakdown.
+picture, so their scans were the same number. Press **+** beside the code count
+on the QR tab, give the new code a name, and it becomes a code of its own — the
+same destination, its own row in the breakdown.
+
+**The list is in alphabetical order by the name you gave each code** and stays
+there, compared without regard to case. A code you have not named sorts first —
+it has no name to sort by, and the row shows a placeholder rather than one. Which
+code is the link's default is the filled dot on its row, not its position, so
+choosing a different default does not shuffle the list under you.
 
 Every code prints an identity in its picture, as `&qrc=<something>` beside
 `?src=qr`. That is what the redirect reads to say which code was scanned. The
