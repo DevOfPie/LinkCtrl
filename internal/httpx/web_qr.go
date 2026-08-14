@@ -203,6 +203,25 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		seeOther(w, r, qrReturn(next, id, "defaulted", slug, nil))
 		return
 	}
+	// **Deliberately unreachable from the dashboard since M50.7, and kept.**
+	// No control on the QR tab posts `rename`: the button that did was removed
+	// when the owner asked for *"the 'Rename' button ... removed with the 'Save
+	// the style' button taking up all saving functions"* (F224g), and the name
+	// field it stood beside is now written by the style save below, out of the
+	// same `label` field this branch reads.
+	//
+	// It stays because removing a *control* is not removing a capability, and
+	// the write it performs is still reachable two other ways: this handler's
+	// own style save, and `PUT /api/v1/links/{id}/qr/codes/{slug}`, which
+	// replaces a named code's label and style together (api/openapi.yaml). Both
+	// end in `Links.SetQRCodeLabel`, so nothing about naming a code is only
+	// reachable from here.
+	//
+	// Kept over deleting it, owner-set 2026-08-13 (D188). What the comment is
+	// for is the next reader: an unreachable branch with nothing saying so is
+	// what somebody deletes on sight, and the point of asking was to avoid
+	// exactly that. A form that posts `rename` — a page cached from before
+	// M50.7, or a script shaped like the old one — still works.
 	if r.PostFormValue("rename") != "" {
 		if _, rerr := h.Links.SetQRCodeLabel(
 			r.Context(), actor, id, slug, r.PostFormValue("label"),
@@ -243,6 +262,32 @@ func (h *Web) LinkQRStyle(w http.ResponseWriter, r *http.Request) {
 		}
 		seeOther(w, r, qrReturn(next, id, "reset", slug, nil))
 		return
+	}
+
+	// **One save writes the name and the style** (M50.7, F224g). The form used to
+	// carry two submits for two halves of one row, so changing a colour and a
+	// name together took two presses — or one press and a silently discarded
+	// field.
+	//
+	// **The key is tested for presence rather than the value for emptiness**, and
+	// that distinction is the whole guard. A posted `label=` is somebody who
+	// cleared the box, and clearing it is a real edit; a post with no `label`
+	// key at all is a *different* form — a page cached from before this
+	// milestone, or a request shaped like one — and blanking a code's name
+	// because a field was absent is the kind of write nobody asked for.
+	// `parseForm` at the top of this handler is what makes `r.PostForm`
+	// readable directly rather than only through `PostFormValue`.
+	//
+	// It runs **before** the style, so a name the domain refuses — too long —
+	// comes back as one refusal with nothing written, rather than as a style
+	// that landed and a name that did not.
+	if _, sent := r.PostForm["label"]; sent {
+		if _, rerr := h.Links.SetQRCodeLabel(
+			r.Context(), actor, id, slug, r.PostFormValue("label"),
+		); rerr != nil {
+			h.finishQRAction(w, r, id, next, slug, rerr)
+			return
+		}
 	}
 
 	in := link.QRSizeInput{

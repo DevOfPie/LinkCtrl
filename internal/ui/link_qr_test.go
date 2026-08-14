@@ -29,6 +29,41 @@ func renderQRPanel(t *testing.T, page string) string {
 	return mainOf(t, renderPage(t, page, map[string]any{"Tab": "qr"}))
 }
 
+// renderQRPanelAsReader renders the same two surfaces for somebody holding
+// `links.read` and not `links.update`.
+//
+// **The fixture's owner holds every permission, and that is why this exists.**
+// A page test wants every branch drawn, so `owner()` grants the lot — which
+// means an assertion about what is *on* the page cannot tell a control every
+// reader gets from one only an editor gets. M50.7's default indicator was
+// rendered inside the `links.update` gate and every count above it passed;
+// what it bought is legibility rather than an action, so gating it delivered
+// nothing to the class of user who can only look (D190).
+//
+// `owner()` builds its permission map fresh on each call, so removing one grant
+// from the value it returns cannot reach another test.
+func renderQRPanelAsReader(t *testing.T, page string) string {
+	t.Helper()
+	id := owner()
+	delete(id.perms, "links.update")
+	if id.Can("links.update") || !id.Can("links.read") {
+		t.Fatal("the read-only identity is not read-only, so anything asserted " +
+			"against it is asserted against an editor")
+	}
+	return mainOf(t, renderPage(t, page, map[string]any{"Tab": "qr", "Identity": id}))
+}
+
+// The two default glyphs, told apart by the one thing that differs: both draw
+// the same ring, and only `icon_default_on` fills its centre.
+//
+// Spelled as the markup icons.html emits rather than as the define's name,
+// because the name does not survive rendering — a test keyed on "icon_default_on"
+// is a test of a string that appears in no rendered page at all.
+const (
+	qrDefaultRing   = `<circle cx="12" cy="12" r="8.6"`
+	qrDefaultFilled = `<circle cx="12" cy="12" r="4.2" fill="currentColor"/>`
+)
+
 // qrPreviewFrame matches the frame the preview is drawn into: the element whose
 // class list states the footprint.
 //
@@ -409,6 +444,13 @@ func TestTheBrowseControlAcknowledgesTheClick(t *testing.T) {
 // the removal safe to offer: the flag has somewhere to go, and a reader who
 // wanted a different code answering for their old posters can say so rather than
 // deleting one to find out.
+//
+// **Both claims survive M50.7 and only their markup moved**: the worded
+// buttons became icons, so what is counted here is the submit's `name` rather
+// than its text. The names are what the handler branches on, so counting them
+// is closer to the claim than counting labels ever was — and the labels
+// themselves are TestTheDefaultIsAnIconOnEveryRow's and
+// TestRemoveIsAMinusThatSaysWhatItRemoves' to assert.
 func TestEveryCodeCanBeRemovedAndMadeTheDefault(t *testing.T) {
 	for _, page := range qrPanelPages {
 		body := renderQRPanel(t, page)
@@ -422,17 +464,622 @@ func TestEveryCodeCanBeRemovedAndMadeTheDefault(t *testing.T) {
 				"identity was the absence of a slug, which is what made it "+
 				"undeletable (F222)", page, n)
 		}
-		// One, not two: the code that already holds the flag has nowhere to
-		// move it to, and a control that says "make this the default" on the
-		// default is a control that does nothing.
+		// One submit, not two: the code that already holds the flag has nowhere
+		// to move it to, so its own icon is inert rather than a second way to
+		// write a value that is already written (D188).
 		if n := strings.Count(body, `name="make_default"`); n != 1 {
-			t.Errorf("%s draws %d \"make default\" controls over a two-code list "+
+			t.Errorf("%s draws %d \"make default\" submits over a two-code list "+
 				"whose first row is the default, want 1. Removing the flag-holder "+
 				"promotes a code the reader did not pick, so choosing one has to "+
 				"be reachable without deleting anything", page, n)
 		}
-		if !strings.Contains(body, ">Make default<") {
-			t.Errorf("%s has no \"Make default\" button", page)
+	}
+}
+
+// --- the row, relaid out at M50.7 --------------------------------------------
+
+// qrRows cuts the codes list's <li> elements out of a rendered panel.
+//
+// Anchored on the list's own border classes rather than on a marker inside a
+// row, so what the assertions below read is the whole row including the parts
+// that carry no text at all.
+func qrRows(t *testing.T, body string) []string {
+	t.Helper()
+	start := strings.Index(body, `<ul class="divide-y divide-line rounded-md border border-line">`)
+	if start < 0 {
+		t.Fatal("the panel renders no codes list")
+	}
+	end := strings.Index(body[start:], "</ul>")
+	if end < 0 {
+		t.Fatal("the codes list is not a complete element")
+	}
+	rows := strings.Split(body[start:start+end], "<li ")
+	if len(rows) < 2 {
+		t.Fatalf("the codes list holds %d rows, want at least 1", len(rows)-1)
+	}
+	return rows[1:]
+}
+
+// TestARowSelectsOnItsWholeArea is F224(f)'s first half, owner-reported:
+// *"Clicking in any unoccupied space on the QR list items should select the
+// code, not just the name."*
+//
+// The row painted a selected background across its full width while only the
+// name was clickable, so the affordance was wider than the target — which reads
+// as a dead row rather than as a small one.
+//
+// **What a template test can assert, and what it cannot.** That the row is a
+// containing block, that the selecting anchor declares an overlay spanning it,
+// and that the acting controls sit above that overlay: three class strings, all
+// readable from markup. What no Go test can do is lay the page out and click,
+// which is why D24's precedent — *"a top-layer element ignores its ancestor's
+// containing block, so positioning is verified in a browser rather than
+// asserted from markup"* — applies here too, and why the click itself is a case
+// in tools/agent-browser/specs/qr-codes-list.spec.mjs.
+func TestARowSelectsOnItsWholeArea(t *testing.T) {
+	for _, page := range qrPanelPages {
+		for i, row := range qrRows(t, renderQRPanel(t, page)) {
+			open := row[:strings.Index(row, ">")]
+			if !strings.Contains(open, "relative") {
+				t.Errorf("%s row %d is not a containing block (%q), so the overlay "+
+					"below spans the panel rather than the row", page, i, open)
+			}
+			// The selecting element: the anchor to this row's own panel URL,
+			// stretched over the row by a pseudo-element rather than by nesting
+			// the row's text inside a block-level link.
+			at := strings.Index(row, `<a href="/links/`)
+			if at < 0 {
+				t.Fatalf("%s row %d carries no link to its own panel", page, i)
+			}
+			anchor := row[at : at+strings.Index(row[at:], ">")]
+			for _, want := range []string{"after:absolute", "after:inset-0", "after:content-['']"} {
+				if !strings.Contains(anchor, want) {
+					t.Errorf("%s row %d: the selecting anchor is missing %s, so the "+
+						"click target is the name and the affordance is the row "+
+						"(F224f):\n  %s", page, i, want, anchor)
+				}
+			}
+		}
+	}
+}
+
+// TestTheActionClusterIsSeparatedAndExcluded is F224(f)'s second half:
+// *"There should be some blank space around the remove and download buttons to
+// prevent accidentally switching when a different action was intended."*
+//
+// Two claims in one element. The cluster is **excluded** from the selecting
+// overlay — positioned, and later in tree order, which is what keeps its own
+// clicks — and it is **separated** from the area that selects, by a margin
+// rather than by the row's gap: the gap applies between every pair of children
+// and the separation is owed at one seam.
+//
+// The rendered gap is the browser's to measure, and the spec does.
+func TestTheActionClusterIsSeparatedAndExcluded(t *testing.T) {
+	for _, page := range qrPanelPages {
+		for i, row := range qrRows(t, renderQRPanel(t, page)) {
+			at := strings.Index(row, `<div class="relative z-10`)
+			if at < 0 {
+				t.Errorf("%s row %d draws no action cluster above the selecting "+
+					"overlay; without `relative` and a stacking level its controls "+
+					"are under the overlay and unclickable:\n  %s", page, i, row)
+				continue
+			}
+			cluster := row[at : at+strings.Index(row[at:], ">")]
+			if !strings.Contains(cluster, "ml-4") {
+				t.Errorf("%s row %d: the action cluster declares no separating "+
+					"margin (%q). A destructive control 8px from a download button "+
+					"on a 22px row is the misclick F224f reports", page, i, cluster)
+			}
+			// And the destructive one is separated again from the control
+			// beside it, which is the half of the report about Remove itself.
+			if !strings.Contains(row, `name="remove" value="1"`) {
+				continue
+			}
+			rm := row[strings.Index(row, `name="remove" value="1"`):]
+			rm = rm[:strings.Index(rm, ">")]
+			if !strings.Contains(rm, "ml-1") {
+				t.Errorf("%s row %d: Remove carries no margin of its own (%q), so it "+
+					"sits at the cluster's own gap from a download control", page, i, rm)
+			}
+		}
+	}
+}
+
+// TestRemoveIsAMinusThatSaysWhatItRemoves is F224(e), owner-set: *"The remove
+// button should be replaced with a button using a '-' icon."*
+//
+// **The accessible name is the assertion that matters.** The word went, so the
+// only thing left telling a screen reader — or anybody hovering — what this
+// button does is the name, and a `−` with no name is a button whose meaning is
+// its shape. It names the code as well as the action, because there are up to
+// twenty of these on one page and *Remove* twenty times is a list nobody can
+// navigate.
+func TestRemoveIsAMinusThatSaysWhatItRemoves(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		if strings.Contains(body, ">Remove</button>") {
+			t.Errorf("%s still draws a worded Remove button; the owner asked for a "+
+				"'-' icon (F224e)", page)
+		}
+		// The minus glyph, one per removable row, carrying a name that says
+		// which code it takes away. The fixture's second row is the named one.
+		for _, want := range []string{
+			`aria-label="Remove Autumn poster"`,
+			`<title>Remove Autumn poster</title>`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: the remove control is missing %s. `icon_minus` carries "+
+					"its name twice — on the svg and in a <title> — and neither is "+
+					"optional when the button has no text at all", page, want)
+			}
+		}
+		// The glyph itself, so a caller that stopped using the shared define
+		// and drew its own path fails here rather than drifting quietly.
+		if !strings.Contains(body, `<path d="M5 12h14"/>`) {
+			t.Errorf("%s does not render icon_minus's glyph; the row draws some "+
+				"other minus, which is the icon vocabulary growing a second copy",
+				page)
+		}
+	}
+}
+
+// TestOneDownloadControlPerCode is F224(d) and F224(i) together, and they are
+// one claim: *"The download buttons in the QR list 'PNG' and 'SVG' should be
+// replaced with a single button using the download icon that provides a
+// dropdown to choose, allowing more file types in the future without adding
+// additional buttons"* — and the pair below the preview, which hit the same two
+// URLs as the row's, is gone.
+//
+// **Counted, because the number is the claim.** A two-code panel used to draw
+// six download controls for two pictures: PNG and SVG on each row, and the
+// worded pair under the preview. It draws two now — one per code — and both
+// formats are reachable from each.
+func TestOneDownloadControlPerCode(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+
+		if n := strings.Count(body, `popovertarget="qr-download-`); n != 2 {
+			t.Errorf("%s draws %d download controls over a two-code list, want one "+
+				"per code (F224d)", page, n)
+		}
+		if strings.Contains(body, "Download the PNG") || strings.Contains(body, "Download the SVG") {
+			t.Errorf("%s still draws the worded download pair below the preview. It "+
+				"hit the same two URLs as the row's controls, and a per-code action "+
+				"belongs on the per-code row (F224i)", page)
+		}
+		// Both formats, from inside the menu, for each code — the point of the
+		// menu being that a third costs an entry rather than a third button.
+		for _, slug := range []string{"d3f4u1t0", "k7m2qh4b"} {
+			menu := elementsAfter(t, body, `<div id="qr-download-`+slug+`"`)
+			for _, want := range []string{"image.png", "image.svg", ">PNG</a>", ">SVG</a>"} {
+				if !strings.Contains(menu, want) {
+					t.Errorf("%s: the menu for %s does not reach %s", page, slug, want)
+				}
+			}
+			if !strings.Contains(menu, `popover="auto"`) {
+				t.Errorf("%s: the menu for %s is not an auto popover, so it closes on "+
+					"neither Escape nor a click outside (D24)", page, slug)
+			}
+		}
+		// And the invoker is a button rather than a submit, which is what keeps
+		// a menu from posting the form it sits beside.
+		if !strings.Contains(body, `<button type="button" popovertarget="qr-download-`) {
+			t.Errorf("%s: the download invoker is not type=\"button\"", page)
+		}
+	}
+}
+
+// elementsAfter returns the markup from a marker to the next closing </div>,
+// which is the whole of a download menu: it holds two anchors and no nested
+// block, so the first close is its own.
+func elementsAfter(t *testing.T, body, marker string) string {
+	t.Helper()
+	at := strings.Index(body, marker)
+	if at < 0 {
+		t.Fatalf("no %s in the rendered panel", marker)
+	}
+	end := strings.Index(body[at:], "</div>")
+	if end < 0 {
+		t.Fatalf("the element at %s is not closed", marker)
+	}
+	return body[at : at+end]
+}
+
+// TestTheMenusAnchoringShipsInTheStylesheet is the half of the download menu
+// that lives in CSS, and it is asserted here for the reason
+// TestTheBrowseControlAcknowledgesTheClick asserts `.file-pick`'s rules:
+// `style-src 'self'` refuses an injected stylesheet, so a rule that did not
+// reach app.css is a control with no positioning at all and nothing in the
+// markup would say so.
+//
+// **Two rules and they fail differently, which is why both are named.**
+// `.qr-menu-anchor` is the name every invoker declares; without it no menu
+// anchors to anything and they all open centred. The `anchor-scope` utility is
+// what bounds that name to one row; without it every menu in a twenty-row list
+// resolves to the **last** invoker and opens on the wrong row — a failure that
+// looks like a layout bug and is a missing class.
+//
+// And the scope is the one of the two Tailwind has to *generate*, which is what
+// makes it worth a test rather than a reading: it is an arbitrary utility, and
+// arbitrary utilities exist only if Tailwind scanned the literal string (F216
+// is that scanner's known gap). A rename in the template that missed the
+// stylesheet would ship a list of menus that all open on the last row.
+func TestTheMenusAnchoringShipsInTheStylesheet(t *testing.T) {
+	css := builtStylesheet(t)
+	for _, want := range []string{
+		".qr-menu-anchor{anchor-name:--linkctrl-qr-menu}",
+		"anchor-scope:--linkctrl-qr-menu",
+		"position-anchor:--linkctrl-qr-menu",
+		"top:anchor(bottom)",
+		"right:anchor(right)",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("the built stylesheet carries no %s. Without it the row menus "+
+				"either anchor to nothing or all anchor to the last row's button, "+
+				"and no template scan can see either", want)
+		}
+	}
+	// The scope reaches the row, which is the half the template owns.
+	for _, page := range qrPanelPages {
+		if !strings.Contains(renderQRPanel(t, page), "[anchor-scope:--linkctrl-qr-menu]") {
+			t.Errorf("%s: the codes list's rows do not scope the anchor name, so the "+
+				"rule above reaches every menu and bounds none of them", page)
+		}
+	}
+}
+
+// TestTheDefaultIsAnIconOnEveryRow is D188's second answer, owner-set over both
+// shapes that were offered: *"an icon button on every row, it becomes filled in
+// when the row is the default and empty when it isn't. It should update all the
+// icons when any of the icons is changed."*
+//
+// **What that buys is a list where the default is readable without reading**,
+// and it is why the answer beat both options: a control only on the rows that
+// are *not* the default puts nothing on the one that is, so the state was
+// legible only from a sentence in the meta line.
+//
+// Four assertions, and the counts are what make them about the set rather than
+// about one row. Exactly one filled icon, `len(codes)-1` empty ones, the filled
+// one on the row that holds the flag, and a name on each that says which code it
+// is about — because an exclusive set of icons is a radio group, and a radio
+// group whose members are all called the same thing is one control repeated.
+//
+// The fill *moving* when one is clicked is the browser's to show, and the spec
+// drives it. Nothing here is swapped and no script is added: the control posts,
+// the handler redirects, and the list re-renders whole.
+func TestTheDefaultIsAnIconOnEveryRow(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		rows := qrRows(t, body)
+
+		var filled, empty int
+		for i, row := range rows {
+			on := strings.Contains(row, qrDefaultFilled)
+			if !strings.Contains(row, qrDefaultRing) {
+				t.Errorf("%s row %d draws no default icon at all. It renders on every "+
+					"row including the default's own, where it is inert (D188)", page, i)
+				continue
+			}
+			if on {
+				filled++
+				if !strings.Contains(row, `aria-pressed="true"`) {
+					t.Errorf("%s row %d is filled and does not expose a pressed state. "+
+						"The set is a radio group and the fill is a picture; the state "+
+						"has to be readable without seeing it", page, i)
+				}
+				if !strings.Contains(row, "disabled") {
+					t.Errorf("%s row %d is the default and its icon is not inert. The "+
+						"flag is already its own, so a submit there is a second way to "+
+						"write a value that is already written (D188)", page, i)
+				}
+			} else {
+				empty++
+				if !strings.Contains(row, `aria-pressed="false"`) {
+					t.Errorf("%s row %d is not the default and does not say so", page, i)
+				}
+			}
+		}
+		if filled != 1 {
+			t.Errorf("%s draws %d filled default icons over %d codes, want exactly 1. "+
+				"A link always has a default (D183), so one filled icon is not a "+
+				"convention — it is the data", page, filled, len(rows))
+		}
+		if want := len(rows) - 1; empty != want {
+			t.Errorf("%s draws %d empty default icons, want %d", page, empty, want)
+		}
+		// The fixture's first row holds the flag, and it is the one that must
+		// be filled: a list that filled the right *number* on the wrong row
+		// would pass every count above.
+		if !strings.Contains(rows[0], qrDefaultFilled) {
+			t.Errorf("%s fills a default icon on a row that does not hold the flag", page)
+		}
+		// And each names its own code.
+		for _, want := range []string{
+			`aria-label="The original code is the default code"`,
+			`aria-label="Make Autumn poster the default code"`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: no default icon carries %s. Twenty icons called "+
+					"\"default\" are one control repeated", page, want)
+			}
+		}
+	}
+}
+
+// TestTheDefaultIconRendersForAReaderWhoCannotChangeIt is D190, owner-answered
+// after the first attempt of this milestone shipped the set inside
+// `{{if $.Identity.Can "links.update"}}`.
+//
+// **The bullet says *every row*, and the first attempt read it as every row of
+// the rows an editor sees.** That is where the **Make default** button it
+// replaces belonged and it is wrong here: what D188 bought is that which code
+// is the default becomes readable without reading, so a `links.read` viewer
+// with no icon on any row was returned to the sentence in the meta line — the
+// thing the icon exists to replace. Nothing above this catches it, because the
+// fixture's owner holds every permission.
+//
+// **The same counts, and no form.** A reader's row is the shape the default's
+// own row already has for an editor: an inert button, `aria-pressed` carrying
+// the state, an accessible name saying which code. The empty one says the code
+// is *not* the default rather than offering to make it so, because for this
+// identity there is nothing to offer.
+func TestTheDefaultIconRendersForAReaderWhoCannotChangeIt(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanelAsReader(t, page)
+		rows := qrRows(t, body)
+
+		var filled, empty int
+		for i, row := range rows {
+			if !strings.Contains(row, qrDefaultRing) {
+				t.Errorf("%s row %d draws no default icon for a reader who holds "+
+					"only links.read. The indicator is what says which code an "+
+					"untagged scan resolves through, and it is legibility rather "+
+					"than a control (D190)", page, i)
+				continue
+			}
+			// No form, and nothing that could post one: this identity may not
+			// write the flag, so a control here would be an offer the server
+			// refuses.
+			for _, forbidden := range []string{"<form", `name="make_default"`, `type="submit"`} {
+				if strings.Contains(row, forbidden) {
+					t.Errorf("%s row %d carries %s for an identity without "+
+						"links.update. The indicator renders as the static pair "+
+						"with no form around it (D190)", page, i, forbidden)
+				}
+			}
+			if strings.Contains(row, qrDefaultFilled) {
+				filled++
+				if !strings.Contains(row, `aria-pressed="true"`) {
+					t.Errorf("%s row %d is filled and does not expose a pressed "+
+						"state; the fill is a picture", page, i)
+				}
+			} else {
+				empty++
+				if !strings.Contains(row, `aria-pressed="false"`) {
+					t.Errorf("%s row %d is not the default and does not say so", page, i)
+				}
+			}
+			if !strings.Contains(row, "disabled") {
+				t.Errorf("%s row %d draws an enabled control for somebody who cannot "+
+					"use it", page, i)
+			}
+		}
+		if filled != 1 {
+			t.Errorf("%s draws %d filled default icons for a reader over %d codes, "+
+				"want exactly 1 — the same set the editor sees, since a link always "+
+				"has a default (D183)", page, filled, len(rows))
+		}
+		if want := len(rows) - 1; empty != want {
+			t.Errorf("%s draws %d empty default icons for a reader, want %d", page, empty, want)
+		}
+		if !strings.Contains(rows[0], qrDefaultFilled) {
+			t.Errorf("%s fills a reader's default icon on a row that does not hold "+
+				"the flag", page)
+		}
+		// Each names its own code, and the empty one names the state rather
+		// than an action nobody here can take.
+		for _, want := range []string{
+			`aria-label="The original code is the default code"`,
+			`aria-label="Autumn poster is not the default code"`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: no default icon carries %s", page, want)
+			}
+		}
+		if strings.Contains(body, `aria-label="Make Autumn poster the default code"`) {
+			t.Errorf("%s offers a reader a name that promises a write they cannot "+
+				"make", page)
+		}
+	}
+}
+
+// --- what saves, saves once (M50.7) ------------------------------------------
+
+// TestNothingPostsRename is F224(g), owner-set: *"the 'Rename' button should be
+// removed with the 'Save the style' button taking up all saving functions."*
+//
+// The form carried two submits for two halves of one row, so changing a colour
+// and a name together took two presses — or one press and a silently dropped
+// field. The server's branch stays and is commented as deliberately unreachable
+// (D188); what must not survive is a dashboard path that posts it.
+func TestNothingPostsRename(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		if strings.Contains(body, `name="rename"`) {
+			t.Errorf("%s still posts `rename`. One control saves this form now, and "+
+				"a second submit for the name is the two-press save the owner asked "+
+				"to remove (F224g)", page)
+		}
+		if strings.Contains(body, ">Rename</button>") {
+			t.Errorf("%s still draws a Rename button", page)
+		}
+		// The field it stood beside stays: what went is the second submit, not
+		// the ability to name a code.
+		if !strings.Contains(body, `id="qr_label_edit"`) {
+			t.Errorf("%s no longer offers a name field. The button went; the field "+
+				"is what Save now writes", page)
+		}
+	}
+}
+
+// TestTheSaveControlReadsSave is F224(h), owner-set from three offered — a save
+// icon, `Save`, `Apply`.
+//
+// One label, and it is worth a test because nothing else reads it: the old one
+// named a style while the control now writes the name too, so the word that
+// described half of what it does had to go whatever was picked. Both directions,
+// because a test for the new string alone passes on a page that grew a second
+// button.
+func TestTheSaveControlReadsSave(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		if !strings.Contains(body, ">Save</button>") {
+			t.Errorf("%s has no \"Save\" button (F224h)", page)
+		}
+		if strings.Contains(body, "Save the style") {
+			t.Errorf("%s still says \"Save the style\"; it saves the name as well "+
+				"now, so the label named half of what it does", page)
+		}
+	}
+}
+
+// bareDisabled matches the HTML attribute and not Tailwind's `disabled:`
+// variants, which sit in the same class list and would otherwise read as the
+// attribute on every render.
+var bareDisabled = regexp.MustCompile(`(^|\s)disabled(\s|$)`)
+
+// TestRestoreDefaultsIsAlwaysDrawn is F224(j): the control rendered only
+// `{{if .QRStored}}`, so a code nobody has styled showed no control and no
+// reason — and *the thing you are looking for is absent because it would do
+// nothing* is not deducible from an empty space.
+//
+// **Both states, and the stored-less one is asserted on both halves.** The
+// earlier wording of this bullet asserted presence and left the promised
+// explanation untested, which the plan review caught: a disabled control with
+// no reason beside it is the same dead affordance in a lighter colour.
+func TestRestoreDefaultsIsAlwaysDrawn(t *testing.T) {
+	for _, page := range qrPanelPages {
+		for _, stored := range []bool{true, false} {
+			body := mainOf(t, renderPage(t, page,
+				map[string]any{"Tab": "qr", "QRStored": stored}))
+
+			at := strings.Index(body, `name="reset" value="1"`)
+			if at < 0 {
+				t.Errorf("%s (QRStored=%v) draws no Restore defaults control. It is "+
+					"drawn in both states now (F224j)", page, stored)
+				continue
+			}
+			button := body[at : at+strings.Index(body[at:], ">")]
+			// The bare attribute, not the `disabled:` variants the class list
+			// carries for the look of it — a substring test reads those as the
+			// attribute and reports every state as disabled.
+			if got := bareDisabled.MatchString(button); got != !stored {
+				t.Errorf("%s (QRStored=%v): the control's disabled attribute is %v, "+
+					"want %v — it is enabled exactly when there is a stored style to "+
+					"clear:\n  %s", page, stored, got, !stored, button)
+			}
+			reason := "This code has no stored style yet."
+			if got := strings.Contains(body, reason); got != !stored {
+				t.Errorf("%s (QRStored=%v): the reason %q is present=%v, want %v. A "+
+					"disabled control with no explanation reads as a bug, which is "+
+					"the whole of why it is drawn rather than hidden",
+					page, stored, reason, got, !stored)
+			}
+		}
+	}
+}
+
+// --- the tab says less (M50.7) -----------------------------------------------
+
+// TestTheCodeCounterReplacesTheCapSentence is F224(a), owner-reported: *"'A link
+// carries at most 20' — this text is useless where it is and should be removed
+// and a 'N/20' counter added near the top of the tab."*
+//
+// Two directions, because either alone is half the report: the counter renders
+// with both numbers near the top of the list, and neither sentence that carried
+// the cap in prose survives — the one under the add form, and the one that
+// replaced the add form at capacity.
+//
+// **It does not duplicate the tab strip's QR badge and both stand**, which the
+// owner answered on 2026-08-13: they are different quantities — how many codes
+// exist, and how much of the cap is spent — rendered from the one `len(QRCodes)`
+// the badge reads. That is what `attachTabBadges`' governing comment asks for,
+// and it is why this is not a second copy of a number.
+func TestTheCodeCounterReplacesTheCapSentence(t *testing.T) {
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+
+		// Two codes and a cap of twenty, both from the fixture.
+		if !strings.Contains(body, ">2/20</p>") {
+			t.Errorf("%s draws no N/20 counter over its codes list. Both numbers, "+
+				"because a bare count is what the tab badge already says (F224a)", page)
+		}
+		for _, gone := range []string{
+			"A link carries at most",
+			"carrying the most codes one link can have",
+		} {
+			if strings.Contains(body, gone) {
+				t.Errorf("%s still says %q. The counter is where the cap is stated "+
+					"now, and a sentence saying it again is the text the owner "+
+					"called useless where it is", page, gone)
+			}
+		}
+	}
+}
+
+// TestTheEncodedURLIsNotPrintedUnderThePicture is F224(c), owner-set: *"The link
+// that the QR resolves to doesn't need to be displayed under the QR code."*
+//
+// The string is the link's own short URL with `?src=qr` on it — which the page
+// states above the picture and the heading row states as the link itself, so it
+// was the third rendering of one value on one page.
+//
+// Asserted against the fixture's own content value rather than a literal, so a
+// fixture that changed what the code encodes cannot leave this passing against a
+// string nothing renders.
+func TestTheEncodedURLIsNotPrintedUnderThePicture(t *testing.T) {
+	for _, page := range qrPanelPages {
+		data, ok := pageData(t)[page].(map[string]any)
+		if !ok {
+			t.Fatalf("the %s fixture is not a map", page)
+		}
+		content, ok := data["QRContent"].(string)
+		if !ok || content == "" {
+			t.Fatalf("the %s fixture carries no QRContent", page)
+		}
+		if strings.Contains(renderQRPanel(t, page), content) {
+			t.Errorf("%s still prints %q under the picture (F224c)", page, content)
+		}
+	}
+}
+
+// TestTheQRSettingsRenderInTheTabsFlow is the assertion panelSheet's comment
+// promises, and it exists because M50.7 put a popover on this tab.
+//
+// M48's F212 amendment claims the QR settings live in the tab's flow rather than
+// behind a popup. Until this milestone that claim was checked by "no popover
+// inside <main>", which is a proxy that stopped fitting the moment a control on
+// the tab used the platform's popover API for something that is not a panel. So
+// the claim is checked directly instead: the only popovers here are the per-row
+// download menus, and the settings themselves are ordinary markup.
+func TestTheQRSettingsRenderInTheTabsFlow(t *testing.T) {
+	popovers := regexp.MustCompile(`<div id="([a-z0-9-]+)" popover="auto"`)
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		for _, m := range popovers.FindAllStringSubmatch(body, -1) {
+			if !strings.HasPrefix(m[1], "qr-download-") {
+				t.Errorf("%s renders a popover %q that is not a row's download menu. "+
+					"The QR settings live in the tab's flow since the F212 reopening, "+
+					"and a popup here is that mechanism returning under another name",
+					page, m[1])
+			}
+		}
+		// And the settings are on the page, outside anything that has to be
+		// opened: the style form's fields, the size control and the list.
+		for _, want := range []string{`id="qr_foreground"`, `id="qr_size"`, `id="qr_label_edit"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s does not render %s in flow", page, want)
+			}
 		}
 	}
 }

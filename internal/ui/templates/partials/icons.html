@@ -1,6 +1,8 @@
-{{- /* The product's icon vocabulary (M47.5). Four glyphs, and deliberately no
-     fifth: cross, check, and the split pair. This file is where the next
-     milestone wanting an icon looks first, and it stays empty of anything
+{{- /* The product's icon vocabulary (M47.5, four more at M50.7). Eight glyphs
+     and deliberately no ninth: cross, check, the split pair, and the four the
+     QR list's controls need — a download arrow, a minus, and the filled and
+     empty pair that says which code is a link's default. This file is where the
+     next milestone wanting an icon looks first, and it stays empty of anything
      speculative until one does.
 
      Inline SVG inheriting currentColor — the CSP is `style-src 'self'` and
@@ -32,3 +34,24 @@
 {{define "icon_check"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="{{.}}"><title>{{.}}</title><path d="M4.5 13l5.5 5.5L19.5 7"/></svg>{{end}}
 {{define "icon_weighted"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" role="img" aria-label="{{.}}"><title>{{.}}</title><rect x="4" y="3.5" width="6" height="17" fill="currentColor"/><rect x="15.4" y="11.1" width="3.2" height="8" fill="none" stroke="currentColor" stroke-width="2.8"/></svg>{{end}}
 {{define "icon_sequential"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="{{.}}"><title>{{.}}</title><rect x="3.5" y="8.5" width="4" height="12"/><rect x="10" y="8.5" width="4" height="12"/><rect x="16.5" y="8.5" width="4" height="12"/></svg>{{end}}
+
+{{- /* The QR list's four (M50.7). Same shape as the four above, same 2.8
+     stroke, and the same rule that a define's dot is its accessible name — the
+     controls they sit inside carry no visible text at all, so the argument is
+     the whole of what a screen reader gets and a caller passing "" ships a
+     nameless button.
+
+     The default pair is a radio dot rather than a star, and the choice is the
+     semantics: exactly one code in a list holds the flag, always (D183), which
+     is a radio group. A star reads as "favourite", which is a set of any size
+     including none. Same ring in both, so the two differ only by the thing that
+     carries the meaning — filled centre or empty — and neither is the other's
+     size at a glance.
+
+     The download arrow keeps the tray line of the worded button it replaces
+     (M48's), redrawn at this file's 12px and stroke: an arrow with no baseline
+     under it reads as "down" rather than as "download".                     */ -}}
+{{define "icon_download"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="{{.}}"><title>{{.}}</title><path d="M12 3.5v11M7 10l5 5 5-5M4 20.5h16"/></svg>{{end}}
+{{define "icon_minus"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" role="img" aria-label="{{.}}"><title>{{.}}</title><path d="M5 12h14"/></svg>{{end}}
+{{define "icon_default_on"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" role="img" aria-label="{{.}}"><title>{{.}}</title><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="2.8"/><circle cx="12" cy="12" r="4.2" fill="currentColor"/></svg>{{end}}
+{{define "icon_default_off"}}<svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" role="img" aria-label="{{.}}"><title>{{.}}</title><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="2.8"/></svg>{{end}}

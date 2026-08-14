@@ -600,8 +600,9 @@ func demoCoverage() []demoFeature {
 			// Exactly one link carries a stored style; every other link's code
 			// is drawn at the default. A demo where all of them are styled shows
 			// one state, and a reader cannot see that a style is a preference —
-			// nor that "Restore defaults" is a button that appears only on a
-			// link that has one.
+			// nor that "Restore defaults" is a control that does anything on a
+			// link that has none — it is drawn in both states since M50.7 and
+			// disabled with a reason in one of them (F224j).
 			// **The ceiling moved to two under M50**, which added a named code
 			// to the same link. It is still a ceiling and still says the same
 			// thing: exactly one link carries stored codes, and every other
@@ -610,9 +611,12 @@ func demoCoverage() []demoFeature {
 			Query: `SELECT count(*) FROM qr_codes
 			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
 			Min: 2, Max: 2,
-			Shows: "the QR panel with a code that is not black on white, and the " +
-				"reset button beside it — with no styled code the panel shows one " +
-				"state and the style form looks like it does nothing",
+			Shows: "the QR panel with a code that is not black on white, and Restore " +
+				"defaults live beside it — with no styled code the panel shows one " +
+				"state and the style form looks like it does nothing. Since M50.7 " +
+				"that button is drawn either way and disabled with a reason when " +
+				"there is nothing stored, so what a styled code shows is the enabled " +
+				"half of a control rather than the only half that exists",
 		},
 		{
 			// M50. Two codes on one link, each named, and scan history against
@@ -662,9 +666,11 @@ func demoCoverage() []demoFeature {
 			         WHERE workspace_id IN (` + demoWorkspaces + `)
 			           AND is_default`,
 			Min: 1, Max: 1,
-			Shows: "a codes list whose rows each carry Remove and Make default, with " +
-				"one marked as the code an untagged scan is counted against — before " +
-				"this the first row had no Remove at all",
+			Shows: "a codes list whose rows each carry a remove control and a default " +
+				"icon, exactly one of them filled — the code an untagged scan is " +
+				"counted against — where before this the first row had no way to be " +
+				"removed at all. The worded buttons became icons at M50.7; what the " +
+				"demo has to show is still one list with both actions on every row",
 		},
 		{
 			// **Three values rather than two, since M50's reopening.** The

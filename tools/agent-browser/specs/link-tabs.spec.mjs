@@ -116,10 +116,15 @@ test('the link page tab strip scrolls sideways at 360px instead of wrapping', as
   ).toBeLessThanOrEqual(widths.client);
 
   // One real switch: the QR tab swaps the panel in and pushes its URL.
+  //
+  // Keyed on the section's own heading. It was the section's opening sentence
+  // until M50.7 rewrote that sentence to reach the tab's prose bound (D188) —
+  // a marker made of prose is a marker any edit to the prose breaks, and this
+  // spec is about swapping panels rather than about wording.
   await strip.locator('a', { hasText: 'QR' }).first().click();
   await page.waitForURL('**tab=qr**', { timeout: 10000 });
   await expect(
-    page.locator('main', { hasText: 'Scans are counted as ordinary clicks' }),
+    page.locator('main h2', { hasText: 'QR code' }),
     'the QR tab did not swap its section in',
   ).toHaveCount(1);
 
@@ -135,7 +140,7 @@ test('the link page tab strip scrolls sideways at 360px instead of wrapping', as
   await thumb.click();
   await page.waitForURL('**tab=qr**', { timeout: 10000 });
   await expect(
-    page.locator('main', { hasText: 'Scans are counted as ordinary clicks' }),
+    page.locator('main h2', { hasText: 'QR code' }),
     'clicking the thumbnail did not swap the QR tab in',
   ).toHaveCount(1);
 });

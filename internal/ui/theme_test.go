@@ -305,12 +305,25 @@ type construct struct {
 // topLevelConstructs splits a stretch of CSS into its top-level rules and
 // at-rules. Quoted strings are skipped so a brace inside a content value cannot
 // desynchronise the depth count.
+//
+// **Backslash escapes are skipped outside strings as well as inside them**, and
+// that is not tidiness — without it this parser reads the *whole rest of the
+// stylesheet* as one string and finds no theme tokens at all. Tailwind escapes
+// every non-identifier character in a class name, so an arbitrary value holding
+// a quote emits `.after\:content-\[\'\'\]:after`; the `\'` opened a string here,
+// the `\'` after it was consumed as an escaped character rather than closing it,
+// and everything to the end of the file was inside quotes. Found at M50.7, whose
+// stretched-link overlay is the first class in this product to carry one — the
+// failure was `found 0 theme-token blocks`, on a stylesheet whose tokens were
+// all present and correct.
 func topLevelConstructs(css string) []construct {
 	var out []construct
 	depth, start := 0, 0
 	prelude := ""
 	for i := 0; i < len(css); i++ {
 		switch c := css[i]; c {
+		case '\\':
+			i++
 		case '"', '\'':
 			for i++; i < len(css); i++ {
 				if css[i] == '\\' {

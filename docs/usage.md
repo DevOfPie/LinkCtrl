@@ -316,7 +316,8 @@ who reviews it either way.
 Every link has one, and always at least one. There is nothing to create and no row to make: open a link's
 page and a small version of the code is drawn beside the link's name, at the top.
 Clicking it opens the **QR** tab, which holds the full code, the style form and
-**Download the PNG** and **Download the SVG** buttons.
+the list of the link's codes. Each row in that list carries a download button —
+the arrow — and picking it offers **PNG** and **SVG**.
 
 **Two formats, one picture.** The PNG is the file most programs open; the SVG is
 vector text and is the one to use for anything that will be resized again. They
@@ -371,8 +372,14 @@ reprint.
 of a link's codes always holds that role, and every picture printed before codes
 had identities relies on it.
 
-Each row in the codes list carries **Make default** and **Remove**. Making a code
-the default moves where those untagged scans land — including the ones already
+Each row in the codes list carries a **default** icon and a **−** to remove the
+code. The default icon is filled on the code that holds the role and empty on the
+rest, so which one it is takes no reading; clicking an empty one fills it and
+empties the others. The filled one does nothing — the role is already its own.
+The icons are drawn whether or not you may change anything: seeing a code is
+`links.read` (above), and which code is the default is part of seeing them. With
+only that permission they are inert and the **−** is absent.
+Making a code the default moves where those untagged scans land — including the ones already
 recorded, because what they record is *no code* rather than a code that has gone.
 Nothing about any picture changes when you move it.
 
@@ -385,8 +392,9 @@ to resolve somewhere.
 **Restore defaults** clears the style of the code you have selected — the colours
 and the size — and leaves the code, its name and any logo on it alone.
 
-A link carries at most **twenty** codes. That is the number that keeps the codes
-list a list and the breakdown a chart.
+A link carries at most **twenty** codes, and the counter above the list says how
+many of them are spent. That is the number that keeps the codes list a list and
+the breakdown a chart.
 
 A code has no destination, no expiry and no gate of its own. Those belong to the
 link, which is what makes changing the link's destination change every printed
@@ -402,15 +410,19 @@ So a chart read across the removal shows one line stopping and another taking up
 the traffic, which is worth knowing before you remove a code that is still in the
 world.
 
-**A name can be changed at any time and changes nothing else.** The identity in
-the picture is fixed when the code is made and is never rewritten, because it is
-printed.
+**A name can be changed at any time and changes nothing else.** Type it in the
+**Name** box and press **Save**, which writes the name and the style together.
+The identity in the picture is fixed when the code is made and is never
+rewritten, because it is printed.
 
-**Restyling changes the drawing and never the content.** The form takes a
+**Restyling changes the drawing and never the content.** The form takes a name, a
 foreground colour, a background colour and a **size in pixels** — 64 to 2048,
 set with a slider that stops at 128, 256, 300, 512, 600, 1024, 1200 and 2048 or
-with the box beside it, which takes any number in range. **Restore defaults**
-appears once a style is stored, and clears the size along with the colours.
+with the box beside it, which takes any number in range. One **Save** writes all
+of it, the name included — there is no separate rename control. **Restore
+defaults** sits beside Save and is drawn whether or not a style is stored; with
+nothing stored it is disabled and says so, rather than being absent and leaving
+you to wonder where it went. It clears the size along with the colours.
 
 The bottom of that range is not reachable for every code: a longer URL is a
 bigger grid of squares, and a grid with no room left for a margin is refused with

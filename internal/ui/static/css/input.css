@@ -136,6 +136,67 @@ form.htmx-request .file-pick::file-selector-button {
 }
 
 /* ---------------------------------------------------------------------------
+ * The per-row download menu on the QR tab (M50.7, F224d).
+ *
+ * A popover — the mechanism D24 chose for the header's menus, for Escape and
+ * light dismiss — but repeated once per code rather than once per page, up to
+ * twenty times in one list. That repetition is the whole of what is new, and it
+ * is the least exercised corner of the pattern nav.html established.
+ *
+ * **Why this is here rather than as utilities on the elements.** An open
+ * popover is in the top layer, so its containing block is the viewport whatever
+ * it is nested inside; placing it beside its own row therefore needs CSS anchor
+ * positioning, and anchor positioning needs a *name*. Twenty rows want twenty
+ * anchors, and there are exactly two ways to get them — twenty names, or one
+ * name scoped twenty times. Twenty names cannot be written in the template at
+ * all: Tailwind generates only the classes it scans, so `[anchor-name:--qr-
+ * {{ .Slug }}]` reaches no stylesheet (F216), and `style-src 'self'` refuses
+ * the inline `style` attribute that would otherwise carry it.
+ *
+ * So: **one name, scoped per row**. `anchor-scope: --linkctrl-qr-menu` on each
+ * `<li>` bounds the name to that row's subtree, and every row's invoker
+ * declares the same name. Without the scope every menu in the list resolves to
+ * the last button that declares it, which is the failure m50.7.md named. The
+ * scope is a Tailwind arbitrary utility on the row because it is a literal
+ * there; only the anchored placement below needs a hand-written rule, because
+ * `anchor()` inside a `@supports` guard is three stacked variants whose
+ * generated selector would have to be trusted rather than read — the argument
+ * `.file-pick` and `.qr-slider` above are both here for.
+ *
+ * **Unguarded, the panel keeps the UA's centred placement**, which is where a
+ * popover with no positioning of its own lands. That is deliberately not
+ * nav.html's fallback: a viewport pin under the header is meaningful for a
+ * menu that hangs off the header and meaningless for one belonging to a row
+ * halfway down a list. A centred sheet is worse than an anchored menu and is
+ * somewhere a reader can see, which the alternative is not.
+ *
+ * Verified on 2026-08-13 in all three pinned engines — chromium, firefox and
+ * webkit — that `anchor-scope` is supported and that three menus in one list
+ * each land on their own row's button. The kept spec in
+ * tools/agent-browser/specs/qr-codes-list.spec.mjs is what holds it.
+ * ------------------------------------------------------------------------- */
+.qr-menu-anchor {
+  anchor-name: --linkctrl-qr-menu;
+}
+@supports (anchor-scope: --linkctrl-qr-menu) {
+  .qr-menu {
+    position-anchor: --linkctrl-qr-menu;
+    /* Hung under the invoker and right-aligned with it, then clamped to the
+     * viewport so a menu on a narrow screen cannot be pushed off the left
+     * edge. `inset` is reset rather than partly set: the UA gives a popover
+     * `inset: 0` with `margin: auto`, and leaving `top` and `bottom` at 0 with
+     * a non-auto height over-constrains the box and the auto margins absorb
+     * the slack — the drift nav.html's own POSITIONING note records. */
+    top: anchor(bottom);
+    right: anchor(right);
+    bottom: auto;
+    left: auto;
+    margin: 0.25rem 0 0 0;
+    max-width: calc(100vw - 2rem);
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * Theme tokens.
  *
  * Templates name meaning — surface, muted, danger — never a palette shade. One

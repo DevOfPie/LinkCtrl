@@ -620,7 +620,12 @@ func TestAQRWriteReturnsToTheQRTab(t *testing.T) {
 	if !strings.Contains(body, `?tab=qr" aria-current="page"`) {
 		t.Error("the refusal did not land on the QR tab")
 	}
-	if !strings.Contains(body, "Scans are counted as ordinary clicks") {
+	// The section's own heading rather than its opening sentence. That sentence
+	// was the marker until M50.7 rewrote it to reach the tab's prose bound
+	// (D188), and a marker made of prose is a marker any edit to the prose
+	// breaks — which is what happened, on a claim about redirects that has
+	// nothing to do with wording.
+	if !strings.Contains(body, ">QR code</h2>") {
 		t.Error("the refusal's page does not draw the QR section beside the error")
 	}
 }
@@ -1556,6 +1561,81 @@ func TestRestoreDefaultsActsOnTheCodeThatIsSelected(t *testing.T) {
 	if got := f.qrCode(id); got.Style.Foreground != "#123a6b" {
 		t.Errorf("the default code's style was cleared by a button pressed on "+
 			"another code: it reads %q. That is the defect, not the fix",
+			got.Style.Foreground)
+	}
+}
+
+// TestOneSaveWritesTheNameAndTheStyle is M50.7's half of F224(g), owner-set:
+// *"the 'Rename' button should be removed with the 'Save the style' button
+// taking up all saving functions."*
+//
+// **Driven through the form, because the form is what changed.** The panel used
+// to carry two submits for two halves of one row, so a reader who edited a
+// colour and a name together pressed twice — or pressed once and watched one of
+// their edits vanish. There is one control now, and this is the assertion that
+// it carries both halves rather than the name having simply stopped being
+// editable.
+//
+// The third case is the guard, and it is the one worth the lines: a post that
+// carries **no** `label` key at all must not blank a code's name. That is what a
+// page cached from before this milestone sends, and what any script shaped like
+// the old style call sends; reading an absent field as "clear it" would erase
+// names nobody touched. The handler tests the key's presence rather than the
+// value's emptiness, and the second case below is what says an *empty* value
+// still means what it looks like.
+func TestOneSaveWritesTheNameAndTheStyle(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("onesave", "https://example.com/x")
+	named := f.createQRCode(t, id, "Autumn poster")
+	panel := "/links/" + id.String() + "/qr"
+
+	// One press, both halves.
+	f.postQRForm(t, panel, url.Values{
+		"code": {named.Slug}, "label": {"Winter poster"},
+		"foreground": {"#123a6b"}, "background": {"#f5f7fa"}, "size": {"512"},
+	})
+	got := f.qrCodeBySlug(t, id, named.Slug)
+	if got.Label != "Winter poster" {
+		t.Errorf("the code reads back named %q after a save carrying a changed "+
+			"name, want %q. One control saves this form now, so a name it did "+
+			"not write is a name the reader believes they saved (F224g)",
+			got.Label, "Winter poster")
+	}
+	if got.Style.Foreground != "#123a6b" {
+		t.Errorf("the code reads back at %q; the style half of the same save did "+
+			"not land", got.Style.Foreground)
+	}
+
+	// An empty value is somebody clearing the box, and clearing it is an edit.
+	f.postQRForm(t, panel, url.Values{
+		"code": {named.Slug}, "label": {""},
+		"foreground": {"#123a6b"}, "background": {"#f5f7fa"}, "size": {"512"},
+	})
+	if got := f.qrCodeBySlug(t, id, named.Slug); got.Label != "" {
+		t.Errorf("a save carrying an empty name left %q on the code. The box is "+
+			"the control, and emptying it is what a reader means by removing a "+
+			"name", got.Label)
+	}
+
+	// And a post with no `label` key leaves the name alone, which is the shape
+	// every request made before this milestone has.
+	f.postQRForm(t, panel, url.Values{
+		"code": {named.Slug}, "label": {"Spring poster"},
+		"foreground": {"#123a6b"}, "background": {"#f5f7fa"}, "size": {"512"},
+	})
+	f.postQRForm(t, panel, url.Values{
+		"code":       {named.Slug},
+		"foreground": {"#0f172a"}, "background": {"#ffffff"}, "size": {"600"},
+	})
+	got = f.qrCodeBySlug(t, id, named.Slug)
+	if got.Label != "Spring poster" {
+		t.Errorf("a style post carrying no `label` field blanked the code's name "+
+			"(it reads %q). An absent field is a different form, not an "+
+			"instruction to clear one", got.Label)
+	}
+	if got.Style.Foreground != "#0f172a" {
+		t.Errorf("that post's style did not land either; it reads %q",
 			got.Style.Foreground)
 	}
 }

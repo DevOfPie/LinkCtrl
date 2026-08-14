@@ -350,6 +350,8 @@ file. Append a row when you append an entry.
 | [M50.6, the level is a rule and the tab does not print it (D186)](#2026-08-13--m506-the-level-is-a-rule-and-the-tab-does-not-print-it-d186) | D186 — the tab does not print the level and names it where it changes. D184's *weakest level* is read as the product default `M` rather than as `L`; the build's unset-only reading was offered and overruled by D187, so nothing is migrated and a stored `M` is inert. Where the floor cannot raise the symbol the module count is `M`'s, which is what carries M49's exact size through it — and where it can, every site that fits a size encodes through the rule |
 | [M50.6, the rule binds a level somebody named, and D187](#2026-08-13--m506-the-rule-binds-a-level-somebody-named-and-d187) | D187 — the free-level rule is a floor under every code, not a default for codes that named nothing. Owner-answered against the build's recommendation: the drawn level is the stronger of what the row names and what the rule gives, so a named `L` where `Q` is free is drawn at `Q`. The rule never lowers, which is what keeps `H` under a logo; the API's `level` is honoured upward and ignored downward |
 | [M50.7's plan, three answers taken before a worker exists](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists) | D188 — the QR tab's prose is bounded at **900** characters, over 1200 and 1500, with the cost of reaching it named and taken. The default control becomes a filled/empty icon on **every** row, which is neither shape offered — the state becomes readable without reading, at the price of an inert control on the default's own row and a radio group's semantics. Rename's server side stays when its button goes, commented as deliberately unreachable |
+| [M50.7 built: one anchor name serves twenty menus, and four explanations were spent](#2026-08-14--m507-built-one-anchor-name-serves-twenty-menus-and-four-explanations-were-spent) | D189 — the per-row popover menus take **one** shared anchor name scoped per row (`anchor-scope`) rather than the twenty slug-derived names m50.7.md describes, which cannot exist: Tailwind generates only the classes it scans and `style-src 'self'` refuses the inline attribute, so a name built from a slug reaches no stylesheet at all. Verified in all three pinned engines. Which explanations the 900-character bound cost, all four, named as D188 requires: the size half of the size-and-contrast paragraph and *why* level H helps under a logo, which the derivation predicted, plus the logo paragraph's promise that you are told what an oversized image became and the last-code sentence's clause about pictures already printed, which it did not. And a proxy corrected rather than a claim broken — *no panel on this tab* had been asserted as *no popover inside `<main>`*, which stopped fitting the moment a control that is not a panel used the platform's popover API, so the assertion now names the exception (the row menus, only where the codes list renders) rather than dropping the rule at the three sites that carried it |
+| [M50.7, two answers its reviewer's findings needed](#2026-08-14--m507-two-answers-its-reviewers-findings-needed) | D190 — the default indicator renders for a `links.read` viewer as the static filled/empty pair, because D188 bought legibility rather than a control and a gated icon delivered it only to editors; and the download menu's fallback, where `anchor-scope` is unsupported, is the UA's own centred placement, over the header's viewport pin and over keeping the two-button row alive |
 
 ---
 
@@ -29046,3 +29048,176 @@ deliberately unreachable and names what still reaches the same write — the API
 `PUT /links/{id}/qr/codes/{slug}`, which replaces a code's label and style whole.
 Deleting it would have been defensible; leaving it undocumented would not, and an
 unreachable branch with no comment is what the next reader removes on sight.
+
+
+## 2026-08-14 — M50.7 built: one anchor name serves twenty menus, and four explanations were spent
+
+Three things the build settled that the plan could not, and one record it
+corrected rather than broke.
+
+**D189 — the download menus take one anchor name, scoped per row, and not
+twenty.** [m50.7.md](phase-details/m50.7.md) prices the popover honestly and then
+says how: *"Twenty rows need **twenty distinct anchor names**, generated per row
+from the code's slug, or every menu anchors to the same element."* The
+requirement is right and the mechanism is not available. A CSS anchor name has to
+reach a stylesheet, and this product has exactly two routes to one — a Tailwind
+arbitrary utility, which is generated only if Tailwind *scans* the literal class
+string ([F216](deferred-findings.md#open) is that scanner's known gap), and a
+hand-written rule in `input.css`. A name built out of `{{ .Slug }}` is neither:
+the class does not exist until the template runs, and by then the stylesheet is
+built. The third route, an inline `style` attribute, is refused by
+`style-src 'self'`.
+
+So the build takes the other way to twenty anchors: **`anchor-scope`**. Each
+`<li>` scopes the name `--linkctrl-qr-menu` to its own subtree and every row's
+invoker declares that same name, so each menu resolves to its own row's button.
+It is strictly less machinery than twenty names — nothing is generated, and it
+holds for any number of rows rather than for twenty — and the bullet's actual
+assertion, *twenty distinct anchors or every menu anchors to the same element*,
+is satisfied. Verified 2026-08-13 by driving three menus in one list in
+**chromium, firefox and webkit**: without the scope all three engines resolve
+every menu to the last invoker, with it each lands on its own row.
+
+**What the fallback is, stated because the milestone names a different one.**
+m50.7.md says *"the fallback for these is the row itself"*. That is not
+reachable: an open popover is in the top layer and its containing block is the
+viewport, which is the fact nav.html's POSITIONING note already records, so
+without anchor positioning there is no way to place it against a row at all.
+Where `anchor-scope` is missing the panel therefore keeps the UA's own centred
+placement — worse than an anchored menu, better than nav.html's viewport pin,
+which is meaningful under a header and meaningless beside a row halfway down a
+list. Named here rather than discovered later.
+
+**Which explanations the 900-character bound cost.** [D188](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists)
+requires this: the owner chose 900 knowing it could not be reached by the obvious
+cuts, and required the build to say what it dropped if it could not find the
+characters elsewhere. It could not find them all elsewhere. The tab measures
+**877** by the milestone's own method, against 1906, and four explanations paid
+for it — two the derivation predicted, and two it did not. The predicted pair:
+
+- **The size half of the size-and-contrast paragraph** — *the size you set is
+  the size that is stored and served*, and the quiet zone taking the remainder.
+  This is the one D188 named in advance. What makes it the cheaper of the two is
+  that the control directly above it prints the number twice, in the box and on
+  the slider, and the quiet-zone clause is arithmetic no control on the tab
+  exposes. **The contrast sentence is kept**, as D188 asked, and trimmed rather
+  than shortened away: it explains a refusal, which is the test this milestone
+  applies to every paragraph.
+- **Why level H helps** — *the level that lets a reader recover a code with part
+  of it covered*. The logo paragraph still names H and still names the return to
+  the free level when the logo goes, which is what
+  [D186](#2026-08-13--m506-the-level-is-a-rule-and-the-tab-does-not-print-it-d186)
+  says is owed: *naming it where it changes is the whole of what is owed*. What
+  went is the gloss on what the level buys, which is a fact about QR codes rather
+  than about this product, and which no control on the tab can act on.
+
+**Two more, out of paragraphs D188's derivation never budgeted**, named here
+because the requirement is to name every explanation the bound cost and not only
+the ones that were predicted. Both were found by this milestone's reviewer, which
+is the point of the step:
+
+- **The logo paragraph's *"and you are told what it became"*** — the promise that
+  an oversized image is not merely adapted but reported. The *telling* is not
+  lost and was never this paragraph's: `internal/httpx/web_qr.go`'s
+  `logo_applied` notice prints the uploaded dimensions and the stored ones
+  whenever they differ, which is what [F214](deferred-findings.md#closed)(a) was
+  reopened to build. What went is a sentence above the control announcing that a
+  message would arrive, which costs a reader more than the message does. The
+  paragraph still says the adaptation happens; only the forward reference to the
+  notice is gone.
+- **The last-code sentence's *"— every picture of it already printed resolves
+  through it"*** — 171 characters to 102. This is the same fact
+  [D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183)
+  turned into a *property*: what makes a link's last code unremovable is that a
+  link always has a code, and the clause explained why that rule exists rather
+  than what the refused control does. It survives where the reasoning is kept —
+  the template comment above the list states it in full, and the meta line on the
+  default's own row still says a scan carrying no code is counted against it, so
+  a reader is told which code an old picture lands on where that matters.
+
+Nothing that went is lost. Both are stated in `README.md`, `docs/usage.md` and
+the changelog, and the privacy claim cut with them — that a stored logo is
+re-encoded, so metadata does not survive — is in `docs/SECURITY.md`'s
+**Uploaded content** row in full.
+
+**And a proxy corrected, which is not a claim broken.** M48's F212 amendment
+claims the QR settings live in the tab's flow rather than behind a popup, and
+three tests asserted it as *no popover inside `<main>`*. That was exact while the
+panel was the only thing inside `<main>` using the API. It stopped being exact
+here: the download menus are popovers and are not panels — two links, hung off a
+row's own button, with none of the chrome `panel_open` owes its callers, and the
+mechanism the milestone itself specifies. The assertions now read *no **panel**
+inside `<main>`*, told apart by the modal sheet geometry only `panel_open`
+declares, and `TestThePanelMechanismIsDefinedOnce` asserts the real panel still
+carries that signature so the distinction cannot rot into a hole.
+`TestTheQRSettingsRenderInTheTabsFlow` is new beside it and checks the claim
+directly rather than through the proxy: the only popovers on this tab are the
+row menus, and the style form, the size control and the name field are all in
+flow. The claim is what it was; what changed is that it is now checked for what
+it says.
+
+**Loosening a proxy is not the same as dropping it, and the first attempt did
+both.** Widening *no popover* to *no panel* was right on the QR tab and was
+applied at all three sites, so every surface that has no reason to hold a
+popover of any kind lost its assertion with nothing put back — the link page's
+six other tabs, the two routes that serve panel contents as pages, and the
+disputes queue, where the count was *every popover inside `<main>`, exactly one*
+and became *one panel*. A second popup on any of them would have passed in
+silence.
+
+The absence assertions now name the exception rather than removing the rule:
+**no popover inside `<main>` except this milestone's per-row download menus, and
+those only where the codes list renders**, keyed on the `qr-download-` id the
+template writes. That is the QR tab (`link_detail_test.go`) and the `/qr` route
+which is the tab's page form (`panel_test.go`); the disputes queue and the
+reviewer route render neither the list nor a menu, and both tests in
+`panel_test.go` now say so rather than leaving it to the panel count. The bound
+runs in both directions at each site — no menus where there is no list, and at
+least one where there is — because an exception nothing exercises cannot be told
+from an assertion that has quietly stopped running. The panel check stands
+beside all of it, because a panel and a stray popover fail for different reasons
+and a reader of the failure should be told which.
+
+## 2026-08-14 — M50.7, two answers its reviewer's findings needed
+
+**D190 — the default indicator renders for a reader who cannot change it, and
+the download menu's fallback is the browser's own placement.** Owner-answered
+2026-08-14, at M50.7's step 3.4, on two findings the milestone's reviewer
+raised against the first attempt.
+
+**The icon is an indicator before it is a control.** The build rendered the
+filled/empty pair inside `{{if $.Identity.Can "links.update"}}`, which is where
+the **Make default** button it replaces lived — correct for a button and wrong
+for this, because [D188](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists)
+bought something a button does not buy: *which code is the default becomes
+readable without reading*. A `links.read` viewer saw no icon on any row and was
+back to reading the sentence in the meta line, so the bullet was false for a
+whole class of user. It now renders for them as the static pair, with no form
+around it — which is exactly what the default's own row already does for an
+editor, so the inert treatment is not a new shape.
+
+Two render paths for one thing is the cost, and it was named in the question.
+The alternative offered was to leave it gated and file a row; the owner took the
+fix. **This is the second time this week a viewer lost something the editor
+kept** — [F229](deferred-findings.md#open) is the same shape, the size number
+living only inside the `links.update` form — and the two answers now point the
+same way, which is worth more than either one on its own.
+
+**The menu's fallback is the UA's centred placement**, over a viewport pin and
+over keeping today's two-button row alive as a fallback layout.
+
+`m50.7.md` said the fallback would be *"the row itself"* and that is not
+buildable: an open popover is in the top layer and its containing block is the
+viewport, which `partials/nav.html:209` already records for the header's menus.
+So on an engine with `popover` but without `anchor-scope` the placement rules
+are skipped whole and the menu lands wherever the UA puts it — centred. The
+owner took that over reusing the header's fixed top-right pin, on the reasoning
+the plan review itself gave: a pin looks deliberate at the top of the page and
+looks like a bug halfway down a list. Rendering the old two-button row as a
+fallback was refused for the reason it is the thing this milestone exists to
+remove.
+
+The milestone file is amended to say so, and the *twenty distinct anchor names*
+it asserted is amended with it — `anchor-scope` is a third route the bullet's
+disjunction did not know about, and one shared name scoped per row is what
+shipped ([D189](#2026-08-14--m507-built-one-anchor-name-serves-twenty-menus-and-four-explanations-were-spent)).

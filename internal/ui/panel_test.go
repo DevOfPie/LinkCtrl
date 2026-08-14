@@ -31,6 +31,89 @@ import (
 // it with a different class string, and both are failures.
 var panelOpen = regexp.MustCompile(`(?s)<div id="([a-z0-9-]+)" popover="auto"\s+class="([^"]*)">`)
 
+// panelSheet is what tells the panel mechanism from any other popover, and it
+// exists because those stopped being the same set at M50.7.
+//
+// **The absence assertions below mean "no *panel* here", and until M50.7 they
+// could say "no popover here" and mean it** — inside <main> the panel was the
+// only thing using the API. The QR tab's per-row download menu is a popover too
+// (D24's mechanism, chosen for Escape and light dismiss, the same reason the
+// header's menus use it) and it is not a panel: it holds two links, hangs off
+// the row's own button, and carries none of the chrome panel_open owes — no
+// title, no Close, no *Open as a page*. Reading it as a returning popup would
+// be the proxy speaking over the claim.
+//
+// What the claim actually is, from m48.md's F212 amendment: the QR *settings*
+// are in the tab's flow rather than behind a popup, and the panel mechanism is
+// defined once. Both still hold, and TestTheQRSettingsRenderInTheTabsFlow below
+// is the assertion that the first one is checked rather than assumed.
+//
+// Anchored on the modal sheet's own geometry, which is panel_open's and which
+// nothing else declares. TestThePanelMechanismIsDefinedOnce asserts that the
+// real panel still carries it, so changing panel.html's geometry fails there
+// and points here rather than quietly widening what may pass below.
+const panelSheet = "max-h-[85vh]"
+
+// panelsIn returns the panel containers inside a rendered page — popovers
+// carrying panel_open's sheet geometry, and not every popover.
+func panelsIn(body string) [][]string {
+	var out [][]string
+	for _, m := range panelOpen.FindAllStringSubmatch(body, -1) {
+		if strings.Contains(m[2], panelSheet) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// qrRowMenuID is the id prefix M50.7's per-row download menus write, and it is
+// the *whole* of what is allowed to use the popover API inside <main>.
+const qrRowMenuID = "qr-download-"
+
+// strayPopoversIn returns the ids of popovers inside a rendered page that are
+// neither a panel nor one of those row menus.
+//
+// **Why this exists rather than panelsIn alone.** Until M50.7 the absence
+// assertions read "no popover inside <main>" and that was exact. Widening them
+// to "no panel" was right on the QR tab, where a menu that is not a panel
+// legitimately uses the API — and wrong everywhere else, because the six other
+// link tabs and the panel's own page have no reason to hold a popover of any
+// kind, and after the widening a second popup on any of them would have passed
+// in silence. Naming the exception keeps the rule; dropping it did not.
+//
+// Not `panelsIn`'s complement: a panel is caught by the assertion beside every
+// call of this, and a panel and a stray popover fail for different reasons.
+func strayPopoversIn(body string) []string {
+	var out []string
+	for _, m := range panelOpen.FindAllStringSubmatch(body, -1) {
+		if strings.Contains(m[2], panelSheet) || strings.HasPrefix(m[1], qrRowMenuID) {
+			continue
+		}
+		out = append(out, m[1])
+	}
+	return out
+}
+
+// qrRowMenusIn returns the ids of the per-row download menus a page renders.
+//
+// **Every caller of strayPopoversIn owes this one too.** That function answers
+// *is this a popup arriving under another name*, and a row menu never is, so it
+// waves them through wherever they appear. *Where they are allowed* is the
+// second question, and without it the exception is unbounded: a `qr-download-`
+// popover would pass on a page that renders no codes list at all, which is the
+// hole the exception was written to avoid rather than open. The menus belong to
+// the codes list, so a page without the list must hold none — and the page with
+// it must hold some, or the exception is guarding nothing.
+func qrRowMenusIn(body string) []string {
+	var out []string
+	for _, m := range panelOpen.FindAllStringSubmatch(body, -1) {
+		if strings.HasPrefix(m[1], qrRowMenuID) {
+			out = append(out, m[1])
+		}
+	}
+	return out
+}
+
 // panelSurfaces is one page that renders a popup panel, and the route the
 // panel's contents are served at.
 //
@@ -64,9 +147,14 @@ var panelPages = []struct {
 	body   string
 	href   string
 	marker string
+	// codes says the page renders the QR codes list, which is the only thing
+	// that renders the per-row download menus. It bounds M50.7's popover
+	// exception to the page it was written for, exactly as the link page's loop
+	// bounds it to the QR tab.
+	codes bool
 }{
 	{body: "link_qr", href: "/links/0198c9c5-0000-7000-8000-000000000001/qr",
-		marker: `id="qr_foreground"`},
+		marker: `id="qr_foreground"`, codes: true},
 	{body: "dispute_reviewers", href: "/disputes/reviewers",
 		marker: `id="reviewer-email"`},
 }
@@ -86,13 +174,40 @@ func TestThePanelMechanismIsDefinedOnce(t *testing.T) {
 		// Inside <main>, so the two header menus — which are popovers too, and
 		// deliberately a different shape (D24, dropdowns anchored to the bar) —
 		// are not counted. They live in the shell.
-		found := panelOpen.FindAllStringSubmatch(page, -1)
+		found := panelsIn(page)
 		if len(found) != 1 {
 			t.Fatalf("%s renders %d panels inside <main>, want exactly 1. A second "+
 				"popup on one surface is the pattern being invented twice, which is "+
 				"the failure m48.md names.", s.page, len(found))
 		}
 		id, got := found[0][1], found[0][2]
+
+		// And nothing else on this page uses the API. The line above was
+		// `panelOpen` matches inside <main>, count exactly 1, until M50.7
+		// widened it to panels only; on a page that is neither the QR tab nor
+		// the codes list's own route, that widening would let any second popup
+		// through in silence. The rule is kept and the exception named (D189).
+		if stray := strayPopoversIn(page); len(stray) > 0 {
+			t.Errorf("%s renders the popovers %v inside <main> beside its panel, "+
+				"which are neither the panel mechanism nor M50.7's per-row download "+
+				"menus. A second popup on one surface is the pattern being invented "+
+				"twice, whatever it calls itself", s.page, stray)
+		}
+		if menus := qrRowMenusIn(page); len(menus) > 0 {
+			t.Errorf("%s renders the QR row menus %v; they belong to the codes list, "+
+				"which this page does not render, so the exception is being borrowed "+
+				"by a page it was not written for", s.page, menus)
+		}
+
+		// The signature the absence assertions key on, checked against the real
+		// panel rather than trusted. Without this, changing panel_open's
+		// geometry would silently stop those assertions catching anything.
+		if !strings.Contains(got, panelSheet) {
+			t.Errorf("the panel on %s no longer declares %s, which is what tells it "+
+				"from an ordinary popover. panelSheet has to move with it, or "+
+				"every \"no panel here\" assertion below stops meaning anything:\n  %s",
+				s.page, panelSheet, got)
+		}
 
 		if class == "" {
 			class, from = got, s.page
@@ -167,11 +282,32 @@ func TestEveryPanelIsAlsoACompletePage(t *testing.T) {
 			}
 
 			// It must not draw its own popup. The page *is* the contents here,
-			// and a popover on it would be the mechanism nested in itself.
-			if panelOpen.MatchString(mainOf(t, body)) {
-				t.Errorf("%s renders a panel of its own; this page is the plain "+
-					"form of an on-demand surface, so a popover here nests the "+
-					"mechanism in itself", s.body)
+			// and a panel on it would be the mechanism nested in itself. An
+			// ordinary popover is not that — see panelSheet.
+			inMain := mainOf(t, body)
+			if n := len(panelsIn(inMain)); n > 0 {
+				t.Errorf("%s renders %d panels of its own; this page is the plain "+
+					"form of an on-demand surface, so a panel here nests the "+
+					"mechanism in itself", s.body, n)
+			}
+			// And no other popover than the exception D189 names. The QR
+			// contents' page carries the codes list, so its row menus are
+			// expected here; anything else is the popup arriving by a side door.
+			if stray := strayPopoversIn(inMain); len(stray) > 0 {
+				t.Errorf("%s renders the popovers %v, which are neither the panel "+
+					"mechanism nor M50.7's per-row download menus", s.body, stray)
+			}
+			// The exception bounded, both ways, as the link page's tabs bound it:
+			// the menus are the codes list's and go where it goes.
+			menus := qrRowMenusIn(inMain)
+			if !s.codes && len(menus) > 0 {
+				t.Errorf("%s renders the QR row menus %v; they belong to the codes "+
+					"list, which this page does not render", s.body, menus)
+			}
+			if s.codes && len(menus) == 0 {
+				t.Error("the codes list's own page renders no row download menus, so " +
+					"the exception above is guarding nothing and would pass on a page " +
+					"that had lost the list")
 			}
 		})
 	}

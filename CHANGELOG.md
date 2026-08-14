@@ -65,6 +65,49 @@ migrations run at boot.
   form and the danger zone carry no badge: editing is always available and
   deleting is a permission, so neither has state worth a chip.
 
+- **The QR tab asks for less attention.** It carried the four explanatory
+  paragraphs the owner named, six download buttons for two pictures, two save
+  buttons for one row and a sentence stating a limit nothing counted against. Nothing on it was
+  broken; all of it cost more reading than it returned.
+
+  **A code's row is one click target.** Clicking anywhere in a row selects that
+  code, where before only its name was clickable while the whole row painted as
+  selectable. The controls at the end of the row are held off that area by a
+  real gap, so reaching for a download no longer risks the remove beside it.
+
+  **One download control per code, with a menu.** The two worded buttons on each
+  row and the pair repeated below the picture — four controls for two files —
+  are one icon that offers **PNG** and **SVG**; a format added later is an entry
+  rather than a fifth button. **Remove is a `−`**, and both carry accessible
+  names saying which code they act on.
+
+  **Which code is the default is now visible without reading.** Every row
+  carries a filled or empty icon instead of a *Make default* button on the rows
+  that are not the default and nothing on the one that is. Exactly one is filled;
+  clicking an empty one moves the fill and every icon in the list follows. The
+  icons are drawn for anybody who may see the codes, not only for somebody who
+  may change them — which code is the default is a fact about the link, and the
+  button it replaced was the only thing about it a reader could not see.
+
+  **One button saves.** *Rename* is gone and **Save** writes the name along with
+  the style, so changing a colour and a name together is one press instead of
+  two. **Restore defaults** is always drawn, disabled with a reason when there is
+  nothing stored, rather than absent — a control you cannot find is not the same
+  as one that has nothing to do. Nothing about what any of them writes changed,
+  and `PUT /api/v1/links/{id}/qr/codes/{slug}` still replaces a code's label and
+  style exactly as it did.
+
+  **A `N/20` counter sits above the list**, and the sentences that carried the
+  limit in prose are gone. The URL printed under the picture is gone with them:
+  it is the link's own short URL, which the page already states twice.
+
+  All of the tab's prose — those four paragraphs and the three shorter ones
+  beside them — went from about 1900 characters to under 900, measured rather
+  than judged, and a test holds it there. What survives is what
+  a reader cannot work out from the control beside it — where a scan is counted,
+  why the picture keeps its own background whatever the page theme is, and what
+  a logo does to a code's error correction.
+
 - **The header's workspace label and workspace switcher read as one control.**
   They were two adjacent fragments — a name, then an unlabelled dropdown beside
   it — and nothing said the two were one claim. They now share a single
@@ -640,9 +683,11 @@ migrations run at boot.
   tab, or share the URL.
 
 - **A QR code can be downloaded as a PNG.** `GET /api/v1/links/{id}/qr.png`, and
-  a **Download the PNG** button in the QR panel beside the SVG one. Until now the
+  a PNG entry in the QR panel's download menu beside the SVG one. Until now the
   only file you could get was vector text, and turning it into something most
-  programs open meant finding a converter.
+  programs open meant finding a converter. *(It was a worded **Download the PNG**
+  button until the QR tab was relaid out later in this release; the file and the
+  endpoint are unchanged.)*
 
   **It is the same picture as the SVG, and that is asserted rather than
   intended.** Both are drawn from one grid at one size with one offset, and a
@@ -667,7 +712,10 @@ migrations run at boot.
 
   **The download control keeps its text and gains an icon.** The note named "the
   download button being text instead of an icon"; an unlabelled icon is a guess
-  for anybody who does not already know what it does, so it is both.
+  for anybody who does not already know what it does, so it is both. *(Superseded
+  later in this release: there is one download control per code now, an icon with
+  a menu offering PNG and SVG, and what tells you what it does is its accessible
+  name rather than a word beside it.)*
 
 - **The QR control is a slider with a number beside it, and asks how big you
   want the code in pixels.** It used to ask for a quiet zone in modules and a
@@ -730,7 +778,9 @@ migrations run at boot.
   setting it is looking.
 
   **The reset button says *Restore defaults*.** It used to say *Back to black on
-  white*, which named the colours — it clears the size too.
+  white*, which named the colours — it clears the size too. *(It is drawn whether
+  or not a style is stored since the QR tab was relaid out later in this release;
+  with nothing stored it is disabled and says why.)*
 
   **Codes styled before this release are untouched.** Their stored settings are
   read forward to the size they already produced, so nothing anybody has printed

@@ -34,9 +34,13 @@
 <div id="qr" class="rounded-lg border border-line bg-raised p-6">
   <div class="min-w-0">
     <h2 class="text-sm font-medium text-ink">QR code</h2>
+    {{/* Halved at M50.7. *Restyling the code never changes what it says* went
+         to the style form, which is the control it is about; the sentence
+         counting this link's codes went to the counter above the list, which
+         is the same number rendered where it can be acted on. What is left is
+         the one thing no control on this tab states — where a scan shows up. */}}
     <p class="mt-1 text-sm text-muted">
-      Scans are counted as ordinary clicks and show up under <strong>{{.QRSourceLabel}}</strong> in the referrers breakdown on the Analytics tab. Restyling the code never changes what it says.
-      {{if gt (len .QRCodes) 1}}This link has {{len .QRCodes}} codes, and that breakdown tells them apart.{{end}}
+      Scans count as clicks and appear under <strong>{{.QRSourceLabel}}</strong> in the Analytics tab's referrers breakdown, one row per code.
     </p>
   </div>
   <div class="mt-6">
@@ -120,22 +124,102 @@
        printed resolves through whichever one holds the flag. */ -}}
 {{if .QRCodes}}
 <div class="mb-6">
+  {{/* The counter, at the top, and it is the whole of what the cap says now
+       (M50.7, F224a). The owner's report was that *"'A link carries at most
+       20' — this text is useless where it is and should be removed and a
+       'N/20' counter added near the top of the tab"*, and two sentences went
+       with it: the one carrying the cap, and the one that replaced the add
+       form at capacity. A reader at 20/20 sees the number they are against
+       where they were already looking.
+
+       **It does not duplicate the tab's QR badge and both stand.** The badge is
+       attachTabBadges' bare count and its governing comment asks that a badge
+       read the value its section renders rather than a second copy of it. These
+       are different quantities — how many codes exist, and how much of the cap
+       is spent — off one `len(QRCodes)`, so there is one value and two
+       renderings of it. Owner-answered 2026-08-13; the maximum stays off the
+       strip, where space is scarce. */}}
+  <div class="mb-2 flex items-baseline justify-between gap-2">
+    <h3 class="text-sm font-medium text-ink">Codes</h3>
+    <p class="shrink-0 text-xs tabular-nums text-subtle">{{len .QRCodes}}/{{.QRMaxCodes}}</p>
+  </div>
   <ul class="divide-y divide-line rounded-md border border-line">
     {{range .QRCodes}}
-    <li class="flex flex-wrap items-center gap-3 px-3 py-2 {{if .Selected}}bg-sunken{{end}}">
+    {{/* **The row selects on its whole area** (M50.7, F224f). The owner
+         reported that only the name was clickable while the row painted a
+         selected background across its full width — the affordance was wider
+         than the target. The name's `<a>` grows an `::after` covering the
+         positioned row, which is the one way to stretch a link over a block
+         without nesting interactive elements inside each other; the action
+         cluster is positioned too and later in tree order, so it paints above
+         the overlay and keeps its own clicks.
+
+         `anchor-scope` is here rather than on the invoker, and it is what makes
+         one anchor name serve twenty rows: the name below is scoped to this
+         `<li>`, so each row's menu resolves to that row's own button. Without
+         it every menu in the list anchors to the last button that declares the
+         name. Verified in chromium, firefox and webkit on 2026-08-13. */}}
+    <li class="relative flex flex-wrap items-center gap-3 px-3 py-2 [anchor-scope:--linkctrl-qr-menu] {{if .Selected}}bg-sunken{{end}}">
       <div class="min-w-0 grow">
-        <a href="{{.Panel}}" class="text-sm font-medium text-ink hover:text-accent">{{.Name}}</a>
+        <a href="{{.Panel}}"
+           class="text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] hover:text-accent">{{.Name}}</a>
         <p class="text-xs text-subtle">
           {{.Size}}px{{if .Slug}} &middot; <code>{{.Slug}}</code>{{end}}{{if .Default}} &middot; the default &mdash; a scan carrying no code of its own is counted against this one{{end}}{{if .HasLogo}} &middot; has a logo{{end}}{{if .Counted}} &middot; {{.Clicks}} scan{{if ne .Clicks 1}}s{{end}} in this window{{end}}
         </p>
       </div>
-      <div class="flex shrink-0 items-center gap-2">
-        <a href="{{.DownloadPNG}}" download="qr-{{$.Link.Alias}}{{if .Slug}}-{{.Slug}}{{end}}.png"
-           class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-sunken">PNG</a>
-        <a href="{{.Download}}" download="qr-{{$.Link.Alias}}{{if .Slug}}-{{.Slug}}{{end}}.svg"
-           class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-sunken">SVG</a>
+      {{/* `ml-4` is the dead space the owner asked for: *"There should be some
+           blank space around the remove and download buttons to prevent
+           accidentally switching when a different action was intended"*. It is
+           a margin rather than a wider `gap-3` on the row because the gap
+           applies between every pair of children and this separation is only
+           owed at one seam — where the selecting area stops and the acting
+           controls start. `relative z-10` is what exempts the cluster from the
+           stretched link above it. */}}
+      <div class="relative z-10 ml-4 flex shrink-0 items-center gap-2">
+        {{/* **One download control with a menu inside it** (F224d), so a third
+             format later costs an entry rather than a third button. The
+             mechanism is the popover the header's menus already use — a
+             `popovertarget` invoker and a `popover="auto"` panel — so
+             `script-src 'self'` is untouched and Escape and a click outside
+             both close it. It is deliberately not `role="menu"`: the entries
+             are links, and m26.5.md settled for the header's popovers that the
+             role would promise keyboard semantics nothing here implements.
+
+             **Outside the `links.update` gate, where the two worded buttons it
+             replaces also were.** A code is a picture of the link's own short
+             URL, so the picture endpoints are `links.read` and only styling is
+             `links.update` (docs/SECURITY.md); folding this into the form below
+             would take the download away from every viewer who may see the code
+             and not restyle it.
+
+             **Anchoring is the part that is new**, and it is the least
+             exercised corner of the pattern this borrows — nav.html's panel is
+             page-level, singular and hung off one named element, where these
+             are per-row and repeated up to twenty times. The name is shared and
+             `anchor-scope` on the `<li>` is what keeps twenty menus off one
+             button; the rules are in input.css, because `style-src 'self'`
+             refuses an inline style attribute and Tailwind generates only the
+             classes it scans, so a name built out of a slug would reach no
+             stylesheet at all (F216).
+
+             Where anchor positioning is missing the panel keeps the UA's own
+             centred placement. That is not the row, which a top-layer element
+             cannot be positioned against without it — nav.html's viewport pin
+             is meaningless halfway down a list, and a centred sheet at least
+             lands somewhere a reader can see. */}}
+        <button type="button" popovertarget="qr-download-{{.Slug}}"
+                class="qr-menu-anchor cursor-pointer rounded-md border border-line-strong p-1.5 text-ink hover:bg-sunken">
+          {{template "icon_download" (printf "Download %s" .Name)}}
+        </button>
+        <div id="qr-download-{{.Slug}}" popover="auto"
+             class="qr-menu z-20 rounded-md border border-line-strong bg-raised py-1 shadow-lg">
+          <a href="{{.DownloadPNG}}" download="qr-{{$.Link.Alias}}{{if .Slug}}-{{.Slug}}{{end}}.png"
+             class="block px-3 py-2 text-left text-sm text-ink hover:bg-sunken">PNG</a>
+          <a href="{{.Download}}" download="qr-{{$.Link.Alias}}{{if .Slug}}-{{.Slug}}{{end}}.svg"
+             class="block px-3 py-2 text-left text-sm text-ink hover:bg-sunken">SVG</a>
+        </div>
         {{if $.Identity.Can "links.update"}}
-        {{/* Two buttons in one form, because they act on the same code and a
+        {{/* Both writes in one form, because they act on the same code and a
              second form would be a second copy of the two hidden fields that
              say which. `code` is this row's slug, never the selection the
              style form below is editing — the control that acted on the
@@ -143,20 +227,85 @@
         <form method="post" action="/links/{{$.Link.ID}}/qr" class="flex items-center gap-2">
           <input type="hidden" name="next" value="{{$.QRReturn}}">
           <input type="hidden" name="code" value="{{.Slug}}">
-          {{if not .Default}}
-          <button type="submit" name="make_default" value="1"
-                  class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-sunken">Make default</button>
+          {{/* **The default is an icon on every row, filled on the one that
+               holds the flag** (M50.7, D188). Owner-set over both shapes
+               offered — a labelled button beside the menu, and an entry inside
+               the menu — because both put a control on the rows that are *not*
+               the default and nothing on the one that is, leaving the state
+               legible only from the sentence in the meta line above.
+
+               The set is exclusive and drawn that way: one filled icon per
+               list, always exactly one, since a link always has a default
+               (D183). That is a radio group's semantics, so the pressed state
+               is exposed with `aria-pressed` rather than left to the fill, and
+               each name says which code it is about.
+
+               **The default's own icon is inert**, disabled rather than absent:
+               the flag is already its own, so a submit there would be a second
+               way to write a value that is already written — and removing the
+               control instead is what left the list unreadable in the first
+               place. Every icon updates when any one is clicked because the
+               post redirects and the list re-renders whole; no swap and no
+               script are added for it.
+
+               **On every row for every reader**, so the pair is drawn twice in
+               this file: this branch for an editor, and the form's `{{"{{else}}"}}`
+               below for somebody holding only `links.read` (D190). */}}
+          {{if .Default}}
+          <button type="button" disabled aria-pressed="true"
+                  class="cursor-default rounded-md p-1.5 text-accent-ink">
+            {{template "icon_default_on" (printf "%s is the default code" .Name)}}
+          </button>
+          {{else}}
+          <button type="submit" name="make_default" value="1" aria-pressed="false"
+                  class="cursor-pointer rounded-md p-1.5 text-subtle hover:bg-sunken hover:text-ink">
+            {{template "icon_default_off" (printf "Make %s the default code" .Name)}}
+          </button>
           {{end}}
           {{/* Present on every row since D183, the default included, and absent
                on the only row a link can have — a link always has a code, so
                the last one is refused. Absent rather than disabled: the
                sentence below the list is where the reason goes, because a
-               disabled control with no explanation reads as a bug. */}}
+               disabled control with no explanation reads as a bug.
+
+               A `−` since M50.7, owner-set. The word went and the accessible
+               name is what still says what it removes, which is why the icon's
+               argument names the code rather than reading "Remove". `ml-1` is
+               the second half of F224f: the destructive control sat 8px from a
+               download button on a 22px-tall row. */}}
           {{if gt (len $.QRCodes) 1}}
           <button type="submit" name="remove" value="1"
-                  class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-danger hover:bg-sunken">Remove</button>
+                  class="ml-1 cursor-pointer rounded-md border border-line-strong p-1.5 text-danger hover:bg-sunken">
+            {{template "icon_minus" (printf "Remove %s" .Name)}}
+          </button>
           {{end}}
         </form>
+        {{else}}
+        {{/* **The same pair, static, for a reader who cannot change it**
+             (M50.7, D190). The set above sat wholly inside the `links.update`
+             gate, where the **Make default** button it replaces correctly
+             lived — and wrong for this, because what D188 bought is
+             legibility rather than an action: which code is the default
+             becomes readable without reading. Gated, a `links.read` viewer saw
+             no icon on any row and was back to the sentence in the meta line,
+             which is the thing the icon exists to replace.
+
+             No form around it, and the shape is not new — it is what the
+             default's own row already draws for an editor. Two render paths
+             for one thing is the cost and the owner took it knowingly; the
+             empty icon's name says the state rather than offering the write,
+             because here there is no write to offer. */}}
+        {{if .Default}}
+        <button type="button" disabled aria-pressed="true"
+                class="cursor-default rounded-md p-1.5 text-accent-ink">
+          {{template "icon_default_on" (printf "%s is the default code" .Name)}}
+        </button>
+        {{else}}
+        <button type="button" disabled aria-pressed="false"
+                class="cursor-default rounded-md p-1.5 text-subtle">
+          {{template "icon_default_off" (printf "%s is not the default code" .Name)}}
+        </button>
+        {{end}}
         {{end}}
       </div>
     </li>
@@ -164,7 +313,7 @@
   </ul>
   {{if eq (len .QRCodes) 1}}
   <p class="mt-2 text-xs text-subtle">
-    A link always has a QR code, so this one cannot be removed &mdash; every picture of it already printed resolves through it. Add a second code and either becomes removable.
+    A link always has a QR code, so this one cannot be removed. Add a second and either becomes removable.
   </p>
   {{end}}
 
@@ -187,11 +336,20 @@
     <button type="submit" name="add" value="1"
             class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Add the code</button>
   </form>
+  {{/* Halved at M50.7. What went is *every code points at this same link, so
+       changing the destination changes all of them at once* — which the add
+       form's own label, sitting under a heading about one link, already says,
+       and which docs/usage.md and the changelog both state at length for
+       somebody who wants it. What a second code *buys* is the part a reader
+       cannot deduce from the control beside it, so it stays. */}}
   <p class="mt-1 text-xs text-subtle">
-    Every code points at this same link, so changing the destination changes all of them at once. What a second code buys is knowing which one people scanned. A link carries at most {{.QRMaxCodes}}.
+    What a second code buys is knowing which one people scanned.
   </p>
   {{else}}
-  <p class="mt-3 text-xs text-subtle">This link is carrying the most codes one link can have ({{.QRMaxCodes}}). Remove one to add another.</p>
+  {{/* The at-capacity sentence is gone with the cap sentence above it (F224a):
+       the counter at the top of this list reads {{"20/20"}} when a link is
+       here, which says what this paragraph said and says it where the reader
+       was already looking. The add form's absence is what says the rest. */}}
   {{end}}
   {{end}}
 </div>
@@ -236,36 +394,27 @@
          and on the slider, which is where somebody setting it is looking. If a
          reader ever needs the word *drawn* here, it is a label on that control
          rather than this paragraph returning. */}}
-    <p class="mt-2 break-all text-xs text-subtle">{{.QRContent}}</p>
-    {{/* Two downloads since M49, and the PNG leads because it is the one the
-         milestone exists for: before it, getting a file anything else could
-         open meant saving the SVG and finding a converter. The SVG stays
-         beside it rather than being replaced — it is the right file for
-         anything that will be resized again, and dropping it would only move
-         the conversion to the other direction.
+    {{/* **The encoded URL stood under the picture and it is gone** (M50.7,
+         F224c), owner-set: *"The link that the QR resolves to doesn't need to
+         be displayed under the QR code."* It is the link's own short URL with
+         `?src=qr` on it, which the page states above the picture and the link's
+         heading row states as the link itself — three renderings of one string
+         on one page, and the two that stay are the ones a reader came for.
+         Nothing about what the code encodes changed — `link.QRContent` is still
+         what goes into the drawing; what went is a rendering of it.
 
-         The download control keeps its text and gains an icon (M48). The
-         owner's note named *"the download button being text instead of an
-         icon"*, and the fix is an icon beside the label rather than one
-         replacing it: an unlabelled icon is a guess for anybody who does not
-         already know what it does, and a download arrow is not a word.
+         **And the download pair below it is gone** (F224i). It hit the same two
+         URLs as the row's controls — both are qrDownloadPath — so a link with
+         two codes drew four download buttons for two pictures, and the pair
+         here always acted on whichever code the form was editing rather than on
+         the row a reader was pointing at. A per-code action belongs on the
+         per-code row, which is where the menu is.
 
-         `download` names the file after the alias. The response's own
-         disposition header says `qr.png`, and this is why the header does not
-         say the alias instead: an attribute the template engine escapes is
-         where workspace-controlled text belongs. */}}
-    <div class="mt-2 flex flex-wrap gap-2">
-      <a href="{{.QRDownloadPNG}}" download="qr-{{.Link.Alias}}.png"
-         class="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">
-        <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 fill-current" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1ZM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
-        Download the PNG
-      </a>
-      <a href="{{.QRDownload}}" download="qr-{{.Link.Alias}}.svg"
-         class="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">
-        <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 fill-current" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1ZM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
-        Download the SVG
-      </a>
-    </div>
+         What that costs is stated rather than discovered: this pair was the one
+         download control outside the codes list, so the shorthand URLs
+         `…/qr.svg` and `…/qr.png` are no longer reachable by clicking. They are
+         still what the API answers on and still what the docs give a script;
+         the row's menu addresses the same picture by the code's own slug. */}}
   </div>
 
   {{if .Identity.Can "links.update"}}
@@ -279,7 +428,7 @@
          against the two paths it builds itself, so this field cannot name a
          third. */}}
     <input type="hidden" name="next" value="{{.QRReturn}}">
-    {{/* Which code this form writes to, and every control on it — Save, Rename,
+    {{/* Which code this form writes to, and every control on it — Save,
          Restore defaults — acts on that one code. Empty asks for the link's
          default, which is what the link page and an unqualified panel show, and
          on a link whose single code has no slug it is also that code's name.
@@ -288,19 +437,25 @@
          flag and refuses a slug the link does not have — the field is a name,
          never a permission. */}}
     <input type="hidden" name="code" value="{{.QRSlug}}">
-    {{/* Renaming is a control on the form for the code being edited rather than
-         a field on every row of the list above: a list where every row is an
-         open text box is a list nobody can read. The slug is not editable at
-         all, because it is printed — see the panel's list. */}}
+    {{/* The name of the code being edited. It is a control on this form rather
+         than a field on every row of the list above: a list where every row is
+         an open text box is a list nobody can read. The slug is not editable at
+         all, because it is printed — see the panel's list.
+
+         **The Rename button beside it is gone and Save writes this field**
+         (M50.7, F224g), owner-set: *"the 'Rename' button should be removed with
+         the 'Save the style' button taking up all saving functions."* Two
+         submits on one form for two halves of one row is a question nobody
+         asked — change a colour and a name together and the old form made you
+         press twice, or press once and silently drop one of them.
+
+         The server's `rename` branch is still there and is deliberately
+         unreachable from here; web_qr.go says so where it lives. */}}
     <div class="sm:col-span-2">
       <label for="qr_label_edit" class="block text-sm font-medium text-ink">Name</label>
-      <div class="mt-1 flex items-center gap-2">
-        <input id="qr_label_edit" name="label" type="text" maxlength="{{.QRMaxLabel}}" value="{{.QRLabel}}"
-               placeholder="What this code is for"
-               class="block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-        <button type="submit" name="rename" value="1"
-                class="shrink-0 rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">Rename</button>
-      </div>
+      <input id="qr_label_edit" name="label" type="text" maxlength="{{.QRMaxLabel}}" value="{{.QRLabel}}"
+             placeholder="What this code is for"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
     </div>
     <div>
       <label for="qr_foreground" class="block text-sm font-medium text-ink">Code</label>
@@ -360,9 +515,12 @@
       </div>
       <input type="hidden" name="size_shown" value="{{.QRSize}}">
     </div>
-    <div class="flex items-end gap-2 sm:col-span-2">
-      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save the style</button>
-      {{if .QRStored}}
+    {{/* **`Save`, from three the owner was offered** — a save icon, `Save`,
+         `Apply` (M50.7, F224h). It read *Save the style* while it saved only a
+         style; it writes the name too now, so the word that named half of what
+         it does had to go whatever the owner picked. */}}
+    <div class="flex flex-wrap items-end gap-2 sm:col-span-2">
+      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save</button>
       {{/* "Restore defaults", not "Back to black on white" (F213). The old
            label named the colours because colours were once all this form
            carried; M49 added a size, so the button clears more than the two
@@ -372,18 +530,47 @@
            It clears the style of **the code named in `code` above** and leaves
            the row, its name and any logo on it (D183). It used to clear the
            *default* code's style whichever code you were looking at, and to
-           delete the row — which now carries the code's printed identity. */}}
-      <button type="submit" name="reset" value="1" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Restore defaults</button>
+           delete the row — which now carries the code's printed identity.
+
+           **Always drawn, and disabled with the reason when there is nothing
+           stored** (M50.7, F224j). It rendered only `{{"{{if .QRStored}}"}}`,
+           so a code nobody has styled showed no control and no explanation —
+           and *the control you are looking for is absent because it would do
+           nothing* is not something a reader can work out from an empty space.
+           A disabled control with a reason beside it is the shape this file
+           already refuses for **Remove** on a link's last code; the difference
+           is that this one has somewhere to put the reason, because there is
+           one control rather than one per row. */}}
+      <button type="submit" name="reset" value="1" {{if not .QRStored}}disabled{{end}}
+              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">Restore defaults</button>
+      {{if not .QRStored}}
+      <p class="text-xs text-subtle">This code has no stored style yet.</p>
       {{end}}
     </div>
     {{/* The snap sentence stood here and it is gone (D182). It said the size
          moved to the nearest one that kept the modules whole, which is what
          the owner set a size and watched happen: *"the number set is where it
          should stay, the quiet zone should be reduced to fit"*. It does stay
-         now, so the paragraph says what the size is instead of apologising for
-         what it was. */}}
+         now, and the sentence that said so is gone too — M50.7 cut the size
+         half of the paragraph below (D188), so what tells a reader the size is
+         the size is the control above printing the number, in the box and on
+         the slider, rather than a sentence promising it. */}}
+    {{/* **The size half of this paragraph is gone and the contrast half
+         stays** (M50.7, D188). The owner chose the 900-character bound knowing
+         it costs one of these two, and this is the one that goes: *the size you
+         set is the size that is stored and served* restates the control
+         directly above it, whose box and slider both print the number, and the
+         quiet-zone clause explains an arithmetic nobody can act on from here.
+
+         The contrast half explains a **refusal**, which is the test this
+         milestone applies to every paragraph: a reader who cannot deduce it
+         from the control beside it keeps it. Two colour swatches say nothing
+         about what happens when they are close together, and the answer — the
+         picture paints its own background rather than following the page — is
+         visible on screen and unexplained without this. It is trimmed rather
+         than kept whole: the trailing clause named the mechanism twice. */}}
     <p class="text-xs text-subtle sm:col-span-2">
-      The size you set is the size that is stored and served &mdash; the picture and both downloads are the same image at that size, and the quiet zone around the code takes up whatever the grid of squares leaves over. Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background rather than following the page.
+      Keep the two colours far apart &mdash; a light code on a dark field is refused by many readers, which is why the picture paints its own background. Restyling never changes what the code says.
     </p>
   </form>
   {{end}}
@@ -446,8 +633,38 @@
        tabbed here out of a pressed state that would never end. */ -}}
 <div class="mt-6 border-t border-line pt-4">
   <h3 class="text-sm font-medium text-ink">Logo</h3>
+  {{/* **Cut from five sentences to two at M50.7** (D188), which is the largest
+       single saving the 900-character bound is paid for out of. What each cut
+       sentence said is still said, and where it is said is the test:
+
+       - *three tenths of the code's width* is a number nobody can act on from
+         here — there is no control for it — which is the exact thing this
+         milestone exists to take off this surface. It is derived in D181, and
+         README.md and docs/usage.md both state it.
+       - *what is stored is a PNG this server encodes from your image, so
+         metadata does not survive* is a privacy claim and it belongs where
+         privacy claims are kept: docs/SECURITY.md's **Uploaded content** row
+         states it in full, and docs/usage.md repeats it beside the API's own
+         upload.
+       - *that makes the picture a little denser; what it says is unchanged* is
+         a consequence of the level, which the sentence below still names.
+       - *and you are told what it became* was a promise about a notice, and the
+         notice is what keeps it: `web_qr.go`'s `logo_applied` case still prints
+         the uploaded dimensions and the stored ones whenever they differ, which
+         is the whole of what F214(a) asked for. A paragraph above the control
+         saying that a message will arrive is one sentence more than the message.
+
+       What stays is the three things a reader cannot get from the file input
+       beside it: what it will accept, that an oversized image is adapted rather
+       than turned away (F214a — silently shrinking somebody's artwork and
+       reporting an unqualified success is what that reopening was called for,
+       and the telling itself is the notice's, named above),
+       and that a logo moves the error-correction level and that removing it
+       moves it back (D184, D186 — M50.6 wrote that clause four hours before
+       this milestone was cited, and naming the level where it changes is the
+       whole of what M50.6 said was owed). */}}
   <p class="mt-1 text-xs text-subtle">
-    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side; it is applied as soon as you choose it. Anything bigger than {{.QRMaxLogoPixels}} pixels in total is <strong>resized down to fit rather than refused</strong>, and you are told what it became. What is stored is a PNG this server encodes from your image, so metadata does not survive &mdash; this is not somewhere to keep an original. It is drawn in the middle of the code, at <strong>three tenths of the code's width</strong>, and a code carrying one is drawn at <strong>error-correction level H</strong> &mdash; the level that lets a reader recover a code with part of it covered. That makes the picture a little denser; what it says is unchanged. Remove the logo and the level goes back to the strongest one this code can carry without growing.
+    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side, applied as soon as you choose it; anything over {{.QRMaxLogoPixels}} pixels in total is <strong>resized down rather than refused</strong>. A code with a logo is drawn at <strong>error-correction level H</strong>, and goes back to the strongest free level when the logo is removed.
   </p>
   <div class="mt-2 flex flex-wrap items-end gap-2">
     <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"

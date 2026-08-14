@@ -363,8 +363,13 @@ func TestTheClickLimitNamesTheTotalAndWhatIsSpent(t *testing.T) {
 // eighth tab or an activity table that went unrendered would both surface here.
 func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
 	markers := map[string]string{
-		"edit":      `id="url"`,
-		"qr":        "Scans are counted as ordinary clicks",
+		"edit": `id="url"`,
+		// The section's own heading, like every other row here. It was the
+		// section's opening sentence until M50.7 rewrote that sentence to reach
+		// the tab's prose bound (D188) — a marker that is prose is a marker any
+		// edit to the prose breaks, and the heading is the stable thing the rest
+		// of this table already keys on.
+		"qr":        ">QR code</h2>",
 		"routing":   ">Routing rules</h2>",
 		"split":     ">Split test</h2>",
 		"signed":    ">Signed links</h2>",
@@ -442,8 +447,9 @@ func TestTheLinkPageDrawsOneSectionAtATime(t *testing.T) {
 //
 // It replaced a popovertarget invoker; the popup it invoked retired with it,
 // and the second assertion is that nothing on the page brought one back — the
-// QR settings render in the tab's flow now, and a popover inside <main> would
-// be the retired mechanism returning under another name.
+// QR settings render in the tab's flow now, and a popover inside <main> that is
+// neither the panel mechanism nor one of M50.7's per-row download menus would be
+// the retired popup returning under another name.
 //
 // Asserted on every tab, because the heading row renders outside #link-tabs
 // and must survive every swap unchanged. What a template scan cannot see —
@@ -477,10 +483,40 @@ func TestTheThumbnailOpensTheQRTab(t *testing.T) {
 			}
 		}
 
-		if panelOpen.MatchString(page) {
-			t.Errorf("the %s tab renders a popover inside <main>; the QR popup "+
+		// A *panel*, not a popover: the two stopped being the same set at
+		// M50.7, whose per-row download menu is a popover and is not the
+		// retired popup coming back. panelSheet in panel_test.go carries the
+		// distinction and the reasoning.
+		if n := len(panelsIn(page)); n > 0 {
+			t.Errorf("the %s tab renders %d panels inside <main>; the QR popup "+
 				"retired at the F212 reopening and its contents live in the QR "+
-				"tab's flow", tab)
+				"tab's flow", tab, n)
+		}
+		// And nothing else uses the API either. Widening the line above from
+		// *no popover* to *no panel* was right for the QR tab and would have
+		// cost the other six their "no popup here" assertion outright, so the
+		// exception is named rather than the rule dropped (D189): the row menus
+		// are allowed, and only where the codes list is.
+		if stray := strayPopoversIn(page); len(stray) > 0 {
+			t.Errorf("the %s tab renders the popovers %v inside <main>, which are "+
+				"neither the panel mechanism nor M50.7's per-row download menus. "+
+				"A popup returning under another name is what this asserts against",
+				tab, stray)
+		}
+		menus := 0
+		for _, m := range panelOpen.FindAllStringSubmatch(page, -1) {
+			if strings.HasPrefix(m[1], qrRowMenuID) {
+				menus++
+			}
+		}
+		if tab != "qr" && menus > 0 {
+			t.Errorf("the %s tab renders %d QR row menus; they belong to the codes "+
+				"list, which renders on the QR tab and nowhere else", tab, menus)
+		}
+		if tab == "qr" && menus == 0 {
+			t.Error("the qr tab renders no row download menus, so the exception " +
+				"above is guarding nothing and the assertion would pass on a tab " +
+				"that had lost the list")
 		}
 	}
 }
