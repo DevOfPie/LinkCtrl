@@ -27,15 +27,16 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Two rows are open.** [M50.8](m50.8.md) — the owner's **third** QR-tab report,
-added 2026-08-14 — and then [M57.9](m57.9.md)'s reopened run, in its own
-session. Everything the first two reports produced has landed: the first's three
+**One row is open:** [M57.9](m57.9.md)'s reopened run, in its own session.
+Everything the QR tab's **four** reports produced has landed: the first's three
 reopenings at `ad28c5f`, `e244cf2` and `272f108`, the second's at `2d4f424`,
-`69ef097` and `d7107b1`, and [M50.7](m50.7.md) at `ea656bd`. `fc9aeef` is
-[M49](m49.md)'s **third** reopening, which is neither report's — it came from
-the owner's answers of 2026-08-13. **M50.8 exhausts
-the M50 band** — `M50.9` is reserved for reviews, so nothing can be inserted
-between M50 and M51 after it. 0.3.0 is written and not yet tagged. Four work areas, chosen 2026-08-06: identity and account
+`69ef097` and `d7107b1`, [M50.7](m50.7.md) at `ea656bd`, and
+[M50.8](m50.8.md) — the third report — at `a12cf16`, **reopened the same day for
+five limbs of the fourth** ([F244](../deferred-findings.md#open), D194/D195).
+`fc9aeef` is [M49](m49.md)'s **third** reopening, which is no report's — it came
+from the owner's answers of 2026-08-13. **M50.8 exhausted the M50 band** —
+`M50.9` is reserved for reviews — which is *why* the fourth report is a
+reopening and two of its limbs are Phase 4 rows rather than an M50.9. 0.3.0 is written and not yet tagged. Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
 campaigns. **Twenty-three milestones** — **twelve integers of work**, two adversarial
 reviews, one close, and **eight insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5, M50.7, M50.8) — against the size target in

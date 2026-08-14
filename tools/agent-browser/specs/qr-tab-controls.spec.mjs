@@ -27,6 +27,11 @@ import { fileURLToPath } from 'node:url';
 //                            same.
 //   the save comes back      the scroll position after a redirect is a property
 //                            of the load, not of the markup.
+//   and comes back once      added at this milestone's reopening (F244a). Where
+//                            the page *settles* was already true; what the
+//                            owner saw was a second position on the way there,
+//                            and only a browser can observe the interval
+//                            between a load and the frame that follows it.
 //   and does not come back   the same offset, stored for a write whose response
 //   twice                    swapped instead of loading, must not survive to be
 //                            applied to some unrelated later load. Storage
@@ -257,6 +262,158 @@ test('a style save comes back to where the reader was', async () => {
     page.locator('#qr button[type="submit"]:not([name])'),
     'the Save control is off screen after a save',
   ).toBeInViewport();
+
+  await page.setViewportSize(was);
+});
+
+// F244(a), and it is the case the one above could not be: *"immediately upon
+// changing the default the screen reloads at the top of the page then jumps
+// down to match the previous scroll position."*
+//
+// **The endpoint was never the complaint.** The case above asserts where the
+// page settles, which was true before this reopening and is still true — the
+// reader does arrive where they were. What they are shown on the way is a
+// second position, because `qrReturn`'s `#qr` fragment and the remembered
+// offset were both aiming at the same scroll and the browser applies the
+// fragment after `DOMContentLoaded`. So this case asserts the **interval**: the
+// document's scroll offset at every point it can be observed, from the first
+// script through a second of frames, is the one the reader stood at.
+//
+// **The observation that catches it is the `load` event**, and it is recorded
+// here because it is not obvious: measured against the build this reopening
+// corrects, the trail reads `DCL 230, load 409, frames 230` — the fragment
+// scroll lands between the two events and the second restoration undoes it
+// before the first frame is painted. A rAF sampler alone therefore sees one
+// value in headless and concludes the page is fine, which is the third probe
+// that missed this. The event handlers run inside the window the frames cannot
+// see.
+//
+// **Three preconditions, because three probes failed on exactly these.** The
+// control is addressed by `name="make_default"` and asserted present — the
+// first probe searched for `name="default"` and skipped in silence, which is
+// F237's shape. The reader's position is set explicitly and the control is
+// asserted **already in the viewport**, so Playwright's click does not scroll
+// it into view and store a position no reader held — the second probe's
+// failure. And that position is asserted far enough from where the bare
+// fragment lands that the two are distinguishable at all.
+test('a save is never shown a position the reader did not stand at', async () => {
+  const linkPage = await openMultiCodeQRTab(page);
+
+  const was = page.viewportSize();
+  await page.setViewportSize({ width: 1000, height: 400 });
+
+  // Every offset this document ever holds, recorded from before its own
+  // scripts run. `addInitScript` re-runs per document, so what is read after
+  // the write is the loaded page's own trail and not the previous one's.
+  //
+  // **Scoped to this case, and that is not tidiness.** `page` is the file's
+  // shared serial one, so instrumentation left installed rides every document
+  // the four cases sharing it after this load: a `__qrTrail`, a capture-phase
+  // scroll listener and a frame loop, none of which any of them asked for and
+  // none of which would fail if they broke something — which is the whole
+  // hazard. Five cases follow this one; the scripts-disabled case runs in its
+  // own context and is the one that would not have inherited it anyway.
+  // `addInitScript` returns a disposable, and it is disposed as soon as the
+  // trail has been read. The frame loop is bounded as well, so the one document
+  // still open at that point stops sampling on its own rather than running for
+  // the rest of the file.
+  const trailProbe = await page.addInitScript(() => {
+    window.__qrTrail = [];
+    const at = (why) =>
+      window.__qrTrail.push({ why, y: Math.round(window.scrollY || window.pageYOffset || 0) });
+    addEventListener('scroll', () => at('scroll'), { capture: true, passive: true });
+    document.addEventListener('DOMContentLoaded', () => at('DOMContentLoaded'));
+    addEventListener('load', () => at('load'));
+    let frames = 0;
+    const frame = () => {
+      at('frame');
+      if (frames++ < 120) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+
+  // Where the bare fragment lands, which is the position this case has to be
+  // able to tell the reader's from.
+  await page.goto(`${linkPage}?tab=qr#qr`);
+  const atFragment = await page.evaluate(() => Math.round(window.scrollY));
+
+  await page.goto(`${linkPage}?tab=qr`);
+  const make = page.locator('main ul li button[name="make_default"]').first();
+  await expect(
+    make,
+    'the codes list draws no enabled default control. The control is ' +
+      '`name="make_default"`; a probe that looked for `name="default"` found ' +
+      'nothing and reported success, which is what this assertion exists to stop',
+  ).toHaveCount(1);
+
+  // Which row holds the flag now, so it can be given back at the end. This
+  // case is the only one in the file that moves a link's default, and the
+  // file's rule is that a second run starts where the first one did.
+  const wasDefault = await page
+    .locator('main ul li:has(button[aria-pressed="true"]) a[href*="/qr?code="]')
+    .first()
+    .textContent();
+
+  // The reader's own position: the control near the bottom of the viewport,
+  // set by scrolling the document rather than by anything that touches the
+  // control.
+  await make.evaluate((el) => {
+    window.scrollTo(0, Math.round(el.getBoundingClientRect().top + window.scrollY - 300));
+  });
+  const before = await page.evaluate(() => Math.round(window.scrollY));
+  await expect(
+    make,
+    'the default control is outside the viewport, so clicking it would scroll ' +
+      'the page first and the position stored would be the driver\'s rather ' +
+      'than the reader\'s',
+  ).toBeInViewport();
+  expect(
+    Math.abs(before - atFragment),
+    `the reader is at ${before} and the bare fragment lands at ${atFragment}; the ` +
+      'two are within a screen of each other, so a jump between them would be ' +
+      'invisible and this case is asserting nothing',
+  ).toBeGreaterThan(100);
+
+  await make.click();
+  await page.waitForURL(/[?&]qr=(defaulted|promoted)/, { timeout: 15000 });
+  await page.waitForLoadState('load');
+  const trail = await page.evaluate(() => window.__qrTrail);
+  // Off the shared page before anything else, including before the navigation
+  // that gives the default back — every document from here on is uninstrumented.
+  await trailProbe.dispose();
+
+  expect(
+    trail.length,
+    'nothing was recorded on the loaded page, so the trail this case reads is ' +
+      'not being produced and every assertion below is vacuous',
+  ).toBeGreaterThan(2);
+  expect(
+    trail.some((s) => s.why === 'load'),
+    'the load event was never observed, and it is the one point in the interval ' +
+      'where the fragment scroll was visible',
+  ).toBe(true);
+
+  const strayed = trail.filter((s) => Math.abs(s.y - before) > 20);
+  expect(
+    strayed,
+    `the reader stood at ${before} and the page they came back to held ` +
+      `${JSON.stringify(strayed)} on the way. A save returns you to where you ` +
+      'were; it does not show you somewhere else first (F244a)',
+  ).toEqual([]);
+
+  // The flag back where it was found.
+  const restore = page
+    .locator('main ul li', { hasText: wasDefault.trim() })
+    .locator('button[name="make_default"]')
+    .first();
+  await expect(
+    restore,
+    `the row that held the default ("${wasDefault.trim()}") no longer offers the ` +
+      'control that would give it back, so this case cannot leave the instance ' +
+      'as it found it',
+  ).toHaveCount(1);
+  await restore.click();
+  await page.waitForURL(/[?&]qr=(defaulted|promoted)/, { timeout: 15000 });
 
   await page.setViewportSize(was);
 });

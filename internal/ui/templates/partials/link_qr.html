@@ -34,14 +34,20 @@
 <div id="qr" class="rounded-lg border border-line bg-raised p-6">
   <div class="min-w-0">
     <h2 class="text-sm font-medium text-ink">QR code</h2>
-    {{/* Halved at M50.7. *Restyling the code never changes what it says* went
-         to the style form, which is the control it is about; the sentence
-         counting this link's codes went to the counter above the list, which
-         is the same number rendered where it can be acted on. What is left is
-         the one thing no control on this tab states — where a scan shows up. */}}
-    <p class="mt-1 text-sm text-muted">
-      Scans count as clicks and appear under <strong>{{.QRSourceLabel}}</strong> in the Analytics tab's referrers breakdown, one row per code.
-    </p>
+    {{/* **The heading carries no prose at all now** (M50.8's reopening, F244c).
+         M50.7 halved this block — *restyling the code never changes what it
+         says* went to the style form and the sentence counting this link's
+         codes went to the counter above the list — and what survived was the
+         one thing no control on this tab states: *"Scans count as clicks and
+         appear under qr in the Analytics tab's referrers breakdown, one row per
+         code."* The owner asked for it gone.
+
+         **What it said is still true and is still written down**, which is the
+         test M50.7 set for a removal: `docs/usage.md` states it for a reader
+         who went looking, and the Analytics tab's referrers breakdown shows it
+         to a reader who did not. A sentence on this tab describing another
+         tab's table is the shape of thing three reports in a row have asked
+         this surface to stop carrying. */}}
   </div>
   <div class="mt-6">
     {{template "link_qr_body" .}}
@@ -229,8 +235,22 @@
       <div class="min-w-0 grow">
         <a href="{{.Panel}}"
            class="text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] hover:text-accent">{{.Name}}</a>
+        {{/* **The default says nothing about itself on this line any more**
+             (M50.8's reopening, F244d), owner-set: *"remove the 'the default -
+             …' text and its description on the Default item"*. It read
+             `&middot; the default &mdash; a scan carrying no code of its own is
+             counted against this one`, which D183 put here as the reader's half
+             of a flag that had just become movable.
+
+             **This takes the last statement on the tab of what the default
+             *does***, and that is deliberate rather than overlooked. The filled
+             icon and its `Default QR Code` tooltip say *which* code it is;
+             nothing left here says an untagged scan is counted against that
+             one. `api/openapi.yaml` and `docs/usage.md` both still say it, and
+             both stay — the claim is not being withdrawn, it is being taken off
+             a surface the owner has now asked four times to carry less. */}}
         <p class="text-xs text-subtle">
-          {{.Size}}px{{if .Slug}} &middot; <code>{{.Slug}}</code>{{end}}{{if .Default}} &middot; the default &mdash; a scan carrying no code of its own is counted against this one{{end}}{{if .HasLogo}} &middot; has a logo{{end}}{{if .Counted}} &middot; {{.Clicks}} scan{{if ne .Clicks 1}}s{{end}} in this window{{end}}
+          {{.Size}}px{{if .Slug}} &middot; <code>{{.Slug}}</code>{{end}}{{if .HasLogo}} &middot; has a logo{{end}}{{if .Counted}} &middot; {{.Clicks}} scan{{if ne .Clicks 1}}s{{end}} in this window{{end}}
         </p>
       </div>
       {{/* `ml-4` is the dead space the owner asked for: *"There should be some
@@ -546,8 +566,11 @@
        (F238f), owner-set: *"Upload a logo should be moved into the style
        section and the header/text/section it is currently in should be fully
        removed."* The `Logo` heading and the bordered block under this whole row
-       are gone; what was inside them renders below the style form, in the same
-       section, under the same column.
+       are gone; what was inside them renders **above** the style form, in the same
+       section, under the same column. *(Above since M50.8's reopening, F244g,
+       owner-set: "the logo picker should be above the save button so all
+       changes to the logo are together." It read "below the style form" until
+       then, and that was true of the milestone that wrote it.)*
 
        **Section, and not the form — the distinction is load-bearing.** A file
        needs `enctype="multipart/form-data"`, which the style form cannot carry
@@ -558,6 +581,165 @@
        has an id: a test asserting the file input is inside the style section
        has to have something to be inside. */}}
   <div id="qr-style" class="flex-1">
+{{- /* A logo on the code being edited (M50.5), inside the style section since
+       M50.8 (F238f) and above its Save button since that milestone's reopening
+       (F244g).
+
+       **Its own form, and it has to be.** A file needs
+       `enctype="multipart/form-data"`, which the style form below cannot carry
+       without every one of its other buttons arriving in a body the handler
+       does not read, and HTML forbids nesting one form inside another. So the
+       upload posts to its own route and the removal stays on the style form's,
+       under its own button name the way reset and remove already do. **The
+       owner's word was section**, and that is what moved: this markup sits in
+       the same column as the style form, under the same heading-less section,
+       and posts exactly where it always did.
+
+       **Before the style form rather than after it** (D195), owner-set: *"The
+       logo picker should be above the save button so all changes to the logo
+       are together."* The two controls that write a logo sat below a `Save`
+       that does not save them, with `Restore defaults` in between. There is
+       exactly one place in this section that is above that button and outside
+       that form — here, ahead of it — because the constraint above has not
+       moved: the upload cannot be *inside* the form, so it cannot sit between
+       the form's fields and the form's submit. What that costs is the file
+       input arriving before **Name**, which is the price of the grouping the
+       owner asked for and is stated rather than discovered.
+
+       **This reaches the default code as well as a named one.** `code` is
+       whichever row the panel is open on, and for a link whose single code has
+       no slug that is the empty string &mdash; which the service reads as *the
+       default code* and resolves from the flag (D183). The owner's ruling of
+       2026-08-07 is what made a logo addressable that way at all rather than by
+       giving the default a reserved slug. A link nobody has added a second code
+       to is nearly every link, and it was the case that could not carry a logo
+       at all.
+
+       **What the upload does to the picture is stated here** (M50.6), because
+       two things change and neither was asked for directly: the image appears
+       in the middle of the code, and error correction goes to level H, which
+       is what makes a code readable with part of it covered. The paragraph
+       M50.5 wrote said nothing drew the logo yet; this milestone is what made
+       that false, so this milestone replaces it.
+
+       **And what the removal does, in one clause** (D184, D186). The level is
+       chosen by a rule now &mdash; the strongest one that does not push the
+       symbol into a larger version &mdash; so H is the one thing on this tab
+       that a reader's own action sets and unsets. The tab does not print the
+       level anywhere else and deliberately: it is not settable here (D129), and
+       a number nobody can act on is what M50.7 exists to take off this
+       surface. Naming it where it changes is the whole of what is owed.
+
+       `accept` and `required` are conveniences for the browser and not checks:
+       the decoder is chosen by the file's own bytes, and the server refuses an
+       empty or unreadable upload whatever the markup allowed.
+
+       **Choosing the file is the whole interaction** (F214c, 2026-08-12). There
+       was a *Upload a logo* / *Replace the logo* button beside this input and
+       it was a second step for a decision already made: nobody picks a file
+       and then declines to apply it. `hx-trigger="change"` on the form is what
+       replaces it &mdash; htmx's own attribute, so nothing of this product's
+       submits this form and nothing new is asked of `script-src 'self'`. That
+       is what this sentence defended and it still holds; what stopped holding
+       at M50.8 is the stronger reading, that no script of this product's runs
+       here at all. static/js/qr-size.js sees this post on
+       `htmx:beforeRequest` and does one thing with it &mdash; remembers the
+       scroll position, so a refusal comes back where the reader was (D193).
+       It does not trigger the request and does not touch its body. On success
+       `seeOther` answers an htmx request with `HX-Redirect`, which is a full
+       page load; on a refusal the handler renders the page and this swaps
+       `#qr` out of it, which is why both surfaces carry that id.
+
+       **`file-pick` is the pressed state** (F214b). The OS file dialog takes
+       around a second to open and the control said nothing in the meantime,
+       which reads as a dead button and earns a second click. The rules are in
+       input.css against `:active` and `:focus:not(:focus-visible)` &mdash;
+       focus is the one that lasts, because the input keeps it for as long as
+       the dialog is up, and the `:not()` is what keeps a reader who merely
+       tabbed here out of a pressed state that would never end. */ -}}
+{{/* **The `Logo` heading and the block around it are gone** (M50.8, F238f). It
+     was `<h3>Logo</h3>` inside its own `mt-6 border-t pt-4` panel below the row
+     that holds the preview and the style form, which made a two-control upload
+     read as a third section of the tab. The controls are unchanged and their
+     routes are unchanged; what went is the furniture around them.
+
+     The rule under the controls rather than over them, since the block moved
+     to the head of the section (F244g): a `border-t` at the top of a column
+     draws a line under the heading row it now sits beneath, and the seam that
+     is actually worth marking is the one between the logo's controls and the
+     style form below. */}}
+<div class="mb-4 border-b border-line pb-4">
+  {{/* **Cut from five sentences to two at M50.7** (D188), which is the largest
+       single saving the 900-character bound is paid for out of. What each cut
+       sentence said is still said, and where it is said is the test:
+
+       - *three tenths of the code's width* is a number nobody can act on from
+         here — there is no control for it — which is the exact thing this
+         milestone exists to take off this surface. It is derived in D181, and
+         README.md and docs/usage.md both state it.
+       - *what is stored is a PNG this server encodes from your image, so
+         metadata does not survive* is a privacy claim and it belongs where
+         privacy claims are kept: docs/SECURITY.md's **Uploaded content** row
+         states it in full, and docs/usage.md repeats it beside the API's own
+         upload.
+       - *that makes the picture a little denser; what it says is unchanged* is
+         a consequence of the level, which the sentence below still names.
+       - *and you are told what it became* was a promise about a notice, and the
+         notice is what keeps it: `web_qr.go`'s `"logo"` marker case still prints
+         the uploaded dimensions and the stored ones whenever they differ, which
+         is the whole of what F214(a) asked for. A paragraph above the control
+         saying that a message will arrive is one sentence more than the message.
+
+       What stayed was the three things a reader cannot get from the file input
+       beside it: what it will accept, that an oversized image is adapted rather
+       than turned away (F214a), and that a logo moves the error-correction
+       level and that removing it moves it back (D184, D186).
+
+       **And it is gone too, at M50.8's reopening** (F244f), owner-set: *"The
+       text that displays the limits of the logo should be removed, the user
+       will get an error if it is too big and should not be bothered before
+       hitting the issue."* That is a judgement about *when* a limit is worth a
+       reader's attention, and it is answerable rather than a matter of taste:
+       the refusal exists and it names the number. `internal/link/qr.go:1959-1963`
+       answers an oversized image with *"this image is W×H and is N pixels wide;
+       a logo is at most 1024 pixels on a side. Anything within that is accepted
+       and resized down to fit if it needs to be"*; the size of the upload
+       itself is refused by `internal/httpx/api_qr.go:551` with *"an upload is
+       at most N bytes"*, and the stored size at `qr.go:1968-1970`. So a reader
+       who hits a limit is told that limit, with their own numbers in it, which
+       the paragraph here could never do.
+
+       **What the paragraph carried that the refusal does not**, stated because
+       it is what the removal costs: the error-correction clause (D184, D186 —
+       M50.6's, and docs/usage.md still states it), and the notice that the
+       upload was resized rather than refused. The notice is unaffected —
+       `web_qr.go`'s `"logo"` marker case still prints the uploaded dimensions
+       and the stored ones whenever they differ, which is F214(a)'s own
+       enforcement and is what tells a reader their artwork was adapted. */}}
+  <div class="flex flex-wrap items-end gap-2">
+    <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"
+          hx-post="/links/{{.Link.ID}}/qr/logo" hx-encoding="multipart/form-data"
+          hx-trigger="change" hx-target="#qr" hx-select="#qr" hx-swap="outerHTML"
+          class="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="next" value="{{.QRReturn}}">
+      <input type="hidden" name="code" value="{{.QRSlug}}">
+      <div>
+        <label for="qr_logo" class="block text-sm font-medium text-ink">{{if .QRHasLogo}}Replace the logo{{else}}Upload a logo{{end}}</label>
+        <input id="qr_logo" name="logo" type="file" accept="image/png,image/jpeg" required
+               class="file-pick mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink focus:border-accent focus:outline-none">
+      </div>
+    </form>
+    {{if .QRHasLogo}}
+    <form method="post" action="/links/{{.Link.ID}}/qr">
+      <input type="hidden" name="next" value="{{.QRReturn}}">
+      <input type="hidden" name="code" value="{{.QRSlug}}">
+      <button type="submit" name="remove_logo" value="1"
+              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-danger hover:bg-sunken">Remove the logo</button>
+    </form>
+    {{end}}
+  </div>
+  </div>
+
   <form method="post" action="/links/{{.Link.ID}}/qr" class="grid gap-4 sm:grid-cols-2">
     {{/* Where the save lands, carried on the form the way the workspace
          switcher and the appearance control already carry theirs. The panel is
@@ -746,132 +928,6 @@
     </p>
   </form>
 
-{{- /* A logo on the code being edited (M50.5), inside the style section since
-       M50.8 (F238f).
-
-       **Its own form, and it has to be.** A file needs
-       `enctype="multipart/form-data"`, which the style form above cannot carry
-       without every one of its other buttons arriving in a body the handler
-       does not read, and HTML forbids nesting one form inside another. So the
-       upload posts to its own route and the removal stays on the style form's,
-       under its own button name the way reset and remove already do. **The
-       owner's word was section**, and that is what moved: this markup sits in
-       the same column as the style form, under the same heading-less section,
-       and posts exactly where it always did.
-
-       **This reaches the default code as well as a named one.** `code` is
-       whichever row the panel is open on, and for a link whose single code has
-       no slug that is the empty string &mdash; which the service reads as *the
-       default code* and resolves from the flag (D183). The owner's ruling of
-       2026-08-07 is what made a logo addressable that way at all rather than by
-       giving the default a reserved slug. A link nobody has added a second code
-       to is nearly every link, and it was the case that could not carry a logo
-       at all.
-
-       **What the upload does to the picture is stated here** (M50.6), because
-       two things change and neither was asked for directly: the image appears
-       in the middle of the code, and error correction goes to level H, which
-       is what makes a code readable with part of it covered. The paragraph
-       M50.5 wrote said nothing drew the logo yet; this milestone is what made
-       that false, so this milestone replaces it.
-
-       **And what the removal does, in one clause** (D184, D186). The level is
-       chosen by a rule now &mdash; the strongest one that does not push the
-       symbol into a larger version &mdash; so H is the one thing on this tab
-       that a reader's own action sets and unsets. The tab does not print the
-       level anywhere else and deliberately: it is not settable here (D129), and
-       a number nobody can act on is what M50.7 exists to take off this
-       surface. Naming it where it changes is the whole of what is owed.
-
-       `accept` and `required` are conveniences for the browser and not checks:
-       the decoder is chosen by the file's own bytes, and the server refuses an
-       empty or unreadable upload whatever the markup allowed.
-
-       **Choosing the file is the whole interaction** (F214c, 2026-08-12). There
-       was a *Upload a logo* / *Replace the logo* button beside this input and
-       it was a second step for a decision already made: nobody picks a file
-       and then declines to apply it. `hx-trigger="change"` on the form is what
-       replaces it &mdash; htmx's own attribute, so nothing of this product's
-       submits this form and nothing new is asked of `script-src 'self'`. That
-       is what this sentence defended and it still holds; what stopped holding
-       at M50.8 is the stronger reading, that no script of this product's runs
-       here at all. static/js/qr-size.js sees this post on
-       `htmx:beforeRequest` and does one thing with it &mdash; remembers the
-       scroll position, so a refusal comes back where the reader was (D193).
-       It does not trigger the request and does not touch its body. On success
-       `seeOther` answers an htmx request with `HX-Redirect`, which is a full
-       page load; on a refusal the handler renders the page and this swaps
-       `#qr` out of it, which is why both surfaces carry that id.
-
-       **`file-pick` is the pressed state** (F214b). The OS file dialog takes
-       around a second to open and the control said nothing in the meantime,
-       which reads as a dead button and earns a second click. The rules are in
-       input.css against `:active` and `:focus:not(:focus-visible)` &mdash;
-       focus is the one that lasts, because the input keeps it for as long as
-       the dialog is up, and the `:not()` is what keeps a reader who merely
-       tabbed here out of a pressed state that would never end. */ -}}
-{{/* **The `Logo` heading and the block around it are gone** (M50.8, F238f). It
-     was `<h3>Logo</h3>` inside its own `mt-6 border-t pt-4` panel below the row
-     that holds the preview and the style form, which made a two-control upload
-     read as a third section of the tab. The controls are unchanged and their
-     routes are unchanged; what went is the furniture around them. */}}
-<div class="mt-4 border-t border-line pt-4">
-  {{/* **Cut from five sentences to two at M50.7** (D188), which is the largest
-       single saving the 900-character bound is paid for out of. What each cut
-       sentence said is still said, and where it is said is the test:
-
-       - *three tenths of the code's width* is a number nobody can act on from
-         here — there is no control for it — which is the exact thing this
-         milestone exists to take off this surface. It is derived in D181, and
-         README.md and docs/usage.md both state it.
-       - *what is stored is a PNG this server encodes from your image, so
-         metadata does not survive* is a privacy claim and it belongs where
-         privacy claims are kept: docs/SECURITY.md's **Uploaded content** row
-         states it in full, and docs/usage.md repeats it beside the API's own
-         upload.
-       - *that makes the picture a little denser; what it says is unchanged* is
-         a consequence of the level, which the sentence below still names.
-       - *and you are told what it became* was a promise about a notice, and the
-         notice is what keeps it: `web_qr.go`'s `logo_applied` case still prints
-         the uploaded dimensions and the stored ones whenever they differ, which
-         is the whole of what F214(a) asked for. A paragraph above the control
-         saying that a message will arrive is one sentence more than the message.
-
-       What stays is the three things a reader cannot get from the file input
-       beside it: what it will accept, that an oversized image is adapted rather
-       than turned away (F214a — silently shrinking somebody's artwork and
-       reporting an unqualified success is what that reopening was called for,
-       and the telling itself is the notice's, named above),
-       and that a logo moves the error-correction level and that removing it
-       moves it back (D184, D186 — M50.6 wrote that clause four hours before
-       this milestone was cited, and naming the level where it changes is the
-       whole of what M50.6 said was owed). */}}
-  <p class="mt-1 text-xs text-subtle">
-    PNG or JPEG, at most {{.QRMaxLogoBytes}} bytes and {{.QRMaxLogoDimension}} pixels a side, applied as soon as you choose it; anything over {{.QRMaxLogoPixels}} pixels in total is <strong>resized down rather than refused</strong>. A code with a logo is drawn at <strong>error-correction level H</strong>, and goes back to the strongest free level when the logo is removed.
-  </p>
-  <div class="mt-2 flex flex-wrap items-end gap-2">
-    <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"
-          hx-post="/links/{{.Link.ID}}/qr/logo" hx-encoding="multipart/form-data"
-          hx-trigger="change" hx-target="#qr" hx-select="#qr" hx-swap="outerHTML"
-          class="flex flex-wrap items-end gap-2">
-      <input type="hidden" name="next" value="{{.QRReturn}}">
-      <input type="hidden" name="code" value="{{.QRSlug}}">
-      <div>
-        <label for="qr_logo" class="block text-sm font-medium text-ink">{{if .QRHasLogo}}Replace the logo{{else}}Upload a logo{{end}}</label>
-        <input id="qr_logo" name="logo" type="file" accept="image/png,image/jpeg" required
-               class="file-pick mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink focus:border-accent focus:outline-none">
-      </div>
-    </form>
-    {{if .QRHasLogo}}
-    <form method="post" action="/links/{{.Link.ID}}/qr">
-      <input type="hidden" name="next" value="{{.QRReturn}}">
-      <input type="hidden" name="code" value="{{.QRSlug}}">
-      <button type="submit" name="remove_logo" value="1"
-              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-danger hover:bg-sunken">Remove the logo</button>
-    </form>
-    {{end}}
-  </div>
-  </div>
   </div>
   {{end}}
 </div>

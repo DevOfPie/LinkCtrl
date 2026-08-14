@@ -628,8 +628,12 @@ type linkQRView struct {
 	QRThumbSVG template.HTML
 	QRContent  string
 	// QRSourceLabel is the value a scan appears under in the referrers
-	// breakdown, passed in rather than written into the template so the word the
-	// page promises and the word the redirect path writes cannot drift apart.
+	// breakdown. **No template has read it since M50.8's reopening** removed the
+	// analytics sentence (F244(c)); it is still filled on every render, which is
+	// F245's row along with the three logo bounds below. It was passed in rather
+	// than written into a template so the word a page promised and the word the
+	// redirect path writes could not drift apart — the constraint on any surface
+	// that says this again, `docs/usage.md` being where it is said today.
 	QRSourceLabel string
 	QRStyle       qr.Style
 	// QRSize is the output size in pixels the code is drawn at, and since M49 it
@@ -706,15 +710,20 @@ type linkQRView struct {
 	// that there is one, and offer to take it away.
 	QRHasLogo bool
 	// QRMaxLogoBytes, QRMaxLogoDimension and QRMaxLogoPixels are the upload's
-	// bounds, passed in like QRMinSize and QRMaxSize so the numbers the panel
-	// states and the ones internal/qr enforces cannot drift. Stated in bytes
-	// rather than rounded to a megabyte, because a rounded figure is one that
-	// stops being true the first time the constant moves and nothing fails.
+	// bounds. **No template has read them since M50.8's reopening** took the
+	// logo's limits paragraph off the tab (F244(f)): they are still filled on
+	// every render and nothing states them, which is F245's row. What states them
+	// now is the refusal itself, with the reader's own figures in it.
 	//
-	// **Two of these are refusals and one is not** (F214). The bytes and the side
-	// turn an upload away; the pixel count is the size an image is resized *to*,
-	// and the panel's prose has to say which is which or it repeats the refusal
-	// that could not be acted on.
+	// Why they were passed in at all is the part worth keeping, because it is
+	// what any surface that says these numbers again has to get right. They came
+	// from here rather than from the template so the numbers a page stated and
+	// the ones internal/qr enforces could not drift, in bytes rather than rounded
+	// to a megabyte because a rounded figure stops being true the first time the
+	// constant moves and nothing fails. And **two of the three are refusals and
+	// one is not** (F214): the bytes and the side turn an upload away, while the
+	// pixel count is the size an image is resized *to*, so prose that treats all
+	// three alike repeats a refusal that could not be acted on.
 	QRMaxLogoBytes     int
 	QRMaxLogoDimension int
 	QRMaxLogoPixels    int

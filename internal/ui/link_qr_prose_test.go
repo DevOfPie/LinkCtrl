@@ -23,20 +23,33 @@ import (
 // come out of the size-and-contrast paragraph, whose *contrast* half explains a
 // refusal no control on the tab states.
 //
-// **750 since M50.8**, and the number is arrived at by a rule rather than
-// chosen, because this is a gate being moved by the milestone that has to meet
-// it. Two more paragraphs went — the last-code sentence, whose reason moved onto
-// the remove control itself (F238g), and *"What a second code buys is knowing
-// which one people scanned"*, which the owner judged help-page material
-// (F238e). The tab measures **715** across four paragraphs after them: analytics
-// 100, code meta 153, contrast 191, logo 271. The bound is that measurement
-// rounded **up to the next fifty**, so it stays a number a later milestone has
-// to work at rather than one it clears by accident, and so that what set it is
-// arithmetic rather than whatever the build happened to land on.
+// **750 at M50.8**, and the number is arrived at by a rule rather than chosen,
+// because this is a gate being moved by the milestone that has to meet it. Two
+// more paragraphs went — the last-code sentence, whose reason moved onto the
+// remove control itself (F238g), and *"What a second code buys is knowing which
+// one people scanned"*, which the owner judged help-page material (F238e). The
+// tab measured **715** across four paragraphs after them: analytics 100, code
+// meta 153, contrast 191, logo 271. The bound is that measurement rounded **up
+// to the next fifty**, so it stays a number a later milestone has to work at
+// rather than one it clears by accident, and so that what set it is arithmetic
+// rather than whatever the build happened to land on.
 //
-// The logo paragraph moved into the style section in the same milestone and did
-// not change; it is counted here exactly as it was.
-const qrProseBound = 750
+// **300 since that milestone's reopening**, by the same rule and from the
+// fourth report. Three more removals, all owner-set: the analytics sentence
+// whole (F244c, −100, and docs/usage.md still states it), the meta line's
+// *"the default — a scan carrying no code of its own is counted against this
+// one"* (F244d, 153 → 61), and the logo's limits paragraph whole (F244f, −271,
+// on the argument that the refusal names the limit with the reader's own
+// numbers in it). The tab measures **252** across two paragraphs: code meta 61
+// and contrast 191. Rounded up to the next fifty, 300.
+//
+// **Two of the four paragraphs the bound was written for are gone**, and what
+// is left is one label and one refusal-explaining sentence — which is why the
+// headroom is 48 characters rather than the 35 the last move left. A later
+// milestone adding a sentence to this tab now fails this test on the first one,
+// which after four reports asking this surface to say less is the intended
+// setting rather than an oversight.
+const qrProseBound = 300
 
 // qrProseMinimum is where a paragraph stops being prose and starts being a
 // label. Forty characters is about a short sentence; "PNG or JPEG, at most N
@@ -103,9 +116,10 @@ func TestTheQRTabsProseIsUnderItsBound(t *testing.T) {
 			t.Logf("%4d  %s", len([]rune(p)), p)
 		}
 		t.Errorf("the QR tab carries %d characters of prose across %d paragraphs, "+
-			"over the bound of %d (D188, lowered at M50.8). It was 1906 before "+
-			"M50.7 and 715 after M50.8. Cut a paragraph, or raise the bound here "+
-			"and say in the commit what the words bought",
+			"over the bound of %d (D188, lowered at M50.8 and again at its "+
+			"reopening). It was 1906 before M50.7, 715 after M50.8 and 252 after "+
+			"the fourth report. Cut a paragraph, or raise the bound here and say "+
+			"in the commit what the words bought",
 			total, len(each), qrProseBound)
 	}
 }

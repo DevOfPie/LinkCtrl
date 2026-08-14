@@ -1110,28 +1110,51 @@ func TestTheQRSettingsRenderInTheTabsFlow(t *testing.T) {
 	}
 }
 
-// TestTheDefaultCodeSaysWhatBeingTheDefaultMeans is the reader's half of D183.
+// TestTheDefaultCodeIsNamedByItsIconAndNotByProse is F244(d), owner-set:
+// *"remove the 'the default - …' text and its description on the Default
+// item"*.
 //
-// The flag decides where a picture carrying no code of its own is counted, and
-// that is not deducible from the word *default* — a reader who has printed a
-// poster wants to know which row their poster's scans are in. The row says so.
+// **This test used to assert the opposite**, and it was the reader's half of
+// D183: the flag decides where a picture carrying no code of its own is
+// counted, which is not deducible from the word *default*, so the row said so.
+// The owner has now asked for both halves of that clause — the label and its
+// explanation — off the row.
 //
-// It also asserts the old sentence is gone from the whole page. That one named
-// the default as *the code every already-printed picture of this link resolves
-// to*, which stopped being a property of one row the moment the flag could move.
-func TestTheDefaultCodeSaysWhatBeingTheDefaultMeans(t *testing.T) {
+// So what it asserts is the removal, plus the thing that makes the removal
+// survivable: **the default is still identifiable without reading**. M50.8 put
+// a filled icon on every row and named it `Default QR Code`, which is what the
+// sort order used to do and what this sentence used to do, and a milestone that
+// removed the words *and* let the icon go would leave the default unmarked. The
+// third assertion is therefore not padding — it is what keeps this one from
+// being a licence to delete the whole affordance.
+//
+// The sentence's claim is not withdrawn, only moved off this surface:
+// `api/openapi.yaml` and `docs/usage.md` both still state it, which is
+// m50.8.md's own condition for the removal.
+func TestTheDefaultCodeIsNamedByItsIconAndNotByProse(t *testing.T) {
 	for _, page := range qrPanelPages {
 		body := renderQRPanel(t, page)
 
-		if !strings.Contains(body, "a scan carrying no code of its own is counted against this one") {
-			t.Errorf("%s does not say what the default code is for. The flag decides "+
-				"where an untagged picture's scans land, and a row labelled only "+
-				"\"the default\" leaves a reader to guess (D183)", page)
+		if strings.Contains(body, "a scan carrying no code of its own is counted against this one") {
+			t.Errorf("%s still explains the default on the row. The owner asked for "+
+				"the \"the default — …\" text and its description to go (F244d); what "+
+				"the flag does is still in api/openapi.yaml and docs/usage.md", page)
+		}
+		if strings.Contains(body, "&middot; the default") {
+			t.Errorf("%s still labels the row \"· the default\" in its meta line. Both "+
+				"halves of that clause were removed, not only the explanation", page)
 		}
 		if strings.Contains(body, "the code every already-printed picture of this link resolves to") {
 			t.Errorf("%s still describes the default as the code every printed picture "+
 				"resolves to. That was true while the default was the row without a "+
 				"slug; the flag moves now, and so does what it describes", page)
+		}
+		// And what is left saying which row it is. Without this the assertions
+		// above pass on a list that marks its default nowhere at all.
+		if !strings.Contains(body, "Default QR Code") {
+			t.Errorf("%s names no default code at all. The prose came off the row on "+
+				"the argument that the filled icon and its tooltip say which one it "+
+				"is (M50.8, D192) — with those gone too, nothing does", page)
 		}
 	}
 }
@@ -1590,6 +1613,60 @@ func TestTheLogoControlsRenderInsideTheStyleSection(t *testing.T) {
 			}
 			if !strings.Contains(body, ">"+label+"<") {
 				t.Errorf("%s (QRHasLogo=%v) does not label the upload %q", page, hasLogo, label)
+			}
+		}
+	}
+}
+
+// TestTheLogoControlsRenderAboveTheStyleFormsSave is F244(g), owner-set: *"The
+// logo picker should be above the save button so all changes to the logo are
+// together."*
+//
+// M50.8 moved the upload into the style section and left it after the form, so
+// the two controls that write a logo rendered **below** a `Save` that does not
+// save them, with `Restore defaults` in between. The owner's reason is grouping
+// rather than aesthetics, which is why this asserts document order rather than
+// a class.
+//
+// **Order is the only thing HTML leaves to choose here.** A file needs
+// `enctype="multipart/form-data"` and forms do not nest, so the upload cannot
+// sit *between* the style form's fields and the style form's submit — the one
+// position above that button and outside that form is ahead of the whole form,
+// which is where it now is. A later change that "tidies" the section by putting
+// the upload back underneath is the regression this catches.
+func TestTheLogoControlsRenderAboveTheStyleFormsSave(t *testing.T) {
+	for _, page := range qrPanelPages {
+		for _, hasLogo := range []bool{true, false} {
+			body := mainOf(t, renderPage(t, page,
+				map[string]any{"Tab": "qr", "QRHasLogo": hasLogo}))
+
+			save := strings.Index(body, `>Save</button>`)
+			if save < 0 {
+				t.Fatalf("%s (QRHasLogo=%v) renders no Save control to order against",
+					page, hasLogo)
+			}
+			if strings.Contains(body[save+1:], `>Save</button>`) {
+				t.Errorf("%s (QRHasLogo=%v) renders more than one Save control, so "+
+					"\"above the save button\" no longer names one position", page, hasLogo)
+			}
+			controls := map[string]string{
+				"the file input":        `id="qr_logo"`,
+				"the upload's own form": `/qr/logo" enctype="multipart/form-data"`,
+			}
+			if hasLogo {
+				controls["the remove control"] = `name="remove_logo" value="1"`
+			}
+			for what, marker := range controls {
+				at := strings.Index(body, marker)
+				if at < 0 {
+					t.Errorf("%s (QRHasLogo=%v) renders %s nowhere at all", page, hasLogo, what)
+					continue
+				}
+				if at > save {
+					t.Errorf("%s (QRHasLogo=%v): %s renders after the style form's Save "+
+						"button. The owner asked for the logo picker above it so that "+
+						"everything that writes a logo is together (F244g)", page, hasLogo, what)
+				}
 			}
 		}
 	}

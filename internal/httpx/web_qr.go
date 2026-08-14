@@ -119,6 +119,14 @@ func qrReturn(next string, id interface{ String() string }, marker, slug string,
 	// derived from what the handler is exactly as the destination itself is —
 	// the field stays a choice between two surfaces and still cannot name a
 	// third (D178).
+	//
+	// **`#qr` is the script-blocked reader's landing and nothing more since
+	// M50.8's reopening** (D195). It used to be the only thing aiming a save at
+	// the section; static/js/qr-size.js remembers where the reader actually
+	// stood, and where it has a position to put back it takes this fragment off
+	// the URL before the browser scrolls to it — two scrolls at one load is what
+	// the owner saw as a jump and a settle. It stays here because a reader with
+	// that script blocked has nothing else, which is D178's own argument.
 	q.Set("tab", "qr")
 	return page + "?" + q.Encode() + "#qr"
 }

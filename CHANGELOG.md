@@ -103,10 +103,13 @@ migrations run at boot.
 
   All of the tab's prose — those four paragraphs and the three shorter ones
   beside them — went from about 1900 characters to under 900, measured rather
-  than judged, and a test holds it there. What survives is what
-  a reader cannot work out from the control beside it — where a scan is counted,
-  why the picture keeps its own background whatever the page theme is, and what
-  a logo does to a code's error correction.
+  than judged, and a test holds it there; by the end of this release a later
+  read of the same tab takes it under 300. What survives is what a reader cannot
+  work out from the control beside it, which by then is two sentences: keep a
+  code's two colours far apart, because a light code on a dark field is refused
+  by many readers, which is why the picture paints its own background whatever
+  the page theme is; and restyling never changes what the code says, so a code
+  already in print still resolves to the same URL after its colours move.
 
 - **The QR tab, after a third read of it: the list holds still, the size control
   tells the truth while you drag it, and a save keeps your place.**
@@ -129,7 +132,9 @@ migrations run at boot.
   clamped.
 
   **Saving no longer throws you back to the top of the page.** Every write on the
-  tab now returns to the position you were reading at.
+  tab now returns to the position you were reading at — and goes there directly,
+  rather than showing you the top of the section first and correcting itself a
+  moment later.
 
   **The remove button stays on a link's only code, grayed out**, with *Every link
   must have at least 1 QR code.* on it — where before it simply was not there and
@@ -149,11 +154,20 @@ migrations run at boot.
   row you have selected now shows, which it did not: the highlight was the same
   colour as the selected row itself.
 
-  **The logo upload has moved into the style section** and its own heading and
-  panel are gone. Nothing about what a logo does changed, only where its control
-  sits. Two more explanatory paragraphs went with all of this, and the tab's
-  prose is now under 750 characters against 900 before and about 1900 two
-  releases ago.
+  **The logo upload has moved into the style section**, above that section's
+  **Save** button so that everything which writes a logo is in one place, and
+  its own heading and panel are gone. Nothing about what a logo does changed,
+  only where its control sits.
+
+  **Five explanatory paragraphs went with all of this**, and the tab's prose is
+  now under 300 characters against 900 before and about 1900 two releases ago.
+  The last three to go: the note that scans appear under `qr` in the referrers
+  breakdown, which the Analytics tab shows and `docs/usage.md` states; the
+  sentence on the default code's row explaining that untagged scans are counted
+  against it, which the API reference and `docs/usage.md` still state and which
+  the filled dot and its **Default QR Code** tooltip already identify; and the
+  logo's size limits, which an upload that exceeds them reports with your own
+  image's dimensions in the message.
 
   **Not done, and stated rather than left to be noticed**: there is still no
   automatic warning when a code's two colours are too close together. The

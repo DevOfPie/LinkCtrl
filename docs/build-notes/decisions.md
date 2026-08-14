@@ -358,6 +358,11 @@ file. Append a row when you append an entry.
 | [M50.8, two amendments its reviewer forced](#2026-08-14--m508-two-amendments-its-reviewer-forced) | Fact-level orchestrator amendments on a milestone file, both **enumerations that were short**. The records citing the reversed sort order are **three**, not two — `internal/httpx/web_links.go:675` documents the view field filled from the service whose order changed. And the default control's strings are **two pairs at four sites**, not one pair at two: the `links.read` branch renders the same control unwritable, and the glyph going decorative on both branches is what obliged it to move. `Not the Default QR Code` is the build's wording rather than the owner's, the report naming only a control a reader can press |
 | [M50.8, five more amendments, three of them on a shipped milestone](#2026-08-14--m508-five-more-amendments-three-of-them-on-a-shipped-milestone) | Fact-level orchestrator amendments, three of them on **`m50.7.md`, which is `done`** — and that is not a reopening, because reopening is for a claim false by *defect* and F238(i) is the owner asking M50.7's claims to stop being true. A shipped file superseded by a later milestone is amended where it is superseded, naming which one did it. The default icons' accessible name is on the **button** and names no code; `icons.html` now draws a decorative shape as well as a named one. M50.8's own order test is an **integration** test, the order being SQL, and its scroll case asserts the **Save** button, far enough down the tab to tell a restored position from the `#qr` fragment's landing |
 | [M50.8, the prose bound moved and the file that derives it did not](#2026-08-14--m508-the-prose-bound-moved-and-the-file-that-derives-it-did-not) | The third review's three findings, all records and all the orchestrator's. `m50.7.md`'s bound section — the one that says *move the number in this file* — still derived **900** while the index and the log carried 750; the number had been moved everywhere except the file that gave the instruction. The milestone's title in `Plan.md` and the phase-details README still carried the *"first script this product writes"* overclaim its own plan review struck. And `docs/usage.md` claimed alphabetical *by name* where the sort is on the stored **label** and an unnamed code draws a substitute — corrected, with the design question behind it filed as [F243](deferred-findings.md#open) |
+| [M50.8, the fourth report and where its seven items go](#2026-08-14--m508-the-fourth-report-and-where-its-seven-items-go) | D194 — the tab's **fourth** report reopens M50.8 for five of its seven limbs, the M50 band being exhausted so no new M50.x can hold them. Four are the owner's choice; **limb (a) joined by rule** — the screen showing the top of the card before jumping back makes *"a save returns you to where you were"* false, and a false claim reopens rather than succeeds. It is not a bug in the restoration: `qr-size.js` restores a **second** time precisely because the browser's `#qr` fragment scroll lands after `DOMContentLoaded`, so the correction is by construction after a paint, and D193 left the fragment on the redirect it chose a remembered position over. **Three probes saw none of it** — one skipped in silence on a wrong selector, one let the driver auto-scroll away the position it meant to store — so the enforcement is an assertion about the interval rather than the endpoint. (b) and (e) are Phase 4 rows |
+| [M50.8, the fragment yields rather than being out-scrolled](#2026-08-14--m508-the-fragment-yields-rather-than-being-out-scrolled) | D195 — two mechanisms were aiming at one scroll and the later existed to undo the earlier, so the **fragment yields**: `qr-size.js` takes `#qr` off the URL with `replaceState` before the browser acts on it, and only on the loads where a remembered position is being applied. Measured on the build being corrected — `DOMContentLoaded 230, load 409, frames 230` — which is why the intermediate position is real, why a frame sampler in headless cannot see it, and why the enforcement asserts the **`load` event**. Costs the reader whose browser refuses `replaceState` their position outright — the fragment survives, and the second application that used to correct it is gone, so they **end** at the card top rather than jumping and settling. Stated rather than fixed: the fallback is a branch nothing in the kept suite can reach. Rejected: deleting the fragment outright, which is D178's no-script return path; and guarding the second application, which M50.8 already tried and which cannot tell a reader's scroll from the browser's |
+| [M50.8, the logo picker above the save button, and the prose bound at 300](#2026-08-14--m508-the-logo-picker-above-the-save-button-and-the-prose-bound-at-300) | The reopening's four other limbs. The logo controls move **ahead of the whole style form**, which is the only position above its Save button and outside it — a file needs `multipart/form-data` and forms do not nest, so *between the fields and the submit* is not a place that exists. F244(d) takes the last statement on the tab of what the default *does*, leaving the icon and its name to say which one it is; the test that asserted the sentence now asserts its absence **and** the icon's name, so losing both cannot pass. F244(f) rests on a refusal that names the limit with the reader's own numbers in it. The prose bound is **300**: measured 252 across two paragraphs, rounded up to the next fifty |
+| [M50.8's reopening, four citations its own diff moved](#2026-08-14--m508s-reopening-four-citations-its-own-diff-moved) | Fact-level orchestrator amendments: four line numbers in the reopening's own bullets, stale because the build moved them by doing what the bullets asked. **The third time in two days this hazard has cost an amendment** — a citation written against a diff in flight goes stale before the diff lands, and the answer is re-reading at step 3.4 rather than citing less. Also records that the three removed sentences still appear as quotations inside the comments recording their removal, which is convention and not a failed deletion |
+| [Three shipped entries the fourth report's removals falsified](#2026-08-14--three-shipped-entries-the-fourth-reports-removals-falsified) | Corrections **by a later entry**, this file being append-only. M50.7's defence of its meta-line cut, M50.7's claim that the logo paragraph still names level H, and D186's citation of that same paragraph were all falsified by F244(c), (d) and (f). A fourth: **`logo_applied` is a symbol that has never existed** — the marker is `"logo"` — and it survived review in a landed entry because the sentence around it was right. D186 stands and is discharged by the **upload notice** at `internal/httpx/web_qr.go:650-663` rather than by prose on the tab. The rule the run earned: **entries about this surface cite the mechanism, not the sentence** — a claim that *the tab still says X* has a lifetime, and this tab has been reported four times in three days |
 
 ---
 
@@ -29613,3 +29618,282 @@ Sorting on a value the reader cannot see is defensible while at most one row can
 have it, and the add form requires no name, so two are reachable. Whether
 *alphabetical by name* should mean the name on the row is the owner's, and it
 reaches the API rather than only the tab.
+
+## 2026-08-14 — M50.8, the fourth report and where its seven items go
+
+**D194 — the QR tab's fourth report reopens M50.8 for five of its seven limbs**,
+owner-answered the day it arrived, over three alternatives each of which was put
+with its cost.
+
+**The band is what removed the option the third report used.** M50.8's own file
+states that `M50.9` is reserved for reviews, so no M50.x milestone can be
+inserted between M50 and M51 — the third report became a milestone and the
+fourth one cannot. What was left was a reopening, Phase 4 rows, or a milestone
+numbered somewhere else, and the owner took the reopening for the four cheap
+limbs: three prose removals and moving the logo picker above the save button.
+
+**Limb (a) joined them by rule rather than by choice.** It was put to the owner
+as unresolved — the build could not reproduce it — and they re-checked and
+reported it precisely: *"immediately upon changing the default the screen
+reloads at the top of the page then jumps down to match the previous scroll
+position."* That makes M50.8's *"a save returns you to where you were"* false as
+stated, and [workflow.md](workflow.md) reopens a milestone whose claim is false
+rather than filing a successor. Since M50.8 was already being reopened, (a)
+costs nothing extra to house and the trail stays on one number.
+
+**What (a) actually is, and it is not a bug in the restoration.**
+`internal/ui/static/js/qr-size.js:175-179` applies the restore a second time
+*because* the browser performs its `#qr` fragment scroll after
+`DOMContentLoaded`. So the correcting scroll is by construction after a paint,
+and the reader is shown the top of the card before being moved back. D193 chose
+a remembered position **over** a fragment and left the fragment on the redirect
+(`internal/httpx/web_qr.go:123`, there since D178), so two mechanisms now aim at
+the same scroll and the second exists to undo the first. The reopening does not
+pick between removing the fragment and restoring before paint; that is the
+build's, with an entry.
+
+**Three probes and the harness saw none of it, which is recorded because it is
+the more useful half.** The first searched for `button[name="default"]` where
+the control is `name="make_default"` and **skipped in silence** — the exact
+shape [F237](deferred-findings.md#open) warns about and this milestone's own
+risk section named. The second let the driver auto-scroll the control into view,
+so the position it stored was never the position a reader holds. The third
+observed nothing because the restore beats the first animation frame in
+headless. A browser check answered *"does it settle in the right place"*, which
+was true, while the owner's complaint was about what happens before it settles.
+**The reopening's enforcement is therefore an assertion about the interval, not
+about the endpoint.**
+
+**(b) and (e) are Phase 4 rows.** (b) — the preview vanishing when a code is
+selected — is a navigation rather than a rendering fault: each row links to the
+panel route, which is a page with no link heading row, so answering it means
+deciding what selecting a code should do. (e) stays
+[F239](deferred-findings.md#open), now with the owner's placement specified and
+still without the contrast metric F239 exists to name.
+
+## 2026-08-14 — M50.8, the fragment yields rather than being out-scrolled
+
+**D195 — the QR tab's `#qr` fragment is taken off the URL by the script that
+has a better position, rather than the script correcting the fragment's scroll
+afterwards.** The reopening left this open in as many words: two mechanisms are
+aiming at one scroll, the milestone does not say which goes, the build chooses.
+
+**What was measured, first, because the reasoning rests on it.** Chromium at
+1000×400 against the test instance at `a12cf16`, recording `window.scrollY` at
+the document's first script, at `DOMContentLoaded`, at `load`, on every scroll
+event and on 120 animation frames. Changing the default from a reader standing
+at **230**:
+
+```
+script 0 · DOMContentLoaded 230 · load 409 · scroll 230 · frame 230 × 96
+```
+
+The offset is restored at `DOMContentLoaded`, the browser performs its `#qr`
+fragment scroll to **409** between the two events, and the second restoration
+puts it back before the first frame. So the intermediate position is real and is
+observable at the `load` event — and is invisible to a frame sampler in
+headless, which is why three probes reported the page was fine. On a machine
+that paints in that window, which is the owner's, it is a jump and a settle.
+
+**The two options, and what each costs.**
+
+*Remove `#qr` from `qrReturn`'s link-page branch* (`internal/httpx/web_qr.go`).
+One line, nothing left to fight, and the position is applied once from a
+`defer`red script — which runs after parsing and before both `DOMContentLoaded`
+and the fragment scroll. What it costs is D178's own argument: with the script
+blocked, or storage refused, a save on the link page would land at the top of
+the document rather than at the QR card, and that reader has nothing else. The
+fragment is not decoration; it is the no-script return path.
+
+*Strip the fragment at runtime, only where a position is being restored*
+(chosen). `history.replaceState` in the same deferred script removes the
+fragment before the browser acts on it, so exactly one mechanism aims at the
+scroll on any given load. A reader with the script blocked still gets `#qr`,
+untouched, because nothing ran to take it away — the degradation the milestone
+promised holds without a second code path to keep it. What it costs is a
+dependence on ordering: the fragment scroll must come *after* deferred scripts.
+That is the same ordering the code being deleted was written against and the
+same ordering the measurement above shows, so the risk is not new; if it were
+ever wrong, `replaceState` would land after the jump and the result would be
+today's behaviour rather than a worse one.
+
+**It costs a second thing, and that one is a worse outcome rather than an equal
+one.** The ordering argument above is about `replaceState` running *late*; this
+is about it not running at all. `qr-size.js` wraps the call in a `try` because
+the history API can refuse — and on a load where it does, the fragment survives,
+the browser performs its scroll after `DOMContentLoaded`, and the second
+application that used to put the position back is the code this decision
+deleted. So that reader **ends** at the top of the QR card instead of jumping
+there and settling at their own offset: *"a save returns you to where you were"*
+fails outright for them, where under the shipped M50.8 it failed imperfectly.
+The code comment at the `catch` says this; this entry now says it too, because
+the sentence above it argued the fallback was *today's behaviour rather than a
+worse one* and that is true of the ordering risk and false of this one.
+
+**Taken rather than fixed, and the reasoning is the shape of the fix.** Putting
+the `load` restoration back behind the refusal is six lines and would restore the
+old behaviour exactly on the only path that needs it — but it is a branch nothing
+in the kept suite can reach, and a case that cannot fail is
+[F237](deferred-findings.md#open)'s shape, which this same reopening exists to
+stop repeating. Against that: `history.replaceState` is present in every browser
+this dashboard supports, it is called once per load so no throttle reaches it,
+and a reader it refuses still lands on the QR card rather than at the top of the
+document — D178's own guarantee, and the same place a reader with no script at
+all arrives. The regression is from *their place* to *the card*, not to nothing.
+
+**Rejected: keep both and guard the second application.** M50.8 already tried a
+guard, recorded in the file it deleted here — it could not tell a reader who had
+scrolled from the browser's own fragment jump, so it yielded every time and the
+feature did nothing. A second attempt at the same distinction would fail the
+same way, because the two are the same event.
+
+**What the fix is not.** It does not make the restoration earlier: the script is
+`defer`red, so `document.readyState` is already `interactive` when it runs and
+the restore was always applied at the first possible moment. Nothing was slow.
+What was wrong was that something else moved the page afterwards.
+
+**The enforcement is the `load` event and that is the transferable part.**
+`tools/agent-browser/specs/qr-tab-controls.spec.mjs` records the trail from
+before the page's own scripts and asserts every sample — script, DCL, load,
+scroll, frames — is the position the reader stood at. An assertion about frames
+alone passes on the broken build. Three preconditions ride with it, one per
+probe that failed: the control is asserted present under `name="make_default"`,
+the reader's position is set by scrolling the document with the control already
+in the viewport so the driver never scrolls it, and that position is asserted
+far enough from the bare fragment's landing to be distinguishable from it.
+
+## 2026-08-14 — M50.8, the logo picker above the save button, and the prose bound at 300
+
+**The reopening's three cheap limbs, and the two of them that had a choice in
+them.** F244(c), (d) and (f) are removals the owner set verbatim; (g) is a move.
+
+**The logo controls go before the whole style form, which is the only place
+above that Save button.** F244(g) asks for the picker *"above the save button so
+all changes to the logo are together"*. The constraint M50.8 recorded has not
+moved: a file needs `enctype="multipart/form-data"`, the style form cannot carry
+it without every one of its other buttons arriving in a body the handler does
+not read, and HTML forbids nesting forms. So the upload cannot sit *between* the
+style form's fields and the style form's submit — there is no such position
+outside the form. Ahead of the form is the only one, and that is where it went.
+What it costs is that the file input now renders before **Name**: the section
+reads logo, then name and colours and size, then Save. The alternative was
+`form=` attribute machinery to move the submit out of the form instead, which
+m50.8.md already declined for this surface and which would put the section's
+save button outside the thing it saves.
+
+**(d) takes the last statement on the tab of what the default *does*.** The
+filled icon and the `Default QR Code` tooltip say *which* code holds the flag;
+after this nothing on the tab says an untagged scan is counted against it.
+`api/openapi.yaml` and `docs/usage.md` both still say it and both stay — the
+claim is not withdrawn, it is off a surface the owner has now asked four times
+to carry less. The test that asserted the sentence was present, which was the
+reader's half of D183, now asserts it is absent **and** that the icon's name is
+still there, because a removal that also lost the icon would leave the default
+unmarked and both halves would pass.
+
+**(f) is answerable rather than a matter of taste.** *"The user will get an
+error if it is too big and should not be bothered before hitting the issue"* is
+a claim about a refusal, and the refusal exists and names the number with the
+reader's own dimensions in it — `internal/link/qr.go:1959-1963` for the side
+bound, `internal/httpx/api_qr.go:551` for the upload's size, `qr.go:1968-1970`
+for the stored size. What the paragraph carried that no refusal does is the
+error-correction clause, which docs/usage.md still states, and the promise that
+an oversized image is resized rather than refused, which the `"logo"` marker's
+notice still makes with the actual numbers after the fact.
+
+**The prose bound is 300, by M50.7's rule and not by choice.** Measured by that
+method the tab now carries **252** characters across two paragraphs — the code
+meta line at 61 and the contrast sentence at 191 — and the bound is the
+measurement rounded up to the next fifty. Two of the four paragraphs the last
+bound was written for are gone, so the headroom is 48 characters: a later
+milestone adding a sentence here fails on the first one. After four reports
+asking this surface to say less, that is the setting rather than an oversight.
+
+## 2026-08-14 — M50.8's reopening, four citations its own diff moved
+
+Orchestrator amendments at step 3.4, all fact-level, all line numbers in the
+reopening section of [m50.8.md](phase-details/m50.8.md). The worker flagged them
+and did not touch them, which is correct — a worker never amends.
+
+As they stood, and as amended: `qr-size.js:175-179` → **`:179-199`**, the comment
+having grown when `dropFragment` was added below it at `:201`; `web_qr.go:123` →
+**`:131`**; `Save` at `link_qr.html:687`, `Restore defaults` at `:716` and the
+file input at `:861` → **`:866`, `:895` and `:725`**, the logo block having moved
+above the style form, which is the change the bullet asked for; and limb (b)'s
+`link_qr.html:230` → **`:236`**.
+
+**This is the third time in two days that the same hazard has cost an
+amendment**, and it is worth naming as a rule rather than as an incident: a
+citation written against a diff that is still in flight goes stale before the
+diff lands. The reopening's citations were written while the reopening was being
+planned, against a tree the build then moved by doing exactly what the file
+asked. The answer is not to write fewer citations — they are what makes a bullet
+falsifiable — but to re-read them **after** the diff, at step 3.4, which is
+where these were caught.
+
+**Two** of the three sentences F244(c) and (d) removed still appear in the
+template as quotations inside the comments that record their removal, which is
+this file's convention and not a leftover: `link_qr.html:41` and `:241` quote
+what went and say who asked. A grep for either therefore finds it, and that is
+the intended outcome rather than a failed deletion. **(f)'s is not among them** —
+the logo block's new comment quotes the owner's *instruction* rather than the
+limits sentence, so `grep "PNG or JPEG, at most"` returns nothing. This
+paragraph said three and named two line numbers, and the milestone's reviewer
+counted it; it is corrected here before the entry lands, which is the same
+enumeration failure this file has now recorded four times in two days and the
+first time it has appeared inside the correction itself.
+
+## 2026-08-14 — three shipped entries the fourth report's removals falsified
+
+Corrections to entries that have **landed**, so they are made here rather than in
+place: this file is append-only and a later entry corrects an earlier one. All
+three are M50.7's and D186's, and all three were falsified by F244(c), (d) and
+(f) — the reopening deleted the sentences those entries pointed at as evidence.
+The milestone's reviewer counted them; the reopening's own entries named
+`docs/usage.md` and the API reference as survivors and did not reach these.
+
+**One — M50.7's meta-line justification.** The *M50.7 built* entry defends
+dropping *"every picture of it already printed resolves through it"* on the
+ground that *"the meta line on the default's own row still says a scan carrying
+no code is counted against it, so a reader is told which code an old picture
+lands on where that matters."* **F244(d) deleted that clause**, owner-set. The
+cut M50.7 made is not reopened by this and the reader is still told — but in
+`api/openapi.yaml` and `docs/usage.md`, not on the row, and *on the row* was the
+whole of what that sentence claimed. What the tab now says about the default is
+which code it is, and nothing about what being it does.
+
+**Two and three — the logo paragraph, cited as live by M50.7's entry and by
+D186.** M50.7 built says *"The logo paragraph still names H and still names the
+return to the free level when the logo goes, which is what D186 says is owed"*;
+D186 says *"the level is not silent where it moves: the logo paragraph says an
+upload raises it to H…"*. **F244(f) deleted the paragraph.** D186's obligation
+is **not** discharged by `docs/usage.md`, and saying so would be the easy answer
+and the wrong one. It is discharged by the upload notice itself —
+`internal/httpx/web_qr.go:650-663`, which names level H at the moment a logo is
+applied, to the reader who applied it. That is a better discharge than the
+paragraph was: it is stated where the change happens rather than beside a control
+somebody might not read. D186 stands; only the record of *where* it is met moves.
+
+**Four — a symbol that has never existed, in a landed entry and in three places
+this run.** M50.7's entry says *"`internal/httpx/web_qr.go`'s `logo_applied`
+notice prints the uploaded dimensions and the stored ones whenever they
+differ"*. There is no `logo_applied` anywhere in the Go: the marker is `"logo"`
+(`web_qr.go:440`), handled by `case "logo":` at `:650`. The claim is true and
+the name is invented. It had been copied into two more template comments and one
+new entry by the time the reopening's reviewer counted it; those three are
+corrected in place, being this run's own and unlanded, and this paragraph
+corrects the landed one. **A wrong symbol survives review precisely because the
+sentence around it is right** — nobody greps a name that is doing no work in the
+argument, and this one was load-bearing twice over, being the mechanism F244(f)'s
+removal was argued on.
+
+**The pattern is worth more than the four corrections.** Every one of them is a
+shipped entry that cited a sentence on the surface as its evidence, and the
+surface is being cut on the owner's instruction faster than the entries citing it
+are being read. An entry that says *the tab still says X* is a claim with a
+lifetime; an entry that says *X is stated at web_qr.go's upload notice* is a claim
+about a mechanism. The tab has been reported four times in three days and the
+prose bound has gone 900 → 750 → 300 in one of them. **Future entries about this
+surface cite the mechanism, not the sentence** — that is the rule this run earned,
+and it is why the third correction above lands on the notice rather than on the
+next paragraph that happens to say H.

@@ -173,20 +173,48 @@
 
 	var pending = take();
 
-	// Applied twice, and the second time is not belt and braces: the link page's
-	// redirect carries `#qr`, so the browser performs a fragment scroll of its own
-	// during load, *after* DOMContentLoaded. Applying once leaves the reader at
-	// the top of the QR card, which is the thing being fixed — measured, on this
-	// milestone's own browser case, which passed with the restoration deleted
-	// until it was made to tell the two landings apart.
+	// **The fragment yields, rather than being out-scrolled afterwards**
+	// (M50.8's reopening, F244(a), D195).
 	//
-	// **Unconditional both times, and an earlier draft guarded the second one**
-	// against a reader who had scrolled in between. That guard could not tell a
-	// reader from the browser's own fragment jump, which is the only thing that
-	// reliably happens in that window — so it yielded to the fragment every time
-	// and the feature did nothing. The window is between DOMContentLoaded and
-	// load on a page whose only pictures are inline SVG, so what it gives up is
-	// sub-second and hypothetical.
+	// This applied the restore *twice*, and the second application was not belt
+	// and braces: the link page's redirect carries `#qr`, the browser performs
+	// that fragment scroll of its own after `DOMContentLoaded`, and a correction
+	// made after it is by construction a correction the reader watches happen.
+	// The owner reported exactly that — *"immediately upon changing the default
+	// the screen reloads at the top of the page then jumps down to match the
+	// previous scroll position"* — and *a save returns you to where you were* is
+	// not what a jump-and-settle looks like. Two mechanisms were aiming at one
+	// scroll and the later one existed only to undo the earlier.
+	//
+	// So the fragment is taken **off the URL before the browser acts on it**.
+	// `replaceState` runs from a `defer`red script, which is after parsing and
+	// before both `DOMContentLoaded` and the fragment scroll — the same ordering
+	// the second restore was written against, used to prevent the jump instead of
+	// to correct it. With no fragment left there is nothing else aiming at the
+	// scroll, so one application holds and the reader sees one position.
+	//
+	// **The fragment stays on the redirect and that is deliberate** (D178). It is
+	// what lands a reader with this script blocked on the QR card rather than at
+	// the top of the page, so it is given up only on the loads where a better
+	// position is already known — never when there is nothing to restore, and
+	// never on a page the tab did not render on.
+	function dropFragment() {
+		if (window.location.hash !== "#qr") {
+			return;
+		}
+		try {
+			window.history.replaceState(window.history.state, "",
+				window.location.pathname + window.location.search);
+		} catch (e) {
+			/* history refused; the fragment keeps the scroll and the reader lands
+			   at the top of the card, which is where D178 alone put them — and
+			   not where they were standing. D195 states that cost: the restore
+			   below still runs, the fragment scroll still overrides it after
+			   DOMContentLoaded, and since M50.8's reopening there is no second
+			   application left to put it back. */
+		}
+	}
+
 	function restore() {
 		if (!pending) {
 			return;
@@ -197,7 +225,11 @@
 		if (!document.getElementById("qr")) {
 			return;
 		}
+		dropFragment();
 		window.scrollTo(0, pending.y);
+		// Once. A position that outlived its own load would follow the reader
+		// into whatever they did next.
+		pending = null;
 	}
 
 	if (document.readyState === "loading") {
@@ -205,10 +237,4 @@
 	} else {
 		restore();
 	}
-	window.addEventListener("load", function () {
-		restore();
-		// Once. A position that outlived its own load would follow the reader
-		// into whatever they did next.
-		pending = null;
-	});
 })();
