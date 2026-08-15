@@ -27,16 +27,20 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**One row is open:** [M57.9](m57.9.md)'s reopened run, in its own session.
-Everything the QR tab's **four** reports produced has landed: the first's three
-reopenings at `ad28c5f`, `e244cf2` and `272f108`, the second's at `2d4f424`,
-`69ef097` and `d7107b1`, [M50.7](m50.7.md) at `ea656bd`, and
-[M50.8](m50.8.md) — the third report — at `a12cf16`, **reopened the same day for
-five limbs of the fourth** ([F244](../deferred-findings.md#open), D194/D195).
+**Two rows are open:** [M57.9](m57.9.md)'s reopened run, in its own session, and
+[M50.8](m50.8.md)'s **second** reopening, scheduled 2026-08-15 from the QR tab's
+**fifth** report ([F246](../deferred-findings.md#open)) — the flash on save,
+which the first reopening aimed at and did not remove, plus the logo's position
+and the size slider's detents. Everything the tab's first four reports produced
+has landed: the first's three reopenings at `ad28c5f`, `e244cf2` and `272f108`,
+the second's at `2d4f424`, `69ef097` and `d7107b1`, [M50.7](m50.7.md) at
+`ea656bd`, and [M50.8](m50.8.md) — the third report — at `a12cf16`, **reopened
+the same day for five limbs of the fourth**
+([F244](../deferred-findings.md#open), D194/D195).
 `fc9aeef` is [M49](m49.md)'s **third** reopening, which is no report's — it came
 from the owner's answers of 2026-08-13. **M50.8 exhausted the M50 band** —
-`M50.9` is reserved for reviews — which is *why* the fourth report is a
-reopening and two of its limbs are Phase 4 rows rather than an M50.9. 0.3.0 is written and not yet tagged. Four work areas, chosen 2026-08-06: identity and account
+`M50.9` is reserved for reviews — which is *why* the fourth and fifth reports
+are reopenings and the limbs they leave are Phase 4 rows rather than an M50.9. 0.3.0 is written and not yet tagged. Four work areas, chosen 2026-08-06: identity and account
 lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
 campaigns. **Twenty-three milestones** — **twelve integers of work**, two adversarial
 reviews, one close, and **eight insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5, M50.7, M50.8) — against the size target in
@@ -76,7 +80,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | done |
-| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | done |
+| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | in progress *(reopened a second time 2026-08-15, [F246](../deferred-findings.md#open))* |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
