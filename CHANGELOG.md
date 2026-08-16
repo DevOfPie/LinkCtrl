@@ -132,9 +132,14 @@ migrations run at boot.
   clamped.
 
   **Saving no longer throws you back to the top of the page.** Every write on the
-  tab now returns to the position you were reading at — and goes there directly,
-  rather than showing you the top of the section first and correcting itself a
-  moment later.
+  tab now returns to the position you were reading at, and you are never shown a
+  different one on the way. A browser cannot be scrolled before it has laid the
+  page out, so what happens instead is that the page is held back for the moment
+  between the two: on the load after a save, and on no other load anywhere in the
+  product, the page appears at your position rather than appearing at the top and
+  moving. *(Two earlier attempts in this release got you to the right place while
+  still showing you the wrong one first — the second only on a connection slower
+  than a local one, which is why it took a report from outside to see it.)*
 
   **The remove button stays on a link's only code, grayed out**, with *Every link
   must have at least 1 QR code.* on it — where before it simply was not there and
@@ -154,10 +159,20 @@ migrations run at boot.
   row you have selected now shows, which it did not: the highlight was the same
   colour as the selected row itself.
 
-  **The logo upload has moved into the style section**, above that section's
-  **Save** button so that everything which writes a logo is in one place, and
-  its own heading and panel are gone. Nothing about what a logo does changed,
-  only where its control sits.
+  **The logo upload has moved into the style form**, between the two colour
+  pickers and the size control, with the **Remove the logo** button beside it, so
+  that everything which writes a logo is in one place and in the order the rest
+  of the form reads. Its own heading and panel are gone. Nothing about what a
+  logo does changed, only where its controls sit — the file is still sent on its
+  own, the moment you choose it, and **Save** still posts exactly the fields it
+  posted before.
+
+  **The size slider draws a mark at each size it stops at.** The sizes were
+  already named in the control and no browser was drawing them, because the
+  slider is themed and the marks come with the appearance the theme replaced.
+  They are drawn now, and only the sizes the code in front of you can actually
+  take: a dense code needs more pixels before its quiet zone reads, so its lowest
+  marks are not there to be offered.
 
   **Five explanatory paragraphs went with all of this**, and the tab's prose is
   now under 300 characters against 900 before and about 1900 two releases ago.

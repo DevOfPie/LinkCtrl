@@ -343,29 +343,55 @@ func logoForm(t *testing.T, body string) string {
 
 // TestChoosingALogoAppliesIt is F214(c): the two-step went away.
 //
-// **The button is asserted absent, not just the trigger present.** A form that
-// grew an htmx trigger and kept its submit control would pass a test for the
-// trigger alone and would still be the interference the owner reported —
+// **The button is asserted absent, not just the trigger present.** A control
+// that grew an htmx trigger and kept its submit alongside would pass a test for
+// the trigger alone and would still be the interference the owner reported —
 // choosing a file would apply it *and* leave a button implying it had not.
 //
-// The swap target is asserted on the page as well as on the form. htmx does not
-// swap a 4xx, so the refusal path renders the page at 200 and this selects the
-// panel out of it; a target the page does not contain would silently swap
+// The swap target is asserted on the page as well as on the control. htmx does
+// not swap a 4xx, so the refusal path renders the page at 200 and this selects
+// the panel out of it; a target the page does not contain would silently swap
 // nothing, which is the failure mode this control was reopened for in the first
 // place.
+//
+// **The attributes are read off the input rather than off the form** since
+// M50.8's second reopening (F246b). The input moved into the style form's grid
+// and reaches its own form by `form="qr-logo-upload"`, and a `change` event
+// bubbles up the DOM rather than to the form a control is associated with — so
+// a trigger left on the form would never fire. The association is asserted with
+// them: an input carrying every htmx attribute and naming no form posts a body
+// with no `next` and no `code` in it, which the handler answers by sending the
+// reader somewhere they did not ask to go.
 func TestChoosingALogoAppliesIt(t *testing.T) {
 	for _, page := range qrPanelPages {
 		body := renderQRPanel(t, page)
 		form := logoForm(t, body)
+		input := elementWithID(t, body, "qr_logo")
 
 		for _, want := range []string{
 			`hx-trigger="change"`, `hx-post="/links/`, `hx-encoding="multipart/form-data"`,
-			`hx-target="#qr"`, `hx-select="#qr"`,
+			`hx-target="#qr"`, `hx-select="#qr"`, `form="qr-logo-upload"`,
 		} {
-			if !strings.Contains(form, want) {
-				t.Errorf("%s: the logo form is missing %s, so choosing a file does not "+
-					"apply it (F214c)", page, want)
+			if !strings.Contains(input, want) {
+				t.Errorf("%s: the logo input is missing %s, so choosing a file does not "+
+					"apply it (F214c, F246b):\n  %s", page, want, input)
 			}
+		}
+		if !strings.Contains(form, `id="qr-logo-upload"`) {
+			t.Errorf("%s: the upload form does not carry the id the input names, so the "+
+				"input belongs to no form at all:\n%s", page, form)
+		}
+		// **No filter on what it posts, and that is measured rather than assumed.**
+		// htmx serializes the requesting element plus `elt.form || closest(elt,
+		// 'form')` — the association wins, so the body is the file and this form's
+		// two hidden fields, not the style form's. An `hx-params` filter stood here
+		// on the opposite belief; the browser spec reads the FormData htmx builds
+		// and is what settled it. If that ever stops being true the spec goes red,
+		// which is where a claim about htmx belongs.
+		if strings.Contains(input, "hx-params") {
+			t.Errorf("%s: the logo input narrows what it posts. Nothing needs narrowing "+
+				"— htmx takes the owner form, not the ancestor — so this is machinery "+
+				"guarding a body it cannot see:\n  %s", page, input)
 		}
 		if strings.Contains(form, "<button") || strings.Contains(form, `type="submit"`) {
 			t.Errorf("%s: the logo form still carries a submit control. The file applies "+
@@ -400,7 +426,12 @@ func TestTheBrowseControlAcknowledgesTheClick(t *testing.T) {
 	for _, want := range []string{
 		".file-pick:active::file-selector-button",
 		".file-pick:focus:not(:focus-visible)::file-selector-button",
+		// Both, since F246b. htmx marks the element that issued the request, and
+		// that is the input now the attributes live on it — the form selector is
+		// the one that used to do the work and would do it again if they moved
+		// back.
 		"form.htmx-request .file-pick",
+		".file-pick.htmx-request",
 	} {
 		if !strings.Contains(css, want) {
 			t.Errorf("the built stylesheet has no rule for %s. The state has to ship in "+
@@ -419,9 +450,10 @@ func TestTheBrowseControlAcknowledgesTheClick(t *testing.T) {
 			"is a palette value in a block whose own comment promises theme tokens")
 	}
 	for _, page := range qrPanelPages {
-		if form := logoForm(t, renderQRPanel(t, page)); !strings.Contains(form, "file-pick") {
+		input := elementWithID(t, renderQRPanel(t, page), "qr_logo")
+		if !strings.Contains(input, "file-pick") {
 			t.Errorf("%s: the file input does not carry file-pick, so none of those "+
-				"rules reaches it", page)
+				"rules reaches it:\n  %s", page, input)
 		}
 	}
 }
@@ -1592,16 +1624,23 @@ func TestTheLogoControlsRenderInsideTheStyleSection(t *testing.T) {
 					"style section", page, hasLogo)
 			}
 			// Its own form, still, and still multipart. This is the claim the
-			// bullet was corrected to make.
+			// bullet was corrected to make — and the one M50.8's second reopening
+			// kept while moving the control itself into the style form's grid:
+			// the file still travels in a body of its own, reached by `form=`.
 			form := logoForm(t, body)
 			for _, want := range []string{
-				`enctype="multipart/form-data"`, `/qr/logo"`, `hx-trigger="change"`,
+				`enctype="multipart/form-data"`, `/qr/logo"`, `id="qr-logo-upload"`,
 			} {
 				if !strings.Contains(form, want) {
 					t.Errorf("%s (QRHasLogo=%v): the upload lost %s in the move. It moved "+
 						"section, not form — a file cannot travel in the style form's "+
 						"body at all", page, hasLogo, want)
 				}
+			}
+			if !strings.Contains(elementWithID(t, body, "qr_logo"), `hx-trigger="change"`) {
+				t.Errorf("%s (QRHasLogo=%v): the trigger is not on the input. `change` "+
+					"bubbles up the DOM, not to the form a control names, so from the "+
+					"grid a trigger on the form never fires (F246b)", page, hasLogo)
 			}
 			// And the logo's other two controls still post where they did.
 			label := "Upload a logo"
@@ -1618,57 +1657,244 @@ func TestTheLogoControlsRenderInsideTheStyleSection(t *testing.T) {
 	}
 }
 
-// TestTheLogoControlsRenderAboveTheStyleFormsSave is F244(g), owner-set: *"The
-// logo picker should be above the save button so all changes to the logo are
-// together."*
+// TestTheLogoControlsRenderBetweenTheColoursAndTheSize is F246(b), owner-set:
+// *"The logo upload thould be below the color pickers and above size."*
 //
-// M50.8 moved the upload into the style section and left it after the form, so
-// the two controls that write a logo rendered **below** a `Save` that does not
-// save them, with `Restore defaults` in between. The owner's reason is grouping
-// rather than aesthetics, which is why this asserts document order rather than
-// a class.
+// It replaces TestTheLogoControlsRenderAboveTheStyleFormsSave, which was F244(g)
+// — *"the logo picker should be above the save button"* — and it is strictly
+// stronger: between the background colour and the size is above `Save`, since
+// both of those are above it. What that test's comment asserted is what this
+// milestone reversed, so it is written out rather than left standing beside its
+// own contradiction: *"the upload cannot sit between the style form's fields
+// and the style form's submit"* was drawn from the nesting ban, and the ban is
+// on the `<form>` element and not on a control carrying `form="…"`.
 //
-// **Order is the only thing HTML leaves to choose here.** A file needs
-// `enctype="multipart/form-data"` and forms do not nest, so the upload cannot
-// sit *between* the style form's fields and the style form's submit — the one
-// position above that button and outside that form is ahead of the whole form,
-// which is where it now is. A later change that "tidies" the section by putting
-// the upload back underneath is the regression this catches.
-func TestTheLogoControlsRenderAboveTheStyleFormsSave(t *testing.T) {
+// **Order in the rendered document, not layout.** A grid can be reordered by
+// CSS, so a class would prove nothing about what a reader with the stylesheet
+// in front of them sees; and the owner asked for a position in a sequence of
+// controls. Both markers are anchored on ids the page has to have anyway.
+//
+// **The association is asserted with the position**, because the two failures
+// look identical from here otherwise: a file input in the right place that has
+// lost its `form=` renders exactly as this one does and posts to the style
+// form's route, where the handler ignores it and answers with a page saying
+// nothing happened.
+func TestTheLogoControlsRenderBetweenTheColoursAndTheSize(t *testing.T) {
 	for _, page := range qrPanelPages {
 		for _, hasLogo := range []bool{true, false} {
 			body := mainOf(t, renderPage(t, page,
 				map[string]any{"Tab": "qr", "QRHasLogo": hasLogo}))
 
-			save := strings.Index(body, `>Save</button>`)
-			if save < 0 {
-				t.Fatalf("%s (QRHasLogo=%v) renders no Save control to order against",
+			background := strings.Index(body, `id="qr_background"`)
+			size := strings.Index(body, `id="qr_size_slider"`)
+			if background < 0 || size < 0 {
+				t.Fatalf("%s (QRHasLogo=%v) renders no background colour input or no size "+
+					"slider, so there is no interval to place the logo controls in",
 					page, hasLogo)
 			}
-			if strings.Contains(body[save+1:], `>Save</button>`) {
-				t.Errorf("%s (QRHasLogo=%v) renders more than one Save control, so "+
-					"\"above the save button\" no longer names one position", page, hasLogo)
+			if background > size {
+				t.Fatalf("%s (QRHasLogo=%v): the size control renders before the colours, "+
+					"so this test's own interval is inverted", page, hasLogo)
 			}
+
 			controls := map[string]string{
-				"the file input":        `id="qr_logo"`,
-				"the upload's own form": `/qr/logo" enctype="multipart/form-data"`,
-			}
-			if hasLogo {
-				controls["the remove control"] = `name="remove_logo" value="1"`
+				"the file input":     `id="qr_logo"`,
+				"the remove control": `name="remove_logo" value="1"`,
 			}
 			for what, marker := range controls {
+				if !hasLogo && what == "the remove control" {
+					continue
+				}
 				at := strings.Index(body, marker)
 				if at < 0 {
 					t.Errorf("%s (QRHasLogo=%v) renders %s nowhere at all", page, hasLogo, what)
 					continue
 				}
-				if at > save {
-					t.Errorf("%s (QRHasLogo=%v): %s renders after the style form's Save "+
-						"button. The owner asked for the logo picker above it so that "+
-						"everything that writes a logo is together (F244g)", page, hasLogo, what)
+				if at < background || at > size {
+					t.Errorf("%s (QRHasLogo=%v): %s renders outside the interval between "+
+						"the background colour (%d) and the size slider (%d); it is at %d. "+
+						"The owner asked for the logo upload below the colour pickers and "+
+						"above size (F246b)", page, hasLogo, what, background, size, at)
+				}
+			}
+
+			// And they still reach their own forms from there. The ids are the
+			// association; a control naming a form the page does not render
+			// submits to nothing.
+			for control, form := range map[string]string{
+				"qr_logo": "qr-logo-upload", "remove_logo": "qr-logo-remove",
+			} {
+				if control == "remove_logo" && !hasLogo {
+					continue
+				}
+				if !strings.Contains(body, `form="`+form+`"`) {
+					t.Errorf("%s (QRHasLogo=%v): nothing names the form %q, so %s posts to "+
+						"the style form's route instead of the logo's", page, hasLogo, form, control)
+				}
+				if !strings.Contains(body, `id="`+form+`"`) {
+					t.Errorf("%s (QRHasLogo=%v): the form %q named by %s does not render, so "+
+						"the control belongs to no form at all", page, hasLogo, form, control)
 				}
 			}
 		}
+	}
+}
+
+// sizeMark cuts one drawn detent out of the size control.
+//
+// The position is captured with the value because the two failures are
+// different: eight marks in the wrong places is arithmetic, and the right
+// arithmetic over the wrong list is a control offering sizes the save refuses.
+var sizeMark = regexp.MustCompile(`<line data-stop="(\d+)" x1="([0-9.]+)%" x2="([0-9.]+)%"`)
+
+// restoringRule finds the held-paint selector in the built stylesheet, and the
+// character class is the whole point of it: `.qr-restoring-off` contains
+// `.qr-restoring`, so a substring search is green on a rule that reaches nothing
+// the script ever sets.
+var restoringRule = regexp.MustCompile(`\.qr-restoring[^-\w]`)
+
+// TestTheSizeSliderDrawsItsStops is F246(c), owner-set: *"The Size slider
+// should have visible detents at the stop points."*
+//
+// The stops were never missing from the page — the `<datalist>` has named them
+// since D182 and Chromium draws ticks from one. `appearance: none` in input.css
+// is what erases those along with the native track, and the track is where the
+// theme lives, so the marks are drawn rather than the appearance given back.
+//
+// **What is asserted is the correspondence, not the count.** A strip of eight
+// marks is easy to draw and would be wrong on the codes that matter: a dense
+// code's floor drops the low stops, so a mark at 128 on an 89-module code is an
+// offer its own save turns down. So the marks are compared against the list the
+// view hands the template, and the second half of this test renders a raised
+// floor to show the marks follow it.
+//
+// **The positions are checked too**, because a mark is a claim about where a
+// value sits: `(stop - min) / (max - min)`, which is what rangePct computes and
+// what a reader checks by dragging the thumb onto one.
+func TestTheSizeSliderDrawsItsStops(t *testing.T) {
+	for _, page := range qrPanelPages {
+		data, ok := pageData(t)[page].(map[string]any)
+		if !ok {
+			t.Fatalf("the %s fixture is not a map", page)
+		}
+		stops, ok := data["QRSizeStops"].([]int)
+		if !ok || len(stops) == 0 {
+			t.Fatalf("the %s fixture carries no QRSizeStops, so there is nothing this "+
+				"test could be comparing the marks against", page)
+		}
+		lo, okLo := data["QRMinSize"].(int)
+		hi, okHi := data["QRMaxSize"].(int)
+		if !okLo || !okHi || hi <= lo {
+			t.Fatalf("the %s fixture carries no usable size range (%v..%v)", page, lo, hi)
+		}
+
+		assertMarks(t, page, renderQRPanel(t, page), stops, lo, hi)
+
+		// A denser code: the floor rises past the first two stops, and the marks
+		// have to lose them. This is the case a fixed strip of eight gets wrong,
+		// and it is the reason the marks are rendered from the list rather than
+		// from the stylesheet.
+		raised := []int{300, 512, 600, 1024, 1200, 2048}
+		body := mainOf(t, renderPage(t, page, map[string]any{
+			"Tab": "qr", "QRMinSize": 280, "QRSizeStops": raised, "QRSize": 600,
+		}))
+		assertMarks(t, page+" (floor 280)", body, raised, 280, hi)
+	}
+}
+
+// assertMarks compares the detents a rendering drew against the stops it was
+// given, in order, with their positions.
+func assertMarks(t *testing.T, page, body string, stops []int, lo, hi int) {
+	t.Helper()
+	got := sizeMark.FindAllStringSubmatch(body, -1)
+	if len(got) != len(stops) {
+		t.Errorf("%s draws %d detents for %d stops (%v). A mark the slider does not "+
+			"stop at, or a stop it does not mark, is what F246(c) asked to be able "+
+			"to see", page, len(got), len(stops), stops)
+		return
+	}
+	for i, m := range got {
+		value, err := strconv.Atoi(m[1])
+		if err != nil || value != stops[i] {
+			t.Errorf("%s draws a detent for %q where stop %d is %d", page, m[1], i, stops[i])
+			continue
+		}
+		want := rangePct(value, lo, hi)
+		if m[2] != want || m[3] != want {
+			t.Errorf("%s draws the detent for %d at %s%%/%s%%, want %s%% — the position "+
+				"of a mark is (stop-min)/(max-min) and nothing else, or the thumb does "+
+				"not land on it", page, value, m[2], m[3], want)
+		}
+	}
+}
+
+// TestTheDrawnDetentsShipInTheStylesheet is the other half of F246(c): SVG
+// carries the geometry, and the one thing it cannot carry is the inset.
+//
+// A range input's thumb travels between its own half-widths, so a strip of
+// marks drawn edge to edge is right in the middle and wrong at both ends —
+// which is the hardest kind of wrong to see. The measurement is in input.css
+// beside the thumb it is derived from, and `style-src 'self'` is why it is
+// there rather than on the element.
+func TestTheDrawnDetentsShipInTheStylesheet(t *testing.T) {
+	css := builtStylesheet(t)
+	if !strings.Contains(css, ".qr-slider-marks") {
+		t.Fatal("the built stylesheet has no rule for .qr-slider-marks, so the strip " +
+			"is drawn edge to edge and every mark is off by half a thumb at the ends")
+	}
+	if !strings.Contains(css, "var(--t-line-strong)") {
+		t.Error("the marks take no theme token, so they are a palette value in a " +
+			"stylesheet whose own comment promises tokens")
+	}
+	for _, page := range qrPanelPages {
+		body := renderQRPanel(t, page)
+		if !strings.Contains(body, `class="qr-slider-marks`) {
+			t.Errorf("%s draws the detents without the class the stylesheet rules hang "+
+				"off, so the inset and the colour reach nothing", page)
+		}
+		// Drawn from `currentColor`, which is what the rule above sets. A mark
+		// with its own colour would be black on both themes.
+		if !strings.Contains(body, `stroke="currentColor"`) {
+			t.Errorf("%s draws a detent that does not take its colour from the "+
+				"stylesheet", page)
+		}
+	}
+}
+
+// TestThePaintIsHeldUntilTheSaveIsPutBack is F246(a)'s markup half.
+//
+// The claim itself — that a save never shows the reader a position they did not
+// stand at — is a browser fact and is driven under emulated network conditions
+// in tools/agent-browser/specs/qr-tab-controls.spec.mjs. What can be asserted
+// from here is that the two halves of the mechanism ship: the rule that
+// withholds the paint, and a stylesheet that is loaded before the script that
+// depends on it.
+//
+// `visibility` is asserted by name. `display: none` would take the document's
+// height with it, and a document with no height cannot be scrolled at all — the
+// restore would silently clamp to the top, which is the failure this rule
+// exists to prevent, wearing the same class name.
+func TestThePaintIsHeldUntilTheSaveIsPutBack(t *testing.T) {
+	css := builtStylesheet(t)
+	// The class name, and not a name beginning with it. Caught by sabotage:
+	// renaming the rule to `.qr-restoring-off` left this test green, which is a
+	// substring search passing for a rule that reaches nothing.
+	rule := restoringRule.FindStringIndex(css)
+	if rule == nil {
+		t.Fatal("the built stylesheet has no .qr-restoring rule. static/js/qr-size.js " +
+			"puts that class on <html> before the first paint and takes it off once the " +
+			"reader's position is back; with no rule behind it the class does nothing " +
+			"and the page paints at the top first (F246a)")
+	}
+	end := strings.Index(css[rule[0]:], "}")
+	if end < 0 {
+		t.Fatal("the .qr-restoring rule is not a complete block")
+	}
+	block := css[rule[0] : rule[0]+end]
+	if !strings.Contains(block, "visibility:hidden") && !strings.Contains(block, "visibility: hidden") {
+		t.Errorf("the held paint is not `visibility: hidden` but %q. Anything that "+
+			"takes the document out of layout takes its height with it, and scrolling "+
+			"a document with no height clamps to the top", block)
 	}
 }
 

@@ -40,9 +40,15 @@
  * input and asserts the pressed background is absent, because this rests on a
  * `:focus-visible` behaviour no template scan can see.
  *
- * `.htmx-request` is the upload itself: the form carries the class while the
- * request is in flight, so the browse control goes inert rather than accepting
- * a second file while the first one is being stored.
+ * `.htmx-request` is the upload itself: the class is carried while the request
+ * is in flight, so the browse control goes inert rather than accepting a second
+ * file while the first one is being stored. **Two selectors for one state since
+ * M50.8's second reopening** (F246b): htmx puts the class on the element that
+ * issued the request, and that was the `<form>` until the input moved into the
+ * style form's grid and took the `hx-post` with it. The input carries it now.
+ * The form selector stays — the descendant form is still the one that would
+ * carry it if the attributes ever move back, and a busy state that quietly
+ * stops arriving is exactly the failure F214(b) was reopened for.
  *
  * **Written here rather than as utilities on the element.** A pseudo-element
  * with two pseudo-class states is three stacked Tailwind variants whose
@@ -60,11 +66,13 @@
   background-color: var(--t-line-strong);
   box-shadow: inset 0 1px 2px var(--t-press-shadow);
 }
-form.htmx-request .file-pick {
+form.htmx-request .file-pick,
+.file-pick.htmx-request {
   opacity: 0.6;
   pointer-events: none;
 }
-form.htmx-request .file-pick::file-selector-button {
+form.htmx-request .file-pick::file-selector-button,
+.file-pick.htmx-request::file-selector-button {
   background-color: var(--t-line-strong);
   cursor: progress;
 }
@@ -90,9 +98,13 @@ form.htmx-request .file-pick::file-selector-button {
  * injected stylesheet, so a state style for this product ships in this file.
  * Theme tokens, never palette values.
  *
- * The marks the slider carries come from a <datalist> in the template and are
- * drawn by the engine where it draws them at all. They are suggestions; the
- * control is continuous, which is what makes both ends of the range reachable.
+ * The marks the slider carries come from a <datalist> in the template. **That
+ * used to say they were "drawn by the engine where it draws them at all", and
+ * the rule above is what stopped it being true** (F246c): Chromium does draw
+ * ticks from a datalist, on the native track, and `appearance: none` takes the
+ * two away together. They are drawn by the block below now. Either way they are
+ * suggestions — the control is continuous, which is what makes both ends of the
+ * range reachable.
  * ------------------------------------------------------------------------- */
 .qr-slider {
   appearance: none;
@@ -133,6 +145,58 @@ form.htmx-request .file-pick::file-selector-button {
 .qr-slider:focus-visible {
   outline: 2px solid var(--t-accent);
   outline-offset: 2px;
+}
+
+/* The stops, drawn under the track (M50.8's second reopening, F246c, D198).
+ *
+ * The paragraph above is why they were not: `appearance: none` takes the native
+ * track and Chromium's datalist ticks with it, and giving the appearance back
+ * would trade the theme for the marks. So the template draws them as SVG
+ * geometry — attributes, which CSP does not restrict, which is the same route
+ * middleware.go names for the bar charts. What is left for this file is the
+ * colour and the one measurement.
+ *
+ * **Inset by half a thumb at each end**, because that is the span the thumb's
+ * *centre* travels: a range input's thumb stays inside its own track, so the
+ * value at `max` sits half a thumb short of the right-hand edge. The thumb is
+ * 1rem wide with a 1px border on each side, which is 18px, so the strip loses
+ * 9px at each end. A mark aligned to the edge instead of to the centre would be
+ * wrong by that much at the ends and right in the middle, which is the hardest
+ * kind of wrong to notice.
+ *
+ * **The inset is on a wrapper and not on the `<svg>`**, which is not a style
+ * choice: the drawing is `width: 100%` of its container, and a margin on it
+ * overhangs that container by 9px at the right instead of shrinking it. Caught
+ * in a browser, where the last mark sat outside the control it marks.
+ *
+ * `stroke` is on the elements rather than here: it is `currentColor`, so this
+ * rule is what sets it, and a mark drawn by a template that forgot the
+ * attribute should be invisible rather than black. */
+.qr-slider-marks {
+  margin-inline: 0.5625rem;
+  color: var(--t-line-strong);
+}
+
+/* ---------------------------------------------------------------------------
+ * The one frame a save must not paint (M50.8's second reopening, F246a, D196).
+ *
+ * static/js/qr-size.js puts this class on <html> from `<head>`, with parsing
+ * blocked, and takes it off once it has put the page back where the reader was.
+ * It is added only on a load that has a position to restore — the load after a
+ * write on the QR tab, and nothing else.
+ *
+ * `visibility` rather than `display` or `opacity`: the document must still lay
+ * out, because an unlaid-out document has no height and `scrollTo` against it
+ * clamps to zero, which is the whole reason the restore cannot simply run
+ * earlier. `body` rather than `html`, so the canvas keeps the page background
+ * and the reader waits on the product's own surface rather than on white.
+ *
+ * **Nothing else may set this class.** A page that keeps it is a page nobody
+ * can read; the script's three independent reveals are what that risk is worth,
+ * and they are argued where they are written.
+ * ------------------------------------------------------------------------- */
+.qr-restoring body {
+  visibility: hidden;
 }
 
 /* ---------------------------------------------------------------------------

@@ -18,6 +18,13 @@
 // held a reference to `#qr_size` would be holding a node the next swap
 // discarded. Listening on the document costs two handlers for the whole
 // application and survives every swap without re-running.
+//
+// **And it runs with parsing blocked, in `<head>`, since the second reopening**
+// (F246a, D196). Nothing below may touch `document.body` or any element at the
+// top level: at the moment this executes the document is an open `<html>` and a
+// `<head>`, and that is deliberate — it is the only moment from which the first
+// paint can still be withheld. Everything that needs the document waits for
+// `DOMContentLoaded` or is delegated from `document`.
 (function () {
 	"use strict";
 
@@ -115,7 +122,11 @@
 		}
 	}, true);
 
-	document.body.addEventListener("htmx:beforeRequest", function (event) {
+	// **On `document`, not on `document.body`.** htmx's events bubble, so either
+	// would receive them — but this file runs before the body exists since the
+	// second reopening (D196), and `document.body.addEventListener` at that point
+	// is a TypeError that would take the mirror above down with it.
+	document.addEventListener("htmx:beforeRequest", function (event) {
 		var from = event.target;
 		if (from && from.closest && from.closest("#qr")) {
 			remember();
@@ -143,7 +154,7 @@
 		}
 	}
 
-	document.body.addEventListener("htmx:afterSwap", forget);
+	document.addEventListener("htmx:afterSwap", forget);
 
 	// Taken out of storage once, on the way in, and cleared whether or not it is
 	// ever applied: an offset that survived would put a later, unrelated load
@@ -187,11 +198,14 @@
 	// scroll and the later one existed only to undo the earlier.
 	//
 	// So the fragment is taken **off the URL before the browser acts on it**.
-	// `replaceState` runs from a `defer`red script, which is after parsing and
-	// before both `DOMContentLoaded` and the fragment scroll — the same ordering
-	// the second restore was written against, used to prevent the jump instead of
-	// to correct it. With no fragment left there is nothing else aiming at the
-	// scroll, so one application holds and the reader sees one position.
+	// `replaceState` runs from `restore` below, at `DOMContentLoaded`, which is
+	// before the fragment scroll — the same ordering the second restore was
+	// written against, used to prevent the jump instead of to correct it. With no
+	// fragment left there is nothing else aiming at the scroll, so one application
+	// holds and the reader sees one position. *(It was a `defer`red script that
+	// gave that ordering until the second reopening; the file is parser-blocking
+	// now and the handler is what carries the ordering, which is why this says
+	// which event rather than which attribute.)*
 	//
 	// **The fragment stays on the redirect and that is deliberate** (D178). It is
 	// what lands a reader with this script blocked on the QR card rather than at
@@ -215,26 +229,86 @@
 		}
 	}
 
-	function restore() {
+	// **The paint is held until the position has been applied** (M50.8's second
+	// reopening, F246a, D196).
+	//
+	// The first reopening stopped the *fragment* from moving the page after the
+	// restore, and left the restore itself where it was: at `DOMContentLoaded`,
+	// reached from a `defer`red script. That is after the document is parsed and
+	// therefore after it has been painted, so on any connection slower than
+	// localhost the reader was still shown the top of the page first — the same
+	// correction as before, from a different starting point. Measured at
+	// `928504f` over a 80 ms / 4 Mbps / 2× CPU profile: eight or nine frames at
+	// the wrong offset, about a third of a second of it.
+	//
+	// **Running earlier cannot fix it, and that is not a cost but an
+	// impossibility.** This file now runs in `<head>` with parsing blocked, which
+	// is before the first paint — and at that moment the document has no body, no
+	// height and nothing to scroll: `scrollTo` clamps to 0 and the restore is
+	// silently lost. A position can only be applied to a laid-out document, so the
+	// only thing that can be done before the first paint is to *withhold* it.
+	//
+	// So the class goes on `<html>` here, at head time, and app.css keeps `body`
+	// unpainted while it is there. It is added **only when there is an offset to
+	// restore**, which is the load after a write and nothing else: every other
+	// page in the dashboard paints exactly as it did. What it costs on that one
+	// load is the interval between the first paint and `DOMContentLoaded` spent
+	// on the page's background rather than on its content — which is the
+	// alternative the owner reported as jarring, made invisible instead of made
+	// correct, because correct is not available.
+	//
+	// **Three ways back to a painted page**, because a page that stays hidden is
+	// far worse than a page that jumps. `restore` reveals in a `finally`, so
+	// every path out of it — no `#qr`, a stale path, a throw — paints. `load`
+	// reveals again in case `DOMContentLoaded` never arrives. And a timer reveals
+	// regardless, four seconds being past any load this product's own slowest
+	// measured profile produces.
+	var holding = false;
+
+	function hold() {
 		if (!pending) {
 			return;
 		}
-		// Only where the tab actually rendered. A refusal renders the page with
-		// the section on it and is exactly the case where the reader wants their
-		// place back; a redirect that landed somewhere else is not.
-		if (!document.getElementById("qr")) {
+		document.documentElement.classList.add("qr-restoring");
+		holding = true;
+	}
+
+	function reveal() {
+		if (!holding) {
 			return;
 		}
-		dropFragment();
-		window.scrollTo(0, pending.y);
-		// Once. A position that outlived its own load would follow the reader
-		// into whatever they did next.
-		pending = null;
+		holding = false;
+		document.documentElement.classList.remove("qr-restoring");
 	}
+
+	function restore() {
+		try {
+			if (!pending) {
+				return;
+			}
+			// Only where the tab actually rendered. A refusal renders the page with
+			// the section on it and is exactly the case where the reader wants their
+			// place back; a redirect that landed somewhere else is not.
+			if (!document.getElementById("qr")) {
+				return;
+			}
+			dropFragment();
+			window.scrollTo(0, pending.y);
+			// Once. A position that outlived its own load would follow the reader
+			// into whatever they did next.
+			pending = null;
+		} finally {
+			reveal();
+		}
+	}
+
+	hold();
 
 	if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", restore);
 	} else {
 		restore();
 	}
+	window.addEventListener("load", reveal);
+	window.setTimeout(reveal, 4000);
 })();

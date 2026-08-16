@@ -566,45 +566,49 @@
        (F238f), owner-set: *"Upload a logo should be moved into the style
        section and the header/text/section it is currently in should be fully
        removed."* The `Logo` heading and the bordered block under this whole row
-       are gone; what was inside them renders **above** the style form, in the same
-       section, under the same column. *(Above since M50.8's reopening, F244g,
-       owner-set: "the logo picker should be above the save button so all
-       changes to the logo are together." It read "below the style form" until
-       then, and that was true of the milestone that wrote it.)*
+       are gone; what was inside them renders **inside the style form's own
+       grid** since M50.8's second reopening (F246b, D197), between the two
+       colour inputs and the size control. *(It read "above the style form"
+       from the first reopening until then, and that was true of the tree that
+       wrote it: the constraint below was read as forbidding the position the
+       owner has now asked for.)*
 
-       **Section, and not the form — the distinction is load-bearing.** A file
-       needs `enctype="multipart/form-data"`, which the style form cannot carry
-       without every one of its other buttons arriving in a body the handler
-       does not read, and HTML forbids nesting one form inside another. So the
-       upload keeps its own `<form>` and its own route; what moved is where on
-       the page it sits. The wrapper is what the section *is*, which is why it
-       has an id: a test asserting the file input is inside the style section
-       has to have something to be inside. */}}
+       **The `<form>` is still the upload's own, and now it is empty of
+       controls.** A file needs `enctype="multipart/form-data"`, which the
+       style form cannot carry without every one of its other buttons arriving
+       in a body the handler does not read, and HTML forbids nesting one form
+       inside another — both still true. What was missed is that the ban is on
+       the `<form>` **element**: a control carrying `form="…"` submits to a
+       form it does not sit inside, so the two elements below stay here, out of
+       the grid, and the controls they own render in it. The wrapper is what
+       the section *is*, which is why it has an id: a test asserting the file
+       input is inside the style section has to have something to be inside. */}}
   <div id="qr-style" class="flex-1">
-{{- /* A logo on the code being edited (M50.5), inside the style section since
-       M50.8 (F238f) and above its Save button since that milestone's reopening
-       (F244g).
+{{- /* The two forms that write a logo on the code being edited (M50.5), inside
+       the style section since M50.8 (F238f). **They carry no visible control
+       of their own** since that milestone's second reopening (F246b, D197):
+       the file input and the remove button render in the style form's grid
+       below, between the colours and the size, and reach these two through a
+       `form="…"` attribute.
 
-       **Its own form, and it has to be.** A file needs
+       **Still their own forms, and they have to be.** A file needs
        `enctype="multipart/form-data"`, which the style form below cannot carry
        without every one of its other buttons arriving in a body the handler
-       does not read, and HTML forbids nesting one form inside another. So the
-       upload posts to its own route and the removal stays on the style form's,
-       under its own button name the way reset and remove already do. **The
-       owner's word was section**, and that is what moved: this markup sits in
-       the same column as the style form, under the same heading-less section,
-       and posts exactly where it always did.
+       does not read, and HTML forbids nesting one form inside another. Both
+       facts are unchanged. What changed is the conclusion drawn from them:
+       *"it moves within the section; it does not move into the style form"*
+       was written here one reopening ago, and the ban it rests on is on the
+       `<form>` **element**, not on its controls. A form-associated control —
+       one carrying `form="<id>"` — may sit anywhere in the document and
+       submits to the form it names, so the elements stay out of the grid and
+       the controls go in it. The removal keeps posting to the style form's
+       route under its own button name, the way reset and remove already do.
 
-       **Before the style form rather than after it** (D195), owner-set: *"The
-       logo picker should be above the save button so all changes to the logo
-       are together."* The two controls that write a logo sat below a `Save`
-       that does not save them, with `Restore defaults` in between. There is
-       exactly one place in this section that is above that button and outside
-       that form — here, ahead of it — because the constraint above has not
-       moved: the upload cannot be *inside* the form, so it cannot sit between
-       the form's fields and the form's submit. What that costs is the file
-       input arriving before **Name**, which is the price of the grouping the
-       owner asked for and is stated rather than discovered.
+       **The ids are what the association is made of**, which makes them part
+       of the contract rather than decoration: `qr-logo-upload` and
+       `qr-logo-remove` are named by `form=` on controls thirty lines away, and
+       renaming one silently detaches a control that still renders. Both are
+       asserted by name in internal/ui/link_qr_test.go.
 
        **This reaches the default code as well as a named one.** `code` is
        whichever row the panel is open on, and for a link whose single code has
@@ -663,13 +667,12 @@
      read as a third section of the tab. The controls are unchanged and their
      routes are unchanged; what went is the furniture around them.
 
-     The rule under the controls rather than over them, since the block moved
-     to the head of the section (F244g): a `border-t` at the top of a column
-     draws a line under the heading row it now sits beneath, and the seam that
-     is actually worth marking is the one between the logo's controls and the
-     style form below. */}}
-<div class="mb-4 border-b border-line pb-4">
-  {{/* **Cut from five sentences to two at M50.7** (D188), which is the largest
+     **And the rule that separated them from the style form went too**, at the
+     second reopening (F246b): with the controls inside that form's own grid
+     there is no seam left between the two to mark, and a `border-b` drawn
+     across nothing is furniture of the kind the first half of this comment
+     removed. */}}
+{{/* **Cut from five sentences to two at M50.7** (D188), which is the largest
        single saving the 900-character bound is paid for out of. What each cut
        sentence said is still said, and where it is said is the test:
 
@@ -716,29 +719,16 @@
        `web_qr.go`'s `"logo"` marker case still prints the uploaded dimensions
        and the stored ones whenever they differ, which is F214(a)'s own
        enforcement and is what tells a reader their artwork was adapted. */}}
-  <div class="flex flex-wrap items-end gap-2">
-    <form method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data"
-          hx-post="/links/{{.Link.ID}}/qr/logo" hx-encoding="multipart/form-data"
-          hx-trigger="change" hx-target="#qr" hx-select="#qr" hx-swap="outerHTML"
-          class="flex flex-wrap items-end gap-2">
-      <input type="hidden" name="next" value="{{.QRReturn}}">
-      <input type="hidden" name="code" value="{{.QRSlug}}">
-      <div>
-        <label for="qr_logo" class="block text-sm font-medium text-ink">{{if .QRHasLogo}}Replace the logo{{else}}Upload a logo{{end}}</label>
-        <input id="qr_logo" name="logo" type="file" accept="image/png,image/jpeg" required
-               class="file-pick mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink focus:border-accent focus:outline-none">
-      </div>
-    </form>
-    {{if .QRHasLogo}}
-    <form method="post" action="/links/{{.Link.ID}}/qr">
-      <input type="hidden" name="next" value="{{.QRReturn}}">
-      <input type="hidden" name="code" value="{{.QRSlug}}">
-      <button type="submit" name="remove_logo" value="1"
-              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-danger hover:bg-sunken">Remove the logo</button>
-    </form>
-    {{end}}
-  </div>
-  </div>
+  <form id="qr-logo-upload" method="post" action="/links/{{.Link.ID}}/qr/logo" enctype="multipart/form-data">
+    <input type="hidden" name="next" value="{{.QRReturn}}">
+    <input type="hidden" name="code" value="{{.QRSlug}}">
+  </form>
+  {{if .QRHasLogo}}
+  <form id="qr-logo-remove" method="post" action="/links/{{.Link.ID}}/qr">
+    <input type="hidden" name="next" value="{{.QRReturn}}">
+    <input type="hidden" name="code" value="{{.QRSlug}}">
+  </form>
+  {{end}}
 
   <form method="post" action="/links/{{.Link.ID}}/qr" class="grid gap-4 sm:grid-cols-2">
     {{/* Where the save lands, carried on the form the way the workspace
@@ -789,6 +779,57 @@
       <input id="qr_background" name="background" type="color" value="{{.QRStyle.Background}}"
              class="mt-1 block h-9 w-full rounded-md border border-line-strong bg-raised px-1 py-1">
     </div>
+    {{/* **The logo's two controls, here between the colours and the size**
+         (M50.8's second reopening, F246b, D197), owner-set: *"The logo upload
+         should be below the color pickers and above size."*
+
+         **They are in this form's grid and they do not submit to this form.**
+         Both carry `form="…"` naming one of the two elements above, which is
+         what a form-associated control is for: the HTML ban is on nesting the
+         `<form>` **element**, and a control that names its form may sit
+         anywhere in the document. So the file still travels in a body of its
+         own, `enctype="multipart/form-data"` and all, and `Save` still posts
+         exactly the fields it posted before — the file input is not one of
+         `qr-style`'s `elements` and `new FormData` on this form does not see
+         it. Its `required` goes with it: the browser validates a control
+         against the form that owns it, so a reader pressing Save with no file
+         chosen is not stopped by a control they were not using.
+
+         **The trigger moved onto the input, and it had to.** It was
+         `hx-trigger="change"` on the `<form>`, which worked because the input
+         was inside it and `change` bubbles up the **DOM**, not to the form a
+         control is associated with. From here the form would never see the
+         event. htmx issues the request from whatever element carries the
+         attributes, so they all moved together.
+
+         **And htmx serializes the form it *owns*, not the one it sits in**,
+         which is the whole reason this arrangement costs nothing. htmx sends
+         the requesting element's own value plus its form's, and the form it
+         takes is `elt.form || closest(elt, 'form')` — the association first.
+         So the body is the file plus `qr-logo-upload`'s two hidden fields, and
+         the style form's name, colours and size are not in it. That was
+         measured rather than assumed, and the first reading of it was wrong:
+         an `hx-params` filter stood here on the belief that the ancestor form
+         rode along, and driving the upload with it removed showed a body of
+         exactly `code`, `logo`, `next`. The measurement is kept as an
+         assertion — tools/agent-browser/specs/qr-logo.spec.mjs reads the
+         FormData htmx hands the browser on `htmx:configRequest`, that being
+         the last point a body is observable at, since Chromium streams a
+         multipart upload and Playwright cannot read one back. */}}
+    <div class="flex flex-wrap items-end gap-2 sm:col-span-2">
+      <div class="min-w-0 grow">
+        <label for="qr_logo" class="block text-sm font-medium text-ink">{{if .QRHasLogo}}Replace the logo{{else}}Upload a logo{{end}}</label>
+        <input id="qr_logo" name="logo" type="file" accept="image/png,image/jpeg" required
+               form="qr-logo-upload"
+               hx-post="/links/{{.Link.ID}}/qr/logo" hx-encoding="multipart/form-data"
+               hx-trigger="change" hx-target="#qr" hx-select="#qr" hx-swap="outerHTML"
+               class="file-pick mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink focus:border-accent focus:outline-none">
+      </div>
+      {{if .QRHasLogo}}
+      <button type="submit" form="qr-logo-remove" name="remove_logo" value="1"
+              class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-danger hover:bg-sunken">Remove the logo</button>
+      {{end}}
+    </div>
     {{/* One number, and it replaced two nobody knows (M49). The form asked for
          a quiet zone in modules and a module size in pixels; somebody printing
          a poster knows neither and knows how big they want it. Both are still
@@ -798,11 +839,16 @@
 
          **A slider and a number since the second M49 reopening** (D182,
          F221). A number box alone gives no sense of the range, and the sizes
-         people actually want are a short list — so the slider carries marks at
-         those sizes through a <datalist>, which is HTML's own way of saying
-         them and needs no script. It is continuous between the two ends rather
-         than stepping between the marks, which is what makes the ends
-         reachable.
+         people actually want are a short list — so the slider names those
+         sizes in a <datalist>, which is HTML's own way of saying them and
+         needs no script. It is continuous between the two ends rather than
+         stepping between the marks, which is what makes the ends reachable.
+         *(This said the slider "carries marks" through that datalist. It named
+         them and drew none: Chromium's ticks come with the native track and
+         `appearance: none` took both — F246c, and the marks below are the
+         answer. The datalist stays, because naming the stops is what the
+         drawing is rendered from and is what a reader's assistive technology
+         is offered.)*
 
          **Two inputs, one setting, and the server decides which spoke.**
          `size_shown` witnesses the value the page was rendered with and
@@ -847,13 +893,41 @@
     <div class="sm:col-span-2">
       <label for="qr_size" class="block text-sm font-medium text-ink">Size</label>
       <div class="mt-1 flex items-center gap-3">
-        <input id="qr_size_slider" name="size_slider" type="range" list="qr_size_stops"
-               min="{{.QRMinSize}}" max="{{.QRMaxSize}}" value="{{.QRSize}}"
-               aria-label="Size in pixels, slider"
-               class="qr-slider min-w-0 grow">
-        <datalist id="qr_size_stops">
-          {{range .QRSizeStops}}<option value="{{.}}"></option>{{end}}
-        </datalist>
+        <div class="min-w-0 grow">
+          <input id="qr_size_slider" name="size_slider" type="range" list="qr_size_stops"
+                 min="{{.QRMinSize}}" max="{{.QRMaxSize}}" value="{{.QRSize}}"
+                 aria-label="Size in pixels, slider"
+                 class="qr-slider block w-full">
+          <datalist id="qr_size_stops">
+            {{range .QRSizeStops}}<option value="{{.}}"></option>{{end}}
+          </datalist>
+          {{/* **The stops, drawn** (M50.8's second reopening, F246c, D198),
+               owner-set: *"The Size slider should have visible detents at the
+               stop points."* They were named already — the `<datalist>` above
+               is HTML's own way of saying them and Chromium draws ticks from
+               it — but `appearance: none` in input.css takes those away with
+               the native track, and the track is where the theme lives.
+
+               **SVG geometry, because CSS cannot be handed the numbers.** A
+               mark sits at `(stop - min) / (max - min)`, the bounds move with
+               the code, and `style-src 'self'` refuses the style attribute
+               that would carry a custom property. Attributes on SVG are not
+               CSS and the policy does not reach them, which is the route
+               middleware.go's own comment names for the bar charts: *"dynamic
+               bar widths are SVG attributes rather than style attributes"*.
+
+               One `<line>` per stop and no more: what is drawn is exactly
+               `.QRSizeStops`, so a code whose floor drops the low stops does
+               not get marks offering sizes its own save would refuse. The
+               inset that lines them up with the thumb is in input.css, beside
+               the thumb it is derived from. */}}
+          <div class="qr-slider-marks">
+            <svg class="block w-full overflow-visible" height="6"
+                 aria-hidden="true" focusable="false">
+              {{range .QRSizeStops}}<line data-stop="{{.}}" x1="{{rangePct . $.QRMinSize $.QRMaxSize}}%" x2="{{rangePct . $.QRMinSize $.QRMaxSize}}%" y1="0" y2="6" stroke="currentColor" stroke-width="1"></line>{{end}}
+            </svg>
+          </div>
+        </div>
         <input id="qr_size" name="size" type="number" min="{{.QRMinSize}}" max="{{.QRMaxSize}}" value="{{.QRSize}}"
                aria-label="Size in pixels"
                class="w-24 shrink-0 rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">

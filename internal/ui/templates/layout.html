@@ -26,9 +26,24 @@
        file does nothing at all on a page with no `#qr` on it — the two
        delegated handlers test for the section before they act.
 
-       `defer`, like htmx above, so parsing is not blocked and the document is
-       there when it runs. */}}
-  <script src="{{asset "js/qr-size.js"}}" defer></script>
+       **No `defer`, unlike htmx above, and that is this milestone's second
+       reopening** (F246a, D196). A deferred script runs after the document is
+       parsed, which is after the browser has painted it — so on any connection
+       slower than localhost the reader was shown the top of the page and then
+       watched it scroll to where they had been. Nothing a script does can put a
+       document at an offset before the document exists to have one, so what runs
+       here at head time is the *decision to hold the paint*: the file reads its
+       stored offset, marks this element when there is one, and app.css keeps the
+       body unpainted until the scroll has been applied at `DOMContentLoaded`.
+
+       **What that costs, stated.** This request is render-blocking on every page
+       of the dashboard, where before it was not. It is not an extra round trip:
+       the preload scanner starts it at the same moment as app.css above, which
+       is render-blocking already and four times the size, so the paint waits on
+       the stylesheet either way. What is paid is bandwidth in parallel with a
+       larger file, and what is bought is that a save never shows the reader a
+       position they did not stand at. */}}
+  <script src="{{asset "js/qr-size.js"}}"></script>
 </head>
 <body class="min-h-full bg-surface text-ink antialiased">
 {{if .Identity}}

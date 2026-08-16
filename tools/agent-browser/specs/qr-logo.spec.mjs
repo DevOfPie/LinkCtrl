@@ -6,11 +6,15 @@ import { fileURLToPath } from 'node:url';
 // that makes true are invisible to a template test.
 //
 // What the Go suites already prove is the markup — `hx-trigger="change"`,
-// `hx-post`, `hx-encoding`, `hx-target`, `hx-select` on the form — and the
+// `hx-post`, `hx-encoding`, `hx-target`, `hx-select`, and since M50.8's second
+// reopening `form=` as well, all of them on the input — and the
 // handler's answer to a request that carried `HX-Request: true` because a test
-// set the header by hand. Neither of those is htmx *binding* a `change` on a
-// `<form>` to a multipart post, which is the whole mechanism the two-step
-// button was traded for. So it is driven here.
+// set the header by hand. Neither of those is htmx *binding* a `change` to a
+// multipart post, which is the whole mechanism the two-step button was traded
+// for, and neither is htmx serializing a control that submits to a form it does
+// not sit inside, which is what F246(b) moved the control into the style form's
+// grid to do. Both are driven here, and the second is read off the request body
+// rather than inferred from the answer.
 //
 // Two runs through it, because the two answers take different routes out of the
 // handler and only one of them is a swap:
@@ -77,6 +81,37 @@ const logoPNG = Buffer.from(
 const notAnImage = Buffer.from('this is not a PNG, whatever it is called\n');
 
 test('choosing a file uploads it, and a refusal comes back through the swap', async ({ page }) => {
+  // **What htmx serializes for the upload, taken from htmx rather than from the
+  // wire.** M50.8's second reopening moved the file input into the style form's
+  // grid on a `form="…"` attribute, and *that htmx serializes a control which
+  // submits to a form it is not inside* is the claim the milestone said would be
+  // demonstrated on the instance instead of argued.
+  //
+  // It cannot be read off the request: Chromium hands a multipart upload to the
+  // network stack as a stream, and Playwright's `postDataBuffer()` is null for
+  // one — measured here, not assumed. `htmx:configRequest` carries the FormData
+  // htmx is about to send, which is one step earlier and is the step the claim
+  // is about. What the *server* did with it is the rest of this case: the
+  // redirect it answers with is built from the `next` and `code` in that body.
+  //
+  // Installed before the first navigation, because an init script reaches the
+  // documents created after it and the upload happens two pages later.
+  let sent = null;
+  await page.exposeFunction('__qrLogoRequest', (names) => {
+    sent = names;
+  });
+  await page.addInitScript(() => {
+    document.addEventListener('htmx:configRequest', (event) => {
+      const detail = event.detail ?? {};
+      if (!String(detail.path ?? '').includes('/qr/logo')) return;
+      const names =
+        detail.formData && typeof detail.formData.keys === 'function'
+          ? [...detail.formData.keys()]
+          : Object.keys(detail.parameters ?? {});
+      window.__qrLogoRequest(names.sort());
+    });
+  });
+
   const { email, password } = credentials();
   await page.goto('/login');
   await page.fill('#email', email);
@@ -106,12 +141,34 @@ test('choosing a file uploads it, and a refusal comes back through the swap', as
   // There is no submit button in that form any more: choosing the file is the
   // whole interaction. Asserted here as well as in the template suite because
   // the rest of this test is meaningless if a button is doing the work.
-  const uploadForm = page.locator('form[hx-post$="/qr/logo"]');
-  await expect(uploadForm, 'the logo form is not the htmx one').toHaveCount(1);
+  const uploadForm = page.locator('form#qr-logo-upload');
+  await expect(uploadForm, 'the logo upload form is not on the page').toHaveCount(1);
   expect(
     await uploadForm.locator('button, input[type="submit"]').count(),
     'the logo form grew a submit control back',
   ).toBe(0);
+
+  // **The control is form-associated since M50.8's second reopening** (F246b):
+  // it renders inside the style form's grid, between the colours and the size,
+  // and submits to a form it is not inside. Both halves are asserted, because
+  // each alone is satisfied by the arrangement this milestone replaced — the
+  // old one sat inside its own form, and a control that lost `form=` would sit
+  // in the right place posting to the wrong route.
+  const association = await input.evaluate((el) => ({
+    owner: el.form && el.form.id,
+    ancestor: el.closest('form') && el.closest('form').getAttribute('action'),
+  }));
+  expect(
+    association.owner,
+    'the file input does not belong to the upload form, so the file travels in ' +
+      'whatever body the style form is posting',
+  ).toBe('qr-logo-upload');
+  expect(
+    association.ancestor,
+    'the file input is not inside the style form, so it has not moved between ' +
+      'the colours and the size at all and this case is proving nothing about ' +
+      'the arrangement F246(b) asked for',
+  ).toMatch(/\/qr$/);
 
   // --- accepted, and the pressed state's pointer path -----------------------
   //
@@ -152,6 +209,28 @@ test('choosing a file uploads it, and a refusal comes back through the swap', as
     page.getByRole('button', { name: 'Remove the logo' }),
     'the panel does not offer removal, so it does not believe a logo was stored',
   ).toHaveCount(1);
+
+  // And what it sent to get here. Three names, each for a reason: `logo` is the
+  // file, and it is in the body only because htmx serialized a control that
+  // names its form rather than sits in it; `next` and `code` are what
+  // LinkQRLogo reads to decide where the reader comes back to and which code is
+  // written. **Anything more would be the style form**, which the input sits
+  // inside — htmx takes `elt.form || closest(elt, 'form')`, so the association
+  // wins and the ancestor is never serialized. That is a claim about htmx and
+  // this assertion is where it is kept: the first reading of it was the other
+  // way round, and an `hx-params` filter was written against a body that never
+  // existed. Anything less is a body the handler answers by sending the reader
+  // somewhere they did not ask to go.
+  expect(
+    sent,
+    'no htmx request to the logo route was ever configured, so this case saw ' +
+      'nothing of what was sent and the assertion below would pass on silence',
+  ).not.toBeNull();
+  expect(sent, 'the upload was serialized with these fields').toEqual([
+    'code',
+    'logo',
+    'next',
+  ]);
 
   // --- the pressed state's keyboard path ------------------------------------
   //

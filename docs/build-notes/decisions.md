@@ -363,6 +363,7 @@ file. Append a row when you append an entry.
 | [M50.8, the logo picker above the save button, and the prose bound at 300](#2026-08-14--m508-the-logo-picker-above-the-save-button-and-the-prose-bound-at-300) | The reopening's four other limbs. The logo controls move **ahead of the whole style form**, which is the only position above its Save button and outside it — a file needs `multipart/form-data` and forms do not nest, so *between the fields and the submit* is not a place that exists. F244(d) takes the last statement on the tab of what the default *does*, leaving the icon and its name to say which one it is; the test that asserted the sentence now asserts its absence **and** the icon's name, so losing both cannot pass. F244(f) rests on a refusal that names the limit with the reader's own numbers in it. The prose bound is **300**: measured 252 across two paragraphs, rounded up to the next fifty |
 | [M50.8's reopening, four citations its own diff moved](#2026-08-14--m508s-reopening-four-citations-its-own-diff-moved) | Fact-level orchestrator amendments: four line numbers in the reopening's own bullets, stale because the build moved them by doing what the bullets asked. **The third time in two days this hazard has cost an amendment** — a citation written against a diff in flight goes stale before the diff lands, and the answer is re-reading at step 3.4 rather than citing less. Also records that the three removed sentences still appear as quotations inside the comments recording their removal, which is convention and not a failed deletion |
 | [Three shipped entries the fourth report's removals falsified](#2026-08-14--three-shipped-entries-the-fourth-reports-removals-falsified) | Corrections **by a later entry**, this file being append-only. M50.7's defence of its meta-line cut, M50.7's claim that the logo paragraph still names level H, and D186's citation of that same paragraph were all falsified by F244(c), (d) and (f). A fourth: **`logo_applied` is a symbol that has never existed** — the marker is `"logo"` — and it survived review in a landed entry because the sentence around it was right. D186 stands and is discharged by the **upload notice** at `internal/httpx/web_qr.go:650-663` rather than by prose on the tab. The rule the run earned: **entries about this surface cite the mechanism, not the sentence** — a claim that *the tab still says X* has a lifetime, and this tab has been reported four times in three days |
+| [M50.8, the paint is held, the logo submits to a form it is not in, and the slider draws its own stops](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops) | D196 — the QR tab's save is put back **before the first paint**, which cannot mean restoring earlier: a script in `<head>` runs before the document has any height and `scrollTo` against it clamps to 0. So the paint is *withheld* — `qr-size.js` is parser-blocking now, marks `<html>` when it holds an offset for this path, and app.css keeps `body` unpainted until the scroll lands at `DOMContentLoaded`. Only on the load after a write; three independent reveals, because a page that stays hidden is worse than a page that jumps. Rejected: a head-time restore (cannot work, not merely costly) and a server-rendered offset (same timing, and the position leaves the browser). D197 — the logo's controls move **into the style form's grid** by `form="…"`, which reverses one reopening's *"it does not move into the style form"*: the nesting ban is on the `<form>` element, not on a control that names one. The `change` trigger moves onto the input with it — `change` bubbles up the DOM, not to the form a control names — and htmx serializes the form the control **owns** rather than the one it sits in, which was measured and which deleted an `hx-params` filter the build had written on the opposite belief. D198 — the size slider's detents are **SVG geometry the template renders**, because `style-src 'self'` refuses the style attribute a custom property would ride on and `appearance: auto` would trade the theme for the marks. One `<line>` per stop, positioned `(stop − min) / (max − min)`, inset by half a thumb |
 
 ---
 
@@ -29897,3 +29898,174 @@ prose bound has gone 900 → 750 → 300 in one of them. **Future entries about 
 surface cite the mechanism, not the sentence** — that is the rule this run earned,
 and it is why the third correction above lands on the notice rather than on the
 next paragraph that happens to say H.
+
+## 2026-08-16 — M50.8, the paint is held, the logo submits to a form it is not in, and the slider draws its own stops
+
+The QR tab's **fifth** report, three limbs, and the first of them is the second
+time this milestone has been reopened for one sentence. F246; the scheduling and
+its stated cost are in [m50.8.md](phase-details/m50.8.md).
+
+**D196 — the position is applied before the first paint by *withholding* the
+paint, because applying it earlier is not available.**
+
+The first reopening stopped the `#qr` fragment from moving the page after the
+restore and left the restore where it was: at `DOMContentLoaded`, reached from a
+`defer`red script. That is after the parse and therefore after the paint, so the
+correction the owner saw simply changed shape — *top → position* instead of
+*`#qr` → position*. Measured at `928504f` over 80 ms / 4 Mbps / 2× CPU: eight or
+nine frames at the wrong offset, about a third of a second; at 150 ms, twenty and
+two thirds of a second. Unthrottled, none, which is why four probes and one kept
+browser case all said the page was fine.
+
+The milestone named three mechanisms and said the build would choose. **One of
+them cannot work at all, and that is the finding rather than the cost.** A
+parser-blocking `<script src>` ahead of the body does run before the first paint
+— and at that moment the document has no body, no height and nothing to scroll:
+`window.scrollTo` clamps to 0 and the restore is silently lost. A position can
+only be applied to a laid-out document, and a laid-out document is one the
+browser is ready to paint. The same objection disposes of the third option,
+moving the offset onto something the server renders: a server cannot scroll a
+browser, so the offset would still be applied by script at the same moment, and
+it would additionally put a reader's scroll position on the wire.
+
+So the second option is the only one, and it is what shipped. `qr-size.js` loads
+without `defer`, runs in `<head>` with parsing blocked, reads its stored offset
+there, and puts `qr-restoring` on `<html>`; `app.css` holds `body` at
+`visibility: hidden` while it is there; `restore()` scrolls at
+`DOMContentLoaded` and takes the class off. `visibility` and not `display`,
+because the document must still lay out — an unlaid-out document has no height,
+which is the impossibility above wearing a different hat.
+
+**What it costs, stated in full.** The script is render-blocking on every page of
+the dashboard now. It is not an extra round trip: the preload scanner starts it
+with `app.css`, which is render-blocking already and four times the size, so the
+paint waits on the stylesheet either way. And on the one load that has a position
+to restore — the load after a write on this tab, and no other — the reader waits
+on the page's own background instead of watching its content arrive at the wrong
+offset. That is the trade in one sentence: the jump the owner called jarring is
+not made correct, because correct is not available; it is made invisible.
+
+**A page that stays hidden is worse than a page that jumps**, so the reveal has
+three independent paths: a `finally` inside `restore` that fires on every exit
+including a throw, a `load` listener, and a four-second timer set at head time.
+The class is only ever added when there is an offset for this pathname, so a
+browser with `sessionStorage` refused, a script that failed to load, and every
+page in the product that is not this one are all untouched.
+
+**The enforcement is the case that already asserted this claim, run throttled.**
+`specs/qr-tab-controls.spec.mjs` was green for a day on a build that flashed for
+two thirds of a second, because localhost is the one profile where a script wins
+the race by construction. It now drives the write through a CDP session at
+80 ms / 4 Mbps / 2×, asserts the emulation took effect by the loaded document's
+own `responseStart`, and samples `visibility` beside every offset. The assertion
+is that no **visible** sample stands away from the reader's position, plus that
+at least one sample was visible — because a filter that passes by matching
+nothing is this tab's recurring failure and it has now produced it twice.
+
+**D195's stated cost is corrected here, because this entry is what falsified
+it.** That entry priced the fragment removal as *"a dependence on ordering: the
+fragment scroll must come after deferred scripts"*, and there is no deferred
+script on this page any more. The mechanism is unharmed and the dependence is
+narrower than it was: `replaceState` runs from the `DOMContentLoaded` handler,
+which is still before the browser's fragment scroll, so what the ordering now
+rests on is the event rather than the attribute — and `qr-size.js:198-208` says
+so where a reader of the code will meet it. Written here rather than by editing
+D195, which is append-only, and written at all because this surface's own rule
+is to cite the mechanism rather than the sentence: an entry whose cost paragraph
+names a `defer` nobody can find is how a correct argument stops being checkable.
+
+**D197 — the logo's controls move into the style form's grid, by `form="…"`.**
+
+Owner, F246(b): *"The logo upload thould be below the color pickers and above
+size."* One reopening ago this file recorded the opposite as a constraint —
+*"it moves within the section; it does not move into the style form"* — and that
+sentence was drawn from two facts that are both still true: a file needs
+`enctype="multipart/form-data"`, and HTML forbids nesting one `<form>` in
+another. **Neither is the whole rule.** The ban is on the `<form>` *element*. A
+form-associated control carries `form="<id>"`, may sit anywhere in the document,
+and submits to the form it names. So the two `<form>` elements stay where they
+were, keeping their own route and their own encoding, and lose their visible
+controls; the file input and the remove button render in the style form's grid
+between the background colour and the size.
+
+Three things follow, and each is a claim rather than a tidy-up:
+
+- **The `change` trigger moves onto the input.** `hx-trigger="change"` sat on
+  the `<form>`, which worked because the input was inside it and `change`
+  bubbles up the **DOM** — not to the form a control is associated with. From
+  the grid, that form would never see the event. Every htmx attribute moved with
+  it, since htmx issues a request from whatever element carries them.
+- **htmx serializes the form a control *owns*, not the one it sits in, and this
+  was measured rather than reasoned about.** The build first wrote an
+  `hx-params="logo,next,code"` filter on the belief that the closest ancestor
+  form — the style form — would ride along with the file. Driving the upload
+  with the filter removed showed a body of exactly `code`, `logo`, `next`, and
+  the vendored source says why: htmx takes `elt.form || closest(elt, 'form')`,
+  so the association wins. The filter was removed as machinery guarding a body
+  that never existed, and the measurement is kept as the spec's assertion —
+  which is where a claim about a dependency belongs. **This is the milestone's
+  own instruction working as intended**: it said htmx serializing a
+  form-associated control was a claim to demonstrate on the instance, and the
+  demonstration corrected the build rather than confirming it.
+- **The busy state gained a second selector.** `form.htmx-request .file-pick`
+  was written when the form issued the request; htmx marks the issuing element,
+  which is the input now. Both selectors ship, and F214(b) is why: a pressed
+  state that quietly stops arriving is the defect that control was reopened for.
+
+**Demonstrated rather than argued**, which the milestone asked for in as many
+words: `specs/qr-logo.spec.mjs` reads the parts of the multipart body htmx
+actually sent and asserts they are `code`, `logo`, `next` and nothing else, and
+asserts the input's owner form and its ancestor form are two different elements.
+An ordering test alone cannot tell a working upload from a detached one.
+
+**D198 — the slider's detents are SVG geometry the template renders.**
+
+Owner, F246(c): *"The Size slider should have visible detents at the stop
+points."* The stops were never missing from the page — the `<datalist>` has named
+them since D182, and Chromium draws ticks from one. `appearance: none` in
+input.css takes those away with the native track, which was verified by forcing
+`appearance: auto` on the shipped control and watching eight marks appear.
+
+**Restoring the appearance is not the fix**: `appearance: none` is what lets the
+track and the thumb take theme tokens, so giving it back trades the theme for the
+marks. **And the custom-property route the milestone offered is closed**: a
+custom property has to reach CSS through a `style` attribute, and this product's
+`style-src 'self'` carries no `'unsafe-inline'`. That leaves what
+`middleware.go`'s own CSP comment already names for the bar charts — *"dynamic
+bar widths are SVG attributes rather than style attributes"* — so the marks are
+one `<line>` per stop with `x1`/`x2` as percentages, which CSP does not reach
+because they are not CSS at all.
+
+Two measurements ride with it. The position is `(stop − min) / (max − min)`,
+computed by a new `rangePct` template function rather than a `QRSizeMarks` field
+beside `QRSizeStops` — a second list is a list that can disagree with the first,
+and the marks exist precisely to say truthfully which sizes a code offers. And
+the strip is inset by half a thumb at each end, in input.css beside the thumb it
+is derived from, because a range input's thumb travels between its own
+half-widths: marks drawn edge to edge are right in the middle and wrong at both
+ends, which is the hardest kind of wrong to notice.
+
+The template test compares the marks against `QRSizeStops` — count, values and
+positions — and renders a raised floor to show the low stops drop out with it,
+which is the case a fixed strip of eight gets wrong. The browser case reads the
+rendered geometry, because the `<datalist>` proves that markup naming the stops
+and a control drawing them are two different things.
+
+**One amendment at acceptance, fact-level, on this milestone's own bullet.**
+
+As it stood, in the reopening's first bullet: *"Whatever it picks, **the
+position is applied before the first paint of the loaded document**, not
+corrected after it."*
+As amended: *"Whatever it picks, **the reader is never shown a position they did
+not stand at** — no painted frame of the loaded document carries the wrong
+offset,"* with the sentence it replaced quoted beside it.
+Tree fact: the same bullet offers three mechanisms and prices *"a body held back
+until the position is applied"* as one of them, and that is the one the build
+took — `qr-size.js:305` marks `<html>` at head time and `input.css:197-199`
+holds `body` unpainted until `restore()` scrolls at `DOMContentLoaded`. So the
+old sentence described the shape of a *different* mechanism from the same menu
+rather than the requirement all three share, and D196 above shows the shape it
+described cannot be built at all. What the bullet asserts is unchanged, which is
+what makes this an amendment rather than a prompt: the owner's choice was
+already delegated by the menu, and no reading of it would have let the hold
+through while stopping something else.

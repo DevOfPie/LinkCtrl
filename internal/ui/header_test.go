@@ -254,6 +254,12 @@ func TestSignOutStaysAFormPost(t *testing.T) {
 // reach for and the CSP would then refuse to run.
 var inlineHandler = regexp.MustCompile(`(?i)\son(click|change|toggle|keydown|keyup|focus|blur|submit|load)\s*=`)
 
+// scriptTags cuts each opening <script> tag out of a page, so that which file a
+// tag loads and how it is loaded can be read together. Which of the two is
+// deferred is a claim about the first paint (F246a) and neither `strings.Count`
+// nor a search for "defer" can tell one tag from the other.
+var scriptTags = regexp.MustCompile(`<script\b[^>]*>`)
+
 // headerMenus is the two controls and the panels they open, by id.
 //
 // Named here rather than discovered from the markup so that a menu which loses
@@ -307,8 +313,8 @@ func TestHeaderMenusAreScriptFreePopovers(t *testing.T) {
 			"to run it, so the control it belongs to would be dead in a browser and "+
 			"alive in a test", strings.TrimSpace(m))
 	}
-	// **Two script tags since M50.8, and both are external and deferred.** The
-	// count is asserted rather than left open because what this test guards is a
+	// **Two script tags since M50.8, and both are external files.** The count is
+	// asserted rather than left open because what this test guards is a
 	// *script-free* header — a menu that grew a handler would still render and
 	// simply not open — and the way that regresses is a third tag arriving with
 	// nobody counting.
@@ -319,16 +325,36 @@ func TestHeaderMenusAreScriptFreePopovers(t *testing.T) {
 	// are delegated from the document and the file is loaded once — and it does
 	// nothing on a page without a `#qr` on it, which the dashboard is.
 	//
+	// **They are no longer both deferred**, and that is M50.8's second reopening
+	// (F246a, D196). htmx still is. qr-size.js is not, and it is asserted so
+	// rather than merely allowed: a deferred script cannot run before the first
+	// paint, and withholding the first paint is the only thing that can put a
+	// reader back where they were without showing them somewhere else on the way.
+	// A later change that adds `defer` back to quiet a lighthouse warning would
+	// restore the flash and break no other test.
+	//
 	// **What is asserted is still the whole claim**: no inline script, so the
 	// CSP's `script-src 'self'` is untouched and no `unsafe-inline` waiver is
 	// needed for either file.
 	if got := strings.Count(signedIn, "<script"); got != 2 {
 		t.Errorf("the page renders %d script tags, want 2 (htmx and qr-size, both "+
-			"external and deferred)", got)
+			"external files)", got)
 	}
 	for _, want := range []string{"js/htmx.min.js", "js/qr-size.js"} {
 		if !strings.Contains(signedIn, want) {
 			t.Errorf("the page does not load %s", want)
+		}
+	}
+	for _, tag := range scriptTags.FindAllString(signedIn, -1) {
+		switch {
+		case strings.Contains(tag, "js/htmx.min.js") && !strings.Contains(tag, "defer"):
+			t.Errorf("htmx is loaded without defer: %q. It blocks the parser for no "+
+				"reason — nothing on the page needs it before the document exists", tag)
+		case strings.Contains(tag, "js/qr-size.js") && strings.Contains(tag, "defer"):
+			t.Errorf("qr-size.js is deferred again: %q. A deferred script runs after the "+
+				"document is parsed, which is after it is painted, so the save that "+
+				"returns a reader to their position shows them the top of the page "+
+				"first — F246(a), reported twice", tag)
 		}
 	}
 	if strings.Contains(signedIn, "<script>") {

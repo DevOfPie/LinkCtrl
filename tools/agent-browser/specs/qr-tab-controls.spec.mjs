@@ -7,6 +7,12 @@ import { fileURLToPath } from 'node:url';
 // The Go suite asserts markup — a class, an attribute, an id — and every one of
 // these is something else:
 //
+//   the stops are drawn      added at the second reopening (F246c). The marks
+//                            the size slider carries are `<line>` elements the
+//                            template renders, and whether any of them is on
+//                            screen is exactly what a markup test cannot say —
+//                            the `<datalist>` that used to draw them was in the
+//                            page the whole time it drew nothing.
 //   the two inputs agree     `qr-size.js` copies whichever of the slider and the
 //                            number moved into the other. Nothing in the markup
 //                            says that happens; the script either runs under
@@ -32,6 +38,11 @@ import { fileURLToPath } from 'node:url';
 //                            owner saw was a second position on the way there,
 //                            and only a browser can observe the interval
 //                            between a load and the frame that follows it.
+//                            **Under emulated network conditions since the
+//                            second reopening** (F246a): against localhost the
+//                            restoring script wins the race by construction, so
+//                            this case was green for a day on a build that
+//                            flashed for two thirds of a second everywhere else.
 //   and does not come back   the same offset, stored for a write whose response
 //   twice                    swapped instead of loading, must not survive to be
 //                            applied to some unrelated later load. Storage
@@ -213,6 +224,100 @@ test('the slider and the number follow each other while they move', async () => 
   ).toHaveValue(typed);
 });
 
+// F246(c), owner-set: *"The Size slider should have visible detents at the stop
+// points."*
+//
+// **A drawn mark is a browser claim and not a markup one.** The Go suite asserts
+// that one `<line>` renders per stop and that each sits at
+// `(stop - min) / (max - min)`; what it cannot tell is whether any of it is on
+// screen. `appearance: none` erasing Chromium's own datalist ticks is exactly
+// that failure — the `<option>` elements were in the markup the whole time and a
+// template test was green on a control with no marks at all. So this case reads
+// the rendered geometry: a box with height, inside the slider's own span, and a
+// stroke the theme resolved to something other than nothing.
+//
+// The correspondence with the stops is asserted here as well as in the Go suite,
+// against the `<datalist>` this page actually shipped rather than against a
+// fixture, because the two lists are drawn from one field and a build that let
+// them drift would render marks a reader cannot land the thumb on.
+test('the size slider draws a visible mark at each stop', async () => {
+  await openQRTab(page);
+
+  const stops = page.locator('#qr_size_stops option');
+  const marks = page.locator('.qr-slider-marks line');
+  const count = await stops.count();
+  expect(
+    count,
+    'the size control names no stops at all, so there is nothing for this case ' +
+      'to have found drawn or missing',
+  ).toBeGreaterThan(1);
+  await expect(
+    marks,
+    'the slider draws a number of detents that is not the number of stops it ' +
+      'offers, so a reader is being shown a size the save would refuse or not ' +
+      'shown one it would take (F246c)',
+  ).toHaveCount(count);
+
+  expect(
+    await marks.evaluateAll((els) => els.map((el) => el.dataset.stop)),
+    'the detents name different sizes from the datalist beside them',
+  ).toEqual(await stops.evaluateAll((els) => els.map((el) => el.value)));
+
+  // Drawn, not merely present, and *drawn* has to be spelled out for a shape
+  // with no area: a vertical line's client rect is zero pixels wide however
+  // thick its stroke is, so what is read is the stroke itself. The stroke is
+  // `currentColor`, which the stylesheet rule sets — a strip that lost that rule
+  // lays out identically and paints nothing.
+  const drawn = await marks.evaluateAll((els) => {
+    const slider = document.getElementById('qr_size_slider').getBoundingClientRect();
+    const at = (el) => {
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return {
+        x: Math.round(box.left),
+        height: Math.round(box.height),
+        strokeWidth: parseFloat(style.strokeWidth),
+        visibility: style.visibility,
+        stroke: style.stroke,
+        insideSlider: box.left >= slider.left - 1 && box.right <= slider.right + 1,
+      };
+    };
+    return { first: at(els[0]), last: at(els[els.length - 1]) };
+  });
+  expect(
+    drawn.first.height,
+    `the first detent has no height (${JSON.stringify(drawn.first)}), so nothing is drawn`,
+  ).toBeGreaterThan(2);
+  expect(
+    drawn.first.strokeWidth,
+    `the first detent has no stroke (${JSON.stringify(drawn.first)}), so it occupies ` +
+      'the layout and marks nothing',
+  ).toBeGreaterThan(0);
+  expect(drawn.first.visibility, 'the detents are hidden').toBe('visible');
+  expect(
+    drawn.first.stroke,
+    'the detents resolve to no colour, which is what a strip that lost the ' +
+      'stylesheet rule behind `currentColor` looks like',
+  ).not.toMatch(/rgba\(0,\s*0,\s*0,\s*0\)|none/);
+
+  // Both ends inside the slider they mark, and apart from each other. A strip
+  // that failed to inset itself overhangs the control; a strip whose positions
+  // never reached the markup stacks every mark on the same x.
+  for (const [which, mark] of Object.entries(drawn)) {
+    expect(
+      mark.insideSlider,
+      `the ${which} detent is drawn outside the slider it marks ` +
+        `(${JSON.stringify(mark)}), so the strip is not inset to the span the ` +
+        'thumb travels',
+    ).toBe(true);
+  }
+  expect(
+    drawn.last.x - drawn.first.x,
+    `the first and last detents are at ${drawn.first.x} and ${drawn.last.x}. Marks ` +
+      'that share an x are marks whose positions never reached the page',
+  ).toBeGreaterThan(20);
+});
+
 test('a style save comes back to where the reader was', async () => {
   const linkPage = await openQRTab(page);
 
@@ -288,6 +393,27 @@ test('a style save comes back to where the reader was', async () => {
 // that missed this. The event handlers run inside the window the frames cannot
 // see.
 //
+// **And it runs under emulated network conditions**, which is M50.8's *second*
+// reopening (F246a). Everything above was true and this case was still green on
+// a build that flashed for two thirds of a second, because the offset is
+// restored by a script and localhost is the one profile where a script wins the
+// race by construction: the file is fetched and run before the browser has
+// anything to paint. Measured at `928504f` — 0 frames at the wrong offset
+// unthrottled, 2 at 20 ms, 4 at 40 ms, 8–9 at 80 ms, 19–22 at 150 ms — so the
+// profile below is the one that would have caught it eight frames wide, and the
+// owner reaches the demo over a connection no better. A case that cannot fail
+// is this tab's recurring failure and it has now produced it twice; the
+// throttling is asserted to have taken effect for the same reason.
+//
+// **`shown` is sampled with the offset, and it is not a weakening.** The claim
+// is that the reader is never *shown* a position they did not stand at, and
+// what puts that right is holding the paint until the position is applied
+// (D196) — nothing can scroll a document that has not been laid out yet. So a
+// frame at the top with the body unpainted is the mechanism working, and a
+// frame at the top with the body visible is the defect. The case asserts both
+// halves: no visible sample away from the reader's position, and at least one
+// visible sample, so the filter cannot pass by matching nothing.
+//
 // **Three preconditions, because three probes failed on exactly these.** The
 // control is addressed by `name="make_default"` and asserted present — the
 // first probe searched for `name="default"` and skipped in silence, which is
@@ -320,7 +446,14 @@ test('a save is never shown a position the reader did not stand at', async () =>
   const trailProbe = await page.addInitScript(() => {
     window.__qrTrail = [];
     const at = (why) =>
-      window.__qrTrail.push({ why, y: Math.round(window.scrollY || window.pageYOffset || 0) });
+      window.__qrTrail.push({
+        why,
+        y: Math.round(window.scrollY || window.pageYOffset || 0),
+        // Whether this sample is something a reader could see. `document.body`
+        // is null for the earliest of them, which is as unseen as a sample gets.
+        shown:
+          !!document.body && getComputedStyle(document.body).visibility === 'visible',
+      });
     addEventListener('scroll', () => at('scroll'), { capture: true, passive: true });
     document.addEventListener('DOMContentLoaded', () => at('DOMContentLoaded'));
     addEventListener('load', () => at('load'));
@@ -374,14 +507,59 @@ test('a save is never shown a position the reader did not stand at', async () =>
       'invisible and this case is asserting nothing',
   ).toBeGreaterThan(100);
 
-  await make.click();
-  await page.waitForURL(/[?&]qr=(defaulted|promoted)/, { timeout: 15000 });
-  await page.waitForLoadState('load');
-  const trail = await page.evaluate(() => window.__qrTrail);
-  // Off the shared page before anything else, including before the navigation
-  // that gives the default back — every document from here on is uninstrumented.
-  await trailProbe.dispose();
+  // **80 ms, 4 Mbps, 2× CPU, and only across this one write.** The profile is
+  // the one the measurement above says catches the defect eight frames wide,
+  // and it is lifted again in the `finally` because `page` is this file's
+  // shared serial one: four cases follow and none of them asked to run over a
+  // slow link. `Network.enable` first — the domain has to be on for the
+  // conditions to be applied at all.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: 80,
+    downloadThroughput: (4 * 1000 * 1000) / 8,
+    uploadThroughput: (4 * 1000 * 1000) / 8,
+  });
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 2 });
 
+  let trail;
+  let ttfb;
+  try {
+    await make.click();
+    await page.waitForURL(/[?&]qr=(defaulted|promoted)/, { timeout: 30000 });
+    await page.waitForLoadState('load');
+    trail = await page.evaluate(() => window.__qrTrail);
+    // How long the loaded document took to start arriving, which is what says
+    // the emulation was in force. A POST, a redirect and a GET over an 80 ms
+    // link cannot answer inside a tenth of a second; over loopback they answer
+    // inside a hundredth.
+    ttfb = await page.evaluate(() => {
+      const nav = performance.getEntriesByType('navigation')[0];
+      return nav ? Math.round(nav.responseStart) : 0;
+    });
+  } finally {
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    await cdp.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    });
+    await cdp.detach();
+    // Off the shared page before anything else, including before the navigation
+    // that gives the default back — every document from here on is
+    // uninstrumented and unthrottled.
+    await trailProbe.dispose();
+  }
+
+  expect(
+    ttfb,
+    `the loaded document answered in ${ttfb} ms, which is a local one. The ` +
+      'emulated conditions are the whole point of this case: against localhost ' +
+      'the restoring script wins the race by construction and this asserted ' +
+      'nothing for a day (F246a)',
+  ).toBeGreaterThan(60);
   expect(
     trail.length,
     'nothing was recorded on the loaded page, so the trail this case reads is ' +
@@ -393,12 +571,24 @@ test('a save is never shown a position the reader did not stand at', async () =>
       'where the fragment scroll was visible',
   ).toBe(true);
 
-  const strayed = trail.filter((s) => Math.abs(s.y - before) > 20);
+  // Only what a reader could see. The page is held unpainted until the position
+  // has been applied (D196), because a document that has not been laid out
+  // cannot be scrolled at all — so an early sample at the top with the body
+  // hidden is the mechanism doing its job.
+  const seen = trail.filter((s) => s.shown);
+  expect(
+    seen.length,
+    'not one sample was taken while the page was visible, so the filter below ' +
+      'passes by matching nothing. Either the paint was never released or the ' +
+      'trail is measuring the wrong document',
+  ).toBeGreaterThan(0);
+
+  const strayed = seen.filter((s) => Math.abs(s.y - before) > 20);
   expect(
     strayed,
-    `the reader stood at ${before} and the page they came back to held ` +
+    `the reader stood at ${before} and the page they came back to showed them ` +
       `${JSON.stringify(strayed)} on the way. A save returns you to where you ` +
-      'were; it does not show you somewhere else first (F244a)',
+      'were; it does not show you somewhere else first (F244a, F246a)',
   ).toEqual([]);
 
   // The flag back where it was found.

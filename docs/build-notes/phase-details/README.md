@@ -27,12 +27,14 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Two rows are open:** [M57.9](m57.9.md)'s reopened run, in its own session, and
-[M50.8](m50.8.md)'s **second** reopening, scheduled 2026-08-15 from the QR tab's
-**fifth** report ([F246](../deferred-findings.md#open)) — the flash on save,
-which the first reopening aimed at and did not remove, plus the logo's position
-and the size slider's detents. Everything the tab's first four reports produced
-has landed: the first's three reopenings at `ad28c5f`, `e244cf2` and `272f108`,
+**One row is open:** [M57.9](m57.9.md)'s reopened run, in its own session.
+Everything the QR tab's **five** reports scheduled has landed, the fifth
+([F246](../deferred-findings.md#open)) as [M50.8](m50.8.md)'s **second**
+reopening on 2026-08-16 — the save's first paint is withheld rather than
+corrected, the logo's controls sit inside the style form between the colours and
+the size, and the size slider draws its stops. That report's fourth limb is a
+Phase 4 row and the finding stays open for it. Before it: the first report's
+three reopenings at `ad28c5f`, `e244cf2` and `272f108`,
 the second's at `2d4f424`, `69ef097` and `d7107b1`, [M50.7](m50.7.md) at
 `ea656bd`, and [M50.8](m50.8.md) — the third report — at `a12cf16`, **reopened
 the same day for five limbs of the fourth**
@@ -80,7 +82,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | done |
-| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | in progress *(reopened a second time 2026-08-15, [F246](../deferred-findings.md#open))* |
+| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | done |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |

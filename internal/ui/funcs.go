@@ -542,6 +542,7 @@ func (r *Renderer) funcs() template.FuncMap {
 		"dict":        dict,
 		"add":         add,
 		"mul":         mul,
+		"rangePct":    rangePct,
 	}
 }
 
@@ -557,3 +558,31 @@ func add(a, b int) int { return a + b }
 // loop's own index, and carrying an x on every band would be a second copy of
 // the counter.
 func mul(a, b int) int { return a * b }
+
+// rangePct is where a value sits between two bounds, as a percentage, for a
+// mark drawn along a track. It answers the size slider's detents (M50.8, D198).
+//
+// **A function rather than a field, for the reason add and mul are.** The
+// position is arithmetic about the drawing, not a fact about the data: a
+// `QRSizeMarks` beside `QRSizeStops` would be a second copy of the same list,
+// and the two could then disagree about which sizes a code offers — which is
+// exactly what the marks exist to say truthfully.
+//
+// **A string rather than a float, because the caller is an SVG attribute.** Two
+// decimals: the track is a few hundred pixels wide, so whole percents would put
+// a mark two of them away from the value it names, and more than two decimals is
+// below a device pixel on any track this product draws.
+//
+// A degenerate range gives "0" and an out-of-range value clamps, so a mark is
+// always somewhere on the strip. Neither can happen from qrSizeStops, which
+// filters to the code's own floor and to qr.MaxSize; the clamp is what keeps a
+// future caller's bad bounds a visible mark rather than an invisible one.
+func rangePct(v, lo, hi int) string {
+	if hi <= lo || v <= lo {
+		return "0"
+	}
+	if v >= hi {
+		return "100"
+	}
+	return strconv.FormatFloat(float64(v-lo)*100/float64(hi-lo), 'f', 2, 64)
+}
