@@ -369,6 +369,7 @@ file. Append a row when you append an entry.
 | [M57.9's triage: three rows scheduled, and the one the owner took further than was recommended](#2026-08-17--m579s-triage-three-rows-scheduled-and-the-one-the-owner-took-further-than-was-recommended) | D201: F251 **reopens M58** rather than being fixed inside the review, and carries a `release-check` gate refusing a non-empty `[Unreleased]` when a version is named — a fix no gate can see regresses the way this one arrived. D202: F248 gets **both** the gate and the seventeen corrections, `decisions.md`'s twenty-two left as append-only. D203: F249 and F250 go into **M50.8's fourth reopening**, against a recommendation of Phase 4 for both, with the size-target cost on the record — and F249 still owes the meaning of the thumbnail before it can be built |
 | [Two reopenings from M57.9's triage, and what the QR thumbnail means](#2026-08-17--two-reopenings-from-m579s-triage-and-what-the-qr-thumbnail-means) | D204 — the heading thumbnail means *this link has a QR code*, so its picture stays the default's and only its `href` carries the selection. The reading that would make it follow the selection was declined on mechanism: it renders outside `#link-tabs`, which is what let F244(b) close, so redrawing it needs `hx-swap-oob` or a second target — new htmx on the surface M50.8 bounded its scripting to |
 | [M50.8, the offset is forgotten when the request ends, not when it swaps](#2026-08-17--m508-the-offset-is-forgotten-when-the-request-ends-not-when-it-swaps) | D205 — the QR tab's stored scroll offset is forgotten on `htmx:afterRequest` rather than on `htmx:afterSwap`, superseding D196: a swap is observable only when there is one, and the requests that must be forgotten for — a 5xx, a refusal htmx will not swap, an abort, a timeout — produce none. Since the third reopening every row of the codes list issues one. F250's fourth ending, a reader who navigates away mid-request, is **not** claimed: its handler would have to run during document teardown and nothing here demonstrates that it does. Guarded on `HX-Redirect` and `HX-Refresh`, because htmx fires the ending **before** the navigation those headers ask for, and an unguarded listener would drop the offset on the one load that reads it back. Rejected: a listener per failure event, which needs no guard and misses every success htmx declines to swap |
+| [M50.8, the thumbnail was already right, and D204 asked a question it then over-answered](#2026-08-17--m508-the-thumbnail-was-already-right-and-d204-asked-a-question-it-then-over-answered) | D206 — the heading thumbnail stays the default's **and** clicking it opens the tab on the default, which is what the tree already did. F249 closes with no change and D204's second half is withdrawn: the owner was asked what the thumbnail *means* and D204 inferred a *behaviour* from the answer that they had not chosen. What sent it back was the price — the anchor renders outside `#link-tabs` and a selection is a swap of it, so carrying the selection needed exactly the `hx-swap-oob` D204 declined for the reading it rejected |
 
 ---
 
@@ -30493,3 +30494,52 @@ true as the tab's markup moves.
 as many words: the `finally` inside `restore`, the `load` listener and the
 four-second timer all stand, because a page that stays hidden is far worse than a
 page that jumps and none of that reasoning depended on which event forgets.
+
+## 2026-08-17 — M50.8, the thumbnail was already right, and D204 asked a question it then over-answered
+
+**D206 — the QR picture beside a link's name goes on being the default code's,
+and clicking it goes on opening the QR tab **on the default**. That is the
+intended behaviour. [F249](deferred-findings.md#closed) is closed with no change
+and [D204](decisions.md) is superseded in its second half.**
+
+Owner-set 2026-08-17, when the row was put to them as a defect with four ways to
+fix it:
+
+> *"This QR code should always render as the default for the link and clicking
+> it should load the QR tab with the default, which I thought was the existing
+> functionality."*
+
+It is the existing functionality exactly.
+`internal/ui/templates/partials/link_qr.html:88` is `href="/links/{id}?tab=qr"`
+with nothing else on it; `internal/httpx/web_links.go:1008` reads a `code`
+parameter that is not there and draws the default; and `:1262-1269` has always
+drawn the default's picture in that anchor whatever the tab is showing, with a
+comment saying so. Nothing changed and nothing needed to.
+
+**What D204 got right and what it over-reached on.** The question put to the
+owner was *what does the thumbnail mean*, and the answer — *this link has a QR
+code*, not *the code you are looking at* — stands and is what keeps the picture
+on the default. What D204 then drew from it, that the `href` should carry the
+selected code so a click does not discard one, was a second decision the
+question had not asked and the owner had not made. This entry withdraws it.
+
+**The mechanism is what sent it back, and the shape is worth keeping.** D204
+declined the *code you are looking at* reading on the ground that redrawing the
+thumbnail would need `hx-swap-oob` or a second target — new htmx on a surface
+[M50.8](phase-details/m50.8.md) had bounded — and priced its own choice at *one
+attribute*. Building it showed the price was the same on both sides: the anchor
+renders **outside** `#link-tabs`, and since this milestone's third reopening a
+selection is a swap **of** `#link-tabs`, so a server-rendered `href` is written
+once at load and is stale for the only reader the row was about. There was no
+version of *carry the selection* that did not spend the bound D204 had just
+refused to spend. Pricing it is what turned a build into a question, and the
+question's answer was that the destination had never been wrong.
+
+**The general shape, since this is the second time on this surface.** A decision
+that answers *what does this mean* should stop there. The behaviour that follows
+from a meaning is a separate decision, and inferring it inside the first one
+produces work nobody asked for — here, an `hx-swap-oob` in the tree, a redraw of
+identical bytes on every swap, and a spent scripting precedent, all to change
+something correct. The worker that met the mismatch returned the prompt
+unanswered rather than building against the inference, which is the split working
+as intended: the mismatch reached the owner instead of reaching the tree.

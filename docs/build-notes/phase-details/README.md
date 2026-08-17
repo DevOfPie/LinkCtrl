@@ -27,12 +27,14 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Two rows are open, both scheduled by [M57.9](m57.9.md)'s triage of 2026-08-17:**
-[M58](m58.md) is **reopened** — the 0.3.0 release notes would omit everything
-built after 2026-08-10 ([F251](../deferred-findings.md#open), D201) — and
-[M50.8](m50.8.md) is **reopened a fourth time** for
-[F249](../deferred-findings.md#open) and [F250](../deferred-findings.md#closed)
-(D203). **0.3.0 is written and not yet tagged**, and F251 is why the tag waits.
+**One row is open:** [M58](m58.md), **reopened** at
+[M57.9](m57.9.md)'s triage because the 0.3.0 release notes would omit everything
+built after 2026-08-10 ([F251](../deferred-findings.md#open), D201). It is the
+phase's last row. **0.3.0 is written and not yet tagged**, and F251 is why the
+tag waits. [M50.8](m50.8.md)'s **fourth** reopening landed the same day —
+[F250](../deferred-findings.md#closed) fixed, and
+[F249](../deferred-findings.md#closed) closed by the owner as the behaviour that
+was asked for rather than a defect (D206).
 
 **Twenty-three milestones** — twelve integers of work, two adversarial reviews,
 one close, and eight insertions — against the fifteen this phase was planned at.
@@ -69,7 +71,7 @@ target's exceptions are in [W40](../workflow-changes.md#made).)*
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | done |
-| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | in progress (reopened) |
+| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | done |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
