@@ -163,9 +163,17 @@ check-links: ## Verify tracked markdown: every link and anchor resolves, every t
 # for a whole phase, unenforced, and did not work when finally built.
 #
 # The runner ships shellcheck, so this costs an apt-get nothing in CI. Unpinned,
-# unlike golangci-lint: shellcheck's output is stable across minor versions, and
-# its scripts-only surface means a surprise finding is a two-line fix rather than
-# a red build across the repository.
+# unlike golangci-lint — and the reason once given for that, *shellcheck's output
+# is stable across minor versions*, is **false and cost this repository nine days
+# of red CI**. It renamed a diagnostic: an uninvoked function is SC2329 in 0.11
+# and its body is unreachable, SC2317, in the release the runner ships. A
+# suppression written against one version passed here and failed there from
+# 2026-08-09 until M58's close, and nobody looked, because no gate in
+# docs/build-notes/workflow.md asks whether CI is green. What survives of the old
+# argument is the second half: the surface is scripts only, so the fix is a
+# two-line edit rather than a red build across the repository — which is why this
+# stays unpinned rather than becoming a third pinned tool. Both codes are named
+# at every suppression site. See F255.
 .PHONY: shellcheck
 shellcheck: ## Lint every shell script
 	shellcheck scripts/*.sh

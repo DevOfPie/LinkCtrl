@@ -63,7 +63,7 @@ PASSWORD="a-long-passphrase-for-the-check"
 fail() { echo "single-instance: $*" >&2; exit 1; }
 step() { echo; echo "-- $*"; }
 
-# shellcheck disable=SC2329  # invoked by the trap below, not by name
+# shellcheck disable=SC2329,SC2317  # invoked by the trap below, not by name (both codes: see rolling-deploy.sh)
 cleanup() {
   docker logs "$APP" > "${TMPDIR:-/tmp}/${APP}.log" 2>&1 || true
   docker rm -f "$APP" "$PG" >/dev/null 2>&1 || true

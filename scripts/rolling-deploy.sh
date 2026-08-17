@@ -99,7 +99,14 @@ curl_() { docker run --rm --network "$NETWORK" curlimages/curl:latest "$@"; }
 # A run interrupted halfway leaves a detached generator pushing 2,000 rps at an
 # instance nobody is watching, and a psql session looping over pg_locks. Both are
 # taken down here rather than left to be noticed.
-# shellcheck disable=SC2329  # invoked by the trap below, not by name
+# shellcheck disable=SC2329,SC2317  # invoked by the trap below, not by name
+#
+# **Two codes for one fact, because the runner's shellcheck is not this
+# machine's.** 0.11 calls an uninvoked function SC2329; older releases call its
+# body unreachable, SC2317, and the disable that named only the first was silent
+# here and red in CI from 2026-08-09 until M58's close. The Makefile's reason for
+# leaving shellcheck unpinned — *output is stable across minor versions* — is
+# what this falsifies, and the comment there now says so.
 cleanup() {
   [ -n "${K6_CONTAINER:-}" ] && docker rm -f "$K6_CONTAINER" >/dev/null 2>&1
   [ -n "${POLL_PID:-}" ] && kill "$POLL_PID" >/dev/null 2>&1
