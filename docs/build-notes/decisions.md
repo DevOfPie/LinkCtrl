@@ -367,6 +367,7 @@ file. Append a row when you append an entry.
 | [M50.8, selecting a code is the tab strip's own swap](#2026-08-17--m508-selecting-a-code-is-the-tab-strips-own-swap) | D199 — a row in the codes list **swaps `#link-tabs` on the page the reader is already on**, with the tab strip's own four attributes and `&code=` on the request, and its `href` is that same URL. No load, so there is nothing to remember and nothing to restore — the position is never disturbed rather than preserved — and the heading thumbnail stays because it renders outside the swapped element, which closes F244(b) as a consequence of F246(d)'s fix. `web_links.go:970` reads `?code=` now, keeping linkQR's existing fallback for a slug the link does not have; `qrReturn` carries the code on the link-page branch as well as the panel one, and the refusal path re-derives it from the posted field the way it already re-derives the tab. Rejected: swapping `#qr` from the panel route, which is the cheaper request but pushes the panel URL onto the link page or else gives one control two addresses; keeping the href on the panel route under the swap, which leaves the script-blocked reader on the defect D178 exists for; and a script of this list's own, which m50.8.md bounds out |
 | [M57.9's reopened run: what it checked, what it found, what it refuted, and one amendment](#2026-08-17--m579s-reopened-run-what-it-checked-what-it-found-what-it-refuted-and-one-amendment) | The by-use record for the additive range: the SLO re-measured on the final build at 240,001 cached redirects 100% under 0.5 ms, the single-instance guarantee re-confirmed, `verify-scan` at 9256 of 9256 exact, `verify-ui` green at 17, and M50.8's third reopening driven under the 80 ms profile that broke the two before it — zero painted frames at an offset the reader did not stand at. F251, F248 counted from three to 39, three candidates refuted, and D200: the doc-cost growth is **split by realized read ratio** — 2,515 bytes of history trimmed out of the files whose ratio fell, and phase-loop.md's growth defended because its ratio rose |
 | [M57.9's triage: three rows scheduled, and the one the owner took further than was recommended](#2026-08-17--m579s-triage-three-rows-scheduled-and-the-one-the-owner-took-further-than-was-recommended) | D201: F251 **reopens M58** rather than being fixed inside the review, and carries a `release-check` gate refusing a non-empty `[Unreleased]` when a version is named — a fix no gate can see regresses the way this one arrived. D202: F248 gets **both** the gate and the seventeen corrections, `decisions.md`'s twenty-two left as append-only. D203: F249 and F250 go into **M50.8's fourth reopening**, against a recommendation of Phase 4 for both, with the size-target cost on the record — and F249 still owes the meaning of the thumbnail before it can be built |
+| [Two reopenings from M57.9's triage, and what the QR thumbnail means](#2026-08-17--two-reopenings-from-m579s-triage-and-what-the-qr-thumbnail-means) | D204 — the heading thumbnail means *this link has a QR code*, so its picture stays the default's and only its `href` carries the selection. The reading that would make it follow the selection was declined on mechanism: it renders outside `#link-tabs`, which is what let F244(b) close, so redrawing it needs `hx-swap-oob` or a second target — new htmx on the surface M50.8 bounded its scripting to |
 
 ---
 
@@ -30384,3 +30385,37 @@ it stops dropping one — or *the code you are looking at* — in which case it
 should also be redrawn on a swap, which it currently cannot be, sitting outside
 `#link-tabs` — is not a defect to fix but a meaning to choose. It is put to the
 owner at the reopening rather than assumed here.
+
+## 2026-08-17 — Two reopenings from M57.9's triage, and what the QR thumbnail means
+
+[M58](phase-details/m58.md) and [M50.8](phase-details/m50.8.md) both go back to
+`in progress (reopened)`, for the reasons D201 and D203 record. Their status
+rows and their milestone files carry the work; this entry carries the one answer
+that had to be given before either could be built.
+
+**D204 — the QR thumbnail means *this link has a QR code*, so it carries the
+selection rather than following it.** Owner-set, from three readings offered.
+
+The picture beside the link's name goes on being the **default** code's, always,
+which `internal/httpx/web_links.go:1262-1269` already does deliberately — it
+stands for *this link has a code*, not for whichever one the tab is showing, and
+its comment says so. What changes is only the `href` and the `hx-get` beside it
+(`internal/ui/templates/partials/link_qr.html:87-89`): they carry whichever code
+is selected, so a reader who follows the thumbnail keeps their selection instead
+of being returned to the default without being told. That is
+[F249](deferred-findings.md#open), and it is one attribute.
+
+**The cost is that the thumbnail and the tab show different codes** whenever a
+non-default one is selected, and it was put that way rather than discovered: it
+is precisely what the second reading — *the code you are looking at* — calls the
+defect. That reading was declined on mechanism, not on taste. The thumbnail
+renders **outside** `#link-tabs`, which is what made
+[F244](deferred-findings.md#open)(b) close at all: the swap cannot touch it, and
+therefore cannot redraw it. Following the selection would need `hx-swap-oob` or
+a second target, which is new htmx mechanism on the surface
+[M50.8](phase-details/m50.8.md) bounded its scripting to when it wrote this
+product's first hand-written script — and D191 says that bound outlives the
+feature.
+
+The third reading, leaving the `href` bare and explaining it in the label, was
+declined because the silence is the finding: a label does not stop the click.

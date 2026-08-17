@@ -69,7 +69,7 @@ target's exceptions are in [W40](../workflow-changes.md#made).)*
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | done |
-| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | done |
+| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | in progress (reopened) |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
@@ -80,7 +80,7 @@ target's exceptions are in [W40](../workflow-changes.md#made).)*
 | [M57](m57.md) | High availability: measured, and still one container | M56 | done |
 | [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | done |
 | [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M46.6 · M47.5 · M57.5 | done *(reopened run, 2026-08-17)* |
-| [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
+| [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | in progress (reopened) |
 
 Work areas, so a blocked milestone has an independent row to fall back to per
 [W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50.8, **A** is
