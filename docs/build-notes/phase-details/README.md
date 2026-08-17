@@ -31,7 +31,7 @@ milestone, is in [workflow.md](../workflow.md).
 [M58](m58.md) is **reopened** — the 0.3.0 release notes would omit everything
 built after 2026-08-10 ([F251](../deferred-findings.md#open), D201) — and
 [M50.8](m50.8.md) is **reopened a fourth time** for
-[F249](../deferred-findings.md#open) and [F250](../deferred-findings.md#open)
+[F249](../deferred-findings.md#open) and [F250](../deferred-findings.md#closed)
 (D203). **0.3.0 is written and not yet tagged**, and F251 is why the tag waits.
 
 **Twenty-three milestones** — twelve integers of work, two adversarial reviews,

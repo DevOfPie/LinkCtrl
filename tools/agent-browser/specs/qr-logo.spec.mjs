@@ -181,6 +181,17 @@ test('choosing a file uploads it, and a refusal comes back through the swap', as
   // click on an element that already holds keyboard focus leaves the flag as
   // the keyboard set it — measured here, not assumed. The keyboard half below
   // therefore runs second, after a navigation has cleared the page.
+  // **Small enough that the page scrolls**, because the accepted upload below is
+  // also the one write in this product that comes back through `HX-Redirect` —
+  // the response that is *not* the end of the journey. Since M50.8's fourth
+  // reopening `qr-size.js` forgets the stored position when a request ends
+  // rather than when it swaps (F250, D205), and htmx fires that ending before it
+  // performs the redirect it was just handed. A listener without the guard would
+  // throw the offset away on precisely the load that exists to read it back, and
+  // nothing else in the kept suite drives an accepted htmx write.
+  // The page fixture is this case's own, so the viewport is not put back.
+  await page.setViewportSize({ width: 1000, height: 400 });
+
   const [chooser] = await Promise.all([
     page.waitForEvent('filechooser'),
     input.click(),
@@ -191,12 +202,56 @@ test('choosing a file uploads it, and a refusal comes back through the swap', as
       'busy state does not survive the second the dialog takes to open — which is what it is for',
   ).toBe(true);
 
+  // Where the reader is standing as the upload goes out — after the click, since
+  // reaching the control is what scrolled the page there, and that is the offset
+  // `htmx:beforeRequest` stores.
+  const standing = await page.evaluate(() => Math.round(window.scrollY));
+
   await chooser.setFiles({ name: 'logo.png', mimeType: 'image/png', buffer: logoPNG });
 
   // No submit was pressed and no navigation was asked for: htmx's `change`
   // binding is the only thing that can post this, and `HX-Redirect` is the
   // only thing that can move the page.
   await page.waitForURL('**qr=logo**', { timeout: 15000 });
+  await page.waitForLoadState('load');
+
+  // **What a build with no restore would land on, measured rather than assumed.**
+  // The alternative this case must be distinguishable from is not the top of the
+  // page: with the offset dropped, `pending` is null, `dropFragment()`
+  // (`qr-size.js:247-262`) never runs, and the browser performs the `#qr` scroll
+  // the redirect carries — so the two endings with nothing restored are the card
+  // and 0. Both are read off the page that actually loaded, because the card's
+  // offset moves with anything rendered above it — F247's notice is exactly that
+  // — and a prose bound written for this page has already moved three times in
+  // this milestone.
+  const card = await page.evaluate(() => {
+    const qr = document.getElementById('qr');
+    return qr === null ? -1 : Math.round(qr.getBoundingClientRect().top + window.scrollY);
+  });
+  expect(
+    card,
+    'the loaded page carries no `#qr`, so the fragment landing cannot be measured ' +
+      'and the assertion below has nothing to be distinguishable from',
+  ).toBeGreaterThan(-1);
+  expect(
+    Math.min(Math.abs(standing - card), standing),
+    `the reader stood at ${standing} and the card sits at ${card}; a load that ` +
+      'restored nothing lands on one of those two. The tolerance below is 20, so ' +
+      'they have to be more than twice that apart or a fragment scroll and a ' +
+      'restore are the same number',
+  ).toBeGreaterThan(60);
+
+  // Exactly, within a rounding: `restore()` scrolls to the stored number rather
+  // than to an element. Measured against a build whose listener forgot on every
+  // ending — the reader stood at 514 and came back to 409, the card's own top.
+  const landed = await page.evaluate(() => Math.round(window.scrollY));
+  expect(
+    Math.abs(landed - standing),
+    `the reader stood at ${standing}, the card sits at ${card} and the accepted ` +
+      `upload put them at ${landed}. The position is stored on the request and read ` +
+      'back on the load the redirect produces, so this fails when the ending of that ' +
+      'request is treated as the end of the journey (F250)',
+  ).toBeLessThan(20);
   await expect(
     page.locator('main', { hasText: 'Logo stored' }),
     'the upload applied but the page does not say the logo was stored',

@@ -48,6 +48,11 @@ import { fileURLToPath } from 'node:url';
 //                            applied to some unrelated later load. Storage
 //                            outliving a navigation is invisible to every other
 //                            kind of test there is.
+//   nor after a click that   added at the fourth reopening (F250). Every row of
+//   went nowhere             the codes list stores an offset now, and a request
+//                            that is refused produces no swap to clear it on.
+//                            The refusal is driven from the spec, because
+//                            waiting for a real 5xx is waiting for nothing.
 //
 // **Each case asserts its own precondition**, which m50.8.md's risk section
 // asks for in as many words: a spec that silently stopped exercising the thing
@@ -628,11 +633,15 @@ test('a refused upload leaves no position behind for a later load', async () => 
   const was = page.viewportSize();
   await page.setViewportSize({ width: 1000, height: 400 });
 
-  // The logo upload is the one write on this tab that posts over htmx, so it is
-  // the one that can store a position and then never produce the load that
-  // reads it back: a refusal answers 200 and swaps `#qr` in place. Without the
-  // swap listener the offset survives in `sessionStorage`, keyed to this
-  // pathname, until *some* later load of it — which is this case.
+  // The logo upload is the one *write* on this tab that posts over htmx, so it
+  // is the one that can store a position and then never produce the load that
+  // reads it back: a refusal answers 200 and swaps `#qr` in place. Without a
+  // listener that forgets, the offset survives in `sessionStorage`, keyed to
+  // this pathname, until *some* later load of it — which is this case.
+  //
+  // **This one ends in a swap, and the case below it does not.** That is the
+  // difference F250 turned on: forgetting used to depend on the swap arriving,
+  // which is exactly what a refused request does not produce.
   const logo = page.locator('#qr_logo');
   await expect(
     logo,
@@ -677,6 +686,172 @@ test('a refused upload leaves no position behind for a later load', async () => 
       `stood at ${before} during an upload that was refused. The position outlived ` +
       'the load it was stored for',
   ).toBeLessThan(100);
+
+  await page.setViewportSize(was);
+});
+
+// F250, M50.8's fourth reopening: the same defect as the case above with the
+// swap taken away, which is what made it a row of its own.
+//
+// **A selection stores a position and produces no load.** Every row of the codes
+// list has been an htmx request from inside `#qr` since the third reopening, so
+// `remember()` fires on each of them; the swap that came back is what used to
+// clear it. A request that never swaps — a 5xx, an abort, a timeout — left the
+// offset in storage keyed to this pathname, and the *next* load of the page then
+// took D196's paint hold and settled where the reader stood during a click they
+// have forgotten. So the failure is driven here rather than waited for: the
+// selection's own request is answered 500 from the spec.
+//
+// F250 names a fourth ending, a reader who navigates away mid-request, and
+// **neither this case nor D205 claims it**: its handler would have to run while
+// the document is torn down, which is the browser's to decide. Driving it here
+// would assert a browser behaviour rather than this file's.
+//
+// **Three assertions and each fails on its own.** The offset is asserted
+// *present* while the request is in flight — without that this case passes on a
+// page that never stored anything, which is F237's shape and this tab's
+// recurring failure. It is asserted gone once the request has ended, which is
+// the fix. And the later load is asserted neither held nor moved, which is what
+// the reader would have met.
+test('a selection whose request fails leaves no position behind', async () => {
+  const linkPage = await openMultiCodeQRTab(page);
+
+  const was = page.viewportSize();
+  await page.setViewportSize({ width: 1000, height: 400 });
+
+  const rows = page.locator('main ul li:has(button[popovertarget^="qr-download-"])');
+  const count = await rows.count();
+  expect(count, 'the codes list is not a list, so nothing can be selected').toBeGreaterThan(1);
+
+  // A row the tab is not already drawing, so the click is a real selection.
+  let target = -1;
+  for (let i = 0; i < count; i += 1) {
+    if ((await rows.nth(i).locator('button[aria-pressed="true"]').count()) === 0) {
+      target = i;
+      break;
+    }
+  }
+  expect(
+    target,
+    'every row holds the default flag, so the row this case needs is not ' +
+      'identifiable and it would be selecting the code already on screen',
+  ).toBeGreaterThan(-1);
+
+  const link = rows.nth(target).locator(codeRowLink).first();
+  const href = await link.getAttribute('href');
+  const wanted = new URL(href, page.url());
+  expect(
+    wanted.searchParams.get('code'),
+    `the row links to ${href}, which names no code — so the request refused below ` +
+      'would not be a selection',
+  ).toBeTruthy();
+
+  // The reader's position, and the row put where a click will not scroll the
+  // page first: an offset the driver produced is not one the reader stood at.
+  await link.evaluate((el) => {
+    window.scrollTo(0, Math.round(el.getBoundingClientRect().top + window.scrollY - 200));
+  });
+  await expect(
+    link,
+    'the row is outside the viewport, so clicking it would scroll the page and ' +
+      'the position stored would be the driver\'s',
+  ).toBeInViewport();
+
+  // The refusal, held open until the offset has been read out of storage.
+  // `route.fulfill` cannot be awaited from inside the click, so the handler
+  // signals that the request arrived and then waits for this case to release it.
+  let arrived;
+  const reached = new Promise((resolve) => {
+    arrived = resolve;
+  });
+  let release;
+  const released = new Promise((resolve) => {
+    release = resolve;
+  });
+  const selection = (url) =>
+    url.pathname === wanted.pathname &&
+    url.searchParams.get('code') === wanted.searchParams.get('code');
+  await page.route(selection, async (route) => {
+    arrived();
+    await released;
+    await route.fulfill({ status: 500, contentType: 'text/plain', body: 'refused by the spec' });
+  });
+
+  const urlBefore = page.url();
+  const stored = () =>
+    page.evaluate(() => window.sessionStorage.getItem('linkctrl:qr-scroll'));
+  try {
+    await link.click();
+    await reached;
+
+    const during = JSON.parse(await stored());
+    expect(
+      during,
+      'nothing was in storage while the selection was in flight, so this case is ' +
+        'not exercising a stored offset at all and every assertion below passes ' +
+        'on a mechanism that never ran',
+    ).not.toBeNull();
+    expect(
+      during.y,
+      `the offset stored was ${during && during.y}; at the top of the page it is ` +
+        'indistinguishable from a fresh load and the last assertion here proves nothing',
+    ).toBeGreaterThan(100);
+
+    release();
+    await expect
+      .poll(stored, {
+        message:
+          'the selection was refused and the offset it stored is still there. ' +
+          'Forgetting depended on a swap arriving, and a 5xx produces none (F250)',
+        timeout: 10000,
+      })
+      .toBeNull();
+  } finally {
+    release();
+    await page.unroute(selection);
+  }
+
+  expect(
+    page.url(),
+    'the refused selection swapped and pushed its URL anyway, so the request this ' +
+      'case is about succeeded and the shape it needs was never produced',
+  ).toBe(urlBefore);
+
+  // What the reader would have met on their next visit. `qr-restoring` is the
+  // class D196 puts on `<html>` at head time whenever an offset is held for this
+  // path, and it is off again by `DOMContentLoaded` — so it is watched from
+  // before the page's own scripts rather than looked for afterwards. Observed on
+  // `document`, which exists at that point where `document.documentElement` may
+  // not.
+  const heldProbe = await page.addInitScript(() => {
+    window.__qrHeld = false;
+    new MutationObserver(() => {
+      if (
+        document.documentElement &&
+        document.documentElement.classList.contains('qr-restoring')
+      ) {
+        window.__qrHeld = true;
+      }
+    }).observe(document, { attributes: true, subtree: true, attributeFilter: ['class'] });
+  });
+  try {
+    // The same pathname, which is what the offset is keyed to; the cache-buster
+    // forces a navigation rather than a reload the browser might restore scroll for.
+    await page.goto(`${linkPage}?tab=qr&cb=${Date.now()}`);
+    expect(
+      await page.evaluate(() => window.__qrHeld),
+      'the next load of this page was held unpainted on the strength of an offset ' +
+        'stored for a selection that never landed — undefined here means the probe ' +
+        'itself did not run and the assertion is empty',
+    ).toBe(false);
+    expect(
+      await page.evaluate(() => Math.round(window.scrollY)),
+      'an unrelated later load of this page landed where the reader stood during a ' +
+        'selection that was refused',
+    ).toBeLessThan(100);
+  } finally {
+    await heldProbe.dispose();
+  }
 
   await page.setViewportSize(was);
 });

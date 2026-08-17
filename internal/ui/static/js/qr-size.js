@@ -115,6 +115,12 @@
 	// logo upload, which posts on `change` and never fires a submit event at all.
 	// Capture on the submit listener, because a handler that cancelled the event
 	// on the way up would otherwise decide whether the position is stored.
+	//
+	// **The htmx half stopped being only writes at the third reopening**: a code
+	// selection is an `hx-get` from a row inside `#qr`, so it stores a position
+	// too. Harmless in itself — a swap disturbs no scroll and the offset is
+	// forgotten below — and it is why forgetting had to stop depending on a swap
+	// arriving (F250).
 	document.addEventListener("submit", function (event) {
 		var form = event.target;
 		if (form && form.closest && form.closest("#qr")) {
@@ -137,15 +143,28 @@
 	// document load reads this back, so an offset stored for a request that never
 	// produces one would sit in storage keyed to this pathname until *some* later
 	// load of it — plausibly the reader's own reload half an hour on, which would
-	// then jump to where they stood during an upload they have forgotten about.
+	// then jump to where they stood during a request they have forgotten about.
 	//
-	// A swap is exactly that proof. htmx answers a successful write here with
-	// `HX-Redirect`, which navigates and swaps nothing; a **refused** logo upload
-	// answers 200 and swaps `#qr` in place, and after that swap the reader is
-	// already where they were, with no load left to restore them. So any swap
-	// that happens while an offset is stored says the offset is stale, and the
-	// listener is on the swap rather than on the response header because the swap
-	// is the observable fact and does not depend on which htmx event runs first.
+	// **The end of the request is the proof, not the swap** (M50.8's fourth
+	// reopening, F250, D205). This listened on `htmx:afterSwap`, on the argument
+	// that a swap is the observable fact and does not depend on which htmx event
+	// runs first. That argument is sound and answers the wrong question: a swap is
+	// observable *when there is one*, and the requests this file has to forget for
+	// are precisely the ones that produce none — a 5xx, a refusal htmx will not
+	// swap, an abort, a timeout. Since the third reopening every row of the codes
+	// list issues one of these requests, so the case went from a rare failed
+	// upload to a click on this tab's most-used control. `htmx:afterRequest` fires
+	// on every one of those endings, which is the fact that actually matches the
+	// question.
+	//
+	// **One response is not an ending, and that is the whole of the guard.** htmx
+	// answers a successful write here with `HX-Redirect`, and it fires
+	// `afterRequest` *before* the navigation it just asked for — so an unguarded
+	// listener would throw away the offset on exactly the load that exists to read
+	// it back, which is every accepted logo upload. `HX-Refresh` is the same
+	// promise by another name. `HX-Location` is deliberately not in the list: htmx
+	// performs that one itself, over ajax, and no document load follows to restore
+	// anything.
 	function forget() {
 		try {
 			window.sessionStorage.removeItem(key);
@@ -154,7 +173,20 @@
 		}
 	}
 
-	document.addEventListener("htmx:afterSwap", forget);
+	// Whether the response promises the document load that reads the offset back.
+	function loadIsComing(xhr) {
+		if (!xhr || !xhr.getResponseHeader) {
+			return false;
+		}
+		return !!(xhr.getResponseHeader("HX-Redirect") || xhr.getResponseHeader("HX-Refresh"));
+	}
+
+	document.addEventListener("htmx:afterRequest", function (event) {
+		var detail = event.detail || {};
+		if (!loadIsComing(detail.xhr)) {
+			forget();
+		}
+	});
 
 	// Taken out of storage once, on the way in, and cleared whether or not it is
 	// ever applied: an offset that survived would put a later, unrelated load

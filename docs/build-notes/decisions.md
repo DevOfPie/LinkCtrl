@@ -368,6 +368,7 @@ file. Append a row when you append an entry.
 | [M57.9's reopened run: what it checked, what it found, what it refuted, and one amendment](#2026-08-17--m579s-reopened-run-what-it-checked-what-it-found-what-it-refuted-and-one-amendment) | The by-use record for the additive range: the SLO re-measured on the final build at 240,001 cached redirects 100% under 0.5 ms, the single-instance guarantee re-confirmed, `verify-scan` at 9256 of 9256 exact, `verify-ui` green at 17, and M50.8's third reopening driven under the 80 ms profile that broke the two before it — zero painted frames at an offset the reader did not stand at. F251, F248 counted from three to 39, three candidates refuted, and D200: the doc-cost growth is **split by realized read ratio** — 2,515 bytes of history trimmed out of the files whose ratio fell, and phase-loop.md's growth defended because its ratio rose |
 | [M57.9's triage: three rows scheduled, and the one the owner took further than was recommended](#2026-08-17--m579s-triage-three-rows-scheduled-and-the-one-the-owner-took-further-than-was-recommended) | D201: F251 **reopens M58** rather than being fixed inside the review, and carries a `release-check` gate refusing a non-empty `[Unreleased]` when a version is named — a fix no gate can see regresses the way this one arrived. D202: F248 gets **both** the gate and the seventeen corrections, `decisions.md`'s twenty-two left as append-only. D203: F249 and F250 go into **M50.8's fourth reopening**, against a recommendation of Phase 4 for both, with the size-target cost on the record — and F249 still owes the meaning of the thumbnail before it can be built |
 | [Two reopenings from M57.9's triage, and what the QR thumbnail means](#2026-08-17--two-reopenings-from-m579s-triage-and-what-the-qr-thumbnail-means) | D204 — the heading thumbnail means *this link has a QR code*, so its picture stays the default's and only its `href` carries the selection. The reading that would make it follow the selection was declined on mechanism: it renders outside `#link-tabs`, which is what let F244(b) close, so redrawing it needs `hx-swap-oob` or a second target — new htmx on the surface M50.8 bounded its scripting to |
+| [M50.8, the offset is forgotten when the request ends, not when it swaps](#2026-08-17--m508-the-offset-is-forgotten-when-the-request-ends-not-when-it-swaps) | D205 — the QR tab's stored scroll offset is forgotten on `htmx:afterRequest` rather than on `htmx:afterSwap`, superseding D196: a swap is observable only when there is one, and the requests that must be forgotten for — a 5xx, a refusal htmx will not swap, an abort, a timeout — produce none. Since the third reopening every row of the codes list issues one. F250's fourth ending, a reader who navigates away mid-request, is **not** claimed: its handler would have to run during document teardown and nothing here demonstrates that it does. Guarded on `HX-Redirect` and `HX-Refresh`, because htmx fires the ending **before** the navigation those headers ask for, and an unguarded listener would drop the offset on the one load that reads it back. Rejected: a listener per failure event, which needs no guard and misses every success htmx declines to swap |
 
 ---
 
@@ -30419,3 +30420,76 @@ feature.
 
 The third reading, leaving the `href` bare and explaining it in the label, was
 declined because the silence is the finding: a label does not stop the click.
+
+## 2026-08-17 — M50.8, the offset is forgotten when the request ends, not when it swaps
+
+The QR tab's **fourth** reopening, two rows, and only one of them was built —
+[F249](deferred-findings.md#open) raised a decision the milestone did not
+anticipate and is returned unanswered. This entry is
+[F250](deferred-findings.md#closed).
+
+**D205 — `qr-size.js` forgets a stored scroll offset on `htmx:afterRequest`,
+which supersedes [D196](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops)'s
+choice of `htmx:afterSwap`.**
+
+D196 wrote the listener onto the swap and said why: *"the swap is the observable
+fact and does not depend on which htmx event runs first."* Both halves of that
+are true and neither answers the question. A swap is observable **when there is
+one**, and the requests this file has to forget for are exactly the ones that
+produce none: a 5xx, a response htmx refuses to swap, an abort, a timeout. The
+argument silently assumed every request ends in a swap,
+and it read as safe for as long as the only htmx request on this tab was a logo
+upload — rare, and refused rarely. The third reopening made every row of the
+codes list an htmx request from inside `#qr`, so `remember()` now fires on this
+tab's most-used control and the assumption started costing something. Frequency
+is what changed; the reasoning was never right.
+
+**One ending [F250](deferred-findings.md#closed) names is deliberately not
+claimed**: a reader who navigates away mid-request. That is the one whose
+handler would have to run while the document is being torn down — the XHR is
+aborted by the navigation, and whether `onabort` dispatches before the JS
+context is discarded is the browser's to decide, not this file's. Nothing here
+demonstrates it and no case in the kept suite drives it, so it is named as the
+finding's and left out of the fix's coverage. What is left uncovered is the
+narrow residue of the row rather than the row: that reader returning to the same
+pathname in the same tab, on a browser that discarded the context before
+`onabort` ran.
+
+**What replaces it is not "the other event", it is a rule.** The offset exists to
+be read by a document load, so it is forgotten when the request ends **unless the
+response promises that load**. `htmx:afterRequest` is what fires on every ending
+— htmx triggers it from `onload`, `onerror`, `onabort` and `ontimeout` alike —
+and the guard is two response headers: `HX-Redirect`, which is how every accepted
+write on this tab comes back, and `HX-Refresh`, which is the same promise by
+another name. `HX-Location` is deliberately **not** in the guard: htmx performs
+that navigation itself over ajax and no document load follows, so an offset kept
+for one would be exactly the stale offset this fixes.
+
+**The guard is not tidiness and the ordering is why.** htmx sets
+`location.href` from the `HX-Redirect` header and then fires `htmx:afterRequest`
+in the same task, before the navigation it just asked for — read out of the
+vendored source (`static/js/htmx.min.js`, `g.onload`: `M(r,T)` handles the
+header, `ae(r,"htmx:afterRequest",T)` follows it). An unguarded listener would
+therefore throw the offset away on precisely the load that exists to consume it,
+which is every accepted logo upload, and it would do so silently — nothing in the
+kept suite asserted the position after an accepted htmx write until this
+milestone added it to `qr-logo.spec.mjs`. That assertion is the guard's
+enforcement and it is where a later author will meet the constraint.
+
+**Rejected: a listener per failure** — `htmx:responseError`, `htmx:sendError`,
+`htmx:sendAbort` and `htmx:timeout`, keeping `afterSwap` for the success path.
+It needs no header guard, which is its whole appeal, and it costs four more
+listeners and a gap: a 204, or any success htmx declines to swap, still leaves
+the offset behind. One listener with a stated rule is the smaller thing to
+maintain and the easier thing to be right about.
+
+**Rejected: forgetting only for requests from inside `#qr`.** The listener is
+global, as the swap listener was. Narrowing it would look tighter and buy
+nothing — nothing outside this tab ever stores an offset, so there is nothing
+for a wider listener to throw away — while adding a `closest()` that has to stay
+true as the tab's markup moves.
+
+**The three reveals D196 argues are untouched**, which the milestone required in
+as many words: the `finally` inside `restore`, the `load` listener and the
+four-second timer all stand, because a page that stays hidden is far worse than a
+page that jumps and none of that reasoning depended on which event forgets.
