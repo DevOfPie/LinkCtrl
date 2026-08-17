@@ -365,6 +365,8 @@ file. Append a row when you append an entry.
 | [Three shipped entries the fourth report's removals falsified](#2026-08-14--three-shipped-entries-the-fourth-reports-removals-falsified) | Corrections **by a later entry**, this file being append-only. M50.7's defence of its meta-line cut, M50.7's claim that the logo paragraph still names level H, and D186's citation of that same paragraph were all falsified by F244(c), (d) and (f). A fourth: **`logo_applied` is a symbol that has never existed** — the marker is `"logo"` — and it survived review in a landed entry because the sentence around it was right. D186 stands and is discharged by the **upload notice** at `internal/httpx/web_qr.go:650-663` rather than by prose on the tab. The rule the run earned: **entries about this surface cite the mechanism, not the sentence** — a claim that *the tab still says X* has a lifetime, and this tab has been reported four times in three days |
 | [M50.8, the paint is held, the logo submits to a form it is not in, and the slider draws its own stops](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops) | D196 — the QR tab's save is put back **before the first paint**, which cannot mean restoring earlier: a script in `<head>` runs before the document has any height and `scrollTo` against it clamps to 0. So the paint is *withheld* — `qr-size.js` is parser-blocking now, marks `<html>` when it holds an offset for this path, and app.css keeps `body` unpainted until the scroll lands at `DOMContentLoaded`. Only on the load after a write; three independent reveals, because a page that stays hidden is worse than a page that jumps. Rejected: a head-time restore (cannot work, not merely costly) and a server-rendered offset (same timing, and the position leaves the browser). D197 — the logo's controls move **into the style form's grid** by `form="…"`, which reverses one reopening's *"it does not move into the style form"*: the nesting ban is on the `<form>` element, not on a control that names one. The `change` trigger moves onto the input with it — `change` bubbles up the DOM, not to the form a control names — and htmx serializes the form the control **owns** rather than the one it sits in, which was measured and which deleted an `hx-params` filter the build had written on the opposite belief. D198 — the size slider's detents are **SVG geometry the template renders**, because `style-src 'self'` refuses the style attribute a custom property would ride on and `appearance: auto` would trade the theme for the marks. One `<line>` per stop, positioned `(stop − min) / (max − min)`, inset by half a thumb |
 | [M50.8, selecting a code is the tab strip's own swap](#2026-08-17--m508-selecting-a-code-is-the-tab-strips-own-swap) | D199 — a row in the codes list **swaps `#link-tabs` on the page the reader is already on**, with the tab strip's own four attributes and `&code=` on the request, and its `href` is that same URL. No load, so there is nothing to remember and nothing to restore — the position is never disturbed rather than preserved — and the heading thumbnail stays because it renders outside the swapped element, which closes F244(b) as a consequence of F246(d)'s fix. `web_links.go:970` reads `?code=` now, keeping linkQR's existing fallback for a slug the link does not have; `qrReturn` carries the code on the link-page branch as well as the panel one, and the refusal path re-derives it from the posted field the way it already re-derives the tab. Rejected: swapping `#qr` from the panel route, which is the cheaper request but pushes the panel URL onto the link page or else gives one control two addresses; keeping the href on the panel route under the swap, which leaves the script-blocked reader on the defect D178 exists for; and a script of this list's own, which m50.8.md bounds out |
+| [M57.9's reopened run: what it checked, what it found, what it refuted, and one amendment](#2026-08-17--m579s-reopened-run-what-it-checked-what-it-found-what-it-refuted-and-one-amendment) | The by-use record for the additive range: the SLO re-measured on the final build at 240,001 cached redirects 100% under 0.5 ms, the single-instance guarantee re-confirmed, `verify-scan` at 9256 of 9256 exact, `verify-ui` green at 17, and M50.8's third reopening driven under the 80 ms profile that broke the two before it — zero painted frames at an offset the reader did not stand at. F251, F248 counted from three to 39, three candidates refuted, and D200: the doc-cost growth is **split by realized read ratio** — 2,515 bytes of history trimmed out of the files whose ratio fell, and phase-loop.md's growth defended because its ratio rose |
+| [M57.9's triage: three rows scheduled, and the one the owner took further than was recommended](#2026-08-17--m579s-triage-three-rows-scheduled-and-the-one-the-owner-took-further-than-was-recommended) | D201: F251 **reopens M58** rather than being fixed inside the review, and carries a `release-check` gate refusing a non-empty `[Unreleased]` when a version is named — a fix no gate can see regresses the way this one arrived. D202: F248 gets **both** the gate and the seventeen corrections, `decisions.md`'s twenty-two left as append-only. D203: F249 and F250 go into **M50.8's fourth reopening**, against a recommendation of Phase 4 for both, with the size-target cost on the record — and F249 still owes the meaning of the thumbnail before it can be built |
 
 ---
 
@@ -30186,3 +30188,199 @@ while a record elsewhere quietly stopped being: D195's own cost sentence went th
 same way one reopening ago, which is why the rule is to sweep per *reversed
 argument* rather than per changed symbol. The argument reversed here is
 *the route is how a code gets selected*.
+
+## 2026-08-17 — M57.9's reopened run: what it checked, what it found, what it refuted, and one amendment
+
+The pre-release review, re-run because its range grew after it first ran. The
+original run of 2026-08-09 stands — F181–F184, all closed by M58 — and this
+section is additive, covering `6743fbd~1..HEAD`: 55 commits, 2026-08-10 to
+2026-08-17, about 17,800 inserted lines outside `docs/`. That is M52's
+reopening, M57.5, M46.5, M46.6 and its two reopenings, M47's, M47.5's, M48's,
+M49's three, M50's, M50.5's, M50.6's two, M50.7, M50.8 and its **three**, and
+M37's map fix, which is outside the numeric range and owed deliberately.
+
+**Two of the range's own claims were re-verified by measurement rather than by
+reading**, because both had been made false once already by a check that could
+not fail on the profile the reader is actually on.
+
+| Checked | On the final build |
+| --- | --- |
+| The redirect SLO | `make seed-slo` then `make load`: **240,001 cached redirects, 100% under 0.5 ms** against a 20 ms target. `make load-uncached` drove 24,572 database reads, also 100% under 20 ms. `internal/redirect/snapshot.go` moved at `2d4f424` and `make load` was skipped there on the owner's decision that the resolve query is byte-identical; this is that measurement taken on the build the tag will ship |
+| The single-instance conformance guarantee | `scripts/single-instance-check.sh linkctrl:test` passes: redirect, invalidation, dashboard, jobs, rate limiting and a boot against a Redis URL that resolves to nothing. The nil-Redis guard the original run sabotaged is still at `internal/redirect/resolver.go:258` |
+| Every gate | `make check` green; `make test-integration` green under `GOFLAGS=-count=1`, 197s; `make check-links` green; `make verify-scan` — **9256 of 9256 decodes exact** over 1360 pictures at five pixels-per-module through two decoders |
+| The browser check (owner-set 2026-08-11) | `make verify-ui` **green, 17 passed**, against an image rebuilt from this commit with the demo data restored under it |
+
+**And the range's newest work was driven rather than read**, under the 80 ms /
+4 Mbps / 2× CPU profile F246(a) was measured on — the corollary the last run
+earned is that a check pinned to localhost cannot fail on a latency-driven
+defect, so this one was not. Selecting a non-default code from the list: the
+offset held at 232 before and after, the URL took `&code=`, and the style form
+followed the selection rather than staying on the code it had. Saving with that
+code selected: the reader came back to **the same code**, at **232**, and
+across 159 traced frames there were **zero painted frames at an offset the
+reader did not stand at** — eight frames were held blank by D196's
+`qr-restoring` class, which is the mechanism working rather than failing. Back
+after a swap returned the tab intact. Console clean throughout. M50.8's third
+reopening holds on the profile that broke the two before it.
+
+### What it found
+
+**[F251](deferred-findings.md#open) — the 0.3.0 release notes will omit the
+whole dashboard redesign.** `CHANGELOG.md` carries a dated, closed
+`## [0.3.0] - 2026-08-10` section and, above it, an `[Unreleased]` section
+holding everything built after M58's documentation pass. No `v0.3.0` tag
+exists. Running the release workflow's own awk over the tree produces 941 lines
+of notes; the 217 lines of `[Unreleased]` are not among them, and the published
+body would say *tab strip* zero times while `README.md:122` calls the dashboard
+*"Rebuilt in 0.3.0"*. Both gates — `scripts/release-check.sh:65` and
+`.github/workflows/release.yml:97` — only grep for the section's existence.
+
+It makes [M58](phase-details/m58.md)'s own bullet false: *"the `awk` extraction
+is checked against the file **as it will be at 0.3.0** before anything is
+tagged"*. That is [workflow.md](workflow.md#an-issue-is-found--any-time-any-source)'s
+reopening trigger, and reopening is scheduling, so it is a row and a prompt
+rather than a fix.
+
+**[F248](deferred-findings.md#open) counted rather than left at three.** The row
+was filed for three stale `#open` anchors. Resolving every link in tracked
+Markdown against the section its row is actually in finds **39**: 22 in
+`decisions.md`, which is append-only and was correct when each was written, and
+**17 in maintained files** — `Plan.md` ×3 and nine milestone files. All 17 point
+at Open for a row that is Closed. The detector is thirty lines, which is the
+argument for the gate F248 asks about.
+
+### What it refuted
+
+A review that reports everything it suspected is not adversarial; these were
+tried and failed.
+
+- **`docs/SECURITY.md` has no row for the dashboard's first script or for
+  client-side storage.** Refuted: `script-src 'self'` did not move — htmx and
+  `docs.js` have been served from it for two phases — and the stored value is a
+  scroll offset in `sessionStorage`, which is neither a secret nor a
+  cross-reader fact. The page is organised by security area and this adds none.
+- **Changing a link's alias silently breaks every printed QR code, and nothing
+  says so.** Refuted twice: the rename **reserves** the old alias
+  (`internal/link/service.go`, the `reserved_aliases` write, whose comment names
+  the redirect hijack it exists to stop), so the failure is a 404 rather than a
+  hand-over; and the alias affordance is Phase 1's, outside this review's range.
+  The stale *stored size* half of it is already [F228](deferred-findings.md#open).
+- **`?code=` reaches `qrDownloadPath` unescaped**, where `qrSelectPath` escapes.
+  Refuted: `linkQR` resets the slug and both download paths whenever
+  `qrCodeExists` fails, so the unescaped value survives only if `ListQRCodes`
+  errors while `Links.Get` on the same request succeeded — which is not
+  reachable, since a database failure takes the earlier read first.
+
+**Three findings from a range this size is low, and the reason is structural
+rather than flattering.** Every milestone in it landed through the per-milestone
+reviewer added on 2026-08-09, and the QR tab was additionally reported on five
+times by the owner against the running product. This run is reading a range that
+has already been read, which is not the state M32.9's *a review that finds
+nothing was not adversarial enough* was written about — and it is why the two
+findings above are both about **records** rather than code: the code has been
+looked at repeatedly and the records have not.
+
+### D200 — the doc-cost judgement: trim what the ratio says is skipped, defend what it says is read
+
+`make doc-cost` put the `/work phase` resume charge at **70,138 bytes against
+65,339**, a growth of **4,799**. [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+asks for a defence or a trim, and this is both, split by the realized read
+ratio rather than by which file grew most.
+
+**Trimmed, 2,515 bytes of it.** `phase-details/README.md` grew 2,879 while its
+realized ratio *fell* from 0.87 to 0.66 — the same evidence M51.9 trimmed on:
+bytes being paid for at every resume and skipped. What had grown was history —
+the whole reopening trail of the QR tab's five reports, the blind-task rounds
+behind M46–M48, and the arithmetic of each insertion — in a file
+[step 1](phase-loop.md#1-validate) reads for a status table and an inherited
+rules table. It is now a pointer to the milestone files, `git log`, and
+[W40](workflow-changes.md#made), and the file is 13,932 bytes with its ratio
+back to 0.70. `Plan.md`'s charged row went 194 → 1,382 because M50.8's cell had
+absorbed the same trail; step 1 reads one ordering row, and that row is now 660.
+
+**Defended, the rest.** `phase-loop.md`'s 732 bytes bought the reviewer actor
+and the parked-milestone fallback, and its ratio *rose* from 0.40 to 0.50 —
+more of it is being read than before, which is the opposite of the trim
+argument. The resume charge closes at **67,623**, a growth of 2,284 rather than
+4,799: **52% of it paid down**, and what is left is status rather than history.
+
+### The amendment: the range paragraph, caught short a sixth time
+
+[Step 1](phase-loop.md#amending-a-bullet) wants all three, and a fact-level
+wrongness is corrected rather than prompted about.
+
+**As it stood:**
+
+> the size slider draws its stops. So this review's range includes a milestone
+> that shipped, was reported against, and shipped again **twice** between two
+> readings of this paragraph. **F244 stays open** for its two unscheduled limbs
+> — the preview vanishing when a code is selected, and the contrast warning
+> ([F239](deferred-findings.md#open)) — both of which the owner placed in Phase
+> 4 and neither of which this review schedules.
+
+**As amended:** the same sentence, followed by M50.8's **third** reopening —
+`966e0ea`, built at `3b2174f`, D199 — and F244 narrowed to **one** unscheduled
+limb, the contrast warning, because the preview limb was discharged there.
+
+**The tree fact that forced it:** `git log` carries `966e0ea` and `3b2174f`
+dated 2026-08-17, `decisions.md` carries D199 at line 30076, and
+`deferred-findings.md` has F246 in the **Closed** table with F244(b) marked
+discharged. The paragraph stopped at the fifth report. That is the sixth time
+this list has been caught short and the fourth time by a reviewer rather than by
+the run that wrote it — which is the argument its own text makes for listing a
+scheduled milestone before it is built, applied to a reopening nobody scheduled
+in advance.
+
+## 2026-08-17 — M57.9's triage: three rows scheduled, and the one the owner took further than was recommended
+
+The review's product is a conversation, and this is it. Three questions, each
+with options, costs and a recommendation; two answered as recommended and one
+against it, which is the one worth recording the reasoning of.
+
+**D201 — [F251](deferred-findings.md#open): [M58](phase-details/m58.md) is
+reopened.** The 0.3.0 release notes would omit everything built after
+2026-08-10. Four routes were offered: reopen M58 and fold; fix it inside M57.9,
+which is already open and holding a commit; leave it until the tag; or a Phase 4
+row. The owner took the reopening, which is also what
+[workflow.md](workflow.md#an-issue-is-found--any-time-any-source) asks for a
+falsified shipped claim — M58's bullet promised the extraction was checked
+against the file *as it will be at 0.3.0*, and it was, on 2026-08-10, before
+fifty-five commits landed above it. Fixing it inside the review was the cheaper
+route and was declined for the reason the review exists: M58's row would have
+stayed `done` asserting something untrue.
+
+It carries a third thing neither the row nor the recommendation asked for, and
+it is the half that outlives the fix: `release-check` gains a gate that refuses
+a non-empty `[Unreleased]` when a version is named. Both existing guards —
+`scripts/release-check.sh:65` and `.github/workflows/release.yml:97` — only
+grep for the section's existence, so a release whose notes are in the wrong
+section passes both. A fix no gate can see regresses the silent way this one
+arrived, which is D173's own argument from the review before this one.
+
+**D202 — [F248](deferred-findings.md#open): the gate and the seventeen, both.**
+Offered the gate alone, the seventeen alone, or both, the owner took both. The
+seventeen are the links in maintained files — `Plan.md` and nine milestone
+files — that point a reader at the **Open** table for a row that is **Closed**;
+`decisions.md`'s twenty-two are left, that file being append-only and each
+having been true when it was written. The cost is stated rather than discovered:
+`check-links` already resolves 3568 links and a row-membership check gives it a
+new way to fail somebody's unrelated diff. Taken, because `check-links` passing
+on a tree carrying the defect is precisely what hid this twice.
+
+**D203 — [F249](deferred-findings.md#open) and
+[F250](deferred-findings.md#open): both now, in M50.8's fourth reopening, against
+the recommendation.** The recommendation was Phase 4 for both — neither
+falsifies a shipped claim, F250 is bounded by D196's four-second reveal, and a
+fourth reopening lands on a phase already eight milestones over its size target.
+The owner chose to clear the tab's remaining rows before the tag instead. That
+is scheduling and it is theirs; what the recommendation bought is that the cost
+is on the record rather than discovered afterwards.
+
+**F249 still owes a decision before it can be built**, and it is the whole of
+what that limb is: the heading thumbnail links to `?tab=qr` with no code, so
+following it silently returns the tab to the default. Whether the thumbnail
+means *this link has a QR code* — in which case it should carry the selection so
+it stops dropping one — or *the code you are looking at* — in which case it
+should also be redrawn on a swap, which it currently cannot be, sitting outside
+`#link-tabs` — is not a defect to fix but a meaning to choose. It is put to the
+owner at the reopening rather than assumed here.

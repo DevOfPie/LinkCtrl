@@ -27,52 +27,34 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**One row is open:** [M57.9](m57.9.md)'s reopened run, in its own session.
-[M50.8](m50.8.md)'s **third** reopening landed 2026-08-17, owner-scheduled —
-selecting a code from the list is the tab strip's own swap now, so it loads no
-page, and [F246](../deferred-findings.md#closed) closes with
-[F244](../deferred-findings.md#open)(b) discharged inside it. That was not the
-falsified-claim trigger and m50.8.md says so: the owner was offered a new
-milestone and chose to keep the trail under one number. The tab's five reports
-have otherwise landed, the fifth as that milestone's **second** reopening on
-2026-08-16 — the
-save's first paint is withheld rather than corrected, the logo's controls sit
-inside the style form between the colours and the size, and the size slider
-draws its stops. Before it: the first report's
-three reopenings at `ad28c5f`, `e244cf2` and `272f108`,
-the second's at `2d4f424`, `69ef097` and `d7107b1`, [M50.7](m50.7.md) at
-`ea656bd`, and [M50.8](m50.8.md) — the third report — at `a12cf16`, **reopened
-the same day for five limbs of the fourth**
-([F244](../deferred-findings.md#open), D194/D195).
-`fc9aeef` is [M49](m49.md)'s **third** reopening, which is no report's — it came
-from the owner's answers of 2026-08-13. **M50.8 exhausted the M50 band** —
-`M50.9` is reserved for reviews — which is *why* the fourth and fifth reports
-are reopenings and the limbs they leave are Phase 4 rows rather than an M50.9. 0.3.0 is written and not yet tagged. Four work areas, chosen 2026-08-06: identity and account
-lifecycle, dashboard UI and UX, infrastructure and resilience, QR codes and
-campaigns. **Twenty-three milestones** — **twelve integers of work**, two adversarial
-reviews, one close, and **eight insertions** (M50.5, M50.6, M46.5, M46.6, M47.5, M57.5, M50.7, M50.8) — against the size target in
-[planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones).
-The phase was planned at **fifteen with every slot spent**. On 2026-08-07 it went
-to sixteen when [M50.5](m50.5.md) was added, and to seventeen when a review found
-that milestone was two and the owner split it into M50.5 and [M50.6](m50.6.md).
-Both were the phase-boundary conversation the target exists to force. The
-standing rule stays at fifteen; this phase is a recorded exception. A milestone that turns out to be
-two is still that conversation rather than an insertion.
+**Two rows are open, both scheduled by [M57.9](m57.9.md)'s triage of 2026-08-17:**
+[M58](m58.md) is **reopened** — the 0.3.0 release notes would omit everything
+built after 2026-08-10 ([F251](../deferred-findings.md#open), D201) — and
+[M50.8](m50.8.md) is **reopened a fourth time** for
+[F249](../deferred-findings.md#open) and [F250](../deferred-findings.md#open)
+(D203). **0.3.0 is written and not yet tagged**, and F251 is why the tag waits.
 
-**Eighteen on 2026-08-11**, when [M57.5](m57.5.md) was added after the close to
-repair six findings M58's own passes filed. That one was **not** a
-phase-boundary conversation, and the difference is
-[W40](../workflow-changes.md#made): the owner settled that the target binds
-initial planning rather than the build, so a milestone the build turns out to
-need is added when it is needed. The two moves above happened under the older
-reading and are left recorded as they happened. M46.5 and M47.5 the same day
-made it twenty, and [M46.6](m46.6.md) — F204's fix, approved with its shape
-chosen from wireframes — twenty-one, each under W40's reading.
+**Twenty-three milestones** — twelve integers of work, two adversarial reviews,
+one close, and eight insertions — against the fifteen this phase was planned at.
+Every move is recorded: the two phase-boundary conversations of 2026-08-07, and
+[W40](../workflow-changes.md#made), which settled that the size target binds
+initial planning rather than the build. The standing rule stays at fifteen and
+this phase is the recorded exception. **M50.8 exhausted the M50 band** — `M50.9`
+is reserved for reviews — which is why the QR tab's fourth and fifth reports are
+reopenings and the limbs they leave are Phase 4 rows.
 
-**M46–M48 are the redesign, written from the owner's walkthrough** — eighteen
-blind tasks over two rounds, 2026-08-06 and 2026-08-07. Round two also produced
-seven defects, which are rows in [deferred-findings.md](../deferred-findings.md)
-and are fixed at [M58](m58.md) rather than costing a redesign slot.
+Four work areas, chosen 2026-08-06 and used by [step 1](../phase-loop.md#1-validate)'s
+fallback: identity and account lifecycle, dashboard UI and UX, infrastructure
+and resilience, QR codes and campaigns.
+
+*(This section carried the whole reopening trail — every commit of the QR tab's
+five reports, the blind-task rounds behind M46–M48, and the arithmetic of each
+insertion — until M57.9's doc-cost judgement of 2026-08-17. It was 2879 bytes of
+that run's 4799-byte growth in the resume charge, on a file whose realized read
+ratio had fallen from 0.87 to 0.66: history being paid for at every resume and
+skipped. Nothing was dropped. The trail is in each milestone's own file and in
+`git log`, the decisions are in [decisions.md](../decisions.md), and the size
+target's exceptions are in [W40](../workflow-changes.md#made).)*
 
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
@@ -97,7 +79,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M56](m56.md) | High availability: the failover contract | — | done |
 | [M57](m57.md) | High availability: measured, and still one container | M56 | done |
 | [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | done |
-| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M46.6 · M47.5 · M57.5 | in progress (reopened) |
+| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M46.6 · M47.5 · M57.5 | done *(reopened run, 2026-08-17)* |
 | [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
 
 Work areas, so a blocked milestone has an independent row to fall back to per
