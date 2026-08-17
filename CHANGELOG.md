@@ -184,6 +184,18 @@ migrations run at boot.
   logo's size limits, which an upload that exceeds them reports with your own
   image's dimensions in the message.
 
+  **Picking a code from the list no longer leaves the page.** It opened the QR
+  settings at their own URL — a page with no link heading row, arriving at the
+  top — so selecting a code cost you the small preview beside the link's name and
+  your place on the tab in the same click. The tab is redrawn where you are
+  standing now: nothing scrolls, the preview stays, and the address bar still
+  names the code, so a refresh, a bookmark and the back button all work as they
+  did. A save on the code you picked comes back to that code rather than to the
+  link's default. It is still an ordinary link, so with scripts off it loads the
+  link's page on that code instead of redrawing part of it; `/links/{id}/qr` is
+  unchanged and still serves the settings as their own page for anybody holding
+  that URL.
+
   **Not done, and stated rather than left to be noticed**: there is still no
   automatic warning when a code's two colours are too close together. The
   advisory sentence stays until this product has a contrast measure it can

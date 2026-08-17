@@ -9,8 +9,9 @@
        the popup and its worded trigger retired on 2026-08-11 and the tab
        renders `link_qr_body` directly. The thumbnail in the heading row now
        opens this tab (`link_qr_thumb` below); the body is also still served
-       at /links/{id}/qr, which is what the codes list links into to select a
-       code.
+       at /links/{id}/qr, which is a bookmark and no longer where the codes
+       list sends anybody — since M50.8's third reopening a row selects on
+       this page rather than navigating to that one.
 
        The code carries its own background and does not follow the theme. A QR
        scanner expects dark modules on a light field; inverting them is refused
@@ -113,11 +114,17 @@
        downloads, and what it has been scanned over the window the page is
        showing.
 
-       Selecting a code is a link to this block's own route with `?code=`, not
-       a popup and not a script. m48.md's requirement was that these contents
-       live at a route which renders as an ordinary page; picking a row is the
-       same route with an argument, which keeps one pattern rather than
-       inventing a second one for a list inside a section.
+       Selecting a code is a link carrying `code=`, not a popup and not a
+       script of this list's own. m48.md's requirement was that these contents
+       live at a route which renders as an ordinary page; picking a row is a
+       surface with an argument, which keeps one pattern rather than inventing
+       a second one for a list inside a section.
+
+       **Which surface, since M50.8's third reopening, is where the reader
+       already is.** It was this block's own route on both, so picking a code on
+       the link page was a document load onto a page with no link heading row
+       (F244b) that started at the top (F246d). The row below says what replaced
+       it and why the href still goes somewhere real.
 
        **The default is the code an untagged scan resolves through, and it is a
        property rather than an absence** (D183). It used to be the row with no
@@ -233,7 +240,39 @@
          name. Verified in chromium, firefox and webkit on 2026-08-13. */}}
     <li class="relative flex flex-wrap items-center gap-3 px-3 py-2 [anchor-scope:--linkctrl-qr-menu] {{if .Selected}}bg-sunken{{end}}">
       <div class="min-w-0 grow">
-        <a href="{{.Panel}}"
+        {{/* **Selecting a code stops leaving the page** (M50.8's third
+             reopening, F246d and F244b, which are one navigation). Owner:
+             *"the selected code is changed with the default, which means we
+             should be able to prevent scrolling when selecting a different
+             code as well?"*
+
+             Until this, every row went to `/links/{id}/qr?code=` — a document
+             load, onto a page with no link heading row, starting at the top.
+             The reader's position was not lost so much as never anybody's to
+             keep: a load is where the whole scroll-restoration machinery
+             (D193, D195, D196) comes from, and it only ever ran on a *write*.
+
+             **So there is no load.** The row is the tab strip's own mechanism
+             one argument further down — link_tabs.html's `hx-get` → `#link-tabs`,
+             `hx-select`, `hx-swap="outerHTML"`, `hx-push-url` — carrying
+             `&code=` as well as `?tab=qr`. Nothing to remember, nothing to
+             restore, no paint to withhold, and the thumbnail in the heading row
+             is outside `#link-tabs` and never redrawn, which is F244(b)
+             answered by the same change rather than separately.
+
+             **The `href` is the same string as the `hx-get`, and it is a real
+             page** (D178). A reader with the script blocked follows it and
+             lands on the link page with that code drawn — web_links.go reads
+             `?code=` there since this reopening. The panel route still answers
+             to its own URL for a bookmark; nothing on this tab sends anybody to
+             it any more.
+
+             `QRSelectSwapsTabs` is false on the panel's own page, which has no
+             `#link-tabs` to swap: there the row is the plain link it always
+             was, and htmx is given nothing it cannot place. */}}
+        <a href="{{.Select}}"
+           {{if $.QRSelectSwapsTabs}}hx-get="{{.Select}}" hx-target="#link-tabs"
+           hx-select="#link-tabs" hx-swap="outerHTML" hx-push-url="true"{{end}}
            class="text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] hover:text-accent">{{.Name}}</a>
         {{/* **The default says nothing about itself on this line any more**
              (M50.8's reopening, F244d), owner-set: *"remove the 'the default -
@@ -744,10 +783,13 @@
          Restore defaults — acts on that one code. Empty asks for the link's
          default, which is what the link page and an unqualified panel show, and
          on a link whose single code has no slug it is also that code's name.
-         The list above sets it by linking back to this route with `?code=`. The
-         handler passes it to the service, which resolves the default from the
-         flag and refuses a slug the link does not have — the field is a name,
-         never a permission. */}}
+         The list above sets it: on the panel's own page by linking back to this
+         route with `?code=`, and on the link page — since M50.8's third
+         reopening — by swapping the tab strip for the same page carrying
+         `&code=`, which is the selection made without a load. The handler passes
+         it to the service, which resolves the default from the flag and refuses
+         a slug the link does not have — the field is a name, never a
+         permission. */}}
     <input type="hidden" name="code" value="{{.QRSlug}}">
     {{/* The name of the code being edited. It is a control on this form rather
          than a field on every row of the list above: a list where every row is

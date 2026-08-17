@@ -158,9 +158,11 @@ var panelSurfaces = []struct {
 // panelPages are the routes that serve on-demand contents as an ordinary page.
 //
 // A superset of panelSurfaces' body pages: the QR contents keep their route
-// after their popup retired — the codes list selects a code through it and it
-// is what a bookmark reaches — so the page-form obligation outlives the popup
-// that first carried it.
+// after their popup retired — it is what a bookmark reaches, and `?code=` on it
+// opens the block on one code — so the page-form obligation outlives the popup
+// that first carried it. The codes list stopped selecting through it at M50.8's
+// third reopening, which took the route's last incoming link off the tab and
+// left the obligation exactly where it was.
 var panelPages = []struct {
 	body   string
 	href   string

@@ -27,14 +27,15 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Two rows are open:** [M57.9](m57.9.md)'s reopened run, in its own session, and
-[M50.8](m50.8.md)'s **third** reopening, owner-scheduled 2026-08-17 — selecting
-a code from the list stops loading another page, which answers
-[F246](../deferred-findings.md#open)(d) and
-[F244](../deferred-findings.md#open)(b) together. It is not the falsified-claim
-trigger and m50.8.md says so: the owner was offered a new milestone and chose to
-keep the trail under one number. The tab's first five reports have otherwise
-landed, the fifth as that milestone's **second** reopening on 2026-08-16 — the
+**One row is open:** [M57.9](m57.9.md)'s reopened run, in its own session.
+[M50.8](m50.8.md)'s **third** reopening landed 2026-08-17, owner-scheduled —
+selecting a code from the list is the tab strip's own swap now, so it loads no
+page, and [F246](../deferred-findings.md#closed) closes with
+[F244](../deferred-findings.md#open)(b) discharged inside it. That was not the
+falsified-claim trigger and m50.8.md says so: the owner was offered a new
+milestone and chose to keep the trail under one number. The tab's five reports
+have otherwise landed, the fifth as that milestone's **second** reopening on
+2026-08-16 — the
 save's first paint is withheld rather than corrected, the logo's controls sit
 inside the style form between the colours and the size, and the size slider
 draws its stops. Before it: the first report's
@@ -86,7 +87,7 @@ and are fixed at [M58](m58.md) rather than costing a redesign slot.
 | [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
 | [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
 | [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | done |
-| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | in progress *(reopened a third time 2026-08-17, [F246](../deferred-findings.md#open)(d) and [F244](../deferred-findings.md#open)(b))* |
+| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | done |
 | [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
 | [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
 | [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |

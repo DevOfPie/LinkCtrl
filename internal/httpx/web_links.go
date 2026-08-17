@@ -675,6 +675,19 @@ type linkQRView struct {
 	// thing that knows which, and the handler compares it against the two paths
 	// it builds itself rather than following it.
 	QRReturn string
+	// QRSelectSwapsTabs says whether picking a code from the list is an htmx
+	// swap of `#link-tabs` (M50.8's third reopening). True on the link page,
+	// where that element exists and the tab strip already selects itself that
+	// way; false on the panel's own page, which has no strip and where the row's
+	// href is the whole mechanism.
+	//
+	// A field rather than a comparison in the template, for the reason QRReturn
+	// is a parameter: the surface is something this package decides, and a
+	// template left to work it out from a path would be a second place that
+	// knows what the two surfaces are. It is also what keeps `hx-target` off a
+	// page where it names nothing — htmx raises a target error on a swap it
+	// cannot place, which is a console message on a page that otherwise works.
+	QRSelectSwapsTabs bool
 
 	// The link's codes (M50), in alphabetical order by name, and which of them
 	// the form below them is editing.
@@ -689,8 +702,13 @@ type linkQRView struct {
 	// **The list is the section and the form is one row of it.** m50.md asks for
 	// the codes with their labels, sizes and downloads, inside whatever M48
 	// decided a panel is — so this is the same `link_qr_body` block, and picking
-	// a code is a link back to the panel's own route rather than a second
-	// pattern for opening things.
+	// a code is a link rather than a second pattern for opening things.
+	//
+	// **Where that link goes is the surface's, since M50.8's third reopening**,
+	// and it is the row's own Select field: the panel page still navigates to
+	// its own route, and the link page names the code on itself so that the tab
+	// can be redrawn in place. It read *"a link back to the panel's own route"*
+	// until then, which was the sentence that made selecting a code a page load.
 	QRCodes []qrCodeView
 	// QRSlug is the code the style form writes to. Empty is the default code,
 	// which is what the link page and an unqualified panel show.
@@ -750,8 +768,18 @@ type qrCodeView struct {
 	// HasLogo says whether this code carries an uploaded image (M50.5), so a
 	// reader can see at a glance which of a link's codes have one without
 	// opening each in turn.
-	HasLogo     bool
-	Panel       string
+	HasLogo bool
+	// Select is where this row goes when it is picked, and it differs by the
+	// surface the list is drawn on (M50.8's third reopening). It was `Panel`,
+	// the panel route, on both — which is why selecting a code was a document
+	// load onto a page with no link heading row (F244(b)) that started at the
+	// top (F246(d)).
+	//
+	// The link page names the code on itself now, `?tab=qr&code=`, so the href a
+	// script-blocked reader follows and the URL the tab swap fetches are one
+	// string. The panel page keeps its own route, because it has no tab strip to
+	// swap and its href is all it has.
+	Select      string
 	Download    string
 	DownloadPNG string
 	// Clicks is what this code has been scanned, over the window the page is
@@ -964,10 +992,21 @@ func (h *Web) loadLinkDetail(w http.ResponseWriter, r *http.Request) (linkDetail
 	data.Tab = activeLinkTab(r.URL.Query(), data.Tabs)
 
 	h.fillLinkEdit(r.Context(), actor, &data)
-	// The link page always shows the default code. Which code the *panel* is
-	// open on is the panel route's business, and a query parameter on the link
-	// page would put the same state in two places.
-	data.linkQRView = h.linkQR(r.Context(), actor, l, "/links/"+l.ID.String(), "")
+	// **Which code the tab draws is the request's to name** (M50.8's third
+	// reopening). This passed `""` unconditionally, and the comment that stood
+	// here argued for it: *"which code the panel is open on is the panel route's
+	// business, and a query parameter on the link page would put the same state
+	// in two places"*. It held while the codes list selected by navigating to
+	// that route — and it is what made *selected* mean *default* on this page,
+	// so moving the flag was the only way to change what the tab drew. F244(b)
+	// and F246(d) are both consequences of it.
+	//
+	// The state is still in one place: this parameter. It is what the list's own
+	// rows carry, what a tab swap fetches and what qrReturn puts back on a
+	// write, under the same name the panel route already reads it by.
+	data.linkQRView = h.linkQR(
+		r.Context(), actor, l, "/links/"+l.ID.String(), r.URL.Query().Get("code"),
+	)
 	h.fillLinkRouting(r.Context(), actor, &data)
 	fillLinkAnalytics(r, &data, from, to)
 	attachQRCounts(&data.linkQRView, data.Stats)
@@ -1143,21 +1182,27 @@ func (h *Web) linkQR(
 		QRMaxLogoDimension: qr.MaxLogoDimension,
 		QRMaxLogoPixels:    qr.MaxLogoPixels,
 		QRReturn:           back,
+		QRSelectSwapsTabs:  back == "/links/"+l.ID.String(),
 		QRSlug:             slug,
 		QRDownload:         qrDownloadPath(l.ID, slug, "svg"),
 		QRDownloadPNG:      qrDownloadPath(l.ID, slug, "png"),
 	}
 
-	// The list first, so a panel opened on a code that has since been removed
+	// The list first, so a surface opened on a code this link does not have
 	// falls back to the default rather than showing an error where a picture
 	// goes. Failed soft like every other read on this page: a list that cannot
 	// be read leaves the section showing one code, which is what the link had
 	// before this milestone.
+	//
+	// **Both surfaces reach this now** (M50.8's third reopening): the link page
+	// reads `?code=` too, so a stale bookmark, a code somebody removed in
+	// another tab and an invented slug all land on the default here rather than
+	// anywhere the reader has to understand.
 	if codes, cerr := h.Links.ListQRCodes(ctx, actor, l.ID); cerr == nil {
-		view.QRCodes = qrCodeViews(l.ID, codes, slug)
+		view.QRCodes = qrCodeViews(l.ID, codes, slug, back)
 		if !qrCodeExists(codes, slug) {
 			view.QRSlug, slug = "", ""
-			view.QRCodes = qrCodeViews(l.ID, codes, "")
+			view.QRCodes = qrCodeViews(l.ID, codes, "", back)
 			view.QRDownload = qrDownloadPath(l.ID, "", "svg")
 			view.QRDownloadPNG = qrDownloadPath(l.ID, "", "png")
 		}
@@ -1277,6 +1322,32 @@ func qrDownloadPath(linkID uuid.UUID, slug, ext string) string {
 	return fmt.Sprintf("%s/links/%s/qr/codes/%s/image.%s", APIPrefix, linkID, slug, ext)
 }
 
+// qrSelectPath is where one row of the codes list goes when it is picked.
+//
+// **Two surfaces draw that list and they no longer select the same way**
+// (M50.8's third reopening). The panel's own page navigates to itself with
+// `?code=`, which is what both surfaces did and is why picking a code on the
+// link page was a load onto a page with no link heading row. The link page names
+// the code on *itself*, `?tab=qr&code=`, so the tab strip's own swap can redraw
+// the section in place and the reader never leaves the page.
+//
+// `back` decides which, and it is **matched, never followed** — the same
+// discipline qrReturn applies to the field a form posts. The two paths are built
+// here and compared against, so this cannot be talked into a third one.
+func qrSelectPath(linkID uuid.UUID, back, slug string) string {
+	page := "/links/" + linkID.String()
+	if back == page+"/qr" {
+		if slug == "" {
+			return page + "/qr"
+		}
+		return page + "/qr?code=" + url.QueryEscape(slug)
+	}
+	if slug == "" {
+		return page + "?tab=qr"
+	}
+	return page + "?tab=qr&code=" + url.QueryEscape(slug)
+}
+
 // qrCodeViews turns the service's codes into the panel's rows.
 //
 // **`Default` is read off the code rather than derived from its slug** (D183).
@@ -1284,7 +1355,7 @@ func qrDownloadPath(linkID uuid.UUID, slug, ext string) string {
 // onto a flag; deriving it now would mark the wrong row the moment somebody set
 // a different code as the default, and would mark *no* row on a link whose codes
 // all have slugs — which after 04400 is every link anybody has touched.
-func qrCodeViews(linkID uuid.UUID, codes []link.QRCode, selected string) []qrCodeView {
+func qrCodeViews(linkID uuid.UUID, codes []link.QRCode, selected, back string) []qrCodeView {
 	out := make([]qrCodeView, 0, len(codes))
 	for _, c := range codes {
 		name := c.Label
@@ -1295,13 +1366,10 @@ func qrCodeViews(linkID uuid.UUID, codes []link.QRCode, selected string) []qrCod
 				name = "Unnamed code"
 			}
 		}
-		panel := fmt.Sprintf("/links/%s/qr", linkID)
-		if c.Slug != "" {
-			panel += "?code=" + url.QueryEscape(c.Slug)
-		}
 		out = append(out, qrCodeView{
 			Slug: c.Slug, Label: c.Label, Size: c.Size, Name: name, HasLogo: c.HasLogo,
-			Default: c.Default, Selected: c.Slug == selected, Panel: panel,
+			Default: c.Default, Selected: c.Slug == selected,
+			Select:      qrSelectPath(linkID, back, c.Slug),
 			Download:    qrDownloadPath(linkID, c.Slug, "svg"),
 			DownloadPNG: qrDownloadPath(linkID, c.Slug, "png"),
 		})

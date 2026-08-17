@@ -53,10 +53,15 @@ type linkQRPageData struct {
 // LinkQRPage serves the QR contents at their own URL.
 //
 // **The popup this route backed retired at the F212 reopening** (2026-08-11):
-// the QR tab renders the same block in flow now. The route outlived it — the
-// codes list selects a code through it (`?code=`), and it is what a bookmark
-// and a shared URL reach. TestEveryPanelIsAlsoACompletePage still holds it to
-// rendering as a complete page.
+// the QR tab renders the same block in flow now. The route outlived it as what
+// a bookmark and a shared URL reach, and TestEveryPanelIsAlsoACompletePage
+// still holds it to rendering as a complete page.
+//
+// **The codes list no longer selects through it** (M50.8's third reopening). It
+// did, with the same `?code=` this handler still reads — which meant picking a
+// code on the link page was a load onto this page, which has no link heading row
+// (F244(b)) and starts at the top (F246(d)). The list names the code on the link
+// page now; this route reads the parameter for its own readers, unchanged.
 //
 // Gated by loading the link, which is `links.read`: the same permission the
 // section on the link page is drawn under. Nothing here widens who may see a
@@ -106,12 +111,20 @@ func qrReturn(next string, id interface{ String() string }, marker, slug string,
 		q[k] = v
 	}
 	page := "/links/" + id.String()
+	// The code being worked on survives the redirect, or every save on a named
+	// code would drop the reader back onto the default one.
+	//
+	// **On both branches since M50.8's third reopening.** It was written into
+	// the panel branch alone, and correctly so: until that reopening the link
+	// page could draw nothing but the default, so naming a code on the way back
+	// to it would have been a selection that surface had no way to honour. It
+	// can now — web_links.go's page reads `?code=` the way this route already
+	// did — and without this the first save on a selected code would return the
+	// reader to the default one, which is the bug moved rather than fixed.
+	if slug != "" {
+		q.Set("code", slug)
+	}
 	if next == page+"/qr" {
-		// The code being worked on survives the redirect, or every save on a
-		// named code would drop the reader back onto the default one.
-		if slug != "" {
-			q.Set("code", slug)
-		}
 		return page + "/qr?" + q.Encode()
 	}
 	// tab=qr since M47's reopening made the page tabs: every write this
@@ -543,7 +556,22 @@ func (h *Web) finishQRAction(
 	// The QR tab, because the refusal renders in the QR section and a POST
 	// carries no ?tab= — qrReturn's re-derivation, on the 422 path (D178).
 	data.Tab = "qr"
-	data.QRError = ve[0].Message
+	// **And the code the form was editing, re-derived the same way** (M50.8's
+	// third reopening). loadLinkDetail takes the selection off the query string,
+	// which a POST to this route does not have — so the refusal would redraw the
+	// *default* code with the reader's own numbers in the box, and the form it
+	// drew would then be pointed at a different code from the one that was just
+	// refused. That is the panel branch's own argument above, on the surface
+	// that only became able to hold a selection at this reopening.
+	//
+	// A second render of the picture, on a path that has already failed. The
+	// alternative is teaching loadLinkDetail to read a posted field, which would
+	// put a QR form's vocabulary inside the assembly of eight sections.
+	view := h.linkQR(r.Context(), IdentityFrom(r.Context()), data.Link,
+		"/links/"+id.String(), slug)
+	view.QRError = ve[0].Message
+	data.linkQRView = view
+	attachQRCounts(&data.linkQRView, data.Stats)
 	h.render(w, r, status, "link_detail", data)
 }
 

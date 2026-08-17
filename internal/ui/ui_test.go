@@ -714,6 +714,13 @@ func pageData(t *testing.T) map[string]any {
 			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 			"QRSourceLabel": "qr",
 			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001",
+			// The link page selects in place since M50.8's third reopening: the
+			// rows carry the tab strip's own swap and their hrefs name the code
+			// on this page rather than on the panel route. Both halves are the
+			// fixture's business, because the two surfaces render one block and
+			// a fixture that gave them the same rows would render a page
+			// internal/httpx does not build.
+			"QRSelectSwapsTabs": true,
 			// Two codes (M50), because the fixture has to render the state the
 			// milestone exists for: a link with one code and a link with two are
 			// different markup, and the theme scan, the overflow check and the
@@ -728,13 +735,13 @@ func pageData(t *testing.T) map[string]any {
 			"QRCodes": []map[string]any{
 				{"Slug": "d3f4u1t0", "Label": "", "Name": "The original code", "Size": 740,
 					"Default": true, "Selected": true,
-					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001?tab=qr&code=d3f4u1t0",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
 					"Clicks":      412, "Counted": true},
 				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
 					"Default": false, "Selected": false,
-					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001?tab=qr&code=k7m2qh4b",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
 					"Clicks":      37, "Counted": true},
@@ -749,8 +756,11 @@ func pageData(t *testing.T) map[string]any {
 		// The QR panel as a page (M48). Same fields as the link page's QR area,
 		// because it is the same block: linkQRView is one struct embedded in two
 		// page structs, and this fixture is the assertion that the second one is
-		// not short of anything the block reads. QRReturn differs, and only
-		// QRReturn, which is the panel's own route rather than the link page.
+		// not short of anything the block reads. What differs is the surface:
+		// QRReturn is the panel's own route rather than the link page, and
+		// since M50.8's third reopening QRSelectSwapsTabs and the rows' Select
+		// follow it — this page has no `#link-tabs`, so a row here is the plain
+		// link to `?code=` that both surfaces used to draw.
 		"link_qr": map[string]any{
 			"Title": "QR code · /demo", "Nav": "links", "Identity": owner(),
 			"Link": lnk,
@@ -787,12 +797,13 @@ func pageData(t *testing.T) map[string]any {
 			"QRMaxSize": 2048,
 			// The slider's marks, as httpx.qrSizeStops hands them over: the
 			// owner's eight, less any below this code's own floor (D182).
-			"QRSizeStops":   []int{128, 256, 300, 512, 600, 1024, 1200, 2048},
-			"QRStored":      true,
-			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
-			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
-			"QRSourceLabel": "qr",
-			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001/qr",
+			"QRSizeStops":       []int{128, 256, 300, 512, 600, 1024, 1200, 2048},
+			"QRStored":          true,
+			"QRDownload":        "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+			"QRDownloadPNG":     "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
+			"QRSourceLabel":     "qr",
+			"QRReturn":          "/links/0198c9c5-0000-7000-8000-000000000001/qr",
+			"QRSelectSwapsTabs": false,
 			// Two codes (M50), because the fixture has to render the state the
 			// milestone exists for: a link with one code and a link with two are
 			// different markup, and the theme scan, the overflow check and the
@@ -807,13 +818,13 @@ func pageData(t *testing.T) map[string]any {
 			"QRCodes": []map[string]any{
 				{"Slug": "d3f4u1t0", "Label": "", "Name": "The original code", "Size": 740,
 					"Default": true, "Selected": true,
-					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
 					"Clicks":      412, "Counted": false},
 				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
 					"Default": false, "Selected": false,
-					"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
 					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
 					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
 					"Clicks":      37, "Counted": false},

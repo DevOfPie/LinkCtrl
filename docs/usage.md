@@ -305,7 +305,9 @@ holds, with the header and a way back, so you can bookmark it, open it in a
 second tab, or share the URL — and a browser too old for the popup renders the
 panel inline instead of hiding it. The panel's own **Open as a page** link is
 where that URL comes from. `/links/{id}/qr` serves the QR settings the same
-way, and the codes list on the QR tab links through it.
+way, and `?code=` on it opens them on one particular code. Nothing on the QR
+tab links there any more — picking a code from the list changes the tab where
+you are standing instead — so it is a URL you keep rather than one you reach.
 
 Neither surface changes who may do anything. The QR settings are still
 `links.update` and the reviewer roster is still `instance.admin`; the queue shows
@@ -344,6 +346,13 @@ there, compared without regard to case. A code you have not named sorts first �
 it has no name to sort by, and the row shows a placeholder rather than one. Which
 code is the link's default is the filled dot on its row, not its position, so
 choosing a different default does not shuffle the list under you.
+
+**Picking a row selects that code**, and the picture, the style form and the
+downloads below the list all follow it. The page does not reload and does not
+move: the tab is redrawn where you are standing, your place on it is kept, and
+the small code beside the link's name stays where it is. Selecting is still an
+ordinary link, so it works with JavaScript off — it loads the page instead of
+redrawing part of it.
 
 Every code prints an identity in its picture, as `&qrc=<something>` beside
 `?src=qr`. That is what the redirect reads to say which code was scanned. The

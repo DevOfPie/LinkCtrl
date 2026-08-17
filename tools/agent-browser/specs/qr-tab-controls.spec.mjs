@@ -84,6 +84,15 @@ const instancesDoc = fileURLToPath(
   new URL('../../../docs/dev-notes/instances.md', import.meta.url),
 );
 
+// A row in the codes list, addressed by where it points.
+//
+// **It stopped being `/qr?code=` at M50.8's third reopening.** Every row went to
+// the panel route on both surfaces; the link page names the code on itself now —
+// `?tab=qr&code=` — so that picking one swaps the tab strip instead of loading a
+// page. `code=` is what the two spellings still share, and it is on nothing else
+// in the row: the download entries are API paths.
+const codeRowLink = 'a[href*="code="]';
+
 function credentials() {
   const { LINKCTRL_UI_EMAIL: email, LINKCTRL_UI_PASSWORD: password } = process.env;
   if (email && password) return { email, password };
@@ -483,7 +492,7 @@ test('a save is never shown a position the reader did not stand at', async () =>
   // case is the only one in the file that moves a link's default, and the
   // file's rule is that a second run starts where the first one did.
   const wasDefault = await page
-    .locator('main ul li:has(button[aria-pressed="true"]) a[href*="/qr?code="]')
+    .locator(`main ul li:has(button[aria-pressed="true"]) ${codeRowLink}`)
     .first()
     .textContent();
 
@@ -744,11 +753,13 @@ test('the row controls answer the pointer on the selected row', async () => {
 
   // **A row has to be selected first, and that is not the landing state.** The
   // link page selects a code only when the URL names one, and on a link whose
-  // codes all carry slugs no row is selected until the reader picks one — which
-  // is exactly what picking one does: it follows that row's own panel URL. So
-  // the spec picks one, the way a reader does.
-  const first = page.locator('main ul li a[href*="/qr?code="]').first();
-  await expect(first, 'no row links to its own panel, so nothing can be selected').toHaveCount(1);
+  // codes all carry slugs no row is selected until the reader picks one. So the
+  // spec picks one, the way a reader does — which since M50.8's third reopening
+  // swaps the tab strip in place rather than loading the panel route, so what
+  // this case goes on to measure is the link page's own list and no longer the
+  // panel's.
+  const first = page.locator(`main ul li ${codeRowLink}`).first();
+  await expect(first, 'no row links to a code, so nothing can be selected').toHaveCount(1);
   await first.click();
   await page.waitForURL(/[?&]code=/, { timeout: 10000 });
 
@@ -786,6 +797,116 @@ test('the row controls answer the pointer on the selected row', async () => {
     hovered,
     'hovering a control on the selected row paints nothing at all',
   ).not.toBe('rgba(0, 0, 0, 0)');
+});
+
+// M50.8's third reopening: F246(d) and F244(b), which are one navigation.
+// Owner: *"the selected code is changed with the default, which means we should
+// be able to prevent scrolling when selecting a different code as well?"*
+//
+// **The answer is that nothing is preserved, because nothing is disturbed.**
+// Every row went to `/links/{id}/qr?code=` — a document load, onto a page with
+// no link heading row, starting at the top. The row is the tab strip's own swap
+// now, so there is no load to remember a position across and no heading row to
+// lose. Four things are asserted and every one of them fails on its own:
+//
+//   no load           a marker set on `window` before the click. A document load
+//                     wipes it, which is the difference between a swap and a
+//                     navigation and is invisible to every other assertion here.
+//   the offset holds  F246(d) itself.
+//   the code changed  what stops the other three passing on a page that did
+//                     nothing at all — the offset is trivially unchanged when
+//                     the click did not work.
+//   the thumbnail     F244(b). It renders outside `#link-tabs`, so a swap cannot
+//                     touch it and a load onto the panel route had none to draw.
+test('selecting a code redraws the tab without leaving the page', async () => {
+  await openMultiCodeQRTab(page);
+
+  const thumb = page.locator('main a[aria-label="QR code: open the QR tab"]');
+  await expect(
+    thumb,
+    'the link page draws no heading thumbnail, which is the element F244(b) is ' +
+      'about — so this case cannot report on it either way',
+  ).toHaveCount(1);
+
+  const rows = page.locator('main ul li:has(button[popovertarget^="qr-download-"])');
+  const count = await rows.count();
+  expect(count, 'the codes list is not a list, so nothing can be selected').toBeGreaterThan(1);
+
+  // A row the tab is not already drawing. The landing state names no code, so
+  // the tab is on the default and the row holding the flag is the one to avoid.
+  let target = -1;
+  for (let i = 0; i < count; i += 1) {
+    if ((await rows.nth(i).locator('button[aria-pressed="true"]').count()) === 0) {
+      target = i;
+      break;
+    }
+  }
+  expect(
+    target,
+    'every row holds the default flag, which cannot be true of a list — so the ' +
+      'row this case needs is not identifiable and it would be selecting the ' +
+      'code already on screen',
+  ).toBeGreaterThan(-1);
+
+  const link = rows.nth(target).locator(codeRowLink).first();
+  const href = await link.getAttribute('href');
+  const slug = new URL(href, page.url()).searchParams.get('code');
+  expect(slug, `the row links to ${href}, which names no code`).toBeTruthy();
+
+  // The reader's position: past the top, and close enough to it that the
+  // heading row is still on screen. Both halves matter — an offset of 0 would
+  // make "unchanged" true of a page that reloaded, and a thumbnail already
+  // scrolled away would make the F244(b) half unfalsifiable.
+  await page.evaluate(() => window.scrollTo(0, 160));
+  const before = await page.evaluate(() => Math.round(window.scrollY));
+  expect(
+    before,
+    'the page does not scroll at this viewport, so an offset that survives a ' +
+      'selection proves nothing',
+  ).toBeGreaterThan(0);
+  await expect(
+    thumb,
+    'the thumbnail is already off screen before anything was selected',
+  ).toBeInViewport();
+
+  const drawing = page.locator('#qr .h-72 svg').first();
+  await expect(drawing, 'the tab draws no code at all').toHaveCount(1);
+  const drawnBefore = await drawing.evaluate((el) => el.outerHTML);
+
+  // The marker. Anything that survives a document load would do; a property on
+  // `window` is the cheapest thing that does not.
+  await page.evaluate(() => {
+    window.__linkctrlSelectionMarker = 'set';
+  });
+
+  await link.click();
+  await page.waitForURL((url) => url.searchParams.get('code') === slug, { timeout: 10000 });
+  await expect(
+    page.locator(`main ul li.bg-sunken ${codeRowLink}`),
+    'no row reads as selected after picking one',
+  ).toHaveCount(1);
+
+  expect(
+    await page.evaluate(() => window.__linkctrlSelectionMarker),
+    'the document was replaced, so selecting a code is still a page load — which ' +
+      'is what put the reader at the top of a page with no heading row (F244b, ' +
+      'F246d)',
+  ).toBe('set');
+  expect(
+    await page.evaluate(() => Math.round(window.scrollY)),
+    'selecting a code moved the reader',
+  ).toBe(before);
+  expect(
+    await drawing.evaluate((el) => el.outerHTML),
+    `selecting ${slug} redrew the same code, so the three assertions around this ` +
+      'one are being made about a click that did nothing',
+  ).not.toBe(drawnBefore);
+  await expect(
+    thumb,
+    'the thumbnail left the viewport when a code was selected, which is F244(b) ' +
+      'exactly: the preview vanished because the reader was sent to a page that ' +
+      'has no heading row',
+  ).toBeInViewport();
 });
 
 test('the add prompt opens beside the counter and adds a code', async () => {
@@ -914,5 +1035,42 @@ test.describe('with scripts disabled', () => {
     await page.locator('#qr button[type="submit"]:not([name])').click();
     await page.waitForURL('**qr=styled**', { timeout: 15000 });
     await expect(page.locator('#qr_size')).toHaveValue(was);
+
+    // --- and selecting a code is still a link ---------------------------------
+    //
+    // M50.8's third reopening turned a row into an htmx swap of `#link-tabs`.
+    // With no htmx there is no swap, so the `href` is the whole mechanism — and
+    // it has to reach a page that shows that code, which is D178's standing
+    // argument on this tab and is why the href and the `hx-get` are one string.
+    //
+    // **In this case rather than in one of its own, and the reason is a limit.**
+    // A second `test()` under this describe would take a second context and a
+    // ninth sign-in against `LOGIN_RATE_PER_MIN`'s 10 (F242). The context is
+    // already here and already signed in, so the claim rides on it.
+    await openMultiCodeQRTab(page);
+    const codeRow = page.locator(`main ul li ${codeRowLink}`).first();
+    await expect(
+      codeRow,
+      'no row in the codes list carries an href, so a reader with the script ' +
+        'blocked has no way to select a code at all',
+    ).toHaveCount(1);
+    const slug = new URL(await codeRow.getAttribute('href'), page.url()).searchParams.get('code');
+    expect(slug, 'the row names no code to follow').toBeTruthy();
+
+    await codeRow.click();
+    // The *form's* code field, addressed through the one form on this page that
+    // has an id. Every row carries a `code` field naming its own slug, so a
+    // bare `[value="…"]` would match the row that was clicked whether or not
+    // anything was selected by clicking it.
+    await expect(
+      page.locator(`#qr-logo-upload input[name="code"][value="${slug}"]`),
+      `following a row's link without scripts did not reach a page editing ${slug}; ` +
+        'the href is all this reader has',
+    ).toHaveCount(1);
+    await expect(
+      page.locator('main a[aria-label="QR code: open the QR tab"]'),
+      'the href landed somewhere with no link heading row, which is the page ' +
+        'F244(b) reported — the list is not supposed to send anybody there any more',
+    ).toHaveCount(1);
   });
 });

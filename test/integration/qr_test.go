@@ -636,6 +636,115 @@ func TestAQRWriteReturnsToTheQRTab(t *testing.T) {
 	}
 }
 
+// TestTheLinkPageDrawsTheCodeTheRequestNames is M50.8's third reopening at the
+// layer the reopening's finding sits in: `/links/{id}` passed `""` to linkQR
+// unconditionally and nothing on that path read `code`, so on the link page
+// *selected* meant *default*. Moving the flag was the only way to change what
+// the tab drew, which is why F244(b) and F246(d) both look like navigation
+// problems and are one missing parameter.
+//
+// Driven against the stack rather than asserted from markup, because the claim
+// is that a **request** reaches a code: the handler, its fallback and the form
+// the page renders back are three separate places the slug has to survive, and
+// internal/ui sees only the third.
+func TestTheLinkPageDrawsTheCodeTheRequestNames(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("selected", "https://example.com/x")
+	detail := "/links/" + id.String()
+	second := f.createQRCode(t, id, "Autumn poster")
+	if second.Slug == "" {
+		t.Fatal("the second code has no slug, so there is nothing for the page to name")
+	}
+	def := f.qrCode(id)
+	if def.Slug == second.Slug {
+		t.Fatal("the link's default is the code just added, so selecting it asserts nothing")
+	}
+
+	// The tab draws the named code: the style form below the list writes to it,
+	// which is the one place on the page that says which code is being edited.
+	named := f.getHTML(detail + "?tab=qr&code=" + second.Slug)
+	if got := styleFormCode(t, named); got != second.Slug {
+		t.Errorf("the link page named %s and the form below the list edits %q; "+
+			"selecting a code on this page changed nothing until this reopening",
+			second.Slug, got)
+	}
+	// And the row for it is the one marked selected, so the list and the form
+	// agree about which code the reader picked.
+	if !strings.Contains(named, "?tab=qr&amp;code="+second.Slug) {
+		t.Errorf("the codes list on the link page does not link a row to %s on this "+
+			"page; every row pointed at the panel route until this reopening",
+			second.Slug)
+	}
+
+	// The fallback, which is what stops a stale bookmark or an invented slug
+	// rendering an error where a picture goes. It is linkQR's and it predates
+	// this reopening; what is new is that the link page can reach it at all.
+	invented := f.getHTML(detail + "?tab=qr&code=nosuchcode")
+	if got := styleFormCode(t, invented); got != "" {
+		t.Errorf("a code this link does not have left the form editing %q rather "+
+			"than falling back to the default", got)
+	}
+	if strings.Contains(invented, "could not be read") {
+		t.Error("an invented ?code= drew an error where the picture goes")
+	}
+
+	// A save on the selected code comes back to it. Without this the first
+	// write after selecting returns the reader to the default and the reopening
+	// has moved the bug rather than fixed it.
+	resp := f.postForm(detail+"/qr", url.Values{
+		"foreground": {"#123456"}, "background": {"#fedcba"}, "size": {"400"},
+		"next": {detail}, "code": {second.Slug},
+	})
+	loc := resp.Header.Get("Location")
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("a save on a selected code = %d, want 303", resp.StatusCode)
+	}
+	if !strings.Contains(loc, "code="+second.Slug) || !strings.Contains(loc, "tab=qr") {
+		t.Errorf("a save on %s returned to %q; the reader is put back on the "+
+			"default code by their own save", second.Slug, loc)
+	}
+
+	// And so does a refusal. The link page's 422 is rendered rather than
+	// redirected, so it takes its selection from the posted form rather than
+	// from a query string the POST does not have — and a refusal that redrew the
+	// default would leave the reader's numbers in a form pointed at another code.
+	bad := f.postForm(detail+"/qr", url.Values{
+		"foreground": {"#000000"}, "background": {"#ffffff"}, "size": {"9"},
+		"next": {detail}, "code": {second.Slug},
+	})
+	body := string(readAll(t, bad))
+	_ = bad.Body.Close()
+	if bad.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("a 9px code = %d, want 422", bad.StatusCode)
+	}
+	if got := styleFormCode(t, body); got != second.Slug {
+		t.Errorf("a refused save on %s came back editing %q", second.Slug, got)
+	}
+}
+
+// styleFormCode is the code the controls below the codes list write to, read off
+// the logo upload form because it is the one form on the page carrying an id.
+//
+// Every *row* also carries a `code` field naming its own slug, so scanning the
+// page for a value would match the row that was clicked whether or not clicking
+// it selected anything. `#qr-logo-upload` holds `QRSlug`, which is the selection
+// itself.
+func styleFormCode(t *testing.T, body string) string {
+	t.Helper()
+	at := strings.Index(body, `id="qr-logo-upload"`)
+	if at < 0 {
+		t.Fatal("the page renders no logo upload form, so there is nothing on it " +
+			"that names the selected code rather than a row's own")
+	}
+	m := regexp.MustCompile(`name="code" value="([^"]*)"`).FindStringSubmatch(body[at:])
+	if m == nil {
+		t.Fatal("the logo upload form carries no code field")
+	}
+	return m[1]
+}
+
 // --- M49: the size, the PNG, and the styles that were already stored ----------
 
 // TestThePNGAndTheSVGAreTheSameCodeOverTheWire is the milestone's matching claim

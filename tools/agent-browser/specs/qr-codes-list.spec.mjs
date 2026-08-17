@@ -53,6 +53,15 @@ const instancesDoc = fileURLToPath(
   new URL('../../../docs/dev-notes/instances.md', import.meta.url),
 );
 
+// A row in the codes list, addressed by where it points.
+//
+// **It stopped being `/qr?code=` at M50.8's third reopening.** Every row went to
+// the panel route on both surfaces; the link page names the code on itself now —
+// `?tab=qr&code=` — so that picking one swaps the tab strip instead of loading a
+// page. `code=` is what the two spellings still share, and it is on nothing else
+// in the row: the download entries are API paths.
+const codeRowLink = 'a[href*="code="]';
+
 function credentials() {
   const { LINKCTRL_UI_EMAIL: email, LINKCTRL_UI_PASSWORD: password } = process.env;
   if (email && password) return { email, password };
@@ -137,7 +146,7 @@ test('a row selects on its whole area, and the action cluster is held off it', a
   const box = await row.boundingBox();
   const cluster = await row.locator('div.relative.z-10').boundingBox();
   expect(cluster, 'the row draws no action cluster').not.toBeNull();
-  const nameBox = await row.locator('a[href*="/qr"]').first().boundingBox();
+  const nameBox = await row.locator(codeRowLink).first().boundingBox();
   expect(
     cluster.x - (nameBox.x + nameBox.width),
     'there is no blank space between the selecting area and the acting controls; the ' +
@@ -250,7 +259,7 @@ test('each row\'s download menu opens on its own row and reaches both formats', 
 // A row is therefore addressed by the code's own link text, which is the one
 // thing on it that is still unique.
 const nameOf = (button) => button.getAttribute('aria-label');
-const codeOf = (row) => row.locator('a[href*="/qr"]').first().innerText();
+const codeOf = (row) => row.locator(codeRowLink).first().innerText();
 // The row a control sits in, addressed by the control's own state rather than
 // by a `has:` filter — a filter's inner locator is resolved against the row, so
 // a page-rooted selector inside one matches nothing and times out.

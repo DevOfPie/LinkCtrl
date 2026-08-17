@@ -364,6 +364,7 @@ file. Append a row when you append an entry.
 | [M50.8's reopening, four citations its own diff moved](#2026-08-14--m508s-reopening-four-citations-its-own-diff-moved) | Fact-level orchestrator amendments: four line numbers in the reopening's own bullets, stale because the build moved them by doing what the bullets asked. **The third time in two days this hazard has cost an amendment** — a citation written against a diff in flight goes stale before the diff lands, and the answer is re-reading at step 3.4 rather than citing less. Also records that the three removed sentences still appear as quotations inside the comments recording their removal, which is convention and not a failed deletion |
 | [Three shipped entries the fourth report's removals falsified](#2026-08-14--three-shipped-entries-the-fourth-reports-removals-falsified) | Corrections **by a later entry**, this file being append-only. M50.7's defence of its meta-line cut, M50.7's claim that the logo paragraph still names level H, and D186's citation of that same paragraph were all falsified by F244(c), (d) and (f). A fourth: **`logo_applied` is a symbol that has never existed** — the marker is `"logo"` — and it survived review in a landed entry because the sentence around it was right. D186 stands and is discharged by the **upload notice** at `internal/httpx/web_qr.go:650-663` rather than by prose on the tab. The rule the run earned: **entries about this surface cite the mechanism, not the sentence** — a claim that *the tab still says X* has a lifetime, and this tab has been reported four times in three days |
 | [M50.8, the paint is held, the logo submits to a form it is not in, and the slider draws its own stops](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops) | D196 — the QR tab's save is put back **before the first paint**, which cannot mean restoring earlier: a script in `<head>` runs before the document has any height and `scrollTo` against it clamps to 0. So the paint is *withheld* — `qr-size.js` is parser-blocking now, marks `<html>` when it holds an offset for this path, and app.css keeps `body` unpainted until the scroll lands at `DOMContentLoaded`. Only on the load after a write; three independent reveals, because a page that stays hidden is worse than a page that jumps. Rejected: a head-time restore (cannot work, not merely costly) and a server-rendered offset (same timing, and the position leaves the browser). D197 — the logo's controls move **into the style form's grid** by `form="…"`, which reverses one reopening's *"it does not move into the style form"*: the nesting ban is on the `<form>` element, not on a control that names one. The `change` trigger moves onto the input with it — `change` bubbles up the DOM, not to the form a control names — and htmx serializes the form the control **owns** rather than the one it sits in, which was measured and which deleted an `hx-params` filter the build had written on the opposite belief. D198 — the size slider's detents are **SVG geometry the template renders**, because `style-src 'self'` refuses the style attribute a custom property would ride on and `appearance: auto` would trade the theme for the marks. One `<line>` per stop, positioned `(stop − min) / (max − min)`, inset by half a thumb |
+| [M50.8, selecting a code is the tab strip's own swap](#2026-08-17--m508-selecting-a-code-is-the-tab-strips-own-swap) | D199 — a row in the codes list **swaps `#link-tabs` on the page the reader is already on**, with the tab strip's own four attributes and `&code=` on the request, and its `href` is that same URL. No load, so there is nothing to remember and nothing to restore — the position is never disturbed rather than preserved — and the heading thumbnail stays because it renders outside the swapped element, which closes F244(b) as a consequence of F246(d)'s fix. `web_links.go:970` reads `?code=` now, keeping linkQR's existing fallback for a slug the link does not have; `qrReturn` carries the code on the link-page branch as well as the panel one, and the refusal path re-derives it from the posted field the way it already re-derives the tab. Rejected: swapping `#qr` from the panel route, which is the cheaper request but pushes the panel URL onto the link page or else gives one control two addresses; keeping the href on the panel route under the swap, which leaves the script-blocked reader on the defect D178 exists for; and a script of this list's own, which m50.8.md bounds out |
 
 ---
 
@@ -30069,3 +30070,119 @@ described cannot be built at all. What the bullet asserts is unchanged, which is
 what makes this an amendment rather than a prompt: the owner's choice was
 already delegated by the menu, and no reading of it would have let the hold
 through while stopping something else.
+
+---
+
+## 2026-08-17 — M50.8, selecting a code is the tab strip's own swap
+
+**D199 — a row in the codes list swaps `#link-tabs` on the page the reader is
+already on, and its `href` is the same URL.** M50.8's third reopening leaves the
+mechanism to the build and requires it be argued; this is the argument, and what
+it rejected.
+
+**What the finding actually was.** `internal/httpx/web_links.go:970` called
+`h.linkQR` with an empty slug, unconditionally, and nothing on the link page's
+path read `code` from the request. So on that page *selected* meant *default*,
+and moving the flag was the only way to change what the tab drew — which is why
+making a code the default appeared to select it, and why that path kept the
+reader's position while selecting one did not. The list's rows were the other
+half: every one of them pointed at `/links/{id}/qr?code=`, the panel route, which
+is a different page with no link heading row. [F244](deferred-findings.md)(b),
+the vanishing thumbnail, and [F246](deferred-findings.md)(d), the lost position,
+are one navigation and are answered by removing it.
+
+**Chosen: the mechanism `partials/link_tabs.html` already runs.** The row is
+`hx-get` → `#link-tabs`, `hx-select="#link-tabs"`, `hx-swap="outerHTML"`,
+`hx-push-url="true"` — the tab strip's four attributes, one argument further
+down, fetching `/links/{id}?tab=qr&code=<slug>`. The href is that same string.
+Three properties follow from it and none of them is separately engineered:
+
+- **No load, so nothing to restore.** The whole scroll-restoration machinery
+  ([D193](#2026-08-14--m508-built-a-remembered-position-and-two-readers-that-mistook-the-flag-for-a-place),
+  [D195](#2026-08-14--m508-the-fragment-yields-rather-than-being-out-scrolled),
+  [D196](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops))
+  exists because a *write* is a redirect and a redirect is a load. A swap is
+  neither. The position is not preserved so much as never disturbed, and
+  `qr-size.js` needed no change at all: it stores an offset on
+  `htmx:beforeRequest` and forgets it on `htmx:afterSwap`, which is exactly the
+  pair a selection produces.
+- **The thumbnail stays because it was never redrawn.** It renders in the link
+  page's heading row, outside `#link-tabs`. F244(b) closes as a consequence of
+  F246(d)'s fix rather than as a second change.
+- **One URL for both readers.** The `href` and the `hx-get` are one string, so a
+  reader with the script blocked follows it to a page showing that code —
+  [D178](#2026-08-11--m47-built-the-stack-becomes-tabs-and-d178)'s
+  standing argument on this tab, and it is not spent here.
+
+**Rejected: swapping `#qr` from the panel route.** `hx-get="{{.Panel}}"` with
+`hx-select="#qr"` fetches one section instead of a whole link page, and the link
+page's assembly is three page-replacing reads and five soft ones including an
+analytics rollup. It is the cheaper request and it was not taken, because
+`hx-push-url="true"` would then push the *panel* URL onto the link page: a
+refresh or a bookmark lands on the page with no heading row, which is the defect.
+The way out is `hx-push-url="/links/{id}?tab=qr&code=…"` naming a different URL
+from the one fetched — one control with two addresses, and the script-blocked
+reader still on the wrong one. The cost of the choice is stated instead: picking
+a code costs exactly what switching tabs costs, because it is the same request.
+
+**Rejected: keeping the href on the panel route and adding the swap over it.**
+This is the smallest diff and it fixes nothing for a reader without the script,
+who is the reader D178 is about. It also makes the two readers see different
+pages from one control, which is the property this tab has spent three reopenings
+acquiring.
+
+**Rejected: a script of this list's own.** m50.8.md bounds `qr-size.js` to two
+things and says anything else wanting script is a decision rather than a
+follow-on. Nothing here needs one.
+
+**Two things moved with it, and they are the milestone's own bullets.**
+`qrReturn`'s link-page branch carried no `code` — written into the panel branch
+alone, and correct until now, because the link page could not show a non-default
+code. Left there, the first save on a selected code would return the reader to
+the default one. The same is true of a **refusal**: `finishQRAction`'s link-page
+branch renders rather than redirects, and `loadLinkDetail` takes the selection
+off a query string a POST does not have, so it re-derives the view from the
+posted `code` the way it already re-derives `Tab`. That second one is not in the
+milestone's text and is in its scope: it is a defect this change creates, on the
+claim this change makes.
+
+**`Select` is per surface and `QRSelectSwapsTabs` says which.** The panel's own
+page has no `#link-tabs`, so its rows keep the plain link they always had and
+htmx is handed no target it cannot place. `qrSelectPath` builds both paths and
+compares against them — **matched, never followed**, which is `qrReturn`'s own
+discipline rather than a second answer to the same question.
+
+**What is enforced, and where.** `TestSelectingACodeDoesNotLeaveTheLinkPage`
+(internal/ui) holds the markup on both surfaces, including that the href and the
+`hx-get` are one string. `qr_select_test.go` (internal/httpx) holds the two path
+builders. `TestTheLinkPageDrawsTheCodeTheRequestNames` (integration) drives the
+request, the fallback, the save and the refusal. The claim that only a browser
+can make — no load, the offset unmoved, the drawing changed, the thumbnail still
+on screen — is a case in `specs/qr-tab-controls.spec.mjs`, on that file's shared
+serial page so it costs no sign-in ([F242](deferred-findings.md)), with the
+script-blocked half folded into the case that already has a scripts-off context
+for the same reason. The no-load half is asserted by a property set on `window`
+before the click: a document load wipes it, and nothing else in the case can see
+the difference between a swap and a navigation.
+
+**Not done here, and recorded rather than left to be noticed.** The panel route
+keeps its own page and its missing heading row. Nothing on the tab links to it;
+whether it should exist at all is a question this reopening does not ask.
+
+**One shipped entry this diff falsified, corrected here because decisions.md is
+append-only.** The 2026-08-11 entry *M48 reopened: the QR popup folds into its
+tab* defends keeping `/links/{id}/qr` as a route with a clause in its disposition
+table: *"The route keeps answering — the codes list selects a code through it
+(`?code=`) and it is what a bookmark reaches."* Half of that is now false. The
+codes list selects through it **on the panel's own page only**; on the link page
+no row points there, which is the whole of this reopening. The route's other two
+justifications are untouched and are why it stays: a bookmark still reaches it,
+and `TestEveryPanelIsAlsoACompletePage` still holds it to rendering complete. The
+two places that mirror the same sentence — `pages/link_qr.html` and
+`internal/ui/panel_test.go` — were corrected in this diff; the decision entry
+could not be, so it is corrected by this paragraph. Found by the milestone's
+reviewer, and it is the third time on this surface that a diff has been right
+while a record elsewhere quietly stopped being: D195's own cost sentence went the
+same way one reopening ago, which is why the rule is to sweep per *reversed
+argument* rather than per changed symbol. The argument reversed here is
+*the route is how a code gets selected*.

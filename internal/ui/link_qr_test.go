@@ -18,6 +18,22 @@ import (
 // has to be added here deliberately.
 var qrPanelPages = []string{"link_detail", "link_qr"}
 
+// qrSelectFor is where a row of the codes list goes on each surface, mirroring
+// httpx.qrSelectPath (M50.8's third reopening).
+//
+// The two are no longer one string. The link page names the code on itself so
+// the tab can be swapped in place; the panel page, which has no tab strip, still
+// navigates to its own route. A fixture handing both surfaces the same row would
+// render markup internal/httpx never builds, which is the failure F191 and F200
+// both recorded one attribute at a time.
+func qrSelectFor(page, slug string) string {
+	const linkID = "0198c9c5-0000-7000-8000-000000000001"
+	if page == "link_qr" {
+		return "/links/" + linkID + "/qr?code=" + slug
+	}
+	return "/links/" + linkID + "?tab=qr&code=" + slug
+}
+
 // renderQRPanel renders one of those surfaces with the QR section on screen.
 //
 // The link page draws one tab at a time since M47's reopening, so the section is
@@ -530,6 +546,106 @@ func qrRows(t *testing.T, body string) []string {
 		t.Fatalf("the codes list holds %d rows, want at least 1", len(rows)-1)
 	}
 	return rows[1:]
+}
+
+// TestSelectingACodeDoesNotLeaveTheLinkPage is M50.8's third reopening, from
+// F246(d) and F244(b) — which are one navigation and are answered together.
+// Owner: *"the selected code is changed with the default, which means we should
+// be able to prevent scrolling when selecting a different code as well?"*
+//
+// Every row went to `/links/{id}/qr?code=` on both surfaces, so picking a code
+// on the link page was a document load onto a page with no link heading row,
+// starting at the top. The answer is that there is no load: the row is the tab
+// strip's own mechanism (partials/link_tabs.html) carrying `&code=` as well as
+// `?tab=qr`, so `#link-tabs` is swapped in place and everything outside it —
+// the heading row and its thumbnail — is never redrawn.
+//
+// **Three things are asserted and they fail separately.** That the href is the
+// link page rather than the panel route, which is what a reader with the script
+// blocked follows (D178). That the swap attributes are all four of the strip's,
+// because three of four is a link that navigates. And that `hx-get` is the same
+// string as the href, because two different URLs would mean the scripted reader
+// and the script-blocked one see different codes.
+//
+// The panel's own page is asserted in the negative: it has no `#link-tabs` to
+// swap, so it keeps the plain link it always had and htmx is handed nothing it
+// cannot place. Whether the swap actually redraws the tab, and whether the
+// position and the thumbnail survive it, is the kept spec's
+// (tools/agent-browser/specs/qr-tab-controls.spec.mjs).
+func TestSelectingACodeDoesNotLeaveTheLinkPage(t *testing.T) {
+	const linkID = "0198c9c5-0000-7000-8000-000000000001"
+	swap := []string{
+		`hx-target="#link-tabs"`, `hx-select="#link-tabs"`,
+		`hx-swap="outerHTML"`, `hx-push-url="true"`,
+	}
+
+	for _, page := range qrPanelPages {
+		rows := qrRows(t, renderQRPanel(t, page))
+		if len(rows) < 2 {
+			t.Fatalf("%s renders %d code rows; the claim is about picking one of "+
+				"several, so a one-row fixture asserts nothing", page, len(rows))
+		}
+		for i, row := range rows {
+			at := strings.Index(row, `<a href="/links/`)
+			if at < 0 {
+				t.Fatalf("%s row %d carries no link at all, so nothing selects it", page, i)
+			}
+			anchor := row[at : at+strings.Index(row[at:], ">")]
+
+			if page == "link_qr" {
+				// The bookmarkable surface, unchanged. It is also the assertion
+				// that the swap is conditional rather than always rendered:
+				// htmx raises a target error where `#link-tabs` does not exist.
+				if !strings.Contains(anchor, `href="/links/`+linkID+`/qr?code=`) {
+					t.Errorf("the panel page's row %d no longer links to its own route; "+
+						"it has no tab strip to swap, so this href is the whole "+
+						"mechanism:\n  %s", i, anchor)
+				}
+				for _, hx := range append([]string{"hx-get="}, swap...) {
+					if strings.Contains(anchor, hx) {
+						t.Errorf("the panel page's row %d carries %s, and there is no "+
+							"#link-tabs on this page for htmx to place the response "+
+							"into:\n  %s", i, hx, anchor)
+					}
+				}
+				continue
+			}
+
+			// `&amp;` because html/template escapes an interpolated `&` in an
+			// attribute, which is what correct HTML looks like; the browser and
+			// htmx both read the parsed value back as `&`.
+			want := `/links/` + linkID + `?tab=qr&amp;code=`
+			if !strings.Contains(anchor, `href="`+want) {
+				t.Errorf("the link page's row %d still sends the reader off the page. "+
+					"Selecting a code is a swap of this page's own tab strip since "+
+					"M50.8's third reopening, and the href is what a script-blocked "+
+					"reader follows to the same place (D178):\n  %s", i, anchor)
+				continue
+			}
+			if !strings.Contains(anchor, `hx-get="`+want) {
+				t.Errorf("the link page's row %d fetches a different URL from the one "+
+					"its href names, so a reader running the script and one who is "+
+					"not would be shown different codes:\n  %s", i, anchor)
+			}
+			for _, hx := range swap {
+				if !strings.Contains(anchor, hx) {
+					t.Errorf("the link page's row %d is missing %s. Three of the "+
+						"strip's four attributes is a link that navigates, which is "+
+						"the load this reopening exists to remove:\n  %s", i, hx, anchor)
+				}
+			}
+		}
+
+		// And nothing on the link page's tab points at the panel route any
+		// more, which is the half of F244(b) that closes: the surface still
+		// answers to a bookmark, and the list stops sending anybody there.
+		if page == "link_detail" {
+			if body := renderQRPanel(t, page); strings.Contains(body, `href="/links/`+linkID+`/qr?code=`) {
+				t.Error("the link page's QR tab still links to the panel route, which " +
+					"is the page with no link heading row that F244(b) reported")
+			}
+		}
+	}
 }
 
 // TestARowSelectsOnItsWholeArea is F224(f)'s first half, owner-reported:
@@ -1201,7 +1317,7 @@ func oneCodeList(t *testing.T, page string) string {
 		"QRCodes": []map[string]any{{
 			"Slug": "d3f4u1t0", "Label": "", "Name": "The original code",
 			"Size": 740, "Default": true, "Selected": true,
-			"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+			"Select":      qrSelectFor(page, "d3f4u1t0"),
 			"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
 			"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
 		}},
@@ -1471,21 +1587,27 @@ func TestTheAddControlIsDisabledAtCapacityRatherThanAbsent(t *testing.T) {
 	if !ok || max < 2 {
 		t.Fatalf("the fixture carries no usable QRMaxCodes (%v)", data["QRMaxCodes"])
 	}
-	full := make([]map[string]any, 0, max)
-	for i := range max {
-		slug := "code" + strconv.Itoa(i)
-		full = append(full, map[string]any{
-			"Slug": slug, "Label": slug, "Name": slug, "Size": 740,
-			"Default": i == 0, "Selected": i == 0,
-			"Panel":       "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=" + slug,
-			"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/" + slug + "/image.svg",
-			"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/" + slug + "/image.png",
-		})
+	// Twenty rows, built per surface: a row's Select is the surface's since
+	// M50.8's third reopening, so one slice shared between the two would carry
+	// the panel route onto the link page and render markup no handler builds.
+	full := func(page string) []map[string]any {
+		rows := make([]map[string]any, 0, max)
+		for i := range max {
+			slug := "code" + strconv.Itoa(i)
+			rows = append(rows, map[string]any{
+				"Slug": slug, "Label": slug, "Name": slug, "Size": 740,
+				"Default": i == 0, "Selected": i == 0,
+				"Select":      qrSelectFor(page, slug),
+				"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/" + slug + "/image.svg",
+				"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/" + slug + "/image.png",
+			})
+		}
+		return rows
 	}
 
 	for _, page := range qrPanelPages {
 		body := mainOf(t, renderPage(t, page,
-			map[string]any{"Tab": "qr", "QRCodes": full}))
+			map[string]any{"Tab": "qr", "QRCodes": full(page)}))
 
 		if !strings.Contains(body, ">"+strconv.Itoa(max)+"/"+strconv.Itoa(max)+"</p>") {
 			t.Errorf("%s does not read %d/%d at capacity, so the fixture is not "+
