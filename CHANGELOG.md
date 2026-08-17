@@ -27,222 +27,7 @@ migrations run at boot.
 
 ## [Unreleased]
 
-### Changed
-
-- **A link's page shows one section at a time, behind tabs.** It was every
-  section in one column — the edit form, the QR code, routing rules, the split
-  test, signed links, analytics, recent activity and the danger zone, stacked —
-  and finding anything below the fold meant scrolling past everything above it.
-  A tab strip now selects one panel: Edit, QR, Routing, Split, Signed,
-  Analytics and Danger, with recent activity folded into Analytics since it is
-  the same data one row at a time. The strip scrolls sideways on narrow
-  screens rather than wrapping. Each tab is a real URL (`?tab=`), so
-  bookmarks, refresh and the back button keep working, and a save made in any
-  section returns to the tab that section lives on. No section's behaviour,
-  permissions or form fields changed.
-
-- **A link's QR settings live on the QR tab, and the small code beside the
-  heading opens it.** The popup that used to hold the style form and the
-  downloads is gone: with the page behind tabs, everything it held is one
-  click away on the QR tab, so the codes list, the full drawing, both
-  downloads, the style form and the logo controls now render there directly.
-  Clicking the thumbnail — from any tab — switches to the QR tab. Nothing
-  else moved: `/links/{id}/qr` still serves the same contents as their own
-  page for bookmarks and second tabs, every saved link and permission is
-  unchanged, and the reviewer panel on the dispute queue keeps working as it
-  did.
-
-- **Every tab on a link's page now says what its section holds, on the tab
-  itself.** Tabs answered where a section went and not what is configured in
-  it; reading a link's setup meant opening seven panels in turn. Each tab now
-  carries a badge: QR counts the link's codes, Routing its rules, and
-  Analytics shows the clicks in the selected window. Split shows which kind of
-  test is running — unequal shares for weighted, equal shares for sequential —
-  and Signed shows a check when the link requires signed access, the one badge
-  with colour. An empty section shows a muted `0` or a small cross rather than
-  nothing, so every tab keeps its width and two links compare position by
-  position; the cross always means the section is empty, never "off". The edit
-  form and the danger zone carry no badge: editing is always available and
-  deleting is a permission, so neither has state worth a chip.
-
-- **The QR tab asks for less attention.** It carried the four explanatory
-  paragraphs the owner named, six download buttons for two pictures, two save
-  buttons for one row and a sentence stating a limit nothing counted against. Nothing on it was
-  broken; all of it cost more reading than it returned.
-
-  **A code's row is one click target.** Clicking anywhere in a row selects that
-  code, where before only its name was clickable while the whole row painted as
-  selectable. The controls at the end of the row are held off that area by a
-  real gap, so reaching for a download no longer risks the remove beside it.
-
-  **One download control per code, with a menu.** The two worded buttons on each
-  row and the pair repeated below the picture — four controls for two files —
-  are one icon that offers **PNG** and **SVG**; a format added later is an entry
-  rather than a fifth button. **Remove is a `−`**, and both carry accessible
-  names saying which code they act on.
-
-  **Which code is the default is now visible without reading.** Every row
-  carries a filled or empty icon instead of a *Make default* button on the rows
-  that are not the default and nothing on the one that is. Exactly one is filled;
-  clicking an empty one moves the fill and every icon in the list follows. The
-  icons are drawn for anybody who may see the codes, not only for somebody who
-  may change them — which code is the default is a fact about the link, and the
-  button it replaced was the only thing about it a reader could not see.
-
-  **One button saves.** *Rename* is gone and **Save** writes the name along with
-  the style, so changing a colour and a name together is one press instead of
-  two. **Restore defaults** is always drawn, disabled with a reason when there is
-  nothing stored, rather than absent — a control you cannot find is not the same
-  as one that has nothing to do. Nothing about what any of them writes changed,
-  and `PUT /api/v1/links/{id}/qr/codes/{slug}` still replaces a code's label and
-  style exactly as it did.
-
-  **A `N/20` counter sits above the list**, and the sentences that carried the
-  limit in prose are gone. The URL printed under the picture is gone with them:
-  it is the link's own short URL, which the page already states twice.
-
-  All of the tab's prose — those four paragraphs and the three shorter ones
-  beside them — went from about 1900 characters to under 900, measured rather
-  than judged, and a test holds it there; by the end of this release a later
-  read of the same tab takes it under 300. What survives is what a reader cannot
-  work out from the control beside it, which by then is two sentences: keep a
-  code's two colours far apart, because a light code on a dark field is refused
-  by many readers, which is why the picture paints its own background whatever
-  the page theme is; and restyling never changes what the code says, so a code
-  already in print still resolves to the same URL after its colours move.
-
-- **The QR tab, after a third read of it: the list holds still, the size control
-  tells the truth while you drag it, and a save keeps your place.**
-
-  **The codes list is alphabetical by name** and stays put. It used to lead with
-  whichever code was the default, so choosing a different one re-ordered the
-  list under you and the change read as nothing having happened. Which code is
-  the default is the filled dot on its row — that is what says it now, and the
-  list does not move. The same order comes back from
-  `GET /api/v1/links/{id}/qr/codes`, where it was default-first before.
-
-  **Dragging the size slider moves the number beside it, and typing a number
-  moves the slider.** The two are one setting and until now neither followed the
-  other, so the box said one thing while the slider was about to save another.
-  This is the first piece of interactive JavaScript this dashboard carries: a
-  single file this server serves, with the Content-Security-Policy unchanged and
-  nothing added to the build. **With scripts off nothing is lost but the live
-  echo** — both inputs still carry their values, the form still saves, and a size
-  outside the range is still refused with a sentence rather than quietly
-  clamped.
-
-  **Saving no longer throws you back to the top of the page.** Every write on the
-  tab now returns to the position you were reading at, and you are never shown a
-  different one on the way. A browser cannot be scrolled before it has laid the
-  page out, so what happens instead is that the page is held back for the moment
-  between the two: on the load after a save, and on no other load anywhere in the
-  product, the page appears at your position rather than appearing at the top and
-  moving. *(Two earlier attempts in this release got you to the right place while
-  still showing you the wrong one first — the second only on a connection slower
-  than a local one, which is why it took a report from outside to see it.)*
-
-  **The remove button stays on a link's only code, grayed out**, with *Every link
-  must have at least 1 QR code.* on it — where before it simply was not there and
-  a sentence under the list explained why. **Adding a code is a `+` beside the
-  count**, opening a small prompt with a name field, in place of the label, box
-  and button that stood under the list; at twenty of twenty it grays out with
-  its reason instead of disappearing.
-
-  **The default control's tooltip is the page's own**, shown anywhere over the
-  button rather than only over the twelve-pixel glyph inside it, and shown to a
-  keyboard as well as to a pointer. It reads **Default QR Code** and **Make
-  Default QR Code**. The `+` button and the grayed-out remove button carry the
-  same kind of tooltip, which is what lets a disabled control explain itself at
-  all — the browser's own tooltips never appear on one. The download button and
-  a remove button that is not grayed out are unchanged: their tooltip is still
-  the browser's, inside the glyph. Hovering a download or remove button on the
-  row you have selected now shows, which it did not: the highlight was the same
-  colour as the selected row itself.
-
-  **The logo upload has moved into the style form**, between the two colour
-  pickers and the size control, with the **Remove the logo** button beside it, so
-  that everything which writes a logo is in one place and in the order the rest
-  of the form reads. Its own heading and panel are gone. Nothing about what a
-  logo does changed, only where its controls sit — the file is still sent on its
-  own, the moment you choose it, and **Save** still posts exactly the fields it
-  posted before.
-
-  **The size slider draws a mark at each size it stops at.** The sizes were
-  already named in the control and no browser was drawing them, because the
-  slider is themed and the marks come with the appearance the theme replaced.
-  They are drawn now, and only the sizes the code in front of you can actually
-  take: a dense code needs more pixels before its quiet zone reads, so its lowest
-  marks are not there to be offered.
-
-  **Five explanatory paragraphs went with all of this**, and the tab's prose is
-  now under 300 characters against 900 before and about 1900 two releases ago.
-  The last three to go: the note that scans appear under `qr` in the referrers
-  breakdown, which the Analytics tab shows and `docs/usage.md` states; the
-  sentence on the default code's row explaining that untagged scans are counted
-  against it, which the API reference and `docs/usage.md` still state and which
-  the filled dot and its **Default QR Code** tooltip already identify; and the
-  logo's size limits, which an upload that exceeds them reports with your own
-  image's dimensions in the message.
-
-  **Picking a code from the list no longer leaves the page.** It opened the QR
-  settings at their own URL — a page with no link heading row, arriving at the
-  top — so selecting a code cost you the small preview beside the link's name and
-  your place on the tab in the same click. The tab is redrawn where you are
-  standing now: nothing scrolls, the preview stays, and the address bar still
-  names the code, so a refresh, a bookmark and the back button all work as they
-  did. A save on the code you picked comes back to that code rather than to the
-  link's default. It is still an ordinary link, so with scripts off it loads the
-  link's page on that code instead of redrawing part of it; `/links/{id}/qr` is
-  unchanged and still serves the settings as their own page for anybody holding
-  that URL.
-
-  **Not done, and stated rather than left to be noticed**: there is still no
-  automatic warning when a code's two colours are too close together. The
-  advisory sentence stays until this product has a contrast measure it can
-  defend, which is a choice rather than a control to draw.
-
-- **The header's workspace label and workspace switcher read as one control.**
-  They were two adjacent fragments — a name, then an unlabelled dropdown beside
-  it — and nothing said the two were one claim. They now share a single
-  bordered container: the current organization and workspace, a hairline
-  divider, and the switcher, whose closed face is a chevron alone. The chevron
-  opens the dashboard's own menu — hanging off the control it belongs to,
-  styled like the rest of the header, listing exactly the workspaces you can
-  move to with no blank row — rather than the browser's native dropdown, which
-  ignored the control's position, opened on an unselectable empty row, and
-  flashed the chosen name into the closed face while the switch was landing.
-  With one membership the box holds the name by itself — no divider, no dead
-  control — and an account with no workspace gets no box at all. Nothing
-  behavioural changed: switching is still one action, still returns you to the
-  page you were on, and the list still never offers the workspace you are
-  already in. The switcher's accessible name is unchanged — a screen reader
-  hears "Switch workspace" on the button, then a menu of workspaces, each a
-  real button.
-
-### Fixed
-
-- **The analytics world map drew two grey bands across its full width** — one
-  along the top, one just below the equator. Fiji and Russia cross the
-  antimeridian, and the map generator emitted each of their outlines as a
-  single ring wrapping from one edge of the frame to the other, so the fill
-  swept the map at that latitude. The generator now splits any
-  antimeridian-crossing ring at ±180° before projecting; Fiji, Russia and
-  Wrangel Island render as their shapes, every other country's geometry is
-  unchanged, and a Russia with clicks shades its own outline rather than a
-  stripe through Scandinavia. The bands were faint at typical laptop widths
-  and obvious on wide screens, which is how they went unnoticed.
-
-- **Every dashboard page loaded with a Content-Security-Policy violation in the
-  browser console.** htmx injects a stylesheet for its request-indicator feature
-  at load, and the dashboard's `style-src 'self'` blocked it — on every page, in
-  every browser. Nothing visible was wrong, because no page uses that feature;
-  the costs were a console that could never be clean, and that the first
-  template to adopt `hx-indicator` would have gotten a loading state that
-  silently did nothing. The layout now tells htmx not to inject
-  (`includeIndicatorStyles: false`); a template that starts using indicators
-  ships the rules in the stylesheet instead. The policy itself is unchanged.
-
-## [0.3.0] - 2026-08-10
+## [0.3.0] - 2026-08-17
 
 ### Added
 
@@ -796,12 +581,205 @@ migrations run at boot.
 
 ### Changed
 
+- **A link's page shows one section at a time, behind tabs.** It was every
+  section in one column — the edit form, the QR code, routing rules, the split
+  test, signed links, analytics, recent activity and the danger zone, stacked —
+  and finding anything below the fold meant scrolling past everything above it.
+  A tab strip now selects one panel: Edit, QR, Routing, Split, Signed,
+  Analytics and Danger, with recent activity folded into Analytics since it is
+  the same data one row at a time. The strip scrolls sideways on narrow
+  screens rather than wrapping. Each tab is a real URL (`?tab=`), so
+  bookmarks, refresh and the back button keep working, and a save made in any
+  section returns to the tab that section lives on. No section's behaviour,
+  permissions or form fields changed.
+
+- **A link's QR settings live on the QR tab, and the small code beside the
+  heading opens it.** The popup that used to hold the style form and the
+  downloads is gone: with the page behind tabs, everything it held is one
+  click away on the QR tab, so the codes list, the full drawing, both
+  downloads, the style form and the logo controls now render there directly.
+  Clicking the thumbnail — from any tab — switches to the QR tab. Nothing
+  else moved: `/links/{id}/qr` still serves the same contents as their own
+  page for bookmarks and second tabs, every saved link and permission is
+  unchanged, and the reviewer panel on the dispute queue keeps working as it
+  did.
+
+- **Every tab on a link's page now says what its section holds, on the tab
+  itself.** Tabs answered where a section went and not what is configured in
+  it; reading a link's setup meant opening seven panels in turn. Each tab now
+  carries a badge: QR counts the link's codes, Routing its rules, and
+  Analytics shows the clicks in the selected window. Split shows which kind of
+  test is running — unequal shares for weighted, equal shares for sequential —
+  and Signed shows a check when the link requires signed access, the one badge
+  with colour. An empty section shows a muted `0` or a small cross rather than
+  nothing, so every tab keeps its width and two links compare position by
+  position; the cross always means the section is empty, never "off". The edit
+  form and the danger zone carry no badge: editing is always available and
+  deleting is a permission, so neither has state worth a chip.
+
+- **The QR tab asks for less attention.** It carried the four explanatory
+  paragraphs the owner named, six download buttons for two pictures, two save
+  buttons for one row and a sentence stating a limit nothing counted against. Nothing on it was
+  broken; all of it cost more reading than it returned.
+
+  **A code's row is one click target.** Clicking anywhere in a row selects that
+  code, where before only its name was clickable while the whole row painted as
+  selectable. The controls at the end of the row are held off that area by a
+  real gap, so reaching for a download no longer risks the remove beside it.
+
+  **One download control per code, with a menu.** The two worded buttons on each
+  row and the pair repeated below the picture — four controls for two files —
+  are one icon that offers **PNG** and **SVG**; a format added later is an entry
+  rather than a fifth button. **Remove is a `−`**, and both carry accessible
+  names saying which code they act on.
+
+  **Which code is the default is now visible without reading.** Every row
+  carries a filled or empty icon instead of a *Make default* button on the rows
+  that are not the default and nothing on the one that is. Exactly one is filled;
+  clicking an empty one moves the fill and every icon in the list follows. The
+  icons are drawn for anybody who may see the codes, not only for somebody who
+  may change them — which code is the default is a fact about the link, and the
+  button it replaced was the only thing about it a reader could not see.
+
+  **One button saves.** *Rename* is gone and **Save** writes the name along with
+  the style, so changing a colour and a name together is one press instead of
+  two. **Restore defaults** is always drawn, disabled with a reason when there is
+  nothing stored, rather than absent — a control you cannot find is not the same
+  as one that has nothing to do. Nothing about what any of them writes changed,
+  and `PUT /api/v1/links/{id}/qr/codes/{slug}` still replaces a code's label and
+  style exactly as it did.
+
+  **A `N/20` counter sits above the list**, and the sentences that carried the
+  limit in prose are gone. The URL printed under the picture is gone with them:
+  it is the link's own short URL, which the page already states twice.
+
+  All of the tab's prose — those four paragraphs and the three shorter ones
+  beside them — went from about 1900 characters to under 900, measured rather
+  than judged, and a test holds it there; by the end of this release a later
+  read of the same tab takes it under 300. What survives is what a reader cannot
+  work out from the control beside it, which by then is two sentences: keep a
+  code's two colours far apart, because a light code on a dark field is refused
+  by many readers, which is why the picture paints its own background whatever
+  the page theme is; and restyling never changes what the code says, so a code
+  already in print still resolves to the same URL after its colours move.
+
+- **The QR tab, after a third read of it: the list holds still, the size control
+  tells the truth while you drag it, and a save keeps your place.**
+
+  **The codes list is alphabetical by name** and stays put. It used to lead with
+  whichever code was the default, so choosing a different one re-ordered the
+  list under you and the change read as nothing having happened. Which code is
+  the default is the filled dot on its row — that is what says it now, and the
+  list does not move. The same order comes back from
+  `GET /api/v1/links/{id}/qr/codes`, where it was default-first before.
+
+  **Dragging the size slider moves the number beside it, and typing a number
+  moves the slider.** The two are one setting and until now neither followed the
+  other, so the box said one thing while the slider was about to save another.
+  This is the first piece of interactive JavaScript this dashboard carries: a
+  single file this server serves, with the Content-Security-Policy unchanged and
+  nothing added to the build. **With scripts off nothing is lost but the live
+  echo** — both inputs still carry their values, the form still saves, and a size
+  outside the range is still refused with a sentence rather than quietly
+  clamped.
+
+  **Saving no longer throws you back to the top of the page.** Every write on the
+  tab now returns to the position you were reading at, and you are never shown a
+  different one on the way. A browser cannot be scrolled before it has laid the
+  page out, so what happens instead is that the page is held back for the moment
+  between the two: on the load after a save, and on no other load anywhere in the
+  product, the page appears at your position rather than appearing at the top and
+  moving. *(Two earlier attempts in this release got you to the right place while
+  still showing you the wrong one first — the second only on a connection slower
+  than a local one, which is why it took a report from outside to see it.)*
+
+  **The remove button stays on a link's only code, grayed out**, with *Every link
+  must have at least 1 QR code.* on it — where before it simply was not there and
+  a sentence under the list explained why. **Adding a code is a `+` beside the
+  count**, opening a small prompt with a name field, in place of the label, box
+  and button that stood under the list; at twenty of twenty it grays out with
+  its reason instead of disappearing.
+
+  **The default control's tooltip is the page's own**, shown anywhere over the
+  button rather than only over the twelve-pixel glyph inside it, and shown to a
+  keyboard as well as to a pointer. It reads **Default QR Code** and **Make
+  Default QR Code**. The `+` button and the grayed-out remove button carry the
+  same kind of tooltip, which is what lets a disabled control explain itself at
+  all — the browser's own tooltips never appear on one. The download button and
+  a remove button that is not grayed out are unchanged: their tooltip is still
+  the browser's, inside the glyph. Hovering a download or remove button on the
+  row you have selected now shows, which it did not: the highlight was the same
+  colour as the selected row itself.
+
+  **The logo upload has moved into the style form**, between the two colour
+  pickers and the size control, with the **Remove the logo** button beside it, so
+  that everything which writes a logo is in one place and in the order the rest
+  of the form reads. Its own heading and panel are gone. Nothing about what a
+  logo does changed, only where its controls sit — the file is still sent on its
+  own, the moment you choose it, and **Save** still posts exactly the fields it
+  posted before.
+
+  **The size slider draws a mark at each size it stops at.** The sizes were
+  already named in the control and no browser was drawing them, because the
+  slider is themed and the marks come with the appearance the theme replaced.
+  They are drawn now, and only the sizes the code in front of you can actually
+  take: a dense code needs more pixels before its quiet zone reads, so its lowest
+  marks are not there to be offered.
+
+  **Five explanatory paragraphs went with all of this**, and the tab's prose is
+  now under 300 characters against 900 before and about 1900 two releases ago.
+  The last three to go: the note that scans appear under `qr` in the referrers
+  breakdown, which the Analytics tab shows and `docs/usage.md` states; the
+  sentence on the default code's row explaining that untagged scans are counted
+  against it, which the API reference and `docs/usage.md` still state and which
+  the filled dot and its **Default QR Code** tooltip already identify; and the
+  logo's size limits, which an upload that exceeds them reports with your own
+  image's dimensions in the message.
+
+  **Picking a code from the list no longer leaves the page.** It opened the QR
+  settings at their own URL — a page with no link heading row, arriving at the
+  top — so selecting a code cost you the small preview beside the link's name and
+  your place on the tab in the same click. The tab is redrawn where you are
+  standing now: nothing scrolls, the preview stays, and the address bar still
+  names the code, so a refresh, a bookmark and the back button all work as they
+  did. A save on the code you picked comes back to that code rather than to the
+  link's default. It is still an ordinary link, so with scripts off it loads the
+  link's page on that code instead of redrawing part of it; `/links/{id}/qr` is
+  unchanged and still serves the settings as their own page for anybody holding
+  that URL.
+
+  **Not done, and stated rather than left to be noticed**: there is still no
+  automatic warning when a code's two colours are too close together. The
+  advisory sentence stays until this product has a contrast measure it can
+  defend, which is a choice rather than a control to draw.
+
+- **The header's workspace label and workspace switcher read as one control.**
+  They were two adjacent fragments — a name, then an unlabelled dropdown beside
+  it — and nothing said the two were one claim. They now share a single
+  bordered container: the current organization and workspace, a hairline
+  divider, and the switcher, whose closed face is a chevron alone. The chevron
+  opens the dashboard's own menu — hanging off the control it belongs to,
+  styled like the rest of the header, listing exactly the workspaces you can
+  move to with no blank row — rather than the browser's native dropdown, which
+  ignored the control's position, opened on an unselectable empty row, and
+  flashed the chosen name into the closed face while the switch was landing.
+  With one membership the box holds the name by itself — no divider, no dead
+  control — and an account with no workspace gets no box at all. Nothing
+  behavioural changed: switching is still one action, still returns you to the
+  page you were on, and the list still never offers the workspace you are
+  already in. The switcher's accessible name is unchanged — a screen reader
+  hears "Switch workspace" on the button, then a menu of workspaces, each a
+  real button.
+
 - **A link's QR code stops being a section and becomes a panel.** What is on the
   page is a small rendered code beside the link's name, at the top; clicking it —
   or **Settings and download** in the QR section further down — opens the full
   code, the style form and the download over the page you are on. An owner given
   the task of retrieving a QR code spent about twenty-six seconds finding it, and
-  the note asked for exactly this shape.
+  the note asked for exactly this shape. *(Superseded later in this release: with
+  the page behind tabs there is no popup and no QR section further down. The
+  thumbnail beside the link's name switches to the QR tab, which holds the full
+  code, the style form and the downloads directly.)*
 
   **The download control keeps its text and gains an icon.** The note named "the
   download button being text instead of an icon"; an unlabelled icon is a guess
@@ -953,7 +931,11 @@ migrations run at boot.
   code, routing rules, split test, signed links, analytics, recent activity,
   danger zone. Nothing was removed and no section changed what it does — the
   analytics are the same analytics, further down the same page, at the same URL.
-  **No route, form field or query parameter changed.**
+  **No route, form field or query parameter changed.** *(Superseded later in
+  this release: the one scrolling column described here is a tab strip, and the
+  eight sections are seven tabs with recent activity folded into Analytics. The
+  order above is the order the tabs are in; what changed is that you no longer
+  scroll past one section to reach the next.)*
 
 - **The click limit says what it is a limit on.** It read *Click limit (empty =
   none)* with *"416 used so far"* in a separate line beneath it, and an owner
@@ -965,6 +947,27 @@ migrations run at boot.
   would silently redefine every limit already set.
 
 ### Fixed
+
+- **The analytics world map drew two grey bands across its full width** — one
+  along the top, one just below the equator. Fiji and Russia cross the
+  antimeridian, and the map generator emitted each of their outlines as a
+  single ring wrapping from one edge of the frame to the other, so the fill
+  swept the map at that latitude. The generator now splits any
+  antimeridian-crossing ring at ±180° before projecting; Fiji, Russia and
+  Wrangel Island render as their shapes, every other country's geometry is
+  unchanged, and a Russia with clicks shades its own outline rather than a
+  stripe through Scandinavia. The bands were faint at typical laptop widths
+  and obvious on wide screens, which is how they went unnoticed.
+
+- **Every dashboard page loaded with a Content-Security-Policy violation in the
+  browser console.** htmx injects a stylesheet for its request-indicator feature
+  at load, and the dashboard's `style-src 'self'` blocked it — on every page, in
+  every browser. Nothing visible was wrong, because no page uses that feature;
+  the costs were a console that could never be clean, and that the first
+  template to adopt `hx-indicator` would have gotten a loading state that
+  silently did nothing. The layout now tells htmx not to inject
+  (`includeIndicatorStyles: false`); a template that starts using indicators
+  ships the rules in the stylesheet instead. The policy itself is unchanged.
 
 - **A link's country map and country list now follow the data instead of the
   GeoIP setting.** An instance that had accumulated country history and then

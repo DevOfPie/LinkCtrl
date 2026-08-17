@@ -31,8 +31,10 @@ change-controlled deployments.
 ```sh
 # 1. Write the changelog section first. It is the thing an operator reads to
 #    decide whether to take the upgrade, so it is written for them, not from
-#    `git log`.
-$EDITOR CHANGELOG.md          # add "## [0.3.0] - YYYY-MM-DD", update the links
+#    `git log`. Everything in [Unreleased] moves into it, dated today: the
+#    release notes are that section and nothing else.
+$EDITOR CHANGELOG.md          # add "## [0.3.0] - YYYY-MM-DD", empty
+                              # [Unreleased] into it, update the links
 
 git add CHANGELOG.md && git commit -m "Changelog for 0.3.0"
 
@@ -48,14 +50,60 @@ git push origin v0.3.0
 ```
 
 `release-check` verifies: the working tree is clean, the tag does not exist, the
-changelog has a section for it, `sqlc` output matches its SQL, the vendored assets
-match their checksums, the stylesheet is built, the build and tests pass under the
-race detector, the OpenAPI document matches the registered routes, and every
-release platform cross-compiles.
+changelog has a section for it, that section is dated today, `[Unreleased]` is
+still there and empty, `sqlc` output matches its SQL, the vendored assets match
+their checksums, the stylesheet is built, the build and tests pass under the race
+detector, the OpenAPI document matches the registered routes, and every release
+platform cross-compiles.
+
+The three changelog checks beyond *a section exists* are there because the section
+existing is what both guards used to ask, and that passes on notes describing the
+wrong thing. The workflow publishes the version's section only, so anything left
+in `[Unreleased]` is written and never read; a date is a claim about when a
+version was released, so one written on the day the notes were drafted is wrong
+by however long the tag took to follow; and the `[Unreleased]` heading itself has
+to still be there, because deleting it rather than emptying it leaves its link
+reference at the foot of the file pointing at nothing and the next release with
+nowhere to be written.
 
 The clean-tree check is not fussiness: a release has to be reproducible from the
 tag, and an uncommitted file means the artifacts contain something the tag does
 not.
+
+### When the tag is not cut on the day the notes were folded
+
+**Expected, not a fault.** Step 1 dates the section *today* and step 3 is the
+owner's act on a day nobody schedules, so any gap between them makes step 2 fail
+— and that is the check doing its job rather than getting in the way. Two things
+can have gone stale, and they are checked separately because either can happen
+without the other:
+
+```text
+FAIL  the 0.3.0 section is dated 2026-08-17 and the tag is being cut on
+      2026-08-21 — re-date it
+FAIL  [Unreleased] holds 14 line(s) that 0.3.0's notes will not contain —
+      fold them into '## [0.3.0]'
+```
+
+The second one is the normal consequence of ordinary work continuing: every
+commit is required to describe itself in `[Unreleased]`, so a day of commits
+after the fold refills it. The remedy is the same edit as step 1, made again:
+
+```sh
+$EDITOR CHANGELOG.md          # move whatever is back in [Unreleased] into the
+                              # 0.3.0 section, and change its date to today
+
+git commit -am "Changelog for 0.3.0"   # or --amend, if the changelog commit is
+                                       # still the tip. Either is fine: the tag
+                                       # has not been cut and nothing is public
+
+make release-check VERSION=v0.3.0
+```
+
+Re-run until it is quiet, then tag. Do not tag against a failing `release-check`
+on the grounds that only the date is wrong: the date is the one claim in the file
+that cannot be corrected after the fact, because the notes are published from the
+tag.
 
 ## What the tag produces
 
@@ -64,8 +112,15 @@ not.
 
 1. **Verify.** Assets, build, vet, unit tests with the race detector, the OpenAPI
    parity test, and the full integration suite against a real Postgres and Redis.
-   Plus the changelog check again, because a machine should not trust that the
-   local gate was run.
+   Plus **one** of `release-check`'s four changelog checks again — that a
+   `## [<version>]` section exists — because a machine should not trust that the
+   local gate was run. The other three stay local on purpose. A date check here
+   would compare against the *workflow's* run date and would refuse a release
+   legitimately tagged the evening before, so the same rule in the two places is
+   not the same rule; and the `[Unreleased]` checks are only meaningful beside
+   it, since folding and re-dating are one edit. `release-check` is where the tag
+   is cut, and that is where they belong. Nothing in CI runs
+   `scripts/release-check.sh`.
 2. **Image.** `linux/amd64` and `linux/arm64`, pushed to
    `ghcr.io/DevOfPie/LinkCtrl` tagged with the exact version, the `major.minor`
    series, and `latest`. Provenance and an SBOM are attached.

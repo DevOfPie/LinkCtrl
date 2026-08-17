@@ -62,10 +62,78 @@ else
   else
     ok "tag is free"
   fi
-  if grep -qF "## [${VERSION#v}]" CHANGELOG.md 2>/dev/null; then
+  # Whether the section exists and what date it carries are read once, together,
+  # so the two cannot disagree about which heading they are looking at. Both are
+  # fixed-string and anchored to column 1: interpolating the version into a regex
+  # turns its dots into any-char, and a section headed "## [0130] - 2026-08-17"
+  # would then satisfy a date check for 0.3.0 that a fixed-string existence check
+  # had just refused. The sentinel "=" is what distinguishes "no such heading"
+  # from "heading with nothing after it", which are different failures.
+  heading="## [${VERSION#v}]"
+  found=$(awk -v want="$heading" '
+    index($0, want) == 1 { print "=" substr($0, length(want) + 1); exit }
+  ' CHANGELOG.md 2>/dev/null)
+  if [ -n "$found" ]; then
     ok "CHANGELOG.md has a section for ${VERSION#v}"
   else
-    bad "CHANGELOG.md has no '## [${VERSION#v}]' section"
+    bad "CHANGELOG.md has no '$heading' section"
+  fi
+
+  # A section existing is not the same as a section describing the release. The
+  # release workflow extracts from "## [<version>]" to the next "## [", so
+  # anything still sitting in [Unreleased] — which is *above* it, this file being
+  # newest-first — is never published. Both guards asked only whether the section
+  # existed, and 0.3.0 accordingly came one commit from shipping notes that
+  # omitted the whole dashboard redesign, 217 lines of it (F251).
+  #
+  # Empty means no content between the [Unreleased] heading and the next section
+  # or the link-reference block. The heading itself stays: the next phase writes
+  # into it immediately, and a check that demanded its removal would be asking
+  # for the file to be wrong in the other direction. So its absence is a failure
+  # of its own rather than an empty count — a file with no [Unreleased] heading
+  # at all would otherwise pass this as "empty", while the "[Unreleased]:"
+  # definition at the foot points at nothing and check-links.sh, which resolves
+  # references but does not look for unreferenced definitions, says nothing.
+  if grep -q '^## \[Unreleased\]' CHANGELOG.md 2>/dev/null; then
+    unreleased=$(awk '
+      /^## \[Unreleased\]/     { inside = 1; next }
+      inside && /^## \[/       { exit }
+      inside && /^\[[^]]+\]: / { exit }
+      inside                   { print }
+    ' CHANGELOG.md | grep -c '[^[:space:]]')
+    if [ "$unreleased" -eq 0 ]; then
+      ok "[Unreleased] is empty — the ${VERSION#v} section is the whole release"
+    else
+      bad "[Unreleased] holds $unreleased line(s) that ${VERSION#v}'s notes will not contain — fold them into '$heading'"
+    fi
+  else
+    bad "CHANGELOG.md has no '## [Unreleased]' heading — it stays in place and empty, or its link reference at the foot of the file points at nothing and the next release has nowhere to be written"
+  fi
+
+  # And the date, because the fold above is only true on the day it is done. A
+  # section dated when it was written and tagged a week later re-states the same
+  # defect in the other direction: notes that describe the release, under a date
+  # that describes nothing. Keep a Changelog's date is a claim about when a
+  # version was released, and this script runs when it is about to be.
+  #
+  # Trailing whitespace is stripped before comparing, or a heading dated today
+  # with a space after it fails with a message saying it is dated today.
+  today=$(date +%F)
+  if [ -z "$found" ]; then
+    printf "  skip  no '%s' section to carry a release date\n" "$heading"
+  else
+    suffix=${found#=}
+    case "$suffix" in
+      " - "*) dated=$(printf '%s' "${suffix# - }" | sed 's/[[:space:]]*$//') ;;
+      *)      dated="" ;;
+    esac
+    if [ -z "$dated" ]; then
+      bad "'$heading' carries no '- YYYY-MM-DD' release date"
+    elif [ "$dated" = "$today" ]; then
+      ok "the ${VERSION#v} section is dated today ($today)"
+    else
+      bad "the ${VERSION#v} section is dated $dated and the tag is being cut on $today — re-date it"
+    fi
   fi
 fi
 

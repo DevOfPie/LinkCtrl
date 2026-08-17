@@ -370,6 +370,7 @@ file. Append a row when you append an entry.
 | [Two reopenings from M57.9's triage, and what the QR thumbnail means](#2026-08-17--two-reopenings-from-m579s-triage-and-what-the-qr-thumbnail-means) | D204 — the heading thumbnail means *this link has a QR code*, so its picture stays the default's and only its `href` carries the selection. The reading that would make it follow the selection was declined on mechanism: it renders outside `#link-tabs`, which is what let F244(b) close, so redrawing it needs `hx-swap-oob` or a second target — new htmx on the surface M50.8 bounded its scripting to |
 | [M50.8, the offset is forgotten when the request ends, not when it swaps](#2026-08-17--m508-the-offset-is-forgotten-when-the-request-ends-not-when-it-swaps) | D205 — the QR tab's stored scroll offset is forgotten on `htmx:afterRequest` rather than on `htmx:afterSwap`, superseding D196: a swap is observable only when there is one, and the requests that must be forgotten for — a 5xx, a refusal htmx will not swap, an abort, a timeout — produce none. Since the third reopening every row of the codes list issues one. F250's fourth ending, a reader who navigates away mid-request, is **not** claimed: its handler would have to run during document teardown and nothing here demonstrates that it does. Guarded on `HX-Redirect` and `HX-Refresh`, because htmx fires the ending **before** the navigation those headers ask for, and an unguarded listener would drop the offset on the one load that reads it back. Rejected: a listener per failure event, which needs no guard and misses every success htmx declines to swap |
 | [M50.8, the thumbnail was already right, and D204 asked a question it then over-answered](#2026-08-17--m508-the-thumbnail-was-already-right-and-d204-asked-a-question-it-then-over-answered) | D206 — the heading thumbnail stays the default's **and** clicking it opens the tab on the default, which is what the tree already did. F249 closes with no change and D204's second half is withdrawn: the owner was asked what the thumbnail *means* and D204 inferred a *behaviour* from the answer that they had not chosen. What sent it back was the price — the anchor renders outside `#link-tabs` and a selection is a swap of it, so carrying the selection needed exactly the `hx-swap-oob` D204 declined for the reading it rejected |
+| [M58, the release notes fold into 0.3.0, and the date a gate keeps honest](#2026-08-17--m58-the-release-notes-fold-into-030-and-the-date-a-gate-keeps-honest) | D207 — the `0.3.0` section is dated **2026-08-17**, the day the fold was made, and is defensible only because D208 refuses a stale one. D208 — `release-check`'s new gate checks the **date** as well as an empty `[Unreleased]`, and that the `[Unreleased]` heading is still there at all, all three as failures rather than warnings, none of them built from a regex holding the version. The rehearsal cost is discharged in `docs/releasing.md` rather than merely stated, and the standing conflict with the per-commit Docs gate is [F254](deferred-findings.md#open) |
 
 ---
 
@@ -30543,3 +30544,131 @@ identical bytes on every swap, and a spent scripting precedent, all to change
 something correct. The worker that met the mismatch returned the prompt
 unanswered rather than building against the inference, which is the split working
 as intended: the mismatch reached the owner instead of reaching the tree.
+
+## 2026-08-17 — M58, the release notes fold into 0.3.0, and the date a gate keeps honest
+
+[M58](phase-details/m58.md)'s reopening, from
+[F251](deferred-findings.md#closed) and D201. The milestone's own bullet said the
+`awk` extraction is checked against `CHANGELOG.md` **as it will be at 0.3.0**
+before anything is tagged. It was, on 2026-08-10, and fifty-five commits landed
+above it afterwards — so the check had been run against a file that no longer
+existed, and the sentence was false about the one it names. Nothing was
+published, which is the only reason this cost a fold rather than a retraction.
+
+**The fold.** `[Unreleased]`'s 217 lines go into the `0.3.0` section, by
+subsection: its `### Changed` bullets ahead of that section's `### Changed`, its
+`### Fixed` ahead of that section's `### Fixed`. Ahead rather than behind,
+because the file's own first line says *newest first* and the folded work is the
+newer — a reader scanning 0.3.0 meets the tab strip before the QR panel the tab
+strip moved. `[Unreleased]` stays, empty, heading and link reference intact, so
+Phase 4 writes into it without reconstructing anything. The release workflow's
+own awk (`.github/workflows/release.yml:278-282`) run over the result yields
+**1152 lines** where it yielded 941, and contains *tab strip* once where it
+contained it zero times, against a `README.md:122` that calls the dashboard
+*"Rebuilt in 0.3.0"*. That is the bullet's check, re-run against the file it
+actually names.
+
+**The fold is what makes two of 0.3.0's own bullets contradict it**, and moving
+prose without marking that is how a reader gets two answers. `[Unreleased]`'s
+work replaced the shape the section below already described: the link page as one
+scrolling column of eight sections, and the QR code as a popup opened from a
+section further down. Both were written when they were true and both are now
+eight lines from a bullet saying the page is seven tabs and the popup is gone —
+in the same `### Changed`, in the same release. The file already has an answer for
+this and it is used twice in the block above: a `*(Superseded later in this
+release: …)*` parenthetical, left on the older bullet rather than deleted from
+it, because a changelog is a record of what happened and the intermediate shape
+did happen. Deleting the older bullets was declined for that reason; re-ordering
+them was declined because the file is newest-first and they are not newest.
+
+**D207 — the section is dated 2026-08-17, the day the fold was made.** The
+bullet asks for *the day the tag is cut*, and the tag is the owner's act; a
+worker cannot know that day and must not perform it. Three options existed:
+today's date, no date, or a placeholder. The last two were declined together —
+Keep a Changelog dates a released version, `[Unreleased]` is precisely the
+section for the undated, and a second undated section would make the file
+contradict the format it claims in its own header. So today's date, and what
+makes it defensible is stated rather than hoped: it is right if the tag is cut
+today, and it is *made* right on any other day by D208 below, which refuses to
+let a tag be cut against a section dated anything but the day of the run. What
+would make it wrong is the one path that leaves: the owner tagging without
+running `release-check`. That is the same way every other check in that script is
+skipped, and it is not a hazard this decision can close.
+
+**D208 — the gate checks the date too, and every half fails rather than warns.**
+The reopening asked for one check: `release-check` refuses a non-empty
+`[Unreleased]` when a version is named. The date is the same defect rotated
+ninety degrees — notes that describe the release, under a date that describes
+nothing — and it is the defect D207 has just created a way to reach. A section
+re-dated today and tagged next week drifts again by exactly the mechanism this
+reopening exists to stop, so the gate that exists to stop it should be the thing
+that notices.
+
+Neither is a warning. This repository has the argument on record twice already —
+*on record is not answered for* — and a check that cannot fail obliges nobody.
+The cost is stated rather than discovered: `release-check` run on a day *before*
+the tag now fails on the date, which is a false failure for a rehearsal. It is
+accepted because the script's own header calls it *everything that must hold
+before a tag is pushed* rather than a rehearsal tool, because the remedy it asks
+for is the one-line edit it is already demanding, and because the failure
+direction is the safe one — it cannot pass a tree it should have refused.
+
+**Stating a cost is not discharging it**, which is what the first attempt at this
+diff did. A cost an operator meets is owed a remedy in the document the operator
+reads, so `docs/releasing.md` gains *When the tag is not cut on the day the notes
+were folded*: both failures as they actually print, the statement that they are
+the check working rather than a fault, and the three commands. Two things go
+stale between a fold and a tag and they are checked separately because either
+happens without the other — the date always, and `[Unreleased]` whenever ordinary
+work continued, which the per-commit Docs gate requires it to. That second one is
+a standing conflict between two gates rather than a fact about this release, and
+it is [F254](deferred-findings.md#open): closing it means changing what
+[workflow.md](workflow.md) tells a worker to do, and a milestone amending its own
+contract is the thing the actor split exists to prevent.
+
+**Three checks, not two, and neither the existence check nor the date check reads
+a regex.** The `[Unreleased]` heading being *present* is its own failure rather
+than an empty count: `awk` that never enters the section counts zero lines, so a
+`CHANGELOG.md` with the heading deleted passed the emptiness check as *empty*
+while the `[Unreleased]:` definition at the foot of the file pointed at nothing —
+and `scripts/check-links.sh` resolves references without looking for unreferenced
+definitions, so nothing else would have said so. The version's heading is found
+by `index($0, want) == 1` against a fixed string, and the date is taken from what
+follows it on that same line, because interpolating the version into a regex
+makes its dots any-char: `## [0130] - 2026-08-17` satisfied a `sed`-built date
+check for `v0.3.0` that the fixed-string existence check had just refused, which
+is two checks disagreeing about which heading they are reading. Trailing
+whitespace is stripped before the comparison, or a section dated today with a
+space after it fails with a message saying it is dated today. And a version whose
+section is *absent* skips the date check rather than reporting that an absent
+section carries no date — the failure one line above already said the true thing.
+All four were verified on fixtures rather than reasoned about.
+
+**Why it is safe to check the date at all**, which was the thing worth verifying
+rather than assuming: `.github/workflows/release.yml` never runs
+`scripts/release-check.sh`. Its only mention is a comment at `:5`. A date check
+living in CI would compare against the *workflow's* run date and would refuse a
+legitimate release tagged the evening before, so the same rule in the two places
+is not the same rule. It belongs where the tag is cut, which is a person's
+terminal, and that is also where the standing rule puts it: what a CI step does
+lives in `scripts/`, and what CI *is* cannot be committed from here.
+
+The consequence is that `docs/releasing.md` was overstating what the machine
+re-verifies, and it now does not. `.github/workflows/release.yml:89-98` is the
+bare `grep -qF "## [<version>]"` it has always been, so CI repeats **one** of the
+four local changelog checks; the document said *the changelog check again*
+without a number, nineteen lines below the paragraph this diff added, which read
+as all of them. Naming which one, and why the date deliberately cannot move
+there, is what makes the asymmetry legible instead of looking like an oversight
+somebody should fix.
+
+**Each check was sabotage-proven alone**, the gate never having fired, so none of
+them could be passing for another's reason. Content restored to `[Unreleased]` —
+two non-blank lines — and `scripts/release-check.sh v0.3.0` refused it by name
+while the other two passed; the date alone set back to 2026-08-10 and it refused
+that while the other two passed; the `[Unreleased]` heading alone deleted and it
+refused that while the other two passed. Counter-edit each time, never
+`git checkout`, and the fold's conservation re-proved afterwards by a sorted
+multiset diff against `HEAD:CHANGELOG.md` — which accounts for every line: two
+blank lines and one duplicate `### Changed` and `### Fixed` gone to the merge,
+the date, and the seven lines of the two supersession parentheticals.
