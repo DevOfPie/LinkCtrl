@@ -121,6 +121,14 @@ than a new ceiling: **the rule here stays fifteen**. Moving the target for one
 phase and moving it for every phase after are different decisions, and only the
 first was taken — twice.
 
+**On 2026-08-18, at Phase 4's planning, the owner moved the cap itself: plan
+to fifteen, cap eighteen** — *the cap moves once, deliberately, and the
+planning number stays where the last two phases put the pressure*
+([phase-4-candidates.md](phase-4-candidates.md#the-phases-shape)). So the
+planning target is unchanged at fifteen, and what changed is the ceiling the
+2026-08-11 clarification's *a few needed milestones* grows into before it
+becomes a phase-boundary conversation. Phase 4 planned fourteen — thirteen as drafted, and one more when its plan review found a milestone was two and the owner split it.
+
 *(Both of those conversations happened under the old reading, where any insertion
 past the target was a boundary conversation. Under the 2026-08-11 clarification
 neither would have been one — both were milestones the build turned out to need,

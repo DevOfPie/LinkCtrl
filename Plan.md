@@ -160,7 +160,7 @@ rather than rendering a world uniformly colored "unknown".
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |
-| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. OAuth, OIDC, SSO and SCIM stay 3+ and unscheduled (D109) |
+| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. **OIDC is Phase 4's, as a first-party add-on rather than in core** ([M69](docs/build-notes/phase-details/m69.md), D211). OAuth, SSO and SCIM stay unscheduled (D109) |
 
 Destination blocking is two threat models wearing one name, and the *Abuse
 prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`
@@ -323,7 +323,8 @@ somebody does it stays in the environment.
 | Advanced analytics, compliance features, high availability | 3 |
 | ↳ of that row, Phase 3 takes **high availability** ([M56](docs/build-notes/phase-details/m56.md), [M57](docs/build-notes/phase-details/m57.md)) and the erasure limb of compliance ([M52](docs/build-notes/phase-details/m52.md)). Advanced analytics and the rest of compliance stay candidates — see [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md) | 3+ |
 | Entitlements or billing for organization creation | 3+ |
-| AI optimization, smart routing, predictive analytics, plugin system | 4 |
+| Add-on support: a WASM host, a published ABI and SDK, an add-on manager | 4 — the phase's spine; see [Phase 4 build plan](#phase-4-build-plan) |
+| AI optimization, smart routing, predictive analytics | future — this row read `4` until Phase 4 was planned (2026-08-18, D211); the phase took its *plugin system* limb as the spine and moved the rest out rather than carrying them as quiet scope |
 | GraphQL, SDKs, Terraform provider | future |
 | Kubernetes, cloud deployments, multi-region | future |
 | NFC integration | future |
@@ -562,6 +563,71 @@ What of it is still actually parked, tracked by work area, is
 [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md)'s [*What Phase
 3 shipped, and what is still on this list*](docs/build-notes/phase-3-candidates.md#what-phase-3-shipped-and-what-is-still-on-this-list)
 and [phase-4-candidates.md](docs/build-notes/phase-4-candidates.md).
+
+---
+
+## Phase 4 build plan
+
+**Fourteen milestones planned, M59–M70, continuing Phase 3's numbering:**
+eleven integers of work, two adversarial reviews (`X.9`, as reserved), and one
+close. 11 + 2 + 1 = 14. One of the eleven arrived at the plan's own review —
+the manager milestone was found to be two, an upload-and-unload lifecycle and
+the page that drives it, and was split before anything was built against it
+(the [M50.5/M50.6 precedent](docs/build-notes/planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)).
+Planned under the size rule as Phase 4's planning
+recorded it: **plan to fifteen, cap raised — once, deliberately — to
+eighteen** (owner-set 2026-08-18,
+[phase-4-candidates.md](docs/build-notes/phase-4-candidates.md#the-phases-shape)).
+One planned slot is deliberately unspent: an ABI is the kind of artifact
+insertions come from, and [M69](docs/build-notes/phase-details/m69.md) is
+designed to surface what the foundation got wrong.
+
+The phase's shape, its owner-set answers and their dates are
+[phase-4-candidates.md](docs/build-notes/phase-4-candidates.md)'s record and
+are not restated here: **add-on support is the spine**, the OIDC add-on —
+built in `DevOfPie/LinkCtrl-OIDC`, consuming only the published SDK — is the
+foundation's acceptance test, and the redirect promise is rescoped to core in
+the same milestone that lets an add-on onto that path.
+
+Ordering is substrates before consumers, in one dependency chain rather than
+Phase 3's independent areas: host, then contract, then enforcement, then
+capabilities in rising order of what a defect in each would cost — storage,
+pages, sessions, the redirect path — then the surfaces that show it and the
+consumer that proves it.
+
+| # | Milestone | Depends on | Discharges |
+| --- | --- | --- | --- |
+| [M59](docs/build-notes/phase-details/m59.md) | Process debt: the gates that were not watching | — | [F248](docs/build-notes/deferred-findings.md#open) · [F253](docs/build-notes/deferred-findings.md#open) · [F254](docs/build-notes/deferred-findings.md#open) · [F255](docs/build-notes/deferred-findings.md#open) |
+| [M60](docs/build-notes/phase-details/m60.md) | The host: a module loads, or is refused | M59 *(ordering)* | Opens the *Add-on support* scope row · owed-work #5 (single-instance gate case) |
+| [M61](docs/build-notes/phase-details/m61.md) | The ABI: what an add-on may import, written down and versioned | M60 | Owed-work #2 (deprecation policy) · the host-function question |
+| [M62](docs/build-notes/phase-details/m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | The enforcement answer · the permission-expression question |
+| [M63](docs/build-notes/phase-details/m63.md) | An add-on's tables: a schema of its own, migrated by the host | M62 | The schema-per-add-on answer · the DDL-additiveness collision |
+| [M64](docs/build-notes/phase-details/m64.md) | An add-on reaches the page: routes, templates, config | M62 · M63 *(ordering)* | Reach: routes, templates, config |
+| [M64.9](docs/build-notes/phase-details/m64.9.md) | **Mid-phase adversarial review** | M59–M64 | — |
+| [M65](docs/build-notes/phase-details/m65.md) | The authentication hook: a session minted on an add-on's word | M61 · M62 · M64 | Reach: the session hook, last limb of *everything OIDC needs* |
+| [M66](docs/build-notes/phase-details/m66.md) | Add-ons on the redirect path: two classes, a deadline, and a promise rescoped | M60 · M62 | The redirect answer and its three requirements · owed-work #1 (core-only SLO claim) · the deadline question |
+| [M67](docs/build-notes/phase-details/m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 | The install/remove halves of the manager answer · split from the surface at the plan's review |
+| [M68](docs/build-notes/phase-details/m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | The manager answer's visible half: listing, per-module performance, orphaned data, the purge choice |
+| [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
+| [M69.9](docs/build-notes/phase-details/m69.9.md) | **Pre-release adversarial review** | everything below it | — |
+| [M70](docs/build-notes/phase-details/m70.md) | Deferred findings, documentation pass, 0.4.0 | all | Phase close · owed-work #3 (the 1.0 sentence) |
+
+### Phase 4 decisions
+
+The planning conversation's answers — all owner-set 2026-08-18 — live in
+[phase-4-candidates.md](docs/build-notes/phase-4-candidates.md) and receive `D`
+numbers as the milestones that rest on them land, per
+[upcoming-decisions.md](docs/build-notes/upcoming-decisions.md)'s convention.
+The plan itself is
+[D211](docs/build-notes/decisions.md#2026-08-18--phase-4-planned-the-spine-and-the-fourteen-slots).
+
+### Not in Phase 4
+
+[phase-4-candidates.md](docs/build-notes/phase-4-candidates.md#what-is-not-in-phase-4)
+carries the list and its reasons; nothing is restated here. The two rows this
+plan moved are recorded in the scope tables where they sat: AI optimization,
+smart routing and predictive analytics left the Phase 4 row above, and OAuth,
+SSO and SCIM stay unscheduled while OIDC ships as an add-on.
 
 ---
 

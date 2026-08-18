@@ -10,9 +10,8 @@ here restates another file.
 phase's rows move to their own file, so the resume path reads the milestones that
 can still be next rather than every milestone there has ever been: Phase 1 is in
 [phase-1.md](phase-1.md), Phase 2 in [phase-2.md](phase-2.md), Phase 3 in
-[phase-3.md](phase-3.md). **There is no table here today**, because Phase 3 is
-released and Phase 4 has no milestones yet — an absence the planning is expected
-to fill, not a table that went missing.
+[phase-3.md](phase-3.md). The live table below is Phase 4's, added when it was
+planned on 2026-08-18.
 
 [Plan.md](../../../Plan.md) holds the scope contract and the ordering table.
 This directory holds the definitions of done those rows point at.
@@ -30,12 +29,34 @@ looks like an ordering mistake. Reopening is what happens when a shipped
 milestone's claim turns out false — the rule, and why it beats a successor
 milestone, is in [workflow.md](../workflow.md).
 
-## Phase 3
+## Phase 4
 
-Released as **0.3.0**, tagged 2026-08-18. Its record — the build plan, the
-decisions and the closing status table — moved to [phase-3.md](phase-3.md). This
-section is the pointer that replaces it, and it is replaced in turn by `## Phase
-4` and its table when Phase 4 is planned.
+Planned 2026-08-18 — fourteen milestones, M59–M70; the ordering table and its
+dependency edges are [Plan.md](../../../Plan.md#phase-4-build-plan)'s. Phase 3
+released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
+
+| # | Milestone | Depends on | Status |
+| --- | --- | --- | --- |
+| [M59](m59.md) | Process debt: the gates that were not watching | — | not started |
+| [M60](m60.md) | The host: a module loads, or is refused | M59 *(ordering)* | not started |
+| [M61](m61.md) | The ABI: what an add-on may import, written down and versioned | M60 | not started |
+| [M62](m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | not started |
+| [M63](m63.md) | An add-on's tables: a schema of its own, migrated by the host | M62 | not started |
+| [M64](m64.md) | An add-on reaches the page: routes, templates, config | M62 · M63 *(ordering)* | not started |
+| [M64.9](m64.9.md) | Mid-phase adversarial review | M59–M64 | not started |
+| [M65](m65.md) | The authentication hook: a session minted on an add-on's word | M61 · M62 · M64 | not started |
+| [M66](m66.md) | Add-ons on the redirect path: two classes, a deadline, and a promise rescoped | M60 · M62 | not started |
+| [M67](m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 | not started |
+| [M68](m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | not started |
+| [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · M68 *(ordering)* | not started |
+| [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | not started |
+| [M70](m70.md) | Deferred findings, documentation pass, 0.4.0 | all | not started |
+
+**Phase 4 inherits all fourteen rules below, as written — owner-confirmed
+2026-08-18** at the plan's review, recorded in
+[phase-4-candidates.md](../phase-4-candidates.md#what-this-collides-with-named-now-rather-than-discovered).
+The five rules the phase collides with on purpose stay arguments each colliding
+milestone must win in its own file, never waivers.
 
 ## What every milestone inherits
 

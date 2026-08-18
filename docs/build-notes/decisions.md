@@ -373,6 +373,7 @@ file. Append a row when you append an entry.
 | [M58, the release notes fold into 0.3.0, and the date a gate keeps honest](#2026-08-17--m58-the-release-notes-fold-into-030-and-the-date-a-gate-keeps-honest) | D207 — the `0.3.0` section is dated **2026-08-17**, the day the fold was made, and is defensible only because D208 refuses a stale one. D208 — `release-check`'s new gate checks the **date** as well as an empty `[Unreleased]`, and that the `[Unreleased]` heading is still there at all, all three as failures rather than warnings, none of them built from a regex holding the version. The rehearsal cost is discharged in `docs/releasing.md` rather than merely stated, and the standing conflict with the per-commit Docs gate is [F254](deferred-findings.md#open) |
 | [The conformance gate waits on the socket the application uses, and a streak alone was not enough](#2026-08-18--the-conformance-gate-waits-on-the-socket-the-application-uses-and-a-streak-alone-was-not-enough) | D209 — the single-instance check's readiness wait asks over **TCP**, because the `initdb` temporary server runs with `listen_addresses=''` and cannot be seen there: socket polls `........RR...RRRR`, TCP polls `............RRRRR`, zero transitions. The first fix kept the socket and required three consecutive successes, and measurement killed it — a temporary server answered ready for exactly three polls. A boundary rather than a margin, sabotage-verified against the new mechanism. F256 closes |
 | [The records collapse in the diff view and the definitions of done do not](#2026-08-18--the-records-collapse-in-the-diff-view-and-the-definitions-of-done-do-not) | D210 — `decisions.md`, `deferred-findings.md` and `doc-cost.md` are marked `linguist-generated=true` in `.gitattributes`, so GitHub collapses them behind *Load diff* and a code PR shows code. GitHub-only and display-only: `git diff` is untouched and nothing is hidden. `-diff` was rejected — it makes git treat the file as binary, so the local diff of the records an audit reads would print *Binary files differ*. `phase-details/**` is deliberately not marked, because an edit to a definition of done after its milestone shipped is what an audit most needs to see |
+| [Phase 4 planned: the spine and the fourteen slots](#2026-08-18--phase-4-planned-the-spine-and-the-fourteen-slots) | D211 — fourteen milestones, M59–M70, one dependency chain rather than areas; capabilities land in rising order of what a defect would cost; the mid-phase review sits **before** sessions and the redirect path, not at the numeric middle; wazero named at planning because `CGO_ENABLED=0` leaves one candidate; the *AI optimization, smart routing, predictive analytics* limbs move to *future* rather than riding along; two slots deliberately unspent |
 | [Two released phases leave the scope contract, and the headings stay behind](#2026-08-18--two-released-phases-leave-the-scope-contract-and-the-headings-stay-behind) | Why 216 KB of finished-phase record left `Plan.md` for `phase-details/phase-N.md`; why the seven section headings stayed behind, and how that keeps 178 links resolving without editing this append-only file; why both *Not in Phase N* signposts name the candidate files as well as the archive; why no new parked-scope list was created; what the cut is *not* worth, measured against `doc-cost.md`; the three claims that went stale in the same move; and why `Last updated` is gone |
 
 ---
@@ -30876,3 +30877,67 @@ by-row charge was landing on a table that had nothing to do with the next
 milestone, which is the same failure the by-row charge was introduced to fix in
 the first place. Removing those rows did not raise the cost of a resume; it
 removed the thing that was making the cost look measurable.
+
+## 2026-08-18 — Phase 4 planned: the spine and the fourteen slots
+
+**D211.** The owner's answers of 2026-08-18 —
+[phase-4-candidates.md](phase-4-candidates.md)'s record, ten questions in three
+rounds — set the phase's shape; this entry records what the *plan* added on top
+of them, which is the part a later reader will otherwise re-derive.
+
+**Fourteen slots against a plan of fifteen, and the spare is the point.**
+Eleven integers of work, two reviews, one close — thirteen as drafted, and
+fourteen after the plan's own independent review found the manager milestone
+was two (an upload-and-unload lifecycle, [M67](phase-details/m67.md), and the
+page that drives it, [M68](phase-details/m68.md)) and the owner split it — the
+M50.5/M50.6 shape, caught this time before anything was built against it. The
+candidates file's own arithmetic said the phase fits its plan for the first
+time in three phases; the remaining slack is kept rather than spent because an
+ABI is the kind of artifact insertions come from, and
+[M69](phase-details/m69.md) exists to surface what the foundation got wrong
+while there is still room to fix it inside the phase.
+
+**One dependency chain, not areas.** Phase 3 was cut into independent areas so
+a blocked milestone had a fallback (D108, W33). Phase 4 cannot be: every
+milestone is substrate for the next, which is what *foundation* means. The
+order inside the chain is deliberate — capabilities land in rising order of
+what a defect in each would cost. Storage (M63) before pages (M64) before
+sessions (M65) before the redirect path (M66): a schema bug damages the
+add-on's own data, a rendering bug damages a page, a session bug is an account
+takeover, and a redirect bug is the product's one public promise. The
+consequence W33 cares about is accepted and stated: a blocked milestone in
+this phase mostly has nothing to fall back to, and the fallback is M59's
+findings work or the phase stalls honestly.
+
+**The mid-phase review sits before the dangerous capabilities, not at the
+numeric middle.** [M64.9](phase-details/m64.9.md) reviews the host, the ABI,
+enforcement, storage and pages — then M65 and M66 build the two
+highest-consequence capabilities on a reviewed boundary. A review placed at
+the middle by count would have straddled that line with the worst half
+unreviewed.
+
+**wazero is named at planning rather than left to the build.** The build is
+`CGO_ENABLED=0` (`Dockerfile:86`, `Makefile:682`) and the owner's sidecar
+rejection rests on staying one container; wazero is the one production WASM
+runtime in pure Go, so the choice has no second candidate and pretending
+otherwise at build time would be theater. It is still a new direct dependency
+in a project with fourteen, which is why it is in this entry: the alternative
+— implementing against an interface with a swappable runtime — buys an
+abstraction with exactly one implementation and costs the ABI clarity M61
+needs.
+
+**Two scope rows moved, on the record.** *AI optimization, smart routing,
+predictive analytics, plugin system* had said `4` since Phase 1; the phase
+takes the plugin-system limb as its spine and the other three limbs move to
+*future* — unscheduled, not dropped, per the tracker rule. And OIDC leaves the
+*stay 3+ and unscheduled* clause of the MFA row for [M68](phase-details/m68.md),
+as an add-on rather than core — the owner's structural answer, with its 1.0
+consequence recorded in the candidates file and discharged at
+[M69](phase-details/m69.md).
+
+**What planning deliberately did not decide**, so nobody reads silence as an
+answer: the inline deadline's value (M66's, from measurement —
+[upcoming-decisions.md](upcoming-decisions.md)), the F253 and F254 repair
+shapes (M59's, the owner's, asked at planning), the manager's layout (chosen
+from wireframes, the D177 route), and whether *every UI feature has API
+support* binds third-party add-on surfaces (M68 forces it with a real case).

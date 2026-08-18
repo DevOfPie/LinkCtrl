@@ -117,8 +117,12 @@ somebody:
 
 Each of these is an inherited invariant from
 [phase-details/README.md](phase-details/README.md)'s *What every milestone
-inherits*, and a WASM host touches four of them. **None is a blocker; every one
-is a milestone's argument to make in writing.**
+inherits*, and a WASM host touches five of them — four named when this file was
+written, the fifth added at the plan's review the same day. **None is a
+blocker; every one is a milestone's argument to make in writing.** And the
+frame was owner-confirmed at that review: **Phase 4 inherits all fourteen
+rules as written**, the collisions staying arguments each milestone must win
+in its own file, never waivers.
 
 - **`ui` stays stdlib-only** — no Node, no CDN, CSP unchanged, no `unsafe-`
   waivers. An add-on that renders UI has to reach the page without moving any of
@@ -132,6 +136,13 @@ is a milestone's argument to make in writing.**
 - **The redirect tree stays minimal**, and touching it re-triggers the
   [slo.md](../slo.md) k6 measurement. Whether an add-on may run on the redirect
   path at all is **open**, below.
+- **The privacy stance** — no IP column anywhere, `ip_prefix` only — meets a
+  storage-holding add-on that watches redirects, which nothing in the first
+  four collisions covers. *Added at the plan's review, 2026-08-18.* The plan's
+  answer is [M61](phase-details/m61.md)'s: the stance binds **at the ABI, not
+  by auditing add-on DDL** — no host function hands a module a raw client
+  address, so an add-on cannot store what it is never handed, asserted by a
+  test over the ABI surface rather than promised by review vigilance.
 
 ---
 
@@ -230,26 +241,51 @@ decision left in it, named so the milestone that meets it does not rediscover it
 5. **The single-instance gate grows a case with an add-on loaded**, or *one
    container is a tested configuration* quietly stops covering the shipped shape.
 
-**Genuinely open, and the phase's planning has to answer them.**
+**Genuinely open at planning — each now routed, none silently.** The four
+questions this section held when it was written on 2026-08-18 were taken up by
+the plan the same day ([D211](decisions.md#2026-08-18--phase-4-planned-the-spine-and-the-fourteen-slots)):
 
-- **What the deadline is.** A number bounding an inline add-on exists in
-  principle and has no value yet, and there is no data to pick one from until
-  something runs.
-- **What the host functions actually are.** *Everything OIDC needs* is a
-  requirement, not an interface. The set of imports is the ABI, and it is the
-  hardest single artifact of the phase.
-- **How declared permissions are expressed and checked.** The shape is
-  `NonDelegableScopes`; whether that generalises to tables, events and routes is
-  unexamined.
-- **How many milestones this is.** With C, D and the commercial module out, the
-  phase is the foundation, the OIDC add-on, one process-debt milestone, two
-  reviews and a close. That is well inside the plan of 15 for the first time in
-  three phases, and the slack is deliberate rather than a shortfall: an ABI is
-  the kind of artifact insertions come from.
+- **What the deadline is** — deliberately *not* answered: no data exists until
+  something runs, so the value is measured into at
+  [M66](phase-details/m66.md), and the question waits in
+  [upcoming-decisions.md](upcoming-decisions.md) with the shape of its answer
+  fixed in advance.
+- **What the host functions actually are** — [M61](phase-details/m61.md)'s
+  central artifact, named there as the hardest of the phase.
+- **How declared permissions are expressed and checked** —
+  [M62](phase-details/m62.md), which examines the `NonDelegableScopes` analogy
+  and records the answer either way.
+- **How many milestones this is** — **fourteen**: eleven integers, two
+  reviews, one close, M59–M70, in
+  [Plan.md](../../Plan.md#phase-4-build-plan)'s ordering table — thirteen as
+  drafted, fourteen after the plan's independent review split the manager
+  milestone in two and the owner took the split. Inside the plan of 15 for
+  the first time in three phases, and the remaining slack is deliberate
+  rather than a shortfall: an ABI is the kind of artifact insertions come
+  from.
 
 ---
 
+## Two more answers, given at the plan's review
+
+**Owner-answered 2026-08-18**, when the drafted plan was put to them — same
+convention as the table above: recorded here, `D` numbers when
+[M59](phase-details/m59.md) lands, options and costs stated when asked.
+
+| Question | Answer |
+| --- | --- |
+| **[F253](deferred-findings.md#open): the direct `release-check` form skips the integration tests — script or docs?** | **The script derives `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` itself**, the recommended shape, taking the stated cost: a new drift pair between Makefile and script, which M59 adds a check for. The alternative — docs drop the direct form — left the trap runnable and merely unrecommended |
+| **[F254](deferred-findings.md#open): which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
+| **Does Phase 4 inherit all fourteen rules as written?** | **Yes, all fourteen** — the five collisions above stay per-milestone written arguments, not waivers. A milestone that cannot win its argument comes back as a prompt |
+
 ## What is not in Phase 4
+
+**Deferred to Phase 5 by the owner in the planning conversation itself** —
+recorded in the shape table above and repeated here because this is the list a
+reader checks: **Areas C and D** (analytics/reporting and redirect-path
+work, waiting their fourth phase, recorded as a change of mind rather than
+reconciled away) and **the commercial module** (Phase 5, once the foundation
+has been through a real consumer).
 
 Carried from [Plan.md](../../Plan.md#not-in-phase-3), which is where their
 reasons live and stay:
