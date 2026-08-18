@@ -278,6 +278,63 @@ convention as the table above: recorded here, `D` numbers when
 | **[F254](deferred-findings.md#open): which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
 | **Does Phase 4 inherit all fourteen rules as written?** | **Yes, all fourteen** — the five collisions above stay per-milestone written arguments, not waivers. A milestone that cannot win its argument comes back as a prompt |
 
+## The manager's layout: chosen from wireframes, amended, confirmed
+
+**Owner-chosen and confirmed 2026-08-18** — the D177 route — against a visual
+plan carrying three drawn options with costs beside each: A (one flat table),
+B (card per add-on, the recommendation), C (list + detail). The choice went
+against the recommendation: **Option A's table as the list page, Option C's
+detail pages behind each row**, then two amendments made and redrawn in the
+same review before the owner confirmed the final frames.
+
+**Removal is select-mode** — not per-row, and not the dropdown the first
+redraw offered: Remove sits in-line with Install; pressing it turns each
+row's trailing `›` into a checkbox **in the same column, so the table never
+shifts**; multiple rows select; and the same button — now *Remove selected
+(n)* — opens one confirmation carrying a purge-data choice per selected
+module, default off, with a required-class module's consequence stated.
+
+**The detail page gains a Settings section, and that is owner-added scope,
+named as such**: settings the add-on declares in its manifest, each with a
+typed input the host renders — text, secret, select, toggle — saved behind
+`addons.manage`, audited, secrets never echoed. The drafted plan had kept
+add-on configuration in the operator's environment; this reverses that for
+*declared* settings only, and it was amended into
+[M60](phase-details/m60.md) (manifest), [M61](phase-details/m61.md) (ABI
+reads) and [M68](phase-details/m68.md) (render and save) after the plan's
+independent review, at the owner's direction, on 2026-08-18.
+
+The confirmed frames, compressed to their essentials (the drawn versions live
+in the planning visual plan; this record is what the repo keeps):
+
+```
+List                            [Install add-on] [Remove…]
+NAME        VER    CLASS             FAIL      P99   KILLS
+oidc        1.2.1  none              required  —     —    ›
+clickstats  0.4.0  redirect-observe  degrade   0.8ms 2    ›
+Orphaned data: addon_legacy_geo (2.4 MB)         [Purge…]
+
+Selection mode (Remove pressed — › cells become checkboxes)
+Select the add-ons to remove  [Remove selected (2)] [Cancel]
+oidc        1.2.1  none              required  —     —    ☑
+clickstats  0.4.0  redirect-observe  degrade   0.8ms 2    ☑
+
+Confirmation (one or many; purge per module, default off)
+Remove 2 add-ons?
+  oidc v1.2.1 — required-class: external sign-in stops
+    ☐ also delete addon_oidc
+  clickstats v0.4.0
+    ☐ also delete addon_clickstats
+                          [Cancel]  [Remove 2 add-ons]
+
+Detail page: ← back · name + class/failure badges ·
+Performance (own p99, kills) · Settings (text / secret /
+select / toggle inputs + Save) · Declared permissions ·
+Data (schema, size) + [Remove add-on…]
+```
+
+`D` numbers when M68 lands, like every answer above.
+
 ## What is not in Phase 4
 
 **Deferred to Phase 5 by the owner in the planning conversation itself** —
