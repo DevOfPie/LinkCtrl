@@ -373,6 +373,7 @@ file. Append a row when you append an entry.
 | [M58, the release notes fold into 0.3.0, and the date a gate keeps honest](#2026-08-17--m58-the-release-notes-fold-into-030-and-the-date-a-gate-keeps-honest) | D207 — the `0.3.0` section is dated **2026-08-17**, the day the fold was made, and is defensible only because D208 refuses a stale one. D208 — `release-check`'s new gate checks the **date** as well as an empty `[Unreleased]`, and that the `[Unreleased]` heading is still there at all, all three as failures rather than warnings, none of them built from a regex holding the version. The rehearsal cost is discharged in `docs/releasing.md` rather than merely stated, and the standing conflict with the per-commit Docs gate is [F254](deferred-findings.md#open) |
 | [The conformance gate waits on the socket the application uses, and a streak alone was not enough](#2026-08-18--the-conformance-gate-waits-on-the-socket-the-application-uses-and-a-streak-alone-was-not-enough) | D209 — the single-instance check's readiness wait asks over **TCP**, because the `initdb` temporary server runs with `listen_addresses=''` and cannot be seen there: socket polls `........RR...RRRR`, TCP polls `............RRRRR`, zero transitions. The first fix kept the socket and required three consecutive successes, and measurement killed it — a temporary server answered ready for exactly three polls. A boundary rather than a margin, sabotage-verified against the new mechanism. F256 closes |
 | [The records collapse in the diff view and the definitions of done do not](#2026-08-18--the-records-collapse-in-the-diff-view-and-the-definitions-of-done-do-not) | D210 — `decisions.md`, `deferred-findings.md` and `doc-cost.md` are marked `linguist-generated=true` in `.gitattributes`, so GitHub collapses them behind *Load diff* and a code PR shows code. GitHub-only and display-only: `git diff` is untouched and nothing is hidden. `-diff` was rejected — it makes git treat the file as binary, so the local diff of the records an audit reads would print *Binary files differ*. `phase-details/**` is deliberately not marked, because an edit to a definition of done after its milestone shipped is what an audit most needs to see |
+| [Two released phases leave the scope contract, and the headings stay behind](#2026-08-18--two-released-phases-leave-the-scope-contract-and-the-headings-stay-behind) | Why 216 KB of finished-phase record left `Plan.md` for `phase-details/phase-N.md`; why the seven section headings stayed behind, and how that keeps 178 links resolving without editing this append-only file; why both *Not in Phase N* signposts name the candidate files as well as the archive; why no new parked-scope list was created; what the cut is *not* worth, measured against `doc-cost.md`; the three claims that went stale in the same move; and why `Last updated` is gone |
 
 ---
 
@@ -30775,3 +30776,103 @@ answer is a structural split — the records off the PR path entirely, or the
 finding backlog moved to a tracker that has state transitions of its own — which
 is a larger change and the owner's to schedule. Recorded here so the next reader
 knows this was the cheap half taken first on purpose.
+
+## 2026-08-18 — Two released phases leave the scope contract, and the headings stay behind
+
+Plan.md was 288318 bytes and 216148 of them were the build plans, decision tables
+and deferred-scope lists of two phases that had shipped — Phase 2 as `v0.2.0` on
+2026-08-06, Phase 3 as `v0.3.0` on 2026-08-18. The file's own second line says it
+states **what is true**, and [workflow.md](workflow.md#standing-rules) says the
+same in the other direction: rationale in the plan is wrong. Three quarters of it
+was the record of finished work.
+
+**Nothing here was a new rule.** [phase-details/README.md](phase-details/README.md)
+has said since Phase 3 opened that a finished phase's rows move to their own file,
+and [phase-1.md](phase-details/phase-1.md) and
+[phase-2.md](phase-details/phase-2.md) already existed because the *status* tables
+did move. The build plans never followed them. This is the convention being
+applied to the rest of the record rather than a convention being invented.
+
+**What moved, and where.** Phase 2's build plan, both decision tables and *Not in
+Phase 2* to [phase-2.md](phase-details/phase-2.md), joining its status table.
+Phase 3's equivalents to a new [phase-3.md](phase-details/phase-3.md), together
+with the twenty-three-row status table that until today sat in the live phase's
+README. Phase 1's per-area completion table and its *scope not yet built* record
+to [phase-1.md](phase-details/phase-1.md#build-status-detail). Plan.md's Build
+status is now three lines naming three releases.
+
+**The headings stayed behind, and that is the whole design.** 178 markdown links
+pointed into those regions — 101 from elsewhere in Plan.md and 77 from twenty
+other files, of which **23 are inside this file**. decisions.md is append-only:
+*never edit an entry; a later entry corrects an earlier one*. So those links could
+not be rewritten, which meant the anchors could not be allowed to disappear. Each
+of the seven section headings therefore remains in Plan.md, spelled
+character-for-character, with a two-line signpost under it naming the archive. A
+reader following `Plan.md#phase-3-decisions` from a decision written in August
+still lands on a page that tells them where the table went, and the append-only
+rule was never bent to achieve it. Verified rather than assumed: `check-links.sh`
+resolves 3674 links and the seven headings were grepped by exact match.
+
+**The two *Not in Phase N* signposts carry an extra clause on purpose.** Those
+lists are trackers, and *nothing leaves a tracker silently* — a row leaves only by
+being re-homed, with the row it left saying where it went. Most of those rows are
+discharged; the ones still live are inventoried by work area in
+[phase-3-candidates.md](phase-3-candidates.md) and
+[phase-4-candidates.md](phase-4-candidates.md). Each signpost names **both**
+destinations — the archive for the original deferral reason, the candidate files
+for what is still parked — because naming only the archive would file live scope
+under history, and naming only the candidates would drop the reasons.
+
+**No new parked-scope list was created**, which was the first design and was
+dropped. [planning.md](planning.md) already says a parked feature lives in *Not in
+Phase N* or the next phase's candidate list, and both candidate files already
+carry the live inventory. A third list in Plan.md would have been a fourth place
+to keep in sync for no reader who lacked one.
+
+**What this is not worth, stated because the obvious claim is wrong.**
+[doc-cost.md](doc-cost.md) measures Plan.md at a realized read ratio of **0.01** —
+ten reads averaging 3388 bytes against a 287720-byte file — because `/work phase`
+charges a single ordering row, 660 bytes. **Cutting 216 KB from it saves almost no
+tokens.** The reason to do it is that the document claiming to state current truth
+was three quarters history, and a reader looking for what is still parked had to
+read two released phases to find out. If tokens are ever the goal, the cost is in
+[workflow.md](workflow.md) — 19662 bytes read whole on every task, ratio 0.95 —
+and in [phase-loop.md](phase-loop.md) at every resume, whose realized totals
+together are twenty-five times Plan.md's.
+
+**Three claims went stale in the same move and were corrected with it**, since a
+restructure that leaves false sentences behind has not finished: Plan.md and
+phase-details/README.md both said status lives in the README *and nowhere else*,
+which stopped being true the moment Phase 3's table left it and Phase 4 had not
+arrived to replace it; README's justification for that rule cited a Plan.md table
+that had itself just moved to phase-1.md; and *Decisions already taken* pointed at
+Plan.md for decisions *recorded in full*, which is now a signpost. The absence of
+a status table in the README is named there as deliberate, because an empty live
+phase between a release and a plan reads exactly like a table somebody lost.
+
+**`| Last updated |` is gone from Plan.md's header table.** It said 2026-08-07
+against a file last changed on the 17th. A hand-maintained date beside a file git
+already dates is the F37 failure — a stamp taken once for a document that kept
+moving — and this file records that failure three separate times inside Plan.md
+itself. The commit date is the date, which is the argument
+[doc-cost.md](doc-cost.md) already makes about its own missing date field.
+
+**`make doc-cost` now reports the `/work phase` resume floor at 132391 bytes,
+against 67623 before, and the growth is not real.** The script charges Plan.md at
+`Plan.md::^\| \[M` — the longest ordering row, because
+[phase-loop.md](phase-loop.md#1-validate) step 1 reads exactly one of them. Every
+`| [M` row left Plan.md with the two archives, so the pattern matches nothing and
+the script falls back to charging the whole file, saying so in the row it prints.
+That fallback is the script being honest and the number is a true statement about
+a transient state: **Phase 3 is released, Phase 4 has no ordering table yet, so
+there is no row for step 1 to read.** Planning Phase 4 puts one back in Plan.md
+and the charge returns to a single row — of Phase 4's table, which is the one a
+resume would actually read.
+
+What the old figure was measuring is the part worth recording. The longest `| [M`
+row in Plan.md at `HEAD` was 968 bytes, at line 1111 — **M50.8, inside Phase 3's
+ordering table**, a released phase whose rows step 1 would never open. The
+by-row charge was landing on a table that had nothing to do with the next
+milestone, which is the same failure the by-row charge was introduced to fix in
+the first place. Removing those rows did not raise the cost of a resume; it
+removed the thing that was making the cost look measurable.

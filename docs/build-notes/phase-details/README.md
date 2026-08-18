@@ -6,18 +6,23 @@ insertions beside it, where `X.9` is reserved for scheduled reviews and
 Read exactly the one you are building — that is what this split is for. Nothing
 here restates another file.
 
-**The table below is the live phase and nothing else.** A finished phase's rows
-move to their own file, so the resume path reads the milestones that can still
-be next rather than every milestone there has ever been: Phase 1 is in
-[phase-1.md](phase-1.md), Phase 2 in [phase-2.md](phase-2.md).
+**This file carries the live phase's status table and nothing else.** A finished
+phase's rows move to their own file, so the resume path reads the milestones that
+can still be next rather than every milestone there has ever been: Phase 1 is in
+[phase-1.md](phase-1.md), Phase 2 in [phase-2.md](phase-2.md), Phase 3 in
+[phase-3.md](phase-3.md). **There is no table here today**, because Phase 3 is
+released and Phase 4 has no milestones yet — an absence the planning is expected
+to fill, not a table that went missing.
 
 [Plan.md](../../../Plan.md) holds the scope contract and the ordering table.
 This directory holds the definitions of done those rows point at.
 
-**Status lives here**, and only here. Plan.md's Build status table is per-area,
-which suited Phase 1's twenty-one milestones summarized by subsystem and does not
-scale to twenty-five tracked individually. Update the row when a milestone starts
-and when it lands.
+**Status lives in this directory**, and nowhere else — here while a phase is
+live, in its `phase-N.md` once it is released. Plan.md carries neither: its Build
+status is three lines naming the releases, and the per-area table it used to
+carry was Phase 1's own record, which is now in
+[phase-1.md](phase-1.md#build-status-detail). Update the row when a milestone
+starts and when it lands.
 
 A milestone that shipped and came back reads `in progress (reopened)`. The
 parenthesis earns its place: without it, a milestone below the one being built
@@ -27,68 +32,10 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## Phase 3
 
-**Every row is `done`. Phase 3 is built.** [M58](m58.md)'s reopening landed
-2026-08-17: `[Unreleased]` is folded into the `0.3.0` section, that section is
-dated the day it was folded, and `release-check` now refuses a changelog whose
-`[Unreleased]` is missing or non-empty, or whose version section is not dated
-the day of the run. **The tag has not been cut** — tagging, pushing a tag and
-opening the phase PR are release actions, each the owner's and each confirmed
-before it happens.
-
-**Twenty-three milestones** — twelve integers of work, two adversarial reviews,
-one close, and eight insertions — against the fifteen this phase was planned at.
-Every move is recorded: the two phase-boundary conversations of 2026-08-07, and
-[W40](../workflow-changes.md#made), which settled that the size target binds
-initial planning rather than the build. The standing rule stays at fifteen and
-this phase is the recorded exception. **M50.8 exhausted the M50 band** — `M50.9`
-is reserved for reviews — which is why the QR tab's fourth and fifth reports are
-reopenings and the limbs they leave are Phase 4 rows.
-
-Four work areas, chosen 2026-08-06 and used by [step 1](../phase-loop.md#1-validate)'s
-fallback: identity and account lifecycle, dashboard UI and UX, infrastructure
-and resilience, QR codes and campaigns.
-
-*(This section carried the whole reopening trail — every commit of the QR tab's
-five reports, the blind-task rounds behind M46–M48, and the arithmetic of each
-insertion — until M57.9's doc-cost judgement of 2026-08-17. It was 2879 bytes of
-that run's 4799-byte growth in the resume charge, on a file whose realized read
-ratio had fallen from 0.87 to 0.66: history being paid for at every resume and
-skipped. Nothing was dropped. The trail is in each milestone's own file and in
-`git log`, the decisions are in [decisions.md](../decisions.md), and the size
-target's exceptions are in [W40](../workflow-changes.md#made).)*
-
-| # | Milestone | Depends on | Status |
-| --- | --- | --- | --- |
-| [M46](m46.md) | The shell, the navigation, and the links list | — | done |
-| [M46.5](m46.5.md) | A browser an agent can drive, and a test that outlives it | — | done |
-| [M46.6](m46.6.md) | The workspace pair reads as one control | M46 · M46.5 | done |
-| [M47](m47.md) | The link page, taken apart | M46 · M46.5 | done |
-| [M47.5](m47.5.md) | What every tab says about itself | M47 · M46.5 | done |
-| [M48](m48.md) | On-demand panels, and what stops being buried | M47 | done |
-| [M49](m49.md) | QR codes sized in pixels, and a PNG to download | M48 *(ordering)* | done |
-| [M50](m50.md) | More than one QR code per link, told apart in the analytics | M49 | done |
-| [M50.5](m50.5.md) | The first file this product accepts | M50 | done |
-| [M50.6](m50.6.md) | A logo in the middle of a QR code | M50.5 | done |
-| [M50.7](m50.7.md) | The QR tab stops costing more attention than it is worth | M49 · M50 | done |
-| [M50.8](m50.8.md) | The QR tab's third report, and the first script the dashboard depends on | M50 · M50.6 · M50.7 | done |
-| [M51](m51.md) | Account recovery: a forgotten password stops being permanent | — *(after M48, ordering)* | done |
-| [M51.9](m51.9.md) | **Mid-phase adversarial review** | M46–M51 | done *(range re-covered by M57.9)* |
-| [M52](m52.md) | Account deletion and subject erasure | M50.5 · M51 *(ordering)* | done |
-| [M53](m53.md) | A second factor: TOTP, enrolment, and recovery codes | M51 | done |
-| [M54](m54.md) | An API key belongs to an account, not to one organization | M52 | done |
-| [M55](m55.md) | An update checker, and the fifth thing that leaves this product | — | done |
-| [M56](m56.md) | High availability: the failover contract | — | done |
-| [M57](m57.md) | High availability: measured, and still one container | M56 | done |
-| [M57.5](m57.5.md) | The six the close left behind | M58 *(see the note below)* | done |
-| [M57.9](m57.9.md) | **Pre-release adversarial review** | M46–M57 · M46.5 · M46.6 · M47.5 · M57.5 | done *(reopened run, 2026-08-17)* |
-| [M58](m58.md) | Deferred findings, documentation pass, 0.3.0 | all | done |
-
-Work areas, so a blocked milestone has an independent row to fall back to per
-[W33](../workflow-changes.md#made): **B** is M46–M48, **F** is M49–M50.8, **A** is
-M51–M54, **E** is M55–M57. An area boundary buys a fallback destination, not
-concurrency — the worker is still forbidden from starting a second milestone.
-
-New milestone files start from [_template.md](_template.md).
+Released as **0.3.0**, tagged 2026-08-18. Its record — the build plan, the
+decisions and the closing status table — moved to [phase-3.md](phase-3.md). This
+section is the pointer that replaces it, and it is replaced in turn by `## Phase
+4` and its table when Phase 4 is planned.
 
 ## What every milestone inherits
 
@@ -130,5 +77,7 @@ of it doing planning work was being paid for and skipped. Nothing was dropped.
 
 ## Decisions already taken
 
-Recorded in full in [Plan.md](../../../Plan.md#phase-2-decisions). Referenced by
-number from the milestone files.
+Recorded in full in [phase-2.md](phase-2.md#phase-2-decisions) and
+[phase-3.md](phase-3.md#phase-3-decisions). Referenced by number from the
+milestone files. Plan.md keeps the headings those numbers were cited under, so an
+older link still lands somewhere true.

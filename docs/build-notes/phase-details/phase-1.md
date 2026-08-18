@@ -64,3 +64,76 @@ written column for column — no IP anywhere, referrers already reduced to a hos
 `is_first_visit` false, and the exact device and browser strings `Classify` emits.
 A seeder that writes rows the application could not have produced tests nothing
 and teaches the reader something false.
+
+## Build status detail
+
+Moved from Plan.md's [Build status](../../../Plan.md#build-status) on
+2026-08-18, verbatim apart from the link-path rewrites this file's location
+needs.
+
+| Area | State |
+| --- | --- |
+| Config, logging, health, graceful shutdown | done, verified |
+| Schema, migrations, partitioning | done, verified |
+| Authentication and sessions | done, verified |
+| RBAC evaluator | done, verified |
+| Link CRUD, aliases, tags, search | done, verified |
+| REST API (links, tags, auth, stats) | done, verified |
+| Redirect hot path and caching | done, verified |
+| Analytics ingest, rollups, read API | done, verified |
+| Background jobs | done, verified |
+| API keys and scopes | done, verified |
+| Dashboard UI | done, verified |
+| OpenAPI document and `/docs` | done, verified |
+| Prometheus metrics | done, verified |
+| Documentation: README, setup, configuration, usage, operations | done |
+| Enforcement: rate limits, 404 probe limits, GeoIP, retention | done, verified |
+| Load validation of the redirect target | done, target met — [docs/slo.md](../../slo.md) |
+| Release packaging | done, verified — [docs/releasing.md](../../releasing.md) |
+| Separate management and link hostnames | done, verified |
+| Post-release defect fixes, and a demo seeder | done, verified |
+| Root redirect on the link domain | done, verified |
+
+Verification: 103 integration tests against real Postgres and Redis — including
+a contract test that replays every OpenAPI operation against the live server —
+plus unit, property and fuzz tests. All run under the race detector, and all of it
+runs in CI alongside a two-architecture container build.
+
+### Phase 1 scope not yet built
+
+Every configuration variable either takes effect or no longer exists, which was
+the enforcement milestone's definition of done, and the redirect SLO is measured.
+Nothing in Phase 1 is outstanding: what follows is the record of the three
+milestones added after the completeness review, then the two lists that hold work
+which is deliberately not scheduled.
+
+#### Added after the review, and built
+
+The scope Phase 1 grew after 0.1.0's first eighteen milestones were reviewed. All
+three are done. Their definitions of done — M18's hostname split, M20's root
+redirect requirement table, M19's three defects, and the demo seeder — are in
+[phase-details/phase-1.md](phase-1.md), kept
+because they are what the implementations are still held to.
+
+#### Deferred findings
+
+Moved to [deferred-findings.md](../deferred-findings.md), which
+carries the queue, the rules for what lands in it, and the review state of each
+row. **That file is the authority on how many there are and what state each is
+in**, and this sentence deliberately no longer repeats a count: it said "one
+open finding, cosmetic, unreviewed" against a queue that had grown past sixty
+and been triaged three times (F37).
+
+#### Previously unassigned, now scheduled
+
+All three items Phase 1 accepted without an owner are scheduled in Phase 2:
+
+| Capability | Now |
+| --- | --- |
+| Dimension rollup cost | **Discharged by [M37](m37.md)**: split cadence (60s totals, 15m breakdowns, a watermark each), `linkctrl_rollup_staleness_seconds` with an alert recipe, and a re-measurement at the 5.7M-event seed taken before the choropleth was allowed to read it. What remains is a lag rather than a cost, and it is in *Known limitations*. |
+| Audit log behavior | [M21](m21.md) — writer, read API, and its own retention window. |
+| Geographic region and city | [M34](m34.md) — resolved transiently for routing, never stored. `click_events.region` and `city` stay null, asserted by test. |
+
+That last row narrows *Scope by phase*, which lists geographic analytics as
+country/region/city in Phase 1. Country is delivered; the other two are
+reclassified rather than quietly skipped.
