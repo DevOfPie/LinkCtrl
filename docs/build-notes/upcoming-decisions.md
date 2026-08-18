@@ -59,14 +59,40 @@ D149 was given ahead of the milestone that uses it, which is what this file is
 for; it is recorded with the date it was given and is used when
 [M55](phase-details/m55.md) lands.*
 
-*Nothing is waiting. The one question that arrived here today came from
+*The one question that arrived here on 2026-08-08 came from
 [step 3.4](phase-loop.md#3-land) rather than from
 [`/preview-decisions`](../../.claude/commands/preview-decisions.md) — the gap in
 an answer already given, found by building against it — and was answered the same
 day as **D164**, which corrects D159 in
 [decisions.md](decisions.md#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed).*
 
-## Answered, awaiting the milestone that uses it
+*One entry below arrived 2026-08-18, at Phase 4's planning, for its redirect
+milestone. Two more arrived and left the same day — the F253 and F254 repair
+shapes, asked and owner-answered at the plan's review; the pointers are in the
+answered section below.*
+
+### M66 — What is the inline add-on deadline's default?
+
+**Needed by:** [M66](phase-details/m66.md) — but **answerable only there**:
+the number bounds an inline add-on against the 20ms redirect budget, and no
+data exists to pick it from until M60 measures instantiation and M66 measures
+steady-state call cost. This entry exists so the loop arrives knowing the
+value is measured into rather than assumed, and knowing the shape of the
+answer in advance:
+
+- one instance-wide `LINKCTRL_ADDON_INLINE_DEADLINE`, no per-add-on override
+  until a real case argues for one;
+- the default chosen from M66's own k6 runs, stated in
+  [docs/slo.md](../slo.md) with the measurement beside it;
+- planning-time expectation is single-digit milliseconds; if measurement says
+  the honest number is larger than the 20ms budget can absorb, that is an
+  owner prompt at M66, not a bigger default.
+
+**Default if unanswered:** M66 proposes a value from its measurements and
+prompts with the data.
+
+**Assumes:** the cached-redirect SLO stays <20ms p99 and the extension point
+lands after destination decision, both per [m66.md](phase-details/m66.md).
 
 One heading, kept for one reason: **other files link to it.** An answered
 question leaves this file, and this section is what stops that removal breaking
@@ -74,6 +100,15 @@ a reference somebody wrote in good faith. It holds pointers, never answers —
 the rule at the top of this file is not weakened by a section that says *the
 answer is over there*. A heading leaves here for good once the milestone that
 uses it has landed and the references have moved with it.
+
+### M59 — The F253 and F254 repair shapes
+
+**Answered 2026-08-18** by the owner, at Phase 4's plan review, the same day
+both questions were written here. The answers, the options they were chosen
+from and the costs taken are recorded in
+[phase-4-candidates.md](phase-4-candidates.md#two-more-answers-given-at-the-plans-review);
+they receive `D` numbers when [M59](phase-details/m59.md) lands, which also
+carries what they oblige.
 
 ### M55 — Does the update checker default on or off?
 
