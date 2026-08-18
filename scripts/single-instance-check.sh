@@ -90,12 +90,43 @@ docker run -d --name "$PG" --network "$NET" \
   -e POSTGRES_USER=linkctrl -e POSTGRES_PASSWORD="$PGPASS" -e POSTGRES_DB=linkctrl \
   -e TZ=UTC postgres:17-alpine -c timezone=UTC >/dev/null
 
+# **Wait on the socket the application will actually use** (F256).
+#
+# This waited for `pg_isready` over the container's **unix socket**, broke on the
+# first yes, and then re-ran it once as a confirmation. Those are two different
+# servers. `postgres:17-alpine` runs `initdb` against a *temporary* server on
+# first boot, and that server answers on the socket, is shut down, and the real
+# one starts behind it — so the loop could break on the temporary server and the
+# confirming shot could land in the window where nothing was listening. The gate
+# then failed and passed on the same commit twice, in opposite directions,
+# decided only by where the one-second cadence fell.
+#
+# **The entrypoint starts that temporary server with `listen_addresses=""`**, so
+# it has no TCP listener at all. Asking over TCP therefore cannot see it, and the
+# boundary stops being a race: measured by polling both from container start, the
+# socket went `........RR...RRRR` while TCP went `............RRRRR` — **zero**
+# ready-to-not-ready transitions, first yes four polls later.
+#
+# That is also the honest question to ask. The container under test reaches
+# Postgres across a docker network, so TCP readiness is the thing this check
+# depends on and the socket never was.
+#
+# The streak is belt, not the mechanism, and it is cheap: a future image that
+# published TCP during `initdb` would put the race back, and three successes at
+# this cadence span more than two seconds against a window measured in fractions
+# of one. There is deliberately **no check after the loop** — a single shot
+# outside it is exactly the defect being removed.
+ready=0
 for _ in $(seq 1 60); do
-  if docker exec "$PG" pg_isready -U linkctrl -d linkctrl >/dev/null 2>&1; then break; fi
+  if docker exec "$PG" pg_isready -h 127.0.0.1 -U linkctrl -d linkctrl >/dev/null 2>&1; then
+    ready=$((ready + 1))
+    if [ "$ready" -ge 3 ]; then break; fi
+  else
+    ready=0
+  fi
   sleep 1
 done
-docker exec "$PG" pg_isready -U linkctrl -d linkctrl >/dev/null 2>&1 \
-  || fail "Postgres never became ready"
+[ "$ready" -ge 3 ] || fail "Postgres never became ready"
 
 # start_app EXTRA_ENV... — the container under test, on an ephemeral host port.
 #

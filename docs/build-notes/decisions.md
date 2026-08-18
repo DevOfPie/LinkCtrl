@@ -371,6 +371,7 @@ file. Append a row when you append an entry.
 | [M50.8, the offset is forgotten when the request ends, not when it swaps](#2026-08-17--m508-the-offset-is-forgotten-when-the-request-ends-not-when-it-swaps) | D205 — the QR tab's stored scroll offset is forgotten on `htmx:afterRequest` rather than on `htmx:afterSwap`, superseding D196: a swap is observable only when there is one, and the requests that must be forgotten for — a 5xx, a refusal htmx will not swap, an abort, a timeout — produce none. Since the third reopening every row of the codes list issues one. F250's fourth ending, a reader who navigates away mid-request, is **not** claimed: its handler would have to run during document teardown and nothing here demonstrates that it does. Guarded on `HX-Redirect` and `HX-Refresh`, because htmx fires the ending **before** the navigation those headers ask for, and an unguarded listener would drop the offset on the one load that reads it back. Rejected: a listener per failure event, which needs no guard and misses every success htmx declines to swap |
 | [M50.8, the thumbnail was already right, and D204 asked a question it then over-answered](#2026-08-17--m508-the-thumbnail-was-already-right-and-d204-asked-a-question-it-then-over-answered) | D206 — the heading thumbnail stays the default's **and** clicking it opens the tab on the default, which is what the tree already did. F249 closes with no change and D204's second half is withdrawn: the owner was asked what the thumbnail *means* and D204 inferred a *behaviour* from the answer that they had not chosen. What sent it back was the price — the anchor renders outside `#link-tabs` and a selection is a swap of it, so carrying the selection needed exactly the `hx-swap-oob` D204 declined for the reading it rejected |
 | [M58, the release notes fold into 0.3.0, and the date a gate keeps honest](#2026-08-17--m58-the-release-notes-fold-into-030-and-the-date-a-gate-keeps-honest) | D207 — the `0.3.0` section is dated **2026-08-17**, the day the fold was made, and is defensible only because D208 refuses a stale one. D208 — `release-check`'s new gate checks the **date** as well as an empty `[Unreleased]`, and that the `[Unreleased]` heading is still there at all, all three as failures rather than warnings, none of them built from a regex holding the version. The rehearsal cost is discharged in `docs/releasing.md` rather than merely stated, and the standing conflict with the per-commit Docs gate is [F254](deferred-findings.md#open) |
+| [The conformance gate waits on the socket the application uses, and a streak alone was not enough](#2026-08-18--the-conformance-gate-waits-on-the-socket-the-application-uses-and-a-streak-alone-was-not-enough) | D209 — the single-instance check's readiness wait asks over **TCP**, because the `initdb` temporary server runs with `listen_addresses=''` and cannot be seen there: socket polls `........RR...RRRR`, TCP polls `............RRRRR`, zero transitions. The first fix kept the socket and required three consecutive successes, and measurement killed it — a temporary server answered ready for exactly three polls. A boundary rather than a margin, sabotage-verified against the new mechanism. F256 closes |
 
 ---
 
@@ -30672,3 +30673,63 @@ refused that while the other two passed. Counter-edit each time, never
 multiset diff against `HEAD:CHANGELOG.md` — which accounts for every line: two
 blank lines and one duplicate `### Changed` and `### Fixed` gone to the merge,
 the date, and the seven lines of the two supersession parentheticals.
+
+## 2026-08-18 — The conformance gate waits on the socket the application uses, and a streak alone was not enough
+
+**D209 — the single-instance check's readiness wait asks `pg_isready` over
+**TCP**, not over the container's unix socket, and the three-success streak
+beside it is belt rather than the mechanism.** [F256](deferred-findings.md#closed)
+closes with it.
+
+Owner-scheduled 2026-08-18, in those terms: *the phase/PR can't be considered
+complete unless all tests succeed appropriately*. It is a task-class commit under
+[workflow.md](workflow.md)'s scope gate rather than a reopening — the milestone
+it was found in is `done` and nothing it claims is false; what was false was a
+gate.
+
+**What was wrong.** `scripts/single-instance-check.sh` waited for `pg_isready`
+over the unix socket, **broke on the first yes**, and then re-ran it once as a
+confirmation. Those are two different servers. `postgres:17-alpine` runs `initdb`
+against a temporary server that answers on the socket, shuts it down, and starts
+the real one behind it — so the loop could break on the temporary server and the
+confirming shot could land in the window where nothing was listening. The gate
+failed and passed on the same commit twice, in opposite directions, decided only
+by where a one-second cadence fell across a sub-second gap.
+
+**The first fix was wrong and measurement caught it before it shipped.** It kept
+the socket and required three consecutive successes, on the reasoning that a
+streak spanning two seconds cannot fit inside a window measured in fractions of
+one. Then a run produced `................RRR` — a temporary server answering
+ready for **exactly three consecutive polls** — and the streak broke on it. The
+reasoning was probabilistic, which is the same kind of reasoning that produced
+the defect; it read as safe because the numbers were bigger.
+
+**What replaced it is a boundary rather than a margin.** The entrypoint starts
+the temporary server with `listen_addresses=''`, so it has **no TCP listener at
+all** and a TCP question cannot see it. Polled from container start, both at
+once: socket `........RR...RRRR`, TCP `............RRRRR` — one
+ready-to-not-ready transition on the socket, **zero** on TCP, first yes four
+polls later. That is not a smaller race, it is the absence of one.
+
+It is also the honest question. The container under test reaches Postgres across
+a docker network; it never touches that socket. A readiness check asking about a
+transport the subject does not use was answering about the wrong thing even on
+the runs where it happened to be right.
+
+The streak stays, documented as belt and not as the argument: a future image that
+published TCP during `initdb` would put the race back, and three successes cost
+three seconds on a check that takes minutes. **There is deliberately no check
+after the loop** — a single shot outside it is the defect being removed, and
+re-adding one later would restore it exactly.
+
+**Sabotage-verified against the new mechanism rather than the old symptom.**
+Starting the *real* server with `listen_addresses=''` makes the check refuse
+after its budget — `Postgres never became ready`, 62 seconds — where the old code
+passed immediately on the socket. Restored by counter-edit, byte-identical.
+
+**And the date check fired for real the day after it was written.**
+`release-check` refused the `0.3.0` section for carrying 2026-08-17 while the run
+was on 2026-08-18, exactly as [D208](decisions.md) said it would and exactly as
+`docs/releasing.md` documents. Re-dated. The check cost one line and caught the
+thing it was built for on its first opportunity, which is more than most gates
+manage.
