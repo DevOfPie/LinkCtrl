@@ -372,6 +372,7 @@ file. Append a row when you append an entry.
 | [M50.8, the thumbnail was already right, and D204 asked a question it then over-answered](#2026-08-17--m508-the-thumbnail-was-already-right-and-d204-asked-a-question-it-then-over-answered) | D206 — the heading thumbnail stays the default's **and** clicking it opens the tab on the default, which is what the tree already did. F249 closes with no change and D204's second half is withdrawn: the owner was asked what the thumbnail *means* and D204 inferred a *behaviour* from the answer that they had not chosen. What sent it back was the price — the anchor renders outside `#link-tabs` and a selection is a swap of it, so carrying the selection needed exactly the `hx-swap-oob` D204 declined for the reading it rejected |
 | [M58, the release notes fold into 0.3.0, and the date a gate keeps honest](#2026-08-17--m58-the-release-notes-fold-into-030-and-the-date-a-gate-keeps-honest) | D207 — the `0.3.0` section is dated **2026-08-17**, the day the fold was made, and is defensible only because D208 refuses a stale one. D208 — `release-check`'s new gate checks the **date** as well as an empty `[Unreleased]`, and that the `[Unreleased]` heading is still there at all, all three as failures rather than warnings, none of them built from a regex holding the version. The rehearsal cost is discharged in `docs/releasing.md` rather than merely stated, and the standing conflict with the per-commit Docs gate is [F254](deferred-findings.md#open) |
 | [The conformance gate waits on the socket the application uses, and a streak alone was not enough](#2026-08-18--the-conformance-gate-waits-on-the-socket-the-application-uses-and-a-streak-alone-was-not-enough) | D209 — the single-instance check's readiness wait asks over **TCP**, because the `initdb` temporary server runs with `listen_addresses=''` and cannot be seen there: socket polls `........RR...RRRR`, TCP polls `............RRRRR`, zero transitions. The first fix kept the socket and required three consecutive successes, and measurement killed it — a temporary server answered ready for exactly three polls. A boundary rather than a margin, sabotage-verified against the new mechanism. F256 closes |
+| [The records collapse in the diff view and the definitions of done do not](#2026-08-18--the-records-collapse-in-the-diff-view-and-the-definitions-of-done-do-not) | D210 — `decisions.md`, `deferred-findings.md` and `doc-cost.md` are marked `linguist-generated=true` in `.gitattributes`, so GitHub collapses them behind *Load diff* and a code PR shows code. GitHub-only and display-only: `git diff` is untouched and nothing is hidden. `-diff` was rejected — it makes git treat the file as binary, so the local diff of the records an audit reads would print *Binary files differ*. `phase-details/**` is deliberately not marked, because an edit to a definition of done after its milestone shipped is what an audit most needs to see |
 
 ---
 
@@ -30733,3 +30734,44 @@ was on 2026-08-18, exactly as [D208](decisions.md) said it would and exactly as
 `docs/releasing.md` documents. Re-dated. The check cost one line and caught the
 thing it was built for on its first opportunity, which is more than most gates
 manage.
+
+## 2026-08-18 — The records collapse in the diff view and the definitions of done do not
+
+**D210.** The owner raised that the agent records in this repository were costing
+PR review and work audit rather than serving them. Measured before deciding:
+`decisions.md` is 1.9M across 369 entries and appears in 142 of the last 200
+commits; `deferred-findings.md` is 744K across 256 rows and appears in 130. PR #6
+changed 89,173 lines, of which 13,734 were under `docs/build-notes/`. The Docs
+gate in [workflow.md](workflow.md#before-completing-a-commit) is why: it requires
+`decisions.md` to carry the *why* in the same commit as the work, so the record
+lands in the same diff as the code by construction and not by accident.
+
+**The fix is display-only, and that is the point.** Three files are marked
+`linguist-generated=true` in `.gitattributes` — `decisions.md`,
+`deferred-findings.md` and `doc-cost.md`, which already says of itself that
+`make doc-cost` writes it. GitHub collapses a file so marked behind *Load diff*
+and leaves it out of language statistics. Nothing is removed, nothing is
+untracked, no commit changes, and a reviewer who wants the entry clicks once.
+
+**`-diff` was considered and rejected.** Setting it would make git treat these
+files as binary, so `git diff` on them prints *Binary files differ* — the local
+diff of the very records an audit reads, destroyed to tidy a web view. The
+smaller lever does the whole job.
+
+**`phase-details/` is deliberately not marked**, against the argument that it is
+the largest remaining churn. It holds each milestone's definition of done and the
+status README, which [CLAUDE.md](../../CLAUDE.md) makes the only place status
+lives. A definition of done edited *after* its milestone shipped is the single
+thing a work audit most needs to see, and collapsing it by default is the wrong
+default for that file even though one click reopens it. The contract files —
+`workflow.md`, `phase-loop.md`, `planning.md`, `commands.md` — stay open for the
+same reason in the opposite direction: a change to the rules belongs in review.
+
+**What this does not fix, stated rather than implied.** The records still commit
+with the code, still grow the clone, and still make `git log --stat` noisy. This
+entry claims one thing only: that the PR view stops burying the code. If the
+difficulty survives it, the difficulty was audit rather than rendering, and the
+answer is a structural split — the records off the PR path entirely, or the
+finding backlog moved to a tracker that has state transitions of its own — which
+is a larger change and the owner's to schedule. Recorded here so the next reader
+knows this was the cheap half taken first on purpose.
