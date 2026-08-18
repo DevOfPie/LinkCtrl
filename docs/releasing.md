@@ -51,10 +51,27 @@ git push origin v0.3.0
 
 `release-check` verifies: the working tree is clean, the tag does not exist, the
 changelog has a section for it, that section is dated today, `[Unreleased]` is
-still there and empty, `sqlc` output matches its SQL, the vendored assets match
-their checksums, the stylesheet is built, the build and tests pass under the race
-detector, the OpenAPI document matches the registered routes, and every release
-platform cross-compiles.
+still there and empty, **the branch's latest CI run is green**, `sqlc` output
+matches its SQL, the vendored assets match their checksums, the stylesheet is
+built, the build and tests pass under the race detector, the OpenAPI document
+matches the registered routes, and every release platform cross-compiles.
+
+The two forms above are equal, and one of them was not. The integration tests run
+only when Postgres is up, that question is asked through `docker compose`, and
+`docker compose` needs `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` to know
+which stack is meant — which the Makefile exported and a plain shell did not. So
+`scripts/release-check.sh v0.3.0` reported `skip  Postgres is not running` on a
+machine where it was, for a whole phase, and a skip reads as information rather
+than as a third of the gate not running (F253). The script derives both variables
+and both DSNs itself now, and a step of its own fails if either derivation stops
+agreeing with the Makefile's.
+
+CI's verdict is asked rather than assumed, because every other check here runs on
+the machine doing the release and a build that is red only on the runner is
+invisible to all of them — one was, for nine days (F255). It has three outcomes,
+not two: green, red, and **could not ask**. The last is reported and does not
+block, since an offline machine cannot answer the question and a gate that
+guessed would be worse than none.
 
 The three changelog checks beyond *a section exists* are there because the section
 existing is what both guards used to ask, and that passes on notes describing the

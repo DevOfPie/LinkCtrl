@@ -375,6 +375,8 @@ file. Append a row when you append an entry.
 | [The records collapse in the diff view and the definitions of done do not](#2026-08-18--the-records-collapse-in-the-diff-view-and-the-definitions-of-done-do-not) | D210 — `decisions.md`, `deferred-findings.md` and `doc-cost.md` are marked `linguist-generated=true` in `.gitattributes`, so GitHub collapses them behind *Load diff* and a code PR shows code. GitHub-only and display-only: `git diff` is untouched and nothing is hidden. `-diff` was rejected — it makes git treat the file as binary, so the local diff of the records an audit reads would print *Binary files differ*. `phase-details/**` is deliberately not marked, because an edit to a definition of done after its milestone shipped is what an audit most needs to see |
 | [Two released phases leave the scope contract, and the headings stay behind](#2026-08-18--two-released-phases-leave-the-scope-contract-and-the-headings-stay-behind) | Why 216 KB of finished-phase record left `Plan.md` for `phase-details/phase-N.md`; why the seven section headings stayed behind, and how that keeps 178 links resolving without editing this append-only file; why both *Not in Phase N* signposts name the candidate files as well as the archive; why no new parked-scope list was created; what the cut is *not* worth, measured against `doc-cost.md`; the three claims that went stale in the same move; and why `Last updated` is gone |
 | [Phase 4 planned: the spine and the fourteen slots](#2026-08-18--phase-4-planned-the-spine-and-the-fourteen-slots) | D211 — fourteen milestones, M59–M70, one dependency chain rather than areas; capabilities land in rising order of what a defect would cost; the mid-phase review sits **before** sessions and the redirect path, not at the numeric middle; wazero named at planning because `CGO_ENABLED=0` leaves one candidate; the *AI optimization, smart routing, predictive analytics* limbs move to *future* rather than riding along; two slots deliberately unspent |
+| [M59, the two repair shapes chosen at the plan's review](#2026-08-18--m59-the-two-repair-shapes-the-owner-chose-at-the-plans-review) | D212 — `release-check` **derives** `COMPOSE_PROJECT_NAME`, `COMPOSE_ENV_FILES` and the two DSNs itself rather than the documentation dropping the direct form, taking the drift pair knowingly and turning it into a step that fails on a mismatch; the DSN limb was forced by what the skip was hiding — unset, the integration suite guesses a password on the *demo* instance's port. D213 — the release-time gate is **named in workflow.md's Docs row**, so a worker between the fold and the tag meets the rule at the moment it binds them; the conflict is documented rather than removed and a post-fold reopening still re-folds by hand |
+| [M59, the F248 population was 83 and not 17](#2026-08-18--m59-the-f248-population-was-83-and-not-17) | D214 — an amendment on a **fact**: F248's count of 39 was taken over links carrying an explicit path to `deferred-findings.md` and so never looked inside that file, where 63 more were. 83 wrong links across 14 maintained files, 99 corrected once M59's own four rows closed. The assertion is unchanged, which is why it is an amendment and not a prompt; `deferred-findings.md` is not exempt as a source, and the recurring cost — closing a row means correcting every citation of it — is stated |
 
 ---
 
@@ -30941,3 +30943,106 @@ answer: the inline deadline's value (M66's, from measurement —
 shapes (M59's, the owner's, asked at planning), the manager's layout (chosen
 from wireframes, the D177 route), and whether *every UI feature has API
 support* binds third-party add-on surfaces (M68 forces it with a real case).
+
+## 2026-08-18 — M59, the two repair shapes the owner chose at the plan's review
+
+Both were asked at Phase 4's planning and answered the same day, on the record in
+[phase-4-candidates.md](phase-4-candidates.md#two-more-answers-given-at-the-plans-review).
+They get their numbers here, on the date they were *used*, which is what
+[upcoming-decisions.md](upcoming-decisions.md) exists to make possible: the answer
+predated the work by nine days and the trail says so.
+
+**D212. `release-check` derives the compose project and env file itself**, rather
+than the documentation dropping the direct form it offers. `docs/releasing.md`
+presents `scripts/release-check.sh v0.3.0` as the equal alternative to
+`make release-check VERSION=v0.3.0`, and it was not equal: the integration step
+asks `docker compose` whether Postgres is up, that question only resolves when
+`COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` are set, and only the Makefile set
+them — so the last gate before a tag printed `skip  Postgres is not running` on a
+machine where it was, and a skip reads as information rather than as a third of
+the gate not running (F253).
+
+The accepted cost is a drift pair: two derivations of one fact, and a Makefile
+change to either variable must reach the script. A price is only accepted if
+something notices when it is not paid, so the milestone adds the step *the
+Makefile and this script agree about which stack* — it reads `INSTANCE`,
+`ENV_FILE`, `PROJECT`, both `export` lines and both DSN templates out of the
+Makefile, unexpanded, and fails on a mismatch. Sabotage-verified in both
+directions: renaming `PROJECT` and hard-coding `COMPOSE_ENV_FILES` each produced
+a named failure, restored by counter-edit.
+
+**What the answer did not say, and the build could not avoid.** Knowing Postgres
+is up buys nothing if the tests are then run with no connection string, and with
+`TEST_DATABASE_URL` unset `test/integration` falls back to a literal guess at the
+password on **port 55432** — the *demo* instance's port. So the direct form did
+not merely skip; had the skip been removed alone, it would have aimed at the
+wrong stack. The script therefore derives the two DSNs by the same rule, from the
+same env file, and an already-exported value still wins so that `make
+release-check` and CI keep passing theirs. *Done* for this limb was defined as
+both documented forms **run** against an up stack, and both were: each ran the
+integration tests green on 2026-08-18.
+
+**D213. The release-time gate is named in workflow.md's Docs row.** Filling
+`CHANGELOG.md`'s `[Unreleased]` is what the per-commit Docs gate requires;
+`release-check` refuses a tag while anything is in it. Between the fold and the
+tag both bind at once, so obeying the first is what fires the second, and neither
+document mentioned the other (F254). The Docs row now says which wins and what to
+do: write the work into `[Unreleased]` as the row requires, and the fold is made
+again before the tag, which `docs/releasing.md` already spells out for whoever
+cuts it.
+
+The cost is accepted and is the point of the shape: the conflict is **documented
+rather than removed**, so a post-fold reopening still refills and re-folds by
+hand, as F251 did. The two shapes not taken — making the fold a step of the phase
+close, or letting `release-check` fold `[Unreleased]` itself — each moved work
+rather than naming an owner, and the second would have a gate editing the file it
+is judging. What changes is that a worker following workflow.md can no longer obey
+one document into violating the other without a sentence telling them which
+binds.
+
+**Neither answer is a product change**, which is why they arrive with a gate each
+rather than with a behaviour. The other two limbs of M59 needed no decision: F248
+was answered at M57.9's triage by D202, and F255's shape — a gate rather than a
+pin — is what its own evidence argued for.
+
+## 2026-08-18 — M59, the F248 population was 83 and not 17
+
+**D214. An amendment, on a fact.** [M59](phase-details/m59.md)'s F248 bullet named
+the population it had to correct. The tree held five times that many, so the
+bullet is amended rather than the work narrowed to fit it.
+
+**As it stood:**
+
+> The 17 wrong links in maintained files (`Plan.md` ×3 and the **ten** milestone
+> files F248 enumerates — its own cell says nine over a ten-file list, counted
+> here rather than trusted) are corrected in the same diff; the 22 in
+> `decisions.md` are left, that file being append-only — each was true when
+> written.
+
+**As amended:**
+
+> The wrong links in maintained files are corrected in the same diff — **83 of
+> them across 14 files**, counted rather than trusted, of which **63 are inside
+> `deferred-findings.md` itself**; the 22 in `decisions.md` are left, that file
+> being append-only — each was true when written.
+
+**The tree fact that forced it.** F248's own count of 39 was taken over links
+carrying an explicit path to `deferred-findings.md`, so it never looked inside
+that file, where a citation carries the bare fragment and no path at all. Sixty-
+three such links were there. Three more moved: `Plan.md` ×3 became
+`phase-3.md` ×3 when `ca8864a` relegated the released phases. Two were the class
+F248 predicted and did not count — `workflow-changes.md#proposed` for rows since
+Made, at `phase-details/m57.5.md:165` and `:170`, whose prose asserted *Proposed*
+and was corrected with them. Closing M59's own four rows made 16 more wrong in
+the same diff, for **99 corrected in total**.
+
+Nothing about the *assertion* changed, which is why this is an amendment and not
+a prompt. The bullet said the maintained files are corrected and the append-only
+one is left, and that is what happened; only the arithmetic was wrong, and it was
+wrong in the direction of the class being larger than the finding that counted
+it. `deferred-findings.md` is not exempt as a source, because it is maintained —
+its rows move between two sections, which is the whole defect F248 named — and
+the script says so in as many words at `scripts/check-links.sh:139-142`. The
+recurring cost is stated here rather than discovered later: **closing a row now
+means correcting every citation of it**, including the ones in that file's own
+cells, and `make check-links` is what will say which.

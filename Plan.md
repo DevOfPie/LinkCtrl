@@ -597,7 +597,7 @@ consumer that proves it.
 
 | # | Milestone | Depends on | Discharges |
 | --- | --- | --- | --- |
-| [M59](docs/build-notes/phase-details/m59.md) | Process debt: the gates that were not watching | — | [F248](docs/build-notes/deferred-findings.md#open) · [F253](docs/build-notes/deferred-findings.md#open) · [F254](docs/build-notes/deferred-findings.md#open) · [F255](docs/build-notes/deferred-findings.md#open) |
+| [M59](docs/build-notes/phase-details/m59.md) | Process debt: the gates that were not watching | — | [F248](docs/build-notes/deferred-findings.md#closed) · [F253](docs/build-notes/deferred-findings.md#closed) · [F254](docs/build-notes/deferred-findings.md#closed) · [F255](docs/build-notes/deferred-findings.md#closed) |
 | [M60](docs/build-notes/phase-details/m60.md) | The host: a module loads, or is refused | M59 *(ordering)* | Opens the *Add-on support* scope row · owed-work #5 (single-instance gate case) |
 | [M61](docs/build-notes/phase-details/m61.md) | The ABI: what an add-on may import, written down and versioned | M60 | Owed-work #2 (deprecation policy) · the host-function question |
 | [M62](docs/build-notes/phase-details/m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | The enforcement answer · the permission-expression question |

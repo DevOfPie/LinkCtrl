@@ -179,9 +179,19 @@ tasks:
       - golangci-lint run
 
   check-links:
-    desc: Verify every relative link and anchor in tracked markdown
+    desc: Verify tracked markdown — links and anchors resolve, rows match their headers, row-table links land on their row
     cmds:
       - bash scripts/check-links.sh
+
+  # Deliberately not in `check` below. Every other gate there runs offline and
+  # answers a question about this working tree; this one asks GitHub about a push
+  # that already happened, so it belongs where the answer can change a decision —
+  # release-check, and the phase loop's land sequence. Exit 2 is "could not ask"
+  # and is not a red build. See F255.
+  check-ci:
+    desc: Is the branch's latest CI run green? (asks GitHub; needs gh)
+    cmds:
+      - bash scripts/check-ci.sh
 
   shellcheck:
     desc: Lint every shell script

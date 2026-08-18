@@ -34,6 +34,12 @@
 # writes — ``` at up to three spaces of indent; a tilde or four-backtick fence
 # would be content to it, and none exists in tracked markdown today.
 #
+# And one thing per link into a **row table**: that the row the link names is in
+# the table its anchor points at (F248). Resolving an anchor is not the same as
+# landing on the row, and a tracker with two sections moves rows between them for
+# a living. The per-file list of which anchors are row tables, and what is exempt
+# from this check, are at `row_tables` below.
+#
 # Usage: scripts/check-links.sh
 set -uo pipefail
 
@@ -110,6 +116,148 @@ else
   printf '  %d broken link(s) of %d\n' "$fails" "$checked"
 fi
 
+# Row-table membership.
+#
+# An anchor naming a *table of rows* resolves forever while the row it was cited
+# for moves between the tables under it. `deferred-findings.md#open` is green
+# whether F248 is open or closed, so a sentence saying a finding is still open,
+# beside a link that lands on the Closed table, passed every check above. 39 such
+# links existed when this was written and all 39 pointed at Open for a row that
+# was Closed (F248) — silent by construction, because the reader follows the link,
+# lands on a table, and does not find the row unless they look.
+#
+# Which anchors are row tables cannot be inferred from the anchor. It is a
+# per-file list, and it is this:
+row_tables='docs/build-notes/deferred-findings.md|open|F
+docs/build-notes/deferred-findings.md|closed|F
+docs/build-notes/workflow-changes.md|proposed|W
+docs/build-notes/workflow-changes.md|made|W'
+#
+# The row a link is *for* comes from its link text: `[F248](…#open)` is a claim
+# about F248. A link whose text names no row — `[deferred-findings.md](…#open)`,
+# `[the table](…#closed)` — is not checked, and that bound is deliberate: the
+# alternative is parsing the sentence around it, which is where a false positive
+# on a gate resolving several thousand links would come from.
+#
+# decisions.md is exempt as a *source*. It is append-only by contract — never
+# edit an entry; a later entry corrects an earlier one — so each of its 22 such
+# links was true on the day it was written and correcting one would be editing
+# history. Nothing else is exempt.
+memfails=0
+memchecked=0
+
+# The first cell of every table row in the section a slug names, stopping at the
+# next heading of the same level or higher. Fenced blocks are skipped for the
+# reason the table pass skips them: a document must be able to demonstrate a
+# malformed row without failing the gate that documents it.
+rows_under() { # rows_under FILE SLUG
+  awk -v want="$2" '
+    function slug(s) {
+      s = tolower(s); gsub(/[^a-z0-9 _-]/, "", s); gsub(/ /, "-", s); return s
+    }
+    /^ {0,3}```/ { infence = !infence; next }
+    infence { next }
+    /^#+ +/ {
+      match($0, /^#+/); lvl = RLENGTH
+      h = $0; sub(/^#+ +/, "", h)
+      if (slug(h) == want) { inside = 1; ilvl = lvl; next }
+      if (inside && lvl <= ilvl) inside = 0
+      next
+    }
+    inside && /\|/ {
+      line = $0
+      gsub(/\\\|/, "\001", line)
+      sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line)
+      sub(/^\|/, "", line)
+      split(line, t, "|")
+      c = t[1]; gsub(/^[ \t]+|[ \t]+$/, "", c)
+      if (c ~ /^:?-{2,}:?$/) next
+      if (c != "") print c
+    }
+  ' "$1"
+}
+
+# Four sections, read once each rather than once per link.
+rowdir=$(mktemp -d)
+trap 'rm -rf "$rowdir"' EXIT
+while IFS= read -r spec; do
+  rt_file=${spec%%|*}; rest=${spec#*|}; rt_anchor=${rest%%|*}
+  rows_under "$rt_file" "$rt_anchor" > "$rowdir/$(basename "$rt_file").$rt_anchor"
+done <<<"$row_tables"
+
+cached_rows() { # cached_rows FILE ANCHOR
+  cat "$rowdir/$(basename "$1").$2" 2>/dev/null
+}
+
+while IFS= read -r file; do
+  [ "$file" = docs/build-notes/decisions.md ] && continue
+
+  while IFS= read -r pair; do
+    [ -n "$pair" ] || continue
+    text=${pair%%\](*}; text=${text#\[}
+    link=${pair##*\](}; link=${link%\)}
+
+    case "$link" in *\#*) ;; *) continue ;; esac
+    anchor=${link#*\#}
+
+    # Every link in the tree passes through here, so the cheapest discriminator
+    # goes first: four anchor names, no forks, before anything is resolved.
+    case "$anchor" in open|closed|proposed|made) ;; *) continue ;; esac
+
+    # Basename, because a path is relative to the file holding it and this
+    # script has to run where `realpath --relative-to` may not exist. Parameter
+    # expansion rather than `basename`, for the same reason.
+    path=${link%%#*}
+    base=${path:-$file}; base=${base##*/}
+
+    prefix=""
+    while IFS= read -r spec; do
+      rt_file=${spec%%|*}; rest=${spec#*|}
+      rt_anchor=${rest%%|*}; rt_prefix=${rest#*|}
+      if [ "$base" = "${rt_file##*/}" ] && [ "$anchor" = "$rt_anchor" ]; then
+        prefix="$rt_prefix"; target="$rt_file"
+        break
+      fi
+    done <<<"$row_tables"
+    [ -n "$prefix" ] || continue
+
+    # `[F248](…)`, `[F244](…)(b)`, `[F248's fix note](…)` — the first row
+    # identifier in the text, and only if it is this file's kind.
+    key=$(printf '%s' "$text" | grep -oE "\\b${prefix}[0-9]+\\b" | head -1)
+    [ -n "$key" ] || continue
+
+    memchecked=$((memchecked + 1))
+    if cached_rows "$target" "$anchor" | grep -qxF "$key"; then
+      continue
+    fi
+
+    where=""
+    while IFS= read -r spec; do
+      rt_file=${spec%%|*}; rest=${spec#*|}; rt_anchor=${rest%%|*}
+      [ "$rt_file" = "$target" ] || continue
+      [ "$rt_anchor" = "$anchor" ] && continue
+      if cached_rows "$target" "$rt_anchor" | grep -qxF "$key"; then
+        where="$rt_anchor"
+      fi
+    done <<<"$row_tables"
+
+    if [ -n "$where" ]; then
+      printf '  FAIL  %s -> %s (%s is in the %s table, not %s)\n' \
+        "$file" "$link" "$key" "$where" "$anchor"
+    else
+      printf '  FAIL  %s -> %s (no %s row in %s)\n' \
+        "$file" "$link" "$key" "${target##*/}"
+    fi
+    memfails=$((memfails + 1))
+  done < <(grep -oE '\[[^][]*\]\([^)]*\)' "$file")
+done < <(git ls-files '*.md')
+
+if [ "$memfails" -eq 0 ]; then
+  printf '  ok    %d row-table links land in the table their row is in\n' "$memchecked"
+else
+  printf '  %d link(s) of %d name a row in the wrong table\n' "$memfails" "$memchecked"
+fi
+
 # Table rows against their own header.
 #
 # Written as awk over the file rather than as a regex over `^| F` lines, because
@@ -175,5 +323,5 @@ else
   printf '  %d malformed table row(s) of %d\n' "$badrows" "$rowcount"
 fi
 
-[ "$fails" -eq 0 ] && [ "$badrows" -eq 0 ] && exit 0
+[ "$fails" -eq 0 ] && [ "$memfails" -eq 0 ] && [ "$badrows" -eq 0 ] && exit 0
 exit 1

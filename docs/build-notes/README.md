@@ -104,8 +104,8 @@ participants, so the artifacts are the point:
   something no longer matters is itself a decision, and an unrecorded one comes
   back later as a fresh idea with its reasoning lost.
 - **The gates are runnable.** `make check`, `make test-integration`,
-  `make check-links`, `make release-check`. Nothing lands without them, and they
-  do not depend on anybody's judgement.
+  `make check-links`, `make check-ci`, `make release-check`. Nothing lands
+  without them, and they do not depend on anybody's judgement.
 
 ## What it costs
 

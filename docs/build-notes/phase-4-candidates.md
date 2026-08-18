@@ -153,7 +153,7 @@ in its own file, never waivers.
 | **Which areas?** | **Add-ons as the spine, and A (identity) expressed through them.** C and D were taken and then **deferred to Phase 5** later in the same conversation | B, E and F are not taken either. C and D have now waited three phases and will wait a fourth — recorded as a change of mind rather than reconciled away, because the first answer is what the arithmetic below was computed against |
 | **Version** | **Another 0.x** | [releasing.md](../releasing.md) ties 1.0 to identity being complete. See the OIDC row below, which changes what that sentence will mean |
 | **Size target** | **Raise the cap to 18; plan to 15** | Phase 2 ran 33, Phase 3 ran 23 against a plan of 15 with eight insertions. The cap moves once, deliberately, and the planning number stays where the last two phases put the pressure |
-| **Process debt** | **One milestone, early in the phase** | [F248](deferred-findings.md#open), [F253](deferred-findings.md#open), [F254](deferred-findings.md#open), [F255](deferred-findings.md#open). Early, because F255 is *nothing asks whether CI is green* and the phase should not run without that gate |
+| **Process debt** | **One milestone, early in the phase** | [F248](deferred-findings.md#closed), [F253](deferred-findings.md#closed), [F254](deferred-findings.md#closed), [F255](deferred-findings.md#closed). Early, because F255 is *nothing asks whether CI is green* and the phase should not run without that gate |
 
 ### OIDC moves out of core, and that is the phase's biggest structural change
 
@@ -274,8 +274,8 @@ convention as the table above: recorded here, `D` numbers when
 
 | Question | Answer |
 | --- | --- |
-| **[F253](deferred-findings.md#open): the direct `release-check` form skips the integration tests — script or docs?** | **The script derives `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` itself**, the recommended shape, taking the stated cost: a new drift pair between Makefile and script, which M59 adds a check for. The alternative — docs drop the direct form — left the trap runnable and merely unrecommended |
-| **[F254](deferred-findings.md#open): which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
+| **[F253](deferred-findings.md#closed): the direct `release-check` form skips the integration tests — script or docs?** | **The script derives `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` itself**, the recommended shape, taking the stated cost: a new drift pair between Makefile and script, which M59 adds a check for. The alternative — docs drop the direct form — left the trap runnable and merely unrecommended |
+| **[F254](deferred-findings.md#closed): which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
 | **Does Phase 4 inherit all fourteen rules as written?** | **Yes, all fourteen** — the five collisions above stay per-milestone written arguments, not waivers. A milestone that cannot win its argument comes back as a prompt |
 
 ## The manager's layout: chosen from wireframes, amended, confirmed

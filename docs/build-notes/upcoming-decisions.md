@@ -68,8 +68,11 @@ day as **D164**, which corrects D159 in
 
 *One entry below arrived 2026-08-18, at Phase 4's planning, for its redirect
 milestone. Two more arrived and left the same day — the F253 and F254 repair
-shapes, asked and owner-answered at the plan's review; the pointers are in the
-answered section below.*
+shapes, asked and owner-answered at the plan's review, and recorded as **D212**
+and **D213** in
+[decisions.md](decisions.md#2026-08-18--m59-the-two-repair-shapes-the-owner-chose-at-the-plans-review)
+when [M59](phase-details/m59.md) used them. Their heading has left this file, the
+direction it only travels; nothing pointed at it.*
 
 ### M66 — What is the inline add-on deadline's default?
 
@@ -100,15 +103,6 @@ a reference somebody wrote in good faith. It holds pointers, never answers —
 the rule at the top of this file is not weakened by a section that says *the
 answer is over there*. A heading leaves here for good once the milestone that
 uses it has landed and the references have moved with it.
-
-### M59 — The F253 and F254 repair shapes
-
-**Answered 2026-08-18** by the owner, at Phase 4's plan review, the same day
-both questions were written here. The answers, the options they were chosen
-from and the costs taken are recorded in
-[phase-4-candidates.md](phase-4-candidates.md#two-more-answers-given-at-the-plans-review);
-they receive `D` numbers when [M59](phase-details/m59.md) lands, which also
-carries what they oblige.
 
 ### M55 — Does the update checker default on or off?
 

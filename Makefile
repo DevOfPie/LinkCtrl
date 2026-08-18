@@ -155,8 +155,18 @@ lint: ## Run golangci-lint
 	golangci-lint run
 
 .PHONY: check-links
-check-links: ## Verify tracked markdown: every link and anchor resolves, every table row matches its header
+check-links: ## Verify tracked markdown: links and anchors resolve, rows match their headers, row-table links land on their row
 	@scripts/check-links.sh
+
+# Deliberately not in `check` below. Every other gate there runs offline and
+# answers a question about this working tree; this one asks GitHub about a push
+# that already happened, so it belongs where the answer can change a decision —
+# release-check, and the phase loop's land sequence — rather than in front of
+# every local test run. Exit 2 is "could not ask" and is not a red build. See
+# F255: nine days of red CI that no gate anywhere was looking at.
+.PHONY: check-ci
+check-ci: ## Is the branch's latest CI run green? (asks GitHub; needs gh)
+	@scripts/check-ci.sh
 
 # A gate, after a phase of being a tool someone remembered to run by hand. This
 # repository's own decision log records how that ends: the link gate was listed

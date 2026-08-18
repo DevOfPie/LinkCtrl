@@ -24,6 +24,66 @@ require() { # require DESCRIPTION command...
   if "$@" >/dev/null 2>&1; then ok "$desc"; else bad "$desc"; fi
 }
 
+# Which stack the compose questions below are about, derived here rather than
+# taken from the environment.
+#
+# `docs/releasing.md` offers `scripts/release-check.sh v0.3.0` as the equal
+# alternative to `make release-check VERSION=v0.3.0`, and it was not equal: the
+# integration step asks `docker compose` whether Postgres is up, that question
+# only resolves when COMPOSE_PROJECT_NAME and COMPOSE_ENV_FILES are set, and only
+# the Makefile set them. So the last gate before a tag printed `skip  Postgres is
+# not running` on a machine where it was running, and a skip reads as information
+# rather than as a third of the gate not running (F253).
+#
+# The owner's answer was that this script derives them, taking the drift pair
+# knowingly: a Makefile change to either variable has to reach here. The step
+# named "the Makefile and this script agree" below is what makes that drift a
+# failure instead of a discovery. An already-exported value wins, so `make
+# release-check` and CI keep passing theirs.
+INSTANCE="${INSTANCE:-test}"
+PROJECT="linkctrl-$INSTANCE"
+ENV_FILE=".env.$INSTANCE"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$PROJECT}"
+export COMPOSE_ENV_FILES="${COMPOSE_ENV_FILES:-$ENV_FILE}"
+
+# The DSNs are the same story one layer down, and the reason the Makefile's own
+# comment at `release-check` exists: knowing Postgres is up buys nothing if the
+# tests are then run with no connection string. Unset, `test/integration` falls
+# back to a literal guess at the password on port 55432 — which is the *demo*
+# instance's port, so the direct form did not merely skip, it aimed elsewhere.
+#
+# Templates, compared literally against the Makefile's below rather than expanded
+# there: a password may hold characters that make a `sed` replacement mean
+# something else.
+# shellcheck disable=SC2016  # make's references, kept literal on purpose
+DSN_TEMPLATE='postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable'
+# shellcheck disable=SC2016  # same
+REDIS_TEMPLATE='redis://localhost:$(REDIS_PORT)/0'
+
+# One value out of the instance's env file, stripping inline comments the way
+# compose does — whitespace, then `#` — so a `#` inside a password is kept.
+# Deliberately the same rule as the Makefile's `envval`.
+envval() {
+  sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null |
+    head -1 | tr -d '\r' |
+    sed -e 's/[[:space:]][[:space:]]*#.*$//' -e 's/[[:space:]]*$//'
+}
+
+POSTGRES_USER="${POSTGRES_USER:-linkctrl}"
+POSTGRES_DB="${POSTGRES_DB:-linkctrl}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(envval POSTGRES_PASSWORD)}"
+POSTGRES_PORT="${POSTGRES_PORT:-$(envval POSTGRES_PORT)}"
+REDIS_PORT="${REDIS_PORT:-$(envval REDIS_PORT)}"
+
+if [ -z "${TEST_DATABASE_URL:-}" ] && [ -n "$POSTGRES_PASSWORD" ] && [ -n "$POSTGRES_PORT" ]; then
+  TEST_DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:$POSTGRES_PORT/$POSTGRES_DB?sslmode=disable"
+  export TEST_DATABASE_URL
+fi
+if [ -z "${LINKCTRL_REDIS_URL:-}" ] && [ -n "$REDIS_PORT" ]; then
+  LINKCTRL_REDIS_URL="redis://localhost:$REDIS_PORT/0"
+  export LINKCTRL_REDIS_URL
+fi
+
 step "working tree"
 if [ -z "$(git status --porcelain)" ]; then
   ok "clean"
@@ -143,6 +203,26 @@ step "documentation links"
 require "every link and anchor resolves, and every table row matches its header" \
         scripts/check-links.sh
 
+step "continuous integration"
+# The gate that was missing. Every other check in this file, and every check
+# workflow.md names, runs on this machine — so a build that is red only on the
+# runner is invisible to all of them, and one was: twelve consecutive red CI runs
+# across a phase, two adversarial reviews and a release candidate, while local
+# `make check` reported 0 issues at every push. The owner found it on the release
+# PR (F255).
+#
+# Run rather than required, because the three outcomes are not two: exit 2 is
+# "could not ask", which must not read as a failing build. It is reported and
+# does not count against the tag — an offline machine cannot answer this question
+# and pretending otherwise would make the gate a coin toss rather than a check.
+ci_out=$(scripts/check-ci.sh 2>&1); ci_rc=$?
+printf '%s\n' "$ci_out"
+case "$ci_rc" in
+  0) : ;;
+  1) fails=$((fails + 1)) ;;
+  *) printf '  skip  CI'\''s verdict is unknown, not green — this check did not run\n' ;;
+esac
+
 step "generated code matches its source"
 # sqlc and the OpenAPI document are both hand-triggered. A release built from a
 # tree where they were not regenerated ships a binary whose behaviour does not
@@ -186,7 +266,12 @@ step "assets the binary embeds"
 # Windows is a supported path — it is why a Taskfile exists — and a release gate
 # that only runs on Linux is a gate that gets skipped by the people most likely
 # to need it.
-mkvar() { sed -n "s/^$1 *:*= *//p" Makefile | head -1 | tr -d '\r'; }
+# All three assignment forms, because the compose variables F253 is about are
+# written `?=` and `=` while the asset pins are `:=`. Unexpanded: a value holding
+# `$(OTHER)` comes back with the reference in it, which is what the agreement step
+# below wants to compare.
+mkvar()    { sed -n "s/^$1 *[:?+]*= *//p" Makefile | head -1 | tr -d '\r' | sed 's/[[:space:]]*$//'; }
+mkexport() { sed -n "s/^export  *$1 *[:?+]*= *//p" Makefile | head -1 | tr -d '\r' | sed 's/[[:space:]]*$//'; }
 
 htmx_version=$(mkvar HTMX_VERSION)
 htmx_sha=$(mkvar HTMX_SHA256)
@@ -226,11 +311,37 @@ else
   printf '  skip  golangci-lint not installed\n'
 fi
 
+step "the Makefile and this script agree about which stack"
+# The accepted cost of F253's answer, made into a gate. This script derives the
+# compose project and env file itself so that the form `docs/releasing.md` offers
+# is not a weaker gate than `make release-check`; the price is two derivations of
+# one fact, and a price is only accepted if something notices when it is not paid.
+# Compared as written, references unexpanded — `$(INSTANCE)` substituted with the
+# instance this run is about and nothing else.
+agree() { # agree DESCRIPTION expected actual
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1: Makefile says '$3', this script builds '$2'"; fi
+}
+mk_instance=$(mkvar INSTANCE)
+agree "default instance ($INSTANCE)"        "$INSTANCE" "$mk_instance"
+agree "env file ($ENV_FILE)"                "$ENV_FILE" "$(mkvar ENV_FILE | sed "s/\$(INSTANCE)/$mk_instance/g")"
+agree "compose project ($PROJECT)"          "$PROJECT"  "$(mkvar PROJECT  | sed "s/\$(INSTANCE)/$mk_instance/g")"
+# shellcheck disable=SC2016  # $(PROJECT) and $(ENV_FILE) are make's, compared as text
+agree 'COMPOSE_PROJECT_NAME is the project' '$(PROJECT)'  "$(mkexport COMPOSE_PROJECT_NAME)"
+# shellcheck disable=SC2016  # same
+agree 'COMPOSE_ENV_FILES is the env file'   '$(ENV_FILE)' "$(mkexport COMPOSE_ENV_FILES)"
+agree "the database DSN"                    "$DSN_TEMPLATE"   "$(mkvar DEV_DATABASE_URL)"
+agree "the Redis URL"                       "$REDIS_TEMPLATE" "$(mkvar DEV_REDIS_URL)"
+
 step "integration tests"
-if docker compose ps --status running --services 2>/dev/null | grep -qx postgres; then
+# Three outcomes, not two. A skip that cannot say which of "the stack is down"
+# and "I could not build a DSN" it means is the shape of F253: the direct form
+# reported one while the other was true.
+if [ -z "${TEST_DATABASE_URL:-}" ]; then
+  bad "no TEST_DATABASE_URL and none could be built from $ENV_FILE (make env INSTANCE=$INSTANCE)"
+elif docker compose ps --status running --services 2>/dev/null | grep -qx postgres; then
   require "integration tests (race)" go test -tags=integration -race -count=1 ./test/integration/
 else
-  printf '  skip  Postgres is not running (docker compose up -d)\n'
+  printf '  skip  Postgres is not running in project %s (docker compose up -d)\n' "$COMPOSE_PROJECT_NAME"
 fi
 
 step "release artifacts build"
