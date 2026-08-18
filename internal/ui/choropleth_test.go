@@ -21,6 +21,9 @@ func renderLinkDetail(t *testing.T, mutate func(map[string]any)) string {
 	if !ok {
 		t.Fatal("the link_detail page data is not a map")
 	}
+	// The map lives on the analytics tab, and since M47's reopening the page
+	// draws one tab at a time; the fixture's landing tab is the edit form.
+	data["Tab"] = "analytics"
 	if mutate != nil {
 		mutate(data)
 	}
@@ -35,16 +38,25 @@ func renderLinkDetail(t *testing.T, mutate func(map[string]any)) string {
 // the failure it names is specific: "no world uniformly coloured unknown".
 //
 // A choropleth degrades badly. With every country at zero it still renders 174
-// shapes, a legend and a heading — a confident picture of an instance that
-// cannot resolve a country at all. So the assertion is in two halves: the
-// sentence is present, and the map is *absent*.
+// shapes, a legend and a heading — a confident picture of a view that has no
+// country in it at all. So the assertion is in two halves: the sentence is
+// present, and the map is *absent*.
 func TestWithNoGeoIPTheMapSaysSoAndDrawsNothing(t *testing.T) {
 	body := renderLinkDetail(t, func(d map[string]any) {
 		d["Map"] = Choropleth(nil, "clicks", "estimates", false)
-		// The handler gives the ranked list nothing when the instance cannot
-		// resolve a country, which is what makes its empty state reachable at
-		// all — see linkDetailPageData.Countries.
+		// The handler gives the ranked list nothing when no country can be
+		// reported for the link's window, which is what makes its empty state
+		// reachable at all — see linkDetailPageData.Countries.
 		d["Countries"] = []map[string]any{}
+		// **The whole state, not the half of it this fixture used to carry**
+		// (F192). The base fixture asserted `GeoAvailable` *and* the sentence
+		// together, which since F160 is a pair the handler cannot produce — the
+		// sentence is reached only when nothing resolved in the window and
+		// nothing can resolve.
+		// This test borrowed that contradiction instead of building the state it
+		// is about, so the two lines below are what it always meant.
+		d["GeoAvailable"] = false
+		d["GeoUnavailable"] = GeoUnavailable
 	})
 
 	if !strings.Contains(body, GeoUnavailable) {
@@ -71,9 +83,10 @@ func TestWithNoGeoIPTheMapSaysSoAndDrawsNothing(t *testing.T) {
 	}
 }
 
-// TestTheMapAndTheRankedListUseOneSentence. Two views of the same fact must not
-// be able to disagree about whether this instance can resolve a country, and
-// the way that goes wrong is somebody editing one string.
+// TestTheMapAndTheRankedListUseOneSentence. Two views of one link's window must
+// not be able to disagree about whether a country can be reported for it, and
+// the way that goes wrong is somebody editing one string. It is also the test
+// GeoUnavailable's own doc names, which until 2026-08-10 it did not.
 func TestTheMapAndTheRankedListUseOneSentence(t *testing.T) {
 	m := Choropleth(nil, "clicks", "", false)
 	if m.Unavailable != GeoUnavailable {

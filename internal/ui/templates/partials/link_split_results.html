@@ -1,0 +1,41 @@
+{{define "link_split_results"}}
+{{- /* Where the clicks went (M36). The one piece of analytics M47 left in the
+       configuration half of the page, and deliberately: it is not a report about
+       the link, it is what turns the arms above it into a test rather than a
+       coin flip, and it is meaningless anywhere but beside them. */ -}}
+<div class="mt-6 border-t border-line pt-6">
+  <h3 class="mb-1 text-sm font-medium text-ink">Where the clicks went</h3>
+  <p class="mb-3 text-xs text-subtle">Non-bot clicks over the selected window, attributed to the destination that served them. This is the half of a split test that makes it a test rather than a coin flip. The link&rsquo;s own destination is counted as whatever the arms do not account for, so it is marked <span class="italic">approximate</span> while the per-destination breakdown catches up &mdash; it recomputes every fifteen minutes, and until it does, that row holds recent clicks the arms have not been credited with yet.</p>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th class="py-2 pr-4 font-medium">Destination</th>
+          <th class="py-2 pr-4 font-medium">Clicks</th>
+          <th class="py-2 pr-4 font-medium">Visitors</th>
+          <th class="py-2 font-medium">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Stats.Destinations}}
+        <tr class="border-b border-line">
+          <td class="py-2 pr-4 break-all">
+            {{.URL}}
+            {{if .IsPrimary}}<span class="text-xs text-subtle">(the link's own destination)</span>{{end}}
+            {{if .Removed}}<span class="text-xs text-subtle">(removed)</span>{{end}}
+          </td>
+          <td class="py-2 pr-4 tabular-nums">
+            {{.Clicks}}
+            {{if .Approximate}}<span class="text-xs text-subtle" title="Includes clicks the per-destination breakdown has not attributed to an arm yet. It recomputes every fifteen minutes.">approximate</span>{{end}}
+          </td>
+          <td class="py-2 pr-4 tabular-nums">
+            {{if .VisitorsKnown}}{{.UniqueVisitors}}{{else}}<span class="text-subtle" title="Unique visitors are counted per destination, and this row is not one the breakdown writes.">&mdash;</span>{{end}}
+          </td>
+          <td class="py-2 tabular-nums">{{printf "%.1f" .Share}}%</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

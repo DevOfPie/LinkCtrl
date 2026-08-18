@@ -732,26 +732,41 @@ func TestWebWorkspaceSwitcher(t *testing.T) {
 	// do nothing until Switch was pressed, and any navigation discarded the
 	// choice silently — a control that looks like it works and does not.
 	//
-	// Asserted on the markup, because the behaviour past this point is htmx's
-	// and the browser's rather than ours: what this tree is responsible for is
-	// emitting a select that submits on change and no second control to press.
+	// Since the M46.6 reopening the one step is literal: the opened state is
+	// the shell's own popover panel rather than a native select popup (F209),
+	// and every workspace in it is itself the submit button, workspace_id on
+	// its value — so there is nothing to pick and nothing further to press,
+	// and no htmx is needed at all. The hx-* assertions that stood here
+	// retired with the select whose change handler they held. What this tree
+	// is responsible for is emitting that panel with no second control and no
+	// blank row.
 	switcher := page[strings.Index(page, `action="/workspace/switch"`):]
 	switcher = switcher[:strings.Index(switcher, "</form>")]
-	for _, want := range []string{`hx-post="/workspace/switch"`, `hx-trigger="change"`, `hx-include="closest form"`} {
-		if !strings.Contains(switcher, want) {
-			t.Errorf("the switcher select is missing %s, so picking a workspace does "+
-				"nothing until something else is pressed", want)
-		}
+	if strings.Contains(switcher, "<select") {
+		t.Error("the switcher still renders a native select, whose opened state " +
+			"is the engine's popup — the thing F209 reopened M46.6 to remove")
 	}
-	if strings.Contains(switcher, "<button") {
-		t.Error("the switcher still renders a button; the directive was that a " +
-			"separate button to switch cannot stay, and a redundant control is the " +
-			"affordance problem F21 is about")
+	if !strings.Contains(switcher, `popovertarget="linkctrl-workspace-menu"`) {
+		t.Error("the switcher has no popover invoker, so the panel cannot be opened")
 	}
-	// hx-include carries this, and without it the switch loses the page it was
+	// The form carries this, and without it the switch loses the page it was
 	// made from and lands on the dashboard instead.
 	if !strings.Contains(switcher, `name="next"`) {
 		t.Error("the switcher no longer carries the path it was submitted from")
+	}
+	// **It offers the places you can go, and not the one you are in** (M46, D117).
+	// Two memberships, so exactly one workspace button: the one you are not
+	// in. A second would be the current workspace back in the list — or the
+	// blank placeholder row the select's chevron-only face once forced, which
+	// the owner rejected on sight (F209).
+	if got := strings.Count(switcher, `name="workspace_id"`); got != 1 {
+		t.Errorf("the switcher renders %d workspace buttons for two memberships, "+
+			"want exactly 1 — the workspace you are not in; the current one is "+
+			"named by the header label instead, and no blank row exists", got)
+	}
+	if strings.Contains(switcher, `name="workspace_id" value=""`) {
+		t.Error("the panel holds a control posting an empty workspace_id; the " +
+			"blank placeholder row retired with the select (F209)")
 	}
 
 	// Switching returns to the page it was posted from.
@@ -759,10 +774,29 @@ func TestWebWorkspaceSwitcher(t *testing.T) {
 		"workspace_id": {second.String()}, "next": {"/links"},
 	}, nil), "/links")
 
-	// And the account page now shows the switched-to workspace as current.
+	// **And the header now says where you are** — the assertion this milestone
+	// moved rather than dropped (M46, D117).
+	//
+	// It read `second.String()+'" selected'`: the switcher's selected option was
+	// the only place the current workspace appeared anywhere in the shell, which
+	// is exactly why blind task 9 could not be completed — an id in an attribute
+	// is not an answer a person reads. The current workspace is now a label, so
+	// the assertion is on the names a person actually sees, at the one moment it
+	// has to be right.
 	account := f.body(f.get("/account", nil))
-	if !strings.Contains(account, second.String()+`" selected`) {
-		t.Error("after switching, the header control does not show the new workspace as current")
+	header, _, ok := strings.Cut(account, "</header>")
+	if !ok {
+		t.Fatal("the page draws no header")
+	}
+	for _, want := range []string{">Acme</span>", ">Marketing</span>"} {
+		if !strings.Contains(header, want) {
+			t.Errorf("after switching, the header does not name %q; it is the only "+
+				"place a person can read which workspace they are acting in", want)
+		}
+	}
+	if strings.Contains(header, `value="`+second.String()+`"`) {
+		t.Error("the switcher offers the workspace you just switched to, which " +
+			"is the state D117 removed")
 	}
 
 	// The default-workspace control pins it.

@@ -12,11 +12,14 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | Page | What it does |
 | --- | --- |
 | `/dashboard` | 30-day totals, clicks-per-day chart, your five newest links. |
-| `/links` | Create a link; search, filter by status, sort; page through with a cursor. The search box filters as you type and updates the address bar, so a reload or a shared URL shows the same view. |
+| `/links` | Search the list; filter by status, folder, campaign or hostname; sort; create a link; page through with a cursor. The search box is the first control on the page, filters as you type and updates the address bar, so a reload or a shared URL shows the same view. Everything except search is behind **Filters**, and creating a link is behind **Create a link** — see [The links list](#the-links-list). |
 | `/links/{id}` | Everything about one link: edit destination, alias, title, description, expiry and tags; per-window analytics (7/30/90 days) with device, browser, OS, referrer, language and country breakdowns, each with a share ring, plus a world choropleth over the country figures; recent activity; archive, restore and delete. |
-| `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace or the organization. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
-| `/notifications` | Things the instance wanted you to know about, and mark-read. |
+| `/keys` | Mint, list and revoke API keys, and choose whether a new one reaches one workspace, one organization, or your whole account. The list is your account's, so it shows keys from every organization you belong to. Rotation is not here: it replaces the credential that made the request, and a browser session is not one. |
+| `/links/{id}/qr` | The link's QR code, its style form and the downloads, on their own page. The same thing the **QR** tab on the link's page shows, on a page a bookmark can reach. |
+| `/forgot`, `/reset/{token}` | Recovering a forgotten password. Public, because whoever needs them has no session. `/forgot` mails a single-use link and answers the same way whatever address you type; `/reset/{token}` is where that link lands. **Both need a mailer** — see [Recovering a forgotten password](#recovering-a-forgotten-password). |
+| `/notifications` | Things the instance wanted you to know about. Opening one goes to what it is about and marks it read; a read one can be marked unread again. |
 | `/disputes` | The review queue: destinations somebody was refused and has asked you to look at. Needs `destinations.review`, which is held instance-wide rather than by a role. The account that claimed the instance also appoints other reviewers here. |
+| `/disputes/reviewers` | Who reviews disputes, and appointing or withdrawing them. Needs `instance.admin`, and the queue above shows the list in summary. Also the **Change who reviews** panel on `/disputes`. |
 | `/feeds` | Whether this instance sends the destinations you type to a third party, and to whom. Read-only, and readable by everybody — what it describes is what happens to your own data. |
 | `/members` | Who is in this organization, at what role, with role changes and removal. Behind `members.read` and `members.write` from an organization-wide membership. |
 | `/workspaces` | The organization's workspaces: create, rename, delete. |
@@ -26,22 +29,64 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/webhooks` | Outbound subscriptions and their delivery log. |
 | `/automation` | Standing rules the scheduler runs unattended, and whether each is paused. |
 | `/campaigns` | Campaign labels, and the links filed under each. |
-| `/account` | Your profile, password and appearance. |
+| `/account` | Your profile, password, appearance — and deleting the account. |
 
 This table listed eight of these pages until 0.2.0 and omitted the rest, including three that share the identity menu with pages it did list ([F45](build-notes/deferred-findings.md)).
 
-It works without JavaScript. htmx makes search and filtering swap a fragment
-instead of reloading, and that is the only thing it is used for.
+**The dashboard needs JavaScript**, and there is no `<noscript>` fallback — the
+stance is recorded rather than defended in markup nobody reads. htmx makes
+search and filtering swap a fragment instead of reloading, and it carries some
+of the writes too: the QR logo upload applies the file as soon as you choose
+one, which is a post over htmx and is why a refused upload answers `200` with
+the reason in the panel rather than a status the swap would throw away.
+
+Some pages are plain forms and links throughout and do keep working with
+scripting off — the folder tree and the link filters are both said to below.
+Read those as *these controls need no script*, which is what they are, rather
+than as a fallback: nothing tests the scriptless path and no page is held to it,
+so a page that works today may stop the next time htmx carries one of its
+writes.
+
+*(This paragraph said the dashboard worked without JavaScript, and that it was
+used for search and filtering only. The first was already stale — the
+requirement was settled deliberately, and well before 0.3.0 shipped — and the
+logo upload is what made the second false too.)*
+
+**Short links need none of it.** The redirect path is scriptless, which is the
+part a visitor touches.
 
 ### The header
 
-Three destinations at the top level — Dashboard, Links, API keys — and on the
-right, in order: the workspace switcher, a notification bell and your email
-address.
+Two destinations at the top level — **Dashboard** and **Links** — and on the
+right, in order: one bordered control naming the workspace you are in, with the
+switcher as a chevron beside the name when there is anywhere to go, then a
+notification bell and your email address. Below `sm` the bar is two lines rather than one, so nothing
+is dropped on a phone and no page scrolls sideways.
+
+**API keys was a third destination up here** and is now in the identity menu,
+with the administrative surfaces. A key is minted once and then not thought
+about; the top level is for where work happens.
 
 The **bell** carries the unread count and, opened, shows the newest few unread
 notifications with a **View all** link to `/notifications`, which is still the
 full surface: everything, paged, with mark-read.
+
+**Clicking a notification goes to what it is about and marks it read**, in the
+bell and on the page alike. A dispute filing opens the queue at the row that is
+waiting; an automation firing opens `/automation`; a domain warning opens
+`/domains`; an accepted invitation opens `/invites`; a dispute decided in your
+favour opens `/links`, which is where you can now create the link that was
+refused. Three kinds lead nowhere and say so by offering nothing to click — an
+audit-growth warning, because the audit log has no page and what to do about it
+is `LINKCTRL_AUDIT_RETENTION_DAYS`; a dispute whose refusal was upheld, because
+no page shows a refusal that stands; and, since 0.3.0, a new release being
+available, because nothing in this product upgrades it and what the reader does
+next is at a shell.
+
+**A read notification can be marked unread**, which is the undo for having
+opened one by accident. It sets the read timestamp back to nothing, so "when did
+you first see this" is discarded — deliberately, by you. Over the API that is
+`DELETE /api/v1/notifications/{id}/read`.
 
 **Since 0.2.0 the inbox is scoped to the workspace you are acting in.** A
 notification a workspace produced — an automation rule firing, a custom domain
@@ -55,11 +100,12 @@ The preview is deliberately
 short, and nothing is only reachable through it.
 
 Your **email address** opens a menu holding the administrative surfaces —
-**Members**, **Invitations**, **Workspaces** and **Blocked destinations**, each
-shown only if you hold the permission its page needs — plus **Reputation
-feeds**, **Account** and **Sign out**. They live here
-rather than at the top level because each is visited when something *changes*,
-where the three top-level destinations are where work happens.
+**Members**, **Invitations**, **Workspaces**, **Domains**, **Blocked
+destinations**, **Webhooks** and **Automation**, each shown only if you hold the
+permission its page needs — plus **API keys**, **Reputation feeds**, **Account**
+and **Sign out**. They live here rather than at the top level because each is
+visited when something *changes*, where the two top-level destinations are where
+work happens.
 
 **Reputation feeds** is the one entry gated on no permission at all, and
 deliberately so: it says whether the destinations *you* type leave this instance
@@ -94,6 +140,33 @@ sitting at each of them chose. It is also why it works before you sign in.
 There is no flash of the wrong theme while a page loads. The server reads the
 cookie and renders the theme into the page it sends, so the first paint is
 already correct — there is no script to run and nothing to correct.
+
+### The links list
+
+The page opens on the list, and the **search box is the first control on it** —
+it filters as you type and pushes the result into the address bar, so a reload or
+a shared URL shows the same view.
+
+Everything else that narrows the list lives behind **Filters**: status, folder,
+campaign, hostname and sort order. Folder, campaign and hostname appear only when
+the workspace has any of those, because a select whose only option is *All* is a
+control that can do nothing. **The panel opens by itself whenever one of those
+filters is set**, so a list is never narrowed for a reason you cannot see, and
+none of the query parameters changed when the controls moved — `?status=`,
+`?folder=`, `?campaign=`, `?domain=`, `?sort=` and `?search=` are what they
+always were.
+
+**Create a link** is a panel too, directly under the filters and one click from
+anywhere on the page. It opens on its own when a creation was refused, carrying
+what you typed, the reason and — where the refusal was a rule that can be
+wrong — the button that asks for a review.
+
+*Campaigns* and *Folders* are a second bar under the header, on every page of the
+links area rather than only on this one.
+
+The **Filter** button beside the search box applies every control at once,
+including the ones inside the panel — one plain form submission, so the filters
+need no script even though the page around them does.
 
 ### Creating a link
 
@@ -142,9 +215,10 @@ asks where it goes; every destination that would actually be accepted grows a
 **Move here** button, and **Move to the top level** sits in the banner. Cancel
 leaves it alone. A folder can never be moved into itself or into any folder
 inside it, and a branch cannot be moved somewhere that would push part of it past
-eight levels — those destinations simply offer no button. The whole thing works
-with JavaScript switched off and is operable from a keyboard; there is no
-drag-and-drop.
+eight levels — those destinations simply offer no button. Every control on this
+page is a plain form or link: operable from a keyboard, working with scripting
+off, and never a drag. That is what these controls are rather than a fallback
+the dashboard maintains — the note above says why the distinction matters.
 
 **Deleting a folder never deletes a link.** It removes the folder and the folders
 inside it, and every link filed anywhere in that branch stays exactly where it
@@ -218,29 +292,198 @@ Campaigns need no permission of their own, exactly as folders do not. Reading th
 list and filtering by it is `links.read`; creating is `links.create`, editing is
 `links.update`, deleting is `links.delete`.
 
+### On-demand panels
+
+One thing you reach occasionally is behind a panel rather than in the page
+body: **Change who reviews** on the dispute queue. The panel opens over the
+page you are on and closes on Escape or a click outside. A link's QR settings
+used to be the second panel; with the link page behind tabs they live on the
+**QR** tab instead, one click away.
+
+**The panel is a page as well.** `/disputes/reviewers` serves exactly what it
+holds, with the header and a way back, so you can bookmark it, open it in a
+second tab, or share the URL — and a browser too old for the popup renders the
+panel inline instead of hiding it. The panel's own **Open as a page** link is
+where that URL comes from. `/links/{id}/qr` serves the QR settings the same
+way, and `?code=` on it opens them on one particular code. Nothing on the QR
+tab links there any more — picking a code from the list changes the tab where
+you are standing instead — so it is a URL you keep rather than one you reach.
+
+Neither surface changes who may do anything. The QR settings are still
+`links.update` and the reviewer roster is still `instance.admin`; the queue shows
+who reviews it either way.
+
 ### QR codes
 
-Every link has one. There is nothing to create and no row to make: open a link's
-page and the code is drawn under **QR code**, with a **Download the SVG** link
-beside it.
+Every link has one, and always at least one. There is nothing to create and no row to make: open a link's
+page and a small version of the code is drawn beside the link's name, at the top.
+Clicking it opens the **QR** tab, which holds the full code, the style form and
+the list of the link's codes. Each row in that list carries a download button —
+the arrow — and picking it offers **PNG** and **SVG**.
 
-**SVG only.** The code is vector text, so it prints at any size, and no image
-encoder is anywhere in this program. There is no PNG download, and there is no
-way to have two codes for one link.
+**Two formats, one picture.** The PNG is the file most programs open; the SVG is
+vector text and is the one to use for anything that will be resized again. They
+are generated from the same grid at the same size, so they are the same image.
 
 **The code encodes your short URL with `?src=qr` on it**, and that is what makes
 a scan countable. A camera sends no `Referer` header, so without the parameter
 every scan would arrive indistinguishable from somebody typing the URL by hand.
 Scans show up in the link's **Referrers** breakdown as `qr`, beside `direct` —
 counted, deduplicated by visitor and filtered for bots like every other click.
-Two things follow: somebody who types `?src=qr` by hand is counted as a scan, and
-two printed codes for one link cannot be told apart.
+That row stays one row however many codes the link carries; which code was
+scanned is the per-code breakdown's question, below.
+One thing follows: somebody who types `?src=qr` by hand is counted as a scan.
 
-**Restyling changes the drawing and never the content.** The form takes a
-foreground colour, a background colour, an error-correction level (`L`, `M`, `Q`,
-`H` — higher survives more damage and packs the code tighter at the same printed
-size), a quiet zone in modules, and a module size in pixels. **Back to black on
-white** appears once a style is stored.
+### More than one code for a link
+
+A print run and a shop-window card pointing at the same link used to be the same
+picture, so their scans were the same number. Press **+** beside the code count
+on the QR tab, give the new code a name, and it becomes a code of its own — the
+same destination, its own row in the breakdown.
+
+**The list is in alphabetical order by the name you gave each code** and stays
+there, compared without regard to case. A code you have not named sorts first —
+it has no name to sort by, and the row shows a placeholder rather than one. Which
+code is the link's default is the filled dot on its row, not its position, so
+choosing a different default does not shuffle the list under you.
+
+**Picking a row selects that code**, and the picture, the style form and the
+downloads below the list all follow it. The page does not reload and does not
+move: the tab is redrawn where you are standing, your place on it is kept, and
+the small code beside the link's name stays where it is. Selecting is still an
+ordinary link, so it works with JavaScript off — it loads the page instead of
+redrawing part of it.
+
+Every code prints an identity in its picture, as `&qrc=<something>` beside
+`?src=qr`. That is what the redirect reads to say which code was scanned. The
+name you type is for you: it never appears in the picture, in a URL, or anywhere
+a visitor can see it.
+
+**Your original code gets one too, at the moment you add the second.** Until then
+it has nothing to be told apart from, so it carries the picture it always had
+with nothing added to the payload; adding a second code is what gives it a
+`qrc` of its own, and from then on what you download carries it.
+
+**That makes what it encodes a little longer, and both codes are re-measured
+against it.** A longer payload sometimes needs a bigger grid of squares. Almost
+always the size you set is kept and only the squares behind it change, and there
+is nothing worth saying about it; when the size is too small to hold the bigger
+grid with a margin anything can read — which takes a code sitting at the very
+bottom of the size control — it is raised to the smallest size that does and you
+are told, with both numbers. Over the API the same rise comes back as `refit` on
+the create. What is never allowed is a code that says one size and produces
+another.
+
+**Nothing you have already printed changes what it counts as.** Every copy of the
+original code already printed, mounted or published carries no `qrc` at all, and
+a scan of one is counted against whichever code is the link's **default** — which
+starts as the code it always was. So the copy on last year's poster and the copy
+you download today are the same row in the breakdown, and there is nothing to
+reprint.
+
+### The default code, and removing one
+
+**The default is the code a picture with no `qrc` on it is counted against.** One
+of a link's codes always holds that role, and every picture printed before codes
+had identities relies on it.
+
+Each row in the codes list carries a **default** icon and a **−** to remove the
+code. The default icon is filled on the code that holds the role and empty on the
+rest, so which one it is takes no reading; clicking an empty one fills it and
+empties the others. The filled one does nothing — the role is already its own.
+The icons are drawn whether or not you may change anything: seeing a code is
+`links.read` (above), and which code is the default is part of seeing them. With
+only that permission they are inert and the **−** is absent.
+Making a code the default moves where those untagged scans land — including the ones already
+recorded, because what they record is *no code* rather than a code that has gone.
+Nothing about any picture changes when you move it.
+
+**Any code can be removed once a link has two**, the default included. Removing
+the default hands the role to the oldest code left and says which one, because
+that is where your old posters start being counted. A link's **last** code cannot
+be removed: a link always has a code, and the pictures already printed of it have
+to resolve somewhere.
+
+**Restore defaults** clears the style of the code you have selected — the colours
+and the size — and leaves the code, its name and any logo on it alone.
+
+A link carries at most **twenty** codes, and the counter above the list says how
+many of them are spent. That is the number that keeps the codes list a list and
+the breakdown a chart.
+
+A code has no destination, no expiry and no gate of its own. Those belong to the
+link, which is what makes changing the link's destination change every printed
+code at once. A code that pointed somewhere else would be a second link, and you
+can make one of those.
+
+**Removing a code keeps what it recorded and stops it growing.** The rows it
+earned stay in the breakdown, marked as removed. A scan arriving afterwards from
+a picture printed with it is counted as the link's **default** code, because the
+identity it prints is no longer one this link recognises — it is not credited
+back to the code that is gone, and it is not stored as an unknown value either.
+So a chart read across the removal shows one line stopping and another taking up
+the traffic, which is worth knowing before you remove a code that is still in the
+world.
+
+**A name can be changed at any time and changes nothing else.** Type it in the
+**Name** box and press **Save**, which writes the name and the style together.
+The identity in the picture is fixed when the code is made and is never
+rewritten, because it is printed.
+
+**Restyling changes the drawing and never the content.** The form takes a name, a
+foreground colour, a background colour and a **size in pixels** — 64 to 2048,
+set with a slider that stops at 128, 256, 300, 512, 600, 1024, 1200 and 2048 or
+with the box beside it, which takes any number in range. One **Save** writes all
+of it, the name included — there is no separate rename control. **Restore
+defaults** sits beside Save and is drawn whether or not a style is stored; with
+nothing stored it is disabled and says so, rather than being absent and leaving
+you to wonder where it went. It clears the size along with the colours.
+
+The bottom of that range is not reachable for every code: a longer URL is a
+bigger grid of squares, and a grid with no room left for a margin is refused with
+the smallest size that code can be drawn at in the message — 70 pixels for a
+short link, more for a long one. The slider starts at that number rather than at
+64, and drops any stop below it.
+
+**The preview keeps its own size.** The frame beside the form is 18rem square
+whatever you set, and a code larger than that is drawn scaled down to fit it, so
+what you read the size off is the control rather than the picture. Before this
+the frame grew with the setting until it hit the edge of the column, which made
+the largest size a page you had to scroll rather than a file you could print.
+*(A caption under the picture repeated the served size until 2026-08-13; it
+called that number the "stored size", which reads as an amount of data rather
+than as a measurement of the image.)*
+
+**The size you set is the size you get, exactly.** Ask for 500 pixels and the
+file is 500 pixels across. A code is a grid of squares and an arbitrary pixel
+size does not divide evenly into it — 300px over a 29-square code is 10.34 pixels
+a square — so something has to absorb the remainder. It is the empty margin
+around the code: the squares themselves stay whole, which is what keeps the SVG
+and the PNG the same picture, and the margin is white space that can be any
+number of pixels wide. *(This used to say the size snapped to the nearest one
+that kept the squares whole, and it did until 2026-08-12.)*
+
+**The margin aims at four squares and never goes below three.** Four is what the
+specification asks for; three is a quarter under it, and it is measured rather
+than assumed — every size and version this product draws is decoded at five
+simulated viewing distances through two independent decoders before that number
+is allowed to stand. On a large code in a small picture there may be no setting
+that lands between three and five at all, and the margin then comes out *wider*
+than five rather than narrower than three: extra white costs nothing to read, and
+a thin margin costs a scan. A style written over the API can ask for a wider
+quiet zone in squares and is drawn with it; setting a size on that code from the
+form replaces it with the margin the size implies.
+
+**The error-correction level is chosen for you, and the API can only raise it.**
+It is a tradeoff between how much damage a printed code survives and how tightly
+it is packed, and there is no way to judge it from a dashboard. Since 0.3.0
+every code is drawn at **the strongest level that does not make the symbol any
+bigger** — a QR symbol steps between versions, and correction below the next
+step costs nothing, so an ordinary short URL comes out at `Q` in exactly the
+picture `M` would have produced. The `PUT` below sets a **floor**: asking for a
+stronger level than the free one gets it, at whatever size that costs; asking
+for a weaker one changes nothing, because there is no saving in less correction
+at the same density. Saving the form afterwards keeps whatever was set.
 
 **The code does not follow your theme.** It paints its own background across its
 quiet zone and defaults to black on white in both light and dark mode, because a
@@ -254,24 +497,129 @@ colour.
 Over the API:
 
 ```sh
-# The picture.
+# The picture, as vector text.
 curl -sS "$BASE/api/v1/links/$LINK_ID/qr.svg" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY" -o code.svg
 
-# What it encodes, and how it is drawn.
+# The same picture, rasterised. Capped at 2048px; a stored style that draws
+# larger than that is refused rather than rasterised.
+curl -sS "$BASE/api/v1/links/$LINK_ID/qr.png" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" -o code.png
+
+# What it encodes, and how it is drawn. The top-level `size` is the output size
+# in pixels — read-only, and equal to `style.size` when one is stored.
 curl -sS "$BASE/api/v1/links/$LINK_ID/qr" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY"
 
 # Restyle it. An omitted field is its default, so {} is plain black on white.
+# `style.size` is the picture in pixels and is what the dashboard writes; give
+# `margin` and `scale` instead to state the geometry in squares directly.
 curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr" \
   -H "Authorization: Bearer $LINKCTRL_API_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"style": {"foreground": "#123a6b", "level": "Q"}}'
+  -d '{"style": {"foreground": "#123a6b", "level": "Q", "size": 512, "scale": 16}}'
 ```
 
 Seeing a code is `links.read` and styling one is `links.update`: a QR code is a
 picture of the link's own short URL, so anybody who can see the link can see its
 code.
+
+#### A logo on a code
+
+**The one thing in this product that accepts a file**, and it is `PUT` with a
+`multipart/form-data` body. It takes `links.update`, like every other change to
+how a code is drawn, and an API key that holds it may use it. The QR tab on a
+link's page does the same thing from a browser.
+
+Two addresses, one operation — the same relationship `qr.png` and
+`codes/{slug}/image.png` have. The shorthand answers for the link's **default**
+code, which is a role rather than an address: it is whichever code an untagged
+picture is counted against, and it can be moved. A code's own slug in the
+collection is the address that does not move.
+
+```sh
+# The link's default code. Upload; the part must be named `logo`, and the
+# filename is ignored.
+curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr/logo" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" \
+  -F 'logo=@brand.png'
+
+# A named code, by the slug printed in its payload.
+curl -sS -X PUT "$BASE/api/v1/links/$LINK_ID/qr/codes/$SLUG/logo" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY" \
+  -F 'logo=@brand.png'
+
+# Remove it. The code stays; the image goes. Idempotent, at either address.
+curl -sS -X DELETE "$BASE/api/v1/links/$LINK_ID/qr/logo" \
+  -H "Authorization: Bearer $LINKCTRL_API_KEY"
+```
+
+The shorthand answers under `qr` and the collection under `code`, like every
+other operation in their respective families.
+
+Six things are worth knowing before you script it.
+
+**PNG and JPEG only, decided by the bytes.** Neither the filename nor the
+`Content-Type` you send is read, so a `.png` holding a JPEG works and a `.jpg`
+holding something else does not. **An SVG is refused** and says so: it is a
+document that can carry script and fetch other files, and this product will not
+serve one it did not write.
+
+**What is stored is a PNG this server encoded**, never your file. That strips
+metadata as a side effect, so do not use this to keep an original.
+
+**Three bounds, and exceeding any of them is a `422` naming which one and what
+your image measured**: the request body stops at 1,048,576 bytes, the image at
+1024 pixels a side, and the re-encoded result at 1,060,000 bytes. The middle one
+is checked from the file's header before anything is decoded.
+
+**A large image is resized rather than refused.** A stored logo holds at most
+262,144 pixels in total, and that is a target rather than a bound: anything over
+it is scaled down to fit with its aspect ratio kept, and the response carries a
+`resampled` object naming what you sent and what was stored. It is absent when
+nothing was resized, so its presence is the signal. *(That figure was a second
+header bound until now, and an image over it was a `422`.)*
+
+**Uploads have their own rate limit** (`UPLOAD_RATE_PER_MIN`, thirty a minute by
+default) on top of the API's, so a `429` here can arrive while everything else
+is still answering.
+
+**A logo changes the picture in two ways, and one of them is `level`.** The
+image covers a centred square three tenths of the code's width — 9% of its area —
+and the code is drawn at **error-correction level H**, which is what lets a
+reader recover a code with part of it covered. So `level` stops being yours to
+choose while a logo is there: a `PUT` naming another one is **accepted and
+answered with `H`** rather than refused, because this endpoint replaces the
+style whole and an omitted `level` sets no floor at all — refusing would fail
+a request that only changed a colour. The response and every later `GET` report
+what was applied, so nothing is silent. **Removing the logo returns the code to
+the rule** rather than to a remembered level — the payload is unchanged, so a
+picture already printed still resolves, and level H on a code with nothing
+covering it is about 30% more modules a side than it needs, which is 30% less
+distance a phone reads it from. *(It stayed at H until 0.3.0.)* H packs more
+modules into the symbol, and **the drawn size is held where it was** rather than
+allowed to grow with it: the style is re-fitted against the larger symbol so the
+picture stays at the size the code was already drawn at, which is what stops a
+code near the raster ceiling from crossing it and refusing to download. Since
+2026-08-12 that is the identical number rather than the nearest achievable one,
+because the margin carries the remainder. This paragraph said `size` can grow
+when you add a logo until 0.3.0.
+
+**One case still grows**, and it is the one where holding the size cannot be
+done: a code drawn below the floor its level-H symbol needs — `2 × (module
+count + 6)` pixels, and H's module count is the larger one — has no size to be
+re-fitted into, so the style is left as it stands and the picture is drawn from
+its `margin` and `scale`, which is bigger. Refusing the upload instead would say
+no to a picture the SVG draws correctly, and squeezing it would serve a quiet
+zone nothing can read. It takes a code already close to its own floor to reach.
+
+There is no operation that reads a logo back: `has_logo` on the code says
+whether one is there, and both picture endpoints draw it.
+
+**Uploading to a default code that has never been styled creates its stored
+row**, so `stored` turns true alongside `has_logo`. The bytes live on the row, so
+there has to be one; the style written is the one the code was already being
+drawn at, plus the level above.
 
 ### Reading the analytics
 
@@ -297,16 +645,33 @@ sit beside the real hostnames because they answer the same question. `?src=`
 accepts no other value: anything else is ignored and the click is attributed as
 it would have been without the parameter.
 
+**`qr` stays one row however many codes a link carries.** It answers *how many of
+these visits came from a QR code at all*, which is a different question from
+*which code*; the per-code split is its own section on the link page and its own
+`qr_codes` field in the API's answer.
+
+The bare `qr` is also a *stored* value, and there it means something narrower: a
+scan that named no code. Those are counted against the link's default code in the
+per-code split, which is what lets a picture printed before codes had identities
+and one printed since be the same row.
+
 Whether a QR code is scanned or its URL is typed cannot be distinguished — the
 label travels in the URL, and anybody can type it.
 
-Country breakdowns need a GeoIP database, which cannot be shipped in the image —
-see [deployment.md](deployment.md#optional-geographic-analytics). Without one the page says the data is
-unavailable rather than drawing a blank chart, and the map is not drawn at all: a
-world coloured entirely "unknown" would be a picture of nothing that looks like a
-picture of something. Region and city are not stored even with a database
-configured: nothing shows them, and city plus a timestamp is close to a location
-history.
+Resolving a country needs a GeoIP database, which cannot be shipped in the image
+— see [deployment.md](deployment.md#optional-geographic-analytics). **What is
+drawn follows the data rather than the setting**: a link with countries in the
+window you are looking at gets the ranked list and the map whether or not a
+database is configured now, because the rows are already resolved and a database
+is only how new clicks join them. Where there is neither — no country in *that
+window* and no database — the page says the data is unavailable rather than
+drawing a blank chart, and the map is not drawn at all: a world coloured entirely
+"unknown" would be a picture of nothing that looks like a picture of something.
+The window is part of the test, so a link whose countries are all older than the
+one you have selected meets the sentence until you widen it. With a database and no
+clicks yet, it is the ordinary *no data yet* and not a claim about the instance.
+Region and city are not stored even with a database configured: nothing shows
+them, and city plus a timestamp is close to a location history.
 
 The map shades each country by its share of the link's clicks across five bands,
 and every shape carries its exact figure — hover it, or use the *Exact numbers*
@@ -376,19 +741,39 @@ Mint one in the dashboard at `/keys`, or on a headless host with
 [`lctl`](cli.md#apikey). The token appears exactly once — only its HMAC is
 stored, so it cannot be recovered afterwards. Lose it, revoke it, mint another.
 
-**Reach.** A key is bound to the workspace you created it in and acts only there.
-The alternative — not pinned to one, rather than acting in all of them at once —
-is the *Reach* control on the form, `"org_wide": true` on the API, or
-`--org-wide` on the CLI. It
+**Reach**, and there are three of them. A key is bound to the workspace you
+created it in and acts only there. The two wider choices are the *Reach* control
+on the form, `"org_wide": true` on the API, or `--org-wide` on the CLI. Either
 needs `apikeys.write` held through an **organization-wide** membership: a role you
 hold in one workspace issues keys for that workspace, which is the same rule that
 stops a workspace-scoped admin re-roling an organization-wide member. The key
-list, `lctl apikey list` and the API all say which of the two a key is.
+list, `lctl apikey list` and the API all say which of the three a key is.
 
-An organization-wide key follows you into that organization's workspaces and no
-further. If you belong to more than one organization, the key stays in the one it
-was issued in whatever workspace you last used or pinned elsewhere — the pin is
-about you, and the key is about a tenancy.
+| Reach | Acts in | Asked for by |
+| --- | --- | --- |
+| **Workspace** | The one you created it in | The default — nothing |
+| **Organization** | Every workspace in that organization, and no further | `organization_id` on the API, `--pin` on the CLI |
+| **Account** | Every organization you hold an organization-wide membership in | Nothing, once the key is unpinned |
+
+Unpinned means account-wide: **a key belongs to your account, not to the tenant
+you happened to be standing in.** Each request still resolves exactly one
+workspace, the way a sign-in does, following where you are working. If you want
+the key frozen to today's organization, pin it — and pin it now, because a
+rotation may narrow a key's reach and never widen it.
+
+An account key **reaches an organization you join later**. That is what account
+means: the alternative is a key whose reach is a snapshot of a membership list
+you cannot see or correct. It does *not* reach an organization where your role is
+scoped to a single workspace — mint a key in that workspace instead.
+
+**Its permissions differ per organization.** The scopes are intersected with your
+role *there*, on every request. Own one organization and the key does what an
+owner can; be a viewer in the next and the identical key can only read. This
+surprises people, and it is the correct behaviour: a credential cannot be more
+than the person it acts as, anywhere.
+
+Every key issued before 0.3.0 is pinned to the organization it was created in and
+stayed that way. The upgrade changed no key's reach.
 
 Scopes are permission slugs you already hold, checked again on every request
 against your current role. Demote the owner and their keys weaken immediately.
@@ -443,11 +828,19 @@ There is no id in that URL, and that is deliberate: the key being rotated is the
 one in the `Authorization` header, and there is no other it could reach. A
 signed-in session gets `403` — a session that wants another key mints one.
 
-The successor is **identical or narrower**. Same workspace, same reach, same name;
-scopes are this key's unless you name a subset, and a scope this key does not hold
-is refused rather than dropped. Its expiry is the predecessor's *lifetime* from
-now, so a 30-day key rotates into another 30-day key and a key that never expires
-rotates into one that never expires.
+The successor is **identical or narrower**. Same workspace, same name; scopes are
+this key's unless you name a subset, and a scope this key does not hold is refused
+rather than dropped. Its expiry is the predecessor's *lifetime* from now, so a
+30-day key rotates into another 30-day key and a key that never expires rotates
+into one that never expires.
+
+Reach is the second axis of *narrower*. Omit it and the successor keeps this key's;
+send `"reach": "organization"` and an account-wide key rotates into one pinned to
+the organization the request resolved into. **The reverse is refused.** A pinned
+key sending `"reach": "account"` gets a `422` — a successor may not reach more
+organizations than the key it replaces, and widening on the strength of a token
+alone is exactly what rotation must not be. Widen by minting a new key from a
+session.
 
 Both secrets verify for a grace window — an hour by default, five minutes to a day
 via `grace_seconds` — so a rolling deployment can hold either. When it closes the
@@ -478,6 +871,26 @@ Two things to know before you rely on it:
   Revoking the key you know about does not touch it. If you suspect a leak, read
   the key list first and look for prefixes you do not recognise —
   [SECURITY.md](SECURITY.md) says what to do about it.
+
+### Revoking a key
+
+`DELETE /api/v1/api-keys/{id}`, or the button on `/keys`. It takes effect on the
+key's next request; nothing about a key is cached. Revoking your own key is not
+audited, because you are the record.
+
+Holding `apikeys.write` through an **organization-wide** membership also lets you
+stop somebody else's key, and what that does depends on the key:
+
+- **Pinned to your organization** — revoked outright. Your organization was all
+  it reached, so cutting the reach and destroying the credential are the same act.
+- **Account-wide** — your organization is cut out of its reach. The key stops
+  resolving into your tenant and keeps working for its owner elsewhere, because
+  it belongs to an account you hold no authority over. The record is
+  `apikey.reach_revoked` rather than `apikey.revoked`, so an incident review can
+  tell "stopped" from "stopped here".
+
+You do not choose between them, and a key you may not act on answers `404` rather
+than `403` so ids cannot be probed.
 
 ### Worked examples
 
@@ -583,10 +996,11 @@ Every failure is `application/problem+json`. Branch on `type`, never on prose:
 | --- | --- |
 | `401` | No valid credential — or the credential itself is being rejected. Invalid, revoked and expired keys are indistinguishable on purpose, and so is every sign-in failure: a wrong password, an unregistered address, a suspended account and an account locked out by repeated failures are one answer, because telling them apart says whether an address has an account here. |
 | `403` | Authenticated but not permitted. The detail names the missing permission, which is useful rather than a disclosure. |
-| `404` | Does not exist, or belongs to a workspace you cannot see. Someone else's resource is never a `403`, so ids cannot be probed. |
+| `404` | Does not exist, or belongs to a workspace you cannot see. Someone else's resource is never a `403`, so ids cannot be probed. A spent, lapsed or unknown password-reset token is `reset-not-valid` here rather than `410`, and so is a token for an account that cannot be recovered — `410` would concede that the token existed. |
 | `409` | Alias already taken. |
 | `422` | Validation failed; `errors` names each field. |
 | `429` | `rate-limited`: your address is going too fast. `Retry-After` says how long to wait, and waiting works. This used to be two types — the other was `account-locked` — and it is one now, because which of them you got answered whether the address you named is registered. A locked account is a `401` like every other sign-in refusal; the lockout is fifteen minutes and further attempts extend it, so the `401` body says so whether or not one is in force. |
+| `503` | `no-mailer`, from the two account-recovery endpoints only: this instance has no SMTP relay, so it cannot send the message the operation *is*. Not `403` and not `404` — the mechanism exists and is unavailable, so a retry after the operator configures a relay succeeds. |
 | `504` | The request exceeded the server's deadline. Retry; narrow the window if it is an analytics query. |
 
 Unknown JSON fields are rejected rather than ignored: a misspelled field silently
@@ -754,6 +1168,14 @@ entirely. Unlike the signature parameters below, **it is not stripped**: with
 query forwarding on it reaches your destination like any other parameter, because
 a source label is not a credential and a destination whose own analytics also see
 it is better informed rather than compromised.
+
+**`qrc` is the second reserved parameter**, and it says which of a link's QR
+codes was scanned. It is only read beside a recognised `src`, and its value must
+be one this link actually issued: anything else is counted as the link's default
+code and is never stored, which is what stops a stranger writing rows into your
+analytics by editing a URL. It is not stripped either, for the reason `src` is
+not — it is a label rather than a credential, and it is no more evidence than
+`src` is.
 
 **Deep-link path forwarding** is the other half, and the same shape:
 `forward_path`, per link, off by default. With it on, path segments after the
@@ -1110,16 +1532,142 @@ Registration shares the sign-in rate limit, per address, so alternating between
 the two surfaces does not double anybody's budget. There is **no CAPTCHA**. On a
 public instance, open sign-ups are the largest abuse surface there is.
 
+## Recovering a forgotten password
+
+**Only if this instance has a mailer**, because the recovery is the mail. With
+`LINKCTRL_SMTP_HOST` unset there is no *forgot your password?* link on the
+sign-in page, `/forgot` says the instance cannot send mail, and
+`POST /api/v1/auth/forgot` answers `503`. That is deliberate rather than a gap
+being papered over: everything else that uses the mailer has a second channel —
+an invitation has a copyable link, a notification is in the dashboard — and this
+has none, so a page that said "check your inbox" would be lying. On such an
+instance the route back is the operator, with database access, and
+[operations.md](operations.md#moving-the-instance-principal) covers the one
+account that has a command instead.
+
+With a mailer, the flow is three steps and no support ticket:
+
+1. **`/forgot`**, or `POST /api/v1/auth/forgot` with `{"email": "..."}`. The
+   answer is the same whatever you type — the page says a message is on its way
+   and the API answers `202` — so neither can be asked whether an address has an
+   account. The answer goes to the address instead: an address that cannot be
+   recovered receives a message saying no link was created, which is what
+   registration already does for an address that is taken.
+2. **Open the link.** It works once and lapses after an hour, and asking again
+   replaces it. Choose a password of at least twelve characters, the same floor
+   every other password in this product has.
+3. **Sign in with it.** No session is started for you, deliberately — see below.
+
+**What setting it does**, all of which the page and the mail say:
+
+- **Every session on the account is signed out**, including any you did not
+  open. That is the point: a recovery that left somebody else's browser signed
+  in would have recovered nothing.
+- **Every other outstanding reset link stops working**, for the same reason.
+- **API keys keep working.** A key is a separate credential with its own
+  rotation, and revoking them here would turn a recovery into an outage for
+  whatever it was minted for. If you are recovering because you believe the
+  account was reached by somebody else, revoke the keys yourself at `/keys`.
+- **No session is started.** You type the new password at the sign-in form,
+  which is also the proof you know it.
+- **The reset is audited** as `password.reset`, with the account as the actor and
+  a network prefix rather than an address. It is an instance-wide record rather
+  than an organization's, because nobody was signed in to any organization when
+  it happened — so it is read at `GET /api/v1/instance/audit` by whoever holds
+  `audit.read.instance`.
+
+A link that has been used, has lapsed, or names an account that cannot be
+recovered — a suspended one, or one that signs in some other way — is answered
+`404` and the page says the same words for all of them. The endpoint cannot be
+asked which, on purpose.
+
+Recovery shares the sign-in rate limit, per address, so alternating between the
+two surfaces does not double anybody's budget. The cost of the identical answer
+is stated rather than hidden: this instance will mail an address that never
+registered, if somebody types one in.
+
+## Deleting your account
+
+At the bottom of `/account`, or `DELETE /api/v1/account`. Both act on **your own
+account and nothing else**: there is no way to delete somebody else's, and there
+is deliberately no administrative one — who may end another person's account is
+a permission question this product has not answered.
+
+You confirm with your own password and, on the page, by typing `DELETE`. **An
+API key cannot do this**, however it is scoped. The credential is not the
+person, and a leaked key must not be able to delete its owner.
+
+**Two things stop it, and each says what to do about it.**
+
+- **You administer this instance.** Move the principal to another account first
+  with `lctl instance principal move --to <email>` — see
+  [operations.md](operations.md#moving-the-instance-principal). Deleting the one
+  account that can administer the box leaves no way back that does not involve
+  the database.
+- **You are the only owner of an organization that still exists.** Make somebody
+  else an owner, or delete the organization, and the refusal says which
+  organizations are blocking. Every self-registered account owns a personal
+  organization, so this is the one most people meet.
+
+Being left belonging to **no** organization is not a refusal. It is the ordinary
+way to arrive here, and an account in that state can still sign in and still
+delete itself — through the API, since every dashboard page but the ones about
+joining an organization needs one.
+
+**What goes immediately**, in a single transaction: every session, every API key,
+every membership, your notifications, any outstanding password-reset link, and
+any instance-level grant you hold. Your address becomes available for a new
+account. When the call returns there is no credential that reaches the account.
+
+**What stays, with you taken out of it.** The audit log and the
+destination-dispute queue keep their rows — they record what happened, and one
+that vanishes with the person is not a record. An hourly job replaces your name
+and address in them with `deleted account`, and clears the address, name and
+password from your account row. Access does not wait for that job; only what is
+left of your name does.
+
+The same job reaches three records that are **about** you but belong to somebody
+else, and it reaches them because a record you cannot see is still a record with
+your address in it: the invitation you joined by, which your organization's
+invitation list would otherwise go on showing in full; the notification that told
+whoever invited you that you had accepted, in the sentence they read as well as in
+the detail behind it; and the list of outgoing administrators on an
+instance-principal handover, if you were one. An invitation still **outstanding**
+to your address is deliberately left alone — it is an offer to an address, and
+your address became available again the moment you deleted the account.
+
+**What is not deleted at all: your links.** They belong to the workspace, and the
+workspace outlives you leaving it — as do the QR codes, folders and campaigns
+inside it. If you want them gone, delete them before you delete the account.
+
+Two things worth knowing before you rely on this:
+
+- **The audit log still tells one erased person apart from another**, because the
+  actor id survives while the name becomes a constant. That is deliberate — a
+  trail in which every departed actor looks identical cannot be read — and it
+  means the remainder is pseudonymous rather than anonymous. `docs/SECURITY.md`
+  says exactly what is and is not claimed.
+- **Your address can be registered again**, by you or by somebody else, and the
+  new account is a different account. It inherits nothing. Old audit entries
+  under `deleted account` are not theirs, and the ids differ.
+
 ## Which workspace you are in
 
 Every request acts in exactly one workspace. With one membership — which is
 every account that has not accepted an invitation — there is nothing to choose
-and the dashboard shows no switcher at all.
+and the dashboard shows no switcher at all. It still says where you are: the
+header names the current organization and workspace whether or not there is
+anywhere to switch to.
 
-Once there is more than one, a control appears in the header. Switching moves
-*that browser*, immediately and for the rest of the session, so two windows can
-sit in two workspaces. It is also remembered: the next time you sign in, you
-start where you last were.
+Once there is more than one, the header's workspace box grows a chevron —
+label, a hairline divider, then a chevron button. It opens a menu hanging off
+the box, listing the workspaces you can move to and **not** the one you
+are already in — that one is named beside it in the same box, as
+*organization · workspace*, which is the label that appears at every
+membership count including one. Switching moves *that browser*,
+immediately and for the rest of the session, so two windows can sit in two
+workspaces. It is also remembered: the next time you sign in, you start where
+you last were.
 
 *Account* → **Default workspace** overrides that. **Last-Used** is the first
 option and the one every account is on; picking a workspace instead pins it, and

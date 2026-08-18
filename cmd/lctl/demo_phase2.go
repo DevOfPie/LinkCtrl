@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -12,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -41,9 +47,15 @@ import (
 // workspace, refusal and dispute below is produced by the same service call the
 // dashboard and the REST API make. A dispute created by INSERT has never been
 // through the form that files one, and a demo that diverges from what the
-// product actually produces is worse than a thin demo. The four places that
-// deliberately go around a service each say so at the statement, and there is no
-// fifth in this file — `demoActor` in demo.go takes the same step around
+// product actually produces is worse than a thin demo. **The places that
+// deliberately go around a service each say so at the statement**, and that is
+// the whole of the rule: a statement here either goes through the service layer
+// or carries a comment saying why it cannot. The count is deliberately not
+// written down. It read *four* here and *three* at the statements themselves
+// until M58, which is [F69](../../docs/build-notes/deferred-findings.md)'s
+// lesson exactly — a number beside a rule is a fact nothing keeps true, and
+// these two had already drifted apart from each other. `demoActor` in demo.go
+// takes the same step around
 // SwitchWorkspace, for the same reason refresh below does.
 // The fourth is M36's `attributeSplitClicks`, and it is editing rows that
 // no service produced either: a month of click history is written by COPY,
@@ -88,10 +100,65 @@ const (
 	// an outstanding row beside the redeemed ones.
 	demoPendingEmail = "riley@example.com"
 
+	// demoDepartedEmail joins, and then deletes their own account (M52).
+	//
+	// **The one seeded person nobody can sign in as, on purpose.** A deleted
+	// account shows nothing — that is what deleting it means — so what the demo
+	// has to show is the *residue*: an audit entry whose actor is an erased
+	// tombstone, sitting in the same trail as entries from live actors. An
+	// evaluator wanting to know what this product does with erasure is asking
+	// what is left afterwards, and that is the only place it can be seen.
+	//
+	// They arrive the way morgan and sam do — registered by the seeder, then
+	// invited and redeemed — because this seeder's invitation service sets
+	// `NewAccounts: false` unconditionally (D7) and an invitation here can only
+	// ever attach a membership to an account that already exists. The redemption
+	// is what puts an entry with *their* name in the demo organization's audit
+	// trail; being granted a membership would put the owner's name there instead.
+	//
+	// Registration means they own a personal organization alone, so the seed has
+	// to delete that before it can delete the account. That is the product
+	// working correctly rather than an obstacle: an account that is the sole
+	// owner of a surviving organization is refused, and the demo goes through the
+	// same door everybody else does.
+	demoDepartedEmail = "jordan@example.com"
+	demoDepartedName  = "Jordan Vale"
+
 	// demoPassword is what the seeded accounts sign in with. Written in the
 	// clear because publishing it is the point — the demo instance exists to be
 	// signed into — and it clears auth.MinPasswordLength.
 	demoPassword = "demo-account-password"
+)
+
+// The second factor's demo (M53).
+const (
+	// demoMFASecret is the TOTP secret sam@example.com enrols with, fixed and
+	// published rather than random.
+	//
+	// **Written in the clear for the reason demoPassword and demoLinkPassword
+	// are: publishing it is the point.** A second factor nobody can produce a
+	// code for is an account nobody can sign in as, and the demo would then show
+	// the prompt and nothing behind it. With the secret published, anybody can
+	// scan it into an authenticator and walk the whole flow — the code prompt
+	// between the password and the session, and the enrolled state on the
+	// account page afterwards.
+	//
+	// **Not the owner's account, deliberately.** Every seeded account shares
+	// demoPassword, and the owner is who an evaluator signs in as first; putting
+	// a second factor on it would put a step in front of the demo itself. Sam is
+	// the viewer, so an evaluator who wants the second factor asks for it and
+	// everybody else is unaffected.
+	//
+	// Twenty bytes of base32, which is what NewTOTPSecret produces and what an
+	// authenticator app expects. Fixed rather than generated so the published
+	// value in docs stays true across every `make demo-update`.
+	demoMFASecret = "MFZWIZLTMVZGKZBAMFZWIZLTMVZGKZBA" //nolint:gosec // G101: a published demo credential, deliberately
+
+	// demoMFAIssuer is what an authenticator app files the entry under. The
+	// demo's own hostname rather than cfg.AppBaseURLParsed()'s, so the published
+	// secret and the label a scanner shows do not drift apart when the demo is
+	// rebuilt behind a different origin.
+	demoMFAIssuer = "linkctrl-demo.devofpie.com"
 )
 
 // demoWorkspace2 is the second workspace, which is the entire difference between
@@ -279,6 +346,14 @@ type demoSeeder struct {
 	// instance appoints the demo's second dispute reviewer (M45, D98), through
 	// the same service call the dashboard makes.
 	instance *instance.Service
+	// accounts deletes the one seeded person who leaves, and runs the erasure
+	// pass by hand afterwards (M52) — the demo cannot wait an hour for the
+	// scheduler, and a demo rebuilt from nothing at every milestone would
+	// otherwise show the lag rather than the outcome.
+	accounts *account.Service
+	// mfa enrols the one seeded account that has a second factor (M53), through
+	// the same service call the dashboard makes.
+	mfa *auth.MFAService
 
 	// owner is whoever claimed the instance, acting in their first workspace.
 	owner *auth.Identity
@@ -319,6 +394,36 @@ func newDemoSeeder(
 		return nil, fmt.Errorf("demo api keys: %w", err)
 	}
 
+	accountSvc, err := account.NewService(pool, account.Config{
+		Auth:  authSvc,
+		Audit: auditSvc,
+		Log:   discardLogger(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("demo accounts: %w", err)
+	}
+
+	// The second factor (M53). The cipher comes from the instance's own
+	// MFA_SECRET_KEY, which `scripts/instance.sh init` mints for every local
+	// instance — an unset key leaves this nil, seedSecondFactor refuses, and the
+	// coverage row fails, which is the right direction for a demo that is
+	// supposed to show the feature.
+	mfaCipher, err := auth.NewMFACipher(cfg.MFASecretKey.Reveal())
+	if err != nil {
+		return nil, fmt.Errorf("demo second factor: %w", err)
+	}
+	mfaSvc, err := auth.NewMFAService(pool, auth.MFAConfig{
+		Auth:   authSvc,
+		Cipher: mfaCipher,
+		Issuer: demoMFAIssuer,
+		Audit:  auditSvc,
+		Notify: notifySvc,
+		Log:    discardLogger(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("demo second factor: %w", err)
+	}
+
 	return &demoSeeder{
 		pool: pool, q: dbgen.New(pool), cfg: cfg, now: now, opt: opt,
 		auth:     authSvc,
@@ -329,6 +434,8 @@ func newDemoSeeder(
 		link:     linkSvc,
 		dispute:  disputeSvc,
 		instance: instance.NewService(pool, instance.Config{Audit: auditSvc}),
+		accounts: accountSvc,
+		mfa:      mfaSvc,
 		gates:    gateSvc,
 		keys:     keySvc,
 		owner:    owner,
@@ -380,6 +487,15 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 		return err
 	}
 	if err := s.seedBlockingAndDisputes(ctx, people); err != nil {
+		return err
+	}
+	if err := s.seedDeletedAccount(ctx); err != nil {
+		return err
+	}
+	if err := s.seedSecondFactor(ctx, people); err != nil {
+		return err
+	}
+	if err := s.seedUpdateCheck(ctx); err != nil {
 		return err
 	}
 	return s.readSomeNotifications(ctx)
@@ -504,7 +620,7 @@ func (s *demoSeeder) refresh(ctx context.Context, people *demoPeople) error {
 		// move somebody's browser — so this runs the write that call makes, the
 		// last-used one, and then resolves the identity through
 		// auth.IdentityForEmail like every other CLI subcommand does. It is one of
-		// the three deliberate steps around a service in this file.
+		// the deliberate steps around a service in this file.
 		if _, err := s.q.SetLastWorkspaceForUser(ctx, dbgen.SetLastWorkspaceForUserParams{
 			UserID: (*p.into).UserID, WorkspaceID: s.owner.WorkspaceID,
 		}); err != nil {
@@ -566,17 +682,66 @@ func (s *demoSeeder) seedSecondWorkspace(ctx context.Context, people demoPeople)
 
 // actAs resolves an identity acting in a named workspace. See refresh for why
 // the last-used write is made directly.
+//
+// **The pinned default is cleared first, and the result is checked (F169).**
+// `ResolveWorkspaceForUser` ranks the pin (rung 2) above last-used (rung 3), so
+// against an account that has pinned one, the write below decided nothing: the
+// demo owner had `default_workspace_id` pointing at the catalogue's workspace,
+// every link `seedSecondWorkspace` created landed there, and the Campaigns
+// workspace the demo exists to switch *to* had never held a single row. The
+// seeder reported success both times, because nothing compared where a link was
+// asked for with where it went.
+//
+// Clearing rather than re-pinning, and that is the choice rather than an
+// accident. Re-pinning would work — it is the strongest rung a process without a
+// session can reach — but it would also leave the pin on the *second* workspace
+// for the length of the seeding, and a run that dies in that window leaves an
+// account `demoActor` then refuses to seed as. NULL is not a lost preference so
+// much as the one D22 gives every account until somebody chooses otherwise, and
+// it is the value the demo owner should be on: a demo whose owner has pinned a
+// workspace is showing a preference nobody set.
+//
+// **D61 says a pinned default "cannot be repointed", and that is about
+// demoActor, not about this.** demoActor refuses only when the pin resolves the
+// account into some workspace other than the demo's own — that is the state
+// that would make demoReset destroy data and report success. A pin naming the
+// demo's own oldest workspace passes that check and is then cleared here, so the
+// seeder does remove a pinned preference in the one case D61's sentence does not
+// reach. Deliberate, and the smaller of the two harms: the alternative is
+// leaving the pin in place and having every write below decided by rung 2
+// instead of rung 3, which is F169 exactly. Recorded against D61 rather than
+// left to be re-derived.
+//
+// The check at the end is what turns the next version of this into a failure
+// instead of a wrong demo. It costs one comparison and it is the whole of what
+// was missing.
 func (s *demoSeeder) actAs(ctx context.Context, email string, wsID uuid.UUID) (*auth.Identity, error) {
 	id, err := s.auth.IdentityForEmail(ctx, email)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", email, err)
+	}
+	if _, err := s.q.SetDefaultWorkspaceForUser(ctx, dbgen.SetDefaultWorkspaceForUserParams{
+		UserID: id.UserID, WorkspaceID: nil,
+	}); err != nil {
+		return nil, fmt.Errorf("clear %s's pinned default workspace: %w", email, err)
 	}
 	if _, err := s.q.SetLastWorkspaceForUser(ctx, dbgen.SetLastWorkspaceForUserParams{
 		UserID: id.UserID, WorkspaceID: wsID,
 	}); err != nil {
 		return nil, fmt.Errorf("place %s in workspace %s: %w", email, wsID, err)
 	}
-	return s.auth.IdentityForEmail(ctx, email)
+	moved, err := s.auth.IdentityForEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s: %w", email, err)
+	}
+	if moved.WorkspaceID != wsID {
+		return nil, fmt.Errorf(
+			"%s was placed in workspace %s and resolves into %s instead, so everything "+
+				"seeded next would be written to the wrong workspace; something outranks "+
+				"last-used for this account (ResolveWorkspaceForUser's precedence)",
+			email, wsID, moved.WorkspaceID)
+	}
+	return moved, nil
 }
 
 // seedBotBlocking switches it on for exactly one link.
@@ -834,7 +999,9 @@ const (
 	// budget below is spent partway, so the page shows a limit with a number
 	// against it rather than a limit nothing has ever touched.
 	demoMaxClicks = 50
-	// demoClicksSpent is how much of it the demo has already used.
+	// demoClicksSpent is how much of it the demo has already used. It is also
+	// exactly how many click events the link carries, because a redirect that
+	// spends a click records one — see seedGatedLinks (F166).
 	demoClicksSpent = 12
 )
 
@@ -844,11 +1011,30 @@ const (
 // through the full M30 tier check and each password is hashed with the
 // instance's own argon2 parameters — a demo whose password was written straight
 // into the column would be showing a row shape the product never produces.
+//
+// **Each one is then aged and given traffic (F165, F166).** These four were the
+// only links on the instance that had neither. The catalogue path backdates
+// `created_at` and drives a month of clicks from a weight; this path called
+// `link.Service.Create` and never touched the row again, so all four carried the
+// instant of the seed — and the dashboard's *Recent links* is `ORDER BY
+// created_at DESC LIMIT 5`, which made these four plus the one on the custom
+// hostname the entire list, every one of them reading zero clicks on an instance
+// holding a million and a half of them. Ages that interleave with the
+// catalogue's, so the list is a mix rather than a block, and counts that are
+// exact rather than weighted — see demoCountedClicks for why.
 func (s *demoSeeder) seedGatedLinks(ctx context.Context) error {
 	maxClicks := int64(demoMaxClicks)
 	gated := []struct {
 		in   link.CreateInput
 		what string
+		// age is how many days ago the link was created, and clicks is how many
+		// times it has been through its gate. `access-once` is the one with
+		// none, and that is the state its gate is in: a one-time link that has
+		// been used is a 410, which demonstrates the refusal and nothing else.
+		age, clicks int
+		// oldest bounds the click history in days-ago terms, so a link created
+		// twenty-three days ago has no click from before it existed.
+		oldest int
 	}{
 		{link.CreateInput{
 			Alias: demoPasswordAlias, URL: "https://example.com/investors/board-deck.pdf",
@@ -856,36 +1042,48 @@ func (s *demoSeeder) seedGatedLinks(ctx context.Context) error {
 			Description: "Asks for a password before it redirects. Nothing is stored in the " +
 				"visitor's browser, so coming back means typing it again.",
 			Password: demoLinkPassword,
-		}, "password " + demoLinkPassword},
+		}, "password " + demoLinkPassword, 23, 18, 21},
 		{link.CreateInput{
 			Alias: demoOneTimeAlias, URL: "https://example.com/onboarding/welcome",
 			Title:       "One-time access link",
 			Description: "Works once. The second visit is a 410, counted in Postgres rather than in the cache.",
 			OneTime:     true,
-		}, "one-time"},
+		}, "one-time", 17, 0, 0},
 		{link.CreateInput{
 			Alias: demoMaxClickAlias, URL: "https://example.com/offers/early-bird",
 			Title:       "First fifty only",
 			Description: "Stops at fifty clicks. The count beside it is exact, unlike the click total.",
 			MaxClicks:   &maxClicks,
-		}, fmt.Sprintf("max %d clicks", demoMaxClicks)},
+		}, fmt.Sprintf("max %d clicks", demoMaxClicks), 9, demoClicksSpent, 6},
 		{link.CreateInput{
 			Alias: demoSignedAlias, URL: "https://example.com/press/embargoed",
 			Title: "Signed link only",
 			Description: "The plain short URL is refused with 403. Only a signed, unexpired " +
 				"URL works — make one from this link's page.",
 			RequireSignature: true,
-		}, "signature required"},
+		}, "signature required", 6, 7, 5},
 	}
 
 	ids := make(map[string]uuid.UUID, len(gated))
+	var clicks []demoClickRow
 	for _, g := range gated {
 		created, err := s.link.Create(ctx, s.owner, g.in)
 		if err != nil {
 			return fmt.Errorf("create gated link /%s: %w", g.in.Alias, err)
 		}
 		ids[g.in.Alias] = created.ID
+		// Backdated the way demoCreateLinks backdates the catalogue, and by the
+		// same statement, because there is no service that ages a row.
+		if _, err := s.pool.Exec(ctx,
+			`UPDATE links SET created_at = $2, updated_at = $2 WHERE id = $1`,
+			created.ID, s.now.AddDate(0, 0, -g.age)); err != nil {
+			return fmt.Errorf("backdate /%s: %w", g.in.Alias, err)
+		}
+		clicks = append(clicks, demoCountedClicks(created.ID, g.clicks, g.oldest, s.now)...)
 		fmt.Fprintf(os.Stderr, "gated link: /%s — %s\n", g.in.Alias, g.what)
+	}
+	if _, err := demoCopyClicks(ctx, s.pool, s.owner.WorkspaceID, clicks); err != nil {
+		return fmt.Errorf("click history for the gated links: %w", err)
 	}
 
 	// Part of the click-limited link's budget, spent through the same statement
@@ -893,11 +1091,19 @@ func (s *demoSeeder) seedGatedLinks(ctx context.Context) error {
 	// that does not work; a partly-spent one is the state the control is
 	// actually for.
 	//
-	// One of the three deliberate steps around a service is not what this is: it
+	// One of the deliberate steps around a service is not what this is: it
 	// goes through internal/gate, which is where the redirect path consumes a
 	// click too. It is a loop rather than one call because the counter is
 	// deliberately incremental — there is no "set it to twelve", and adding one
 	// would be a way to write a number the gate never produced.
+	//
+	// **The other half of what a redirect does is the loop above** (F166). A real
+	// one consumes the budget *and* records a click event, so the two numbers
+	// move together; this spent the budget alone, and the demo then showed
+	// `first-fifty` at *12 of 50 spent* in its gate section and *0 clicks* on the
+	// dashboard beside it — two true statements that cannot both be true of one
+	// link, which is exactly what a reader uses to decide whether to trust the
+	// numbers on the page. demoClicksSpent is therefore the count in both places.
 	for range demoClicksSpent {
 		if _, err := s.gates.Consume(ctx, ids[demoMaxClickAlias], s.owner.WorkspaceID,
 			int64(demoMaxClicks)); err != nil {
@@ -1055,13 +1261,32 @@ type demoCampaign struct {
 	links       []string
 }
 
-// demoQRStyled is the link whose QR code carries a stored style.
+// demoQRStyled is the link whose QR codes carry a stored style, a second code
+// and a logo.
 //
 // One, not all of them. Every link has a code — the endpoint answers for any of
 // them — so seeding a style everywhere would show one state; seeding exactly one
-// shows both, and the link detail page's "back to black on white" button only
+// shows both, and the link detail page's "Restore defaults" button only
 // appears on a link that has a stored style at all.
-const demoQRStyled = "summer-sale"
+//
+// **It must be a link that still resolves, which is F174.** This was
+// `summer-sale` until 2026-08-08, and `summer-sale` exists in the catalogue to
+// demonstrate expiry — it answers `410 Gone`. So every QR code the demo carried
+// was a picture of a dead link: three milestones of work, sized codes, several
+// per link and a logo in the middle of one, shown through codes that refused
+// every scan. The dashboard rendered them correctly and `demoCoverage()` passed,
+// because the coverage test measures the seed and not the instance (F160's
+// lesson, and this is the same shape).
+//
+// `launch` instead: the most-visited link on the demo, on the default host, with
+// no expiry, no click budget and no gate — so a code drawn from it can actually
+// be scanned, which is the only property that was missing. **The stated cost:**
+// attributeQRScans below rewrites `referrer_host` on 21% of a link's non-bot
+// clicks, so the reattribution now lands on the demo's busiest link rather than
+// on a quiet one. The proportion is unchanged; what changes is that the referrer
+// breakdown an evaluator opens first has a fifth of it reading as QR scans,
+// which is what a link with a printed code would honestly look like.
+const demoQRStyled = "launch"
 
 // seedCampaigns creates the campaigns, labels the links, and styles one QR code.
 //
@@ -1103,17 +1328,201 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	// A dark blue on a pale field, which is a real brand choice and still passes
 	// the contrast a scanner needs. Level Q, so a printed code survives being
 	// scuffed — the reason anybody changes the level at all.
+	//
+	// **Two writes, because M49 split the surfaces and the demo shows both.**
+	// The level left the dashboard for the API, so it is set here the way a
+	// script sets it; the size is then set the way the panel sets it, and
+	// SetQRSize carries the level forward rather than answering a question its
+	// form no longer asks. A demo seeded only through SetQRStyle would show a
+	// margin and a scale nobody chose, which is exactly the vocabulary this
+	// milestone removed.
 	if _, err := s.link.SetQRStyle(ctx, s.owner, styled, qr.Style{
-		Foreground: "#123a6b", Background: "#f5f7fa",
-		Level: qr.LevelQ, Margin: 4, Scale: 10,
+		Foreground: demoQRForeground, Background: demoQRBackground, Level: qr.LevelQ,
 	}); err != nil {
 		return fmt.Errorf("style the QR code on /%s: %w", demoQRStyled, err)
 	}
+	// 400px: a size somebody printing a poster would type, and one that does not
+	// divide evenly into this link's module count — so the demo shows a size the
+	// module grid has to work around being served back exactly, which is what
+	// the second M49 reopening is for.
+	sized, _, err := s.link.SetQRSize(ctx, s.owner, styled, link.QRSizeInput{
+		Foreground: demoQRForeground, Background: demoQRBackground, Size: demoQRSize,
+	})
+	if err != nil {
+		return fmt.Errorf("size the QR code on /%s: %w", demoQRStyled, err)
+	}
 
-	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled\n",
-		len(demoCampaigns()), labelled)
+	// A second code on the same link (M50). One link, two codes, two names —
+	// because a feature whose whole value is telling two things apart shows
+	// nothing when only one of them exists.
+	// The re-fit is discarded rather than reported: the seeded size is 400px on a
+	// symbol whose floor is far below it, so the create keeps the number and
+	// moves only the scale (M49's third reopening, D185). A demo run that ever
+	// starts raising it is a demo whose seeded size has drifted to its own floor,
+	// which is a seeding change and not something to print here.
+	second, _, err := s.link.CreateQRCode(ctx, s.owner, styled, demoQRSecondLabel)
+	if err != nil {
+		return fmt.Errorf("add a second QR code to /%s: %w", demoQRStyled, err)
+	}
+	// The default code gets a name too. Without one the panel heads its row "The
+	// original code", which is honest and is not what a workspace running two
+	// campaigns would see: they would have named both.
+	//
+	// The write comes back with the code, because since D183 the default has a
+	// slug of its own — generated when CreateQRCode above wrote its row — and the
+	// scan attribution below needs it to seed a picture printed *after* it had
+	// one, beside the untagged history of every picture printed before.
+	def, err := s.link.SetQRCodeLabel(ctx, s.owner, styled, "", demoQRDefaultLabel)
+	if err != nil {
+		return fmt.Errorf("name the default QR code on /%s: %w", demoQRStyled, err)
+	}
+	// And a logo on that second code (M50.5), which is this product's first
+	// uploaded file and would otherwise be a feature with no example anywhere on
+	// the demo.
+	//
+	// **The bytes are generated here rather than committed to the repository.**
+	// A binary fixture in the tree is a file nobody reviews, and it would make
+	// the demo depend on a path — which is exactly the shape D134 declined for
+	// storage. demoLogoPNG draws one deterministically, so two runs of
+	// `make demo-update` upload the same image.
+	//
+	// Through the service like everything else here, so the demo's logo went
+	// through the caps, the sniffing and the re-encode a real upload does. Since
+	// M50.6 it is also drawn: the second code renders with the mark in the middle
+	// of it, at error-correction level H, which is the feature rather than the
+	// proof that an upload succeeded. The seeding is unchanged — M50.5 put it
+	// here so that M50.6 would arrive to find something to composite.
+	if _, _, err := s.link.SetQRCodeLogo(
+		ctx, s.owner, styled, second.Slug, demoLogoPNG(),
+	); err != nil {
+		return fmt.Errorf("upload a logo to the second QR code on /%s: %w", demoQRStyled, err)
+	}
+
+	scans, err := s.attributeQRScans(ctx, styled, second.Slug, def.Slug)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "campaigns: %d, holding %d links; 1 QR code styled at %dpx; "+
+		"2 codes on /%s, 1 drawn with a logo at level H, %d scans between them\n",
+		len(demoCampaigns()), labelled, sized.Size, demoQRStyled, scans)
 	return nil
 }
+
+// demoLogoSide is how big the seeded logo is, in pixels.
+//
+// Small on purpose. It stands for a brand mark rather than for a photograph,
+// and it is drawn at three tenths of the code's width, so a large one would only make
+// the demo's database bigger for a picture nobody sees at that resolution.
+const demoLogoSide = 96
+
+// demoLogoPNG draws the seeded logo: a filled disc with a lighter ring in it,
+// on a transparent field.
+//
+// **Transparent, and that is the part worth having.** A logo with an opaque
+// rectangle behind it would sit on a QR code as a white box; the alpha channel
+// is what a real one carries and what the compositing has to handle, so the
+// demo's example carries it too. What shows through it is the code's own
+// background colour, because the box is painted before the image is drawn over
+// it — the disc reads as a disc rather than as a square.
+//
+// Deterministic — no randomness, no clock — because `make demo-update` runs the
+// seeder twice and the second run must produce the same instance as the first.
+func demoLogoPNG() []byte {
+	img := image.NewNRGBA(image.Rect(0, 0, demoLogoSide, demoLogoSide))
+	const c = demoLogoSide / 2
+	for y := range demoLogoSide {
+		for x := range demoLogoSide {
+			dx, dy := float64(x-c)+0.5, float64(y-c)+0.5
+			d := math.Sqrt(dx*dx + dy*dy)
+			switch {
+			case d > float64(c)-1:
+				// Outside the disc: left transparent.
+			case d > float64(c)*0.62 && d < float64(c)*0.80:
+				img.SetNRGBA(x, y, color.NRGBA{R: 0xf5, G: 0xf7, B: 0xfb, A: 0xff})
+			default:
+				img.SetNRGBA(x, y, color.NRGBA{R: 0x1d, G: 0x35, B: 0x7a, A: 0xff})
+			}
+		}
+	}
+	var buf bytes.Buffer
+	// The encoder cannot fail writing to a bytes.Buffer, and a seeder that
+	// returned an error here would be reporting one nothing can cause.
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+// attributeQRScans turns a share of the styled link's existing clicks into scans
+// of its two codes (M50).
+//
+// **The same deliberate trip around the service layer attributeSplitClicks
+// makes, for the same reason and with the same bucketing.** These clicks were
+// written by COPY rather than produced by a redirect, so there is no scan for the
+// redirect path to have attributed; the alternative is a demo with two codes and
+// no way to see that they are counted apart, which is the empty page the
+// milestone exists to prevent.
+//
+// Bucketed on the visitor hash, which is derived from the seeded PRNG, so two
+// runs of `make demo-update` produce the same split. Roughly a fifth of the
+// link's human traffic becomes scans, weighted towards the original code:
+// somebody who printed a poster last month and a shop-window card last week has
+// more history on the first, and a demo where two codes had identical numbers
+// would be a demo where the reader cannot tell the columns are real.
+//
+// Bots are left alone. They are excluded from every rollup anyway, and a crawler
+// did not scan anything.
+//
+// **Three values, and the third is what M50's reopening added.** The default
+// code has a slug of its own now (D183), so a picture of it printed since then
+// records `qr:<default slug>` while every picture printed before it had one
+// records the bare `qr` — two stored values for one code, which the breakdown
+// folds onto that code's single row. Seeding only one of the pair would show a
+// number without showing that it is a sum, and the sum is exactly how today's
+// default code gained a slug without any recorded scan being rewritten.
+func (s *demoSeeder) attributeQRScans(
+	ctx context.Context, linkID uuid.UUID, named, def string,
+) (int64, error) {
+	const q = `
+		UPDATE click_events ce
+		   SET referrer_host = CASE
+		           WHEN ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
+		                BETWEEN 0 AND 12 THEN $2
+		           WHEN ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
+		                BETWEEN 13 AND 16 THEN $3
+		           ELSE $4
+		       END
+		 WHERE ce.link_id = $1
+		   AND NOT ce.is_bot
+		   AND ('x' || substr(encode(ce.visitor_hash, 'hex'), 1, 8))::bit(32)::int % 100
+		       BETWEEN 0 AND 20`
+	tag, err := s.pool.Exec(ctx, q, linkID,
+		domain.ClickSourceCode(named), domain.ClickSourceCode(def), domain.ClickSourceQR)
+	if err != nil {
+		return 0, fmt.Errorf("attribute qr scans on /%s: %w", demoQRStyled, err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// The styled code's colours and size. Named because the two writes above both
+// carry the colours, and a hex string typed twice is a hex string that ends up
+// meaning two different colours.
+const (
+	demoQRForeground = "#123a6b"
+	demoQRBackground = "#f5f7fa"
+	demoQRSize       = 400
+	// The two labels the demo's codes carry. Different words, because the point
+	// of the pair is that a reader can tell which number belongs to which
+	// printed thing.
+	//
+	// **Named for the link they sit on, which is why they changed on
+	// 2026-08-08.** They read "Storefront window card" and "Summer print run"
+	// while the codes hung off `/summer-sale`; F174 moved them to
+	// demoQRStyled's `/launch` and left two labels describing a sale that link
+	// is not about. A demo whose labels do not match its link teaches the
+	// reader that the labels are decoration.
+	demoQRDefaultLabel = "Conference booth banner"
+	demoQRSecondLabel  = "Launch press kit"
+)
 
 // demoWebhooks are the registrations the demo shows.
 //
@@ -1316,6 +1725,14 @@ func (s *demoSeeder) seedAutomation(ctx context.Context) error {
 // `link-checker` is the ordinary case, unrotated and workspace-bound, so the
 // other two read as choices rather than as how keys are.
 //
+// **Four since M54**, because the *Reach* column gained a third value and a
+// column showing two of three states is the same problem the third key was
+// added to solve. `personal-token` is account-wide — the reach a key created
+// without pinning now has — and `reporting` is pinned explicitly so that it
+// keeps saying *Organization* rather than quietly becoming the fourth one's
+// twin. The pin on `reporting` is therefore load-bearing for the page and not
+// an opinion about how a reporting key should be scoped.
+//
 // **No secret survives this.** Every token these calls return is discarded here,
 // which is not tidiness — it is the only correct thing to do with one. The
 // product stores an HMAC and shows the token once, so a demo that kept one would
@@ -1326,16 +1743,21 @@ func demoAPIKeys() []struct {
 	name    string
 	scopes  []string
 	orgWide bool
-	rotate  bool
+	// pinned asks for an organization-scoped key rather than an account-wide
+	// one, and only means anything with orgWide. It is the M54 axis.
+	pinned bool
+	rotate bool
 } {
 	return []struct {
 		name    string
 		scopes  []string
 		orgWide bool
+		pinned  bool
 		rotate  bool
 	}{
 		{name: "ci-deploy", scopes: []string{"links.read", "links.create"}, rotate: true},
-		{name: "reporting", scopes: []string{"links.read"}, orgWide: true},
+		{name: "reporting", scopes: []string{"links.read"}, orgWide: true, pinned: true},
+		{name: "personal-token", scopes: []string{"links.read"}, orgWide: true},
 		{name: "link-checker", scopes: []string{"links.read"}},
 	}
 }
@@ -1356,9 +1778,14 @@ func demoAPIKeys() []struct {
 func (s *demoSeeder) seedAPIKeys(ctx context.Context) error {
 	rotated := 0
 	for _, spec := range demoAPIKeys() {
-		created, err := s.keys.Create(ctx, s.owner, auth.CreateAPIKeyInput{
+		in := auth.CreateAPIKeyInput{
 			Name: spec.name, Scopes: spec.scopes, OrgWide: spec.orgWide,
-		})
+		}
+		if spec.pinned {
+			org := s.owner.OrgID
+			in.OrganizationID = &org
+		}
+		created, err := s.keys.Create(ctx, s.owner, in)
 		if err != nil {
 			return fmt.Errorf("create api key %q: %w", spec.name, err)
 		}
@@ -1479,16 +1906,36 @@ func (s *demoSeeder) seedDomains(ctx context.Context) error {
 		// And one link on it, which is what makes the hostname visible anywhere
 		// other than the domains page: the links list shows its short URL built
 		// from this hostname rather than from the instance's own.
-		if _, err := s.link.Create(ctx, actor, link.CreateInput{
+		//
+		// Aged and given traffic like the catalogue's, for the reason
+		// seedGatedLinks gives: this was the fifth of the five links carrying the
+		// instant of the seed, and between them they were the whole of the
+		// dashboard's *Recent links* — five rows reading zero clicks (F165). The
+		// weighted generator rather than an exact count, because nothing compares
+		// this link's total against anything and a curve is what its own detail
+		// page has charts for.
+		spring := []demoLink{{alias: "spring", weight: 9, from: 12, age: 13}}
+		created, err := s.link.Create(ctx, actor, link.CreateInput{
 			URL:      "https://example.com/campaigns/spring",
-			Alias:    "spring",
+			Alias:    spring[0].alias,
 			Title:    "Spring campaign, on this workspace's own hostname",
 			DomainID: &verified.ID,
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("create a link on %s: %w", d.hostname, err)
 		}
-		fmt.Fprintf(os.Stderr, "domain %s: registered to %s, verified, 1 link\n",
-			d.hostname, actor.WorkspaceID)
+		if _, err := s.pool.Exec(ctx,
+			`UPDATE links SET created_at = $2, updated_at = $2 WHERE id = $1`,
+			created.ID, s.now.AddDate(0, 0, -spring[0].age)); err != nil {
+			return fmt.Errorf("backdate /%s: %w", spring[0].alias, err)
+		}
+		springClicks, err := demoClicks(ctx, s.pool, actor.WorkspaceID.String(),
+			spring, map[int]uuid.UUID{0: created.ID}, s.opt, s.now)
+		if err != nil {
+			return fmt.Errorf("click history for /%s: %w", spring[0].alias, err)
+		}
+		fmt.Fprintf(os.Stderr, "domain %s: registered to %s, verified, 1 link, %d clicks\n",
+			d.hostname, actor.WorkspaceID, springClicks)
 	}
 	// Back where the demo opens, exactly as seedSecondWorkspace does.
 	if _, err := s.actAs(ctx, s.owner.Email, s.owner.WorkspaceID); err != nil {
@@ -1575,7 +2022,7 @@ func (s *demoSeeder) seedBlockingAndDisputes(ctx context.Context, people demoPeo
 
 // listDemoHost adds the demo's own host to the runtime low-confidence blocklist.
 //
-// Written directly, and it is the second of the three deliberate steps around a
+// Written directly, and it is one of the deliberate steps around a
 // service. Nothing in the product inserts into this table: boot reconciles
 // LINKCTRL_DESTINATION_BLOCKLIST into it (source 'env'), migration 01500 seeded
 // the shortener hosts once, and M31's review queue only ever *removes* a row.
@@ -1661,6 +2108,159 @@ func (s *demoSeeder) readSomeNotifications(ctx context.Context) error {
 	return nil
 }
 
+// seedSecondFactor enrols one seeded account (M53).
+//
+// Through the service the dashboard calls, not by writing rows: the secret is
+// encrypted under this instance's MFA_SECRET_KEY, `mfa_enabled_at` is stamped by
+// the same statement, ten recovery codes are issued and the change is audited and
+// notified. A demo that wrote `mfa_enabled_at = now()` directly would show a state
+// the product never produces.
+//
+// **The secret is fixed and published**, so somebody evaluating this can scan it
+// and drive the whole flow rather than look at a prompt they cannot pass. See
+// demoMFASecret for why it is not the owner's account.
+//
+// The recovery codes are discarded here on purpose. They are shown once by
+// design, and a demo that kept them would be publishing ten standing credentials
+// for an account anybody can already sign into with the published password and
+// the published secret — ten more ways in, for nothing.
+func (s *demoSeeder) seedSecondFactor(ctx context.Context, people demoPeople) error {
+	if people.viewer == nil {
+		return errors.New("the demo viewer was not seeded, so there is nobody to enrol")
+	}
+	// The code the account's authenticator would be showing. Computed rather than
+	// fixed, because a fixed code stops being current thirty seconds after it is
+	// written down.
+	code, err := auth.TOTPCode(demoMFASecret, auth.TOTPStep(time.Now()))
+	if err != nil {
+		return fmt.Errorf("compute the demo enrolment code: %w", err)
+	}
+	out, err := s.mfa.ConfirmEnrolment(ctx, people.viewer, demoMFASecret, code)
+	if err != nil {
+		return fmt.Errorf("enrol %s in the second factor: %w", demoViewerEmail, err)
+	}
+	fmt.Fprintf(os.Stderr, "second factor: %s enrolled, %d recovery codes issued\n",
+		demoViewerEmail, len(out.RecoveryCodes))
+	return nil
+}
+
+// seedUpdateCheck answers the update-check question as the demo's operator
+// (M55, D164).
+//
+// **The demo has to answer it, because nothing else would.** The instance is
+// claimed by `scripts/instance.sh`, not by somebody filling in the setup form, so
+// it arrives here in the state an upgraded instance is in: unanswered, and
+// therefore quiet. Left alone the demo would be showing the *absence* of the
+// feature — a box that never asks — while `docs/SECURITY.md` tells every reader
+// this is one of five things that leave a default instance.
+//
+// So the answer is given the way an operator gives it, through the same service
+// call the dashboard prompt reaches, by the account that holds `instance.admin`.
+// The demo is then an instance whose operator said yes, which is a real
+// configuration rather than a seeded one, and the coverage row asserts the
+// setting rather than an inbox: a notification appears if and only if a newer
+// LinkCtrl has actually been published, and manufacturing one would be showing a
+// release that does not exist.
+//
+// ErrAlreadyAnswered is a re-run over an instance that already answered, which is
+// every rebuild after the first, and it is a success.
+func (s *demoSeeder) seedUpdateCheck(ctx context.Context) error {
+	switch err := s.instance.AnswerUpdateCheck(ctx, s.owner, true); {
+	case errors.Is(err, instance.ErrAlreadyAnswered):
+		return nil
+	case err != nil:
+		return fmt.Errorf("answer the demo's update-check question: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "update check: on, answered by the demo's operator")
+	return nil
+}
+
+// seedDeletedAccount joins somebody, has them leave, and erases them (M52).
+//
+// Three service calls, all of them the ones the product makes: the invitation is
+// redeemed the same way the admin's and the viewer's are, the account is deleted
+// through the same call `DELETE /api/v1/account` reaches, and the erasure is the
+// hourly sweep run once by hand. Nothing here writes a row directly, so what the
+// demo shows is what the feature does rather than an impression of it.
+//
+// **The sweep is run inline because the demo cannot wait an hour.** On a real
+// instance the lag between deletion and erasure is the scheduler's cadence, and
+// `docs/SECURITY.md` states it as a number. A demo rebuilt from nothing at every
+// milestone boundary would spend that hour showing an address, which is the one
+// state an evaluator must not mistake for the feature.
+//
+// What is left afterwards, and is the whole point: the `invitation.redeemed`
+// record this person wrote is still in the organization's audit trail, still
+// correlatable by `actor_user_id`, and its actor now reads `deleted account`.
+func (s *demoSeeder) seedDeletedAccount(ctx context.Context) error {
+	departing, err := s.auth.Register(ctx, auth.RegisterInput{
+		Email: demoDepartedEmail, Name: demoDepartedName, Password: demoPassword,
+	})
+	if err != nil {
+		return fmt.Errorf("create demo account %s: %w", demoDepartedEmail, err)
+	}
+	personalOrg, personalWorkspace := departing.OrgID, departing.WorkspaceID
+
+	created, err := s.invite.Create(ctx, s.owner, invite.CreateInput{
+		Email: demoDepartedEmail, Role: "editor",
+	})
+	if err != nil {
+		return fmt.Errorf("invite %s: %w", demoDepartedEmail, err)
+	}
+	if created.Emailed {
+		return fmt.Errorf("invitation to %s was queued for delivery; "+
+			"the demo seeder must need no mailer", demoDepartedEmail)
+	}
+	if _, err := s.invite.Redeem(ctx, invite.RedeemInput{
+		Token:    demoInviteToken(created.URL),
+		Email:    demoDepartedEmail,
+		Name:     demoDepartedName,
+		Password: demoPassword,
+	}); err != nil {
+		return fmt.Errorf("redeem invitation for %s: %w", demoDepartedEmail, err)
+	}
+
+	// The personal organization goes first, and it goes through M28.5's own
+	// call. Acting *in* it, because DeleteOrganization answers not-found for an
+	// id that is not the caller's current organization — the path parameter is a
+	// confirmation rather than a selector, which is the right shape for an
+	// irreversible operation and the reason this needs actAs rather than an id.
+	inPersonal, err := s.actAs(ctx, demoDepartedEmail, personalWorkspace)
+	if err != nil {
+		return err
+	}
+	if err := s.team.DeleteOrganization(ctx, inPersonal, personalOrg); err != nil {
+		return fmt.Errorf("delete %s's personal organization: %w", demoDepartedEmail, err)
+	}
+
+	// Re-resolved, because the only membership left is the demo organization's
+	// and the identity above still points at an organization that no longer
+	// exists.
+	departing, err = s.auth.IdentityForEmail(ctx, demoDepartedEmail)
+	if err != nil {
+		return fmt.Errorf("resolve %s: %w", demoDepartedEmail, err)
+	}
+	if err := s.accounts.Delete(ctx, departing, demoPassword); err != nil {
+		return fmt.Errorf("delete %s: %w", demoDepartedEmail, err)
+	}
+
+	// Asserted rather than assumed. A sweep that took nothing would leave the
+	// demo showing an ordinary redeemed invitation and no erasure at all, and the
+	// coverage row would be the only thing that noticed — one milestone later,
+	// when somebody read the failure and had to work out which of the two steps
+	// had stopped happening.
+	erased, err := s.accounts.ErasePending(ctx, 1000)
+	if err != nil {
+		return fmt.Errorf("erase deleted accounts: %w", err)
+	}
+	if erased == 0 {
+		return errors.New("the erasure pass took no accounts, so the demo's audit " +
+			"trail still names the person who left")
+	}
+	fmt.Fprintf(os.Stderr, "deleted account: %s, erased (%d)\n", demoDepartedEmail, erased)
+	return nil
+}
+
 // demoResetPhase2 removes everything the Phase 2 seeding wrote.
 //
 // Runs inside demoReset's transaction, and every statement is scoped to the demo
@@ -1669,7 +2269,14 @@ func (s *demoSeeder) readSomeNotifications(ctx context.Context) error {
 // costs: a feature seeded above without a line here makes the second run of
 // `make demo-update` differ from the first.
 func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUID) error {
-	emails := []string{demoAdminEmail, demoViewerEmail, demoPendingEmail}
+	// demoDepartedEmail is here for the run that does not finish. In a complete
+	// run the account has been deleted and erased, so its address is blank and
+	// the two statements keyed on this list cannot match it — the
+	// `deleted_at IS NOT NULL` step at the end is what takes it. In a run that
+	// failed between registering the account and deleting it, this is what
+	// stops the personal organization and the account surviving into the next
+	// one.
+	emails := []string{demoAdminEmail, demoViewerEmail, demoPendingEmail, demoDepartedEmail}
 
 	// Routing rules (M34) have no step of their own, and that is a cascade
 	// rather than an omission. Their rows hang off `destinations`, which
@@ -1783,19 +2390,63 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 		// SET NULL rather than CASCADE, so deleting a successor would otherwise
 		// leave its predecessor behind with a dangling rotation.
 		//
-		// Scoped to the organization, which means it also removes any key a demo
-		// visitor minted for themselves. That is the intent: the demo is reset to
-		// what the seeder writes, and a credential somebody created on a public
-		// instance is exactly the sort of thing that should not survive it.
-		{"api keys", `DELETE FROM api_keys WHERE organization_id = $1`, []any{orgID}},
+		// Scoped to the organization **or to the owner**, which means it also
+		// removes any key a demo visitor minted for themselves. That is the
+		// intent: the demo is reset to what the seeder writes, and a credential
+		// somebody created on a public instance is exactly the sort of thing that
+		// should not survive it.
+		//
+		// The owner limb is M54's. An account-wide key has no organization at all,
+		// so the organization predicate alone stopped reaching every key the
+		// seeder mints — and the one it stopped reaching is the one that would
+		// have accumulated a fresh copy on every demo-update.
+		{"api keys",
+			`DELETE FROM api_keys WHERE organization_id = $1 OR user_id = $2`,
+			[]any{orgID, userID}},
 
 		{"invitations", `DELETE FROM invitations WHERE organization_id = $1`, []any{orgID}},
 		{"notifications", `DELETE FROM notifications WHERE user_id = $1`, []any{userID}},
 		{"audit records", `DELETE FROM audit_logs WHERE organization_id = $1`, []any{orgID}},
+		// The account deletion's own record (M52), which the statement above
+		// cannot reach: `account.deleted` is instance-wide, so its
+		// `organization_id` is NULL by design — an account may belong to several
+		// organizations and is about none of them.
+		//
+		// By action rather than by organization, and therefore reaching a record
+		// a demo visitor wrote by deleting an account they made. That is the same
+		// trade the workspace and API-key statements above already make and it is
+		// stated for the same reason: the demo is reset to what the seeder
+		// writes. `password.reset` is the other NULL-organization action and is
+		// deliberately not matched.
+		{"the account-deletion record",
+			`DELETE FROM audit_logs WHERE organization_id IS NULL AND action = $1`,
+			[]any{audit.ActionAccountDeleted}},
 		// Cascades the workspace's links, tags and destinations.
-		{"second workspace",
-			`DELETE FROM workspaces WHERE organization_id = $1 AND slug = $2`,
-			[]any{orgID, demoWorkspace2Slug}},
+		//
+		// **Every workspace but the default one, rather than the one slug this
+		// seeder happens to use today** (F168). It read `slug = $2` against
+		// demoWorkspace2Slug, which resets exactly what the current constant
+		// creates and nothing else — so renaming the second workspace orphans
+		// whatever the previous name made, permanently and silently. The demo
+		// instance proved it: a `Marketing` workspace, slug `marketing`, created
+		// 2026-08-02, was still in the organization on 2026-08-07 holding nothing,
+		// because the constant had since become `campaigns` and the delete no
+		// longer matched it.
+		//
+		// `default` is the slug auth.Register gives the workspace it provisions
+		// with the account (`internal/auth/service.go:796-797`), so it is the one
+		// thing in this organization the seeder did not make and must not remove.
+		// Everything else here was made by a previous run or by somebody clicking
+		// around the demo, and a reset that keeps either is not a reset.
+		//
+		// The widening is deliberate and it is stated: this now deletes a
+		// workspace a demo visitor created, where before it left one behind. That
+		// is the same trade every other statement in this function already makes
+		// — the demo is rebuilt from nothing on every milestone, and the command
+		// refuses to run against production without --force.
+		{"workspaces other than the default",
+			`DELETE FROM workspaces WHERE organization_id = $1 AND slug <> 'default'`,
+			[]any{orgID}},
 		// The personal organizations registration gave the seeded accounts. No
 		// foreign key removes them with the user, and leaving them behind would
 		// make the next run's organization list grow every time.
@@ -1823,6 +2474,23 @@ func demoResetPhase2(ctx context.Context, tx pgxExecutor, orgID, userID uuid.UUI
 			[]any{orgID, emails}},
 		// Last: cascades memberships, sessions and notifications.
 		{"seeded accounts", `DELETE FROM users WHERE email_lower = ANY($1::text[])`, []any{emails}},
+		// The account that deleted itself (M52), which the statement above
+		// cannot reach for the reason it is here at all: erasure blanked the
+		// address, so there is no address left to name it by. Matched on
+		// `deleted_at` instead, which is the column the deletion writes and the
+		// only durable mark such a row carries.
+		//
+		// Not narrowed to the erased ones. An account deleted and not yet swept
+		// is the same row one hour earlier, and leaving it would make the reset
+		// depend on whether the sweep had run — which on the demo it always has,
+		// because the seeder runs it inline, and which is exactly the kind of
+		// *almost always* that turns into a growing table.
+		//
+		// It reaches a demo visitor's deleted account too, on the same terms as
+		// the API keys and the extra workspaces above, and it cannot reach a live
+		// one: nothing else in this product writes `users.deleted_at`.
+		{"accounts that deleted themselves",
+			`DELETE FROM users WHERE deleted_at IS NOT NULL`, nil},
 	}
 	for _, st := range steps {
 		if _, err := tx.Exec(ctx, st.sql, st.args...); err != nil {

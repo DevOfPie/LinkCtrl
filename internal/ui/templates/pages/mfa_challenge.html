@@ -1,0 +1,32 @@
+{{define "content"}}
+<div class="mx-auto mt-16 max-w-sm">
+  <div class="mb-8 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">Enter your code</h1>
+    <p class="mt-1 text-sm text-muted">Your password was accepted. One more step.</p>
+  </div>
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    {{template "flash_error" .Error}}
+    {{/* An ordinary form posting to an ordinary path. The token is a hidden
+         field rather than a cookie: it is a credential for one operation with a
+         five-minute life, and a cookie would carry it on every request to the
+         origin for the rest of the browser's session. */}}
+    <form method="post" action="/login/code" class="space-y-4">
+      <input type="hidden" name="token" value="{{.Token}}">
+      {{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
+      <div>
+        <label for="code" class="block text-sm font-medium text-ink">Six-digit code</label>
+        {{/* inputmode and autocomplete are what make this bearable on a phone:
+             the numeric keypad opens, and both iOS and Android offer the code
+             from the clipboard or from an SMS-shaped autofill. `one-time-code`
+             is the token browsers look for. */}}
+        <input id="code" name="code" type="text" required autofocus
+               inputmode="numeric" autocomplete="one-time-code" spellcheck="false"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm tracking-widest focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">From your authenticator app. If you no longer have it, type one of your recovery codes here instead.</p>
+      </div>
+      <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Sign in</button>
+    </form>
+  </div>
+  <p class="mt-6 text-center text-sm text-muted"><a href="/login" class="font-medium text-accent-ink hover:underline">Start again</a></p>
+</div>
+{{end}}

@@ -17,6 +17,41 @@ and nothing done to one can reach the other.
 | Image | `linkctrl:demo`, rebuilt by `make demo-update` | `linkctrl:test`, rebuilt whenever |
 | Lifetime | Survives everything except `make demo-update` | Disposable; `make rebuild` is routine |
 | Data | The `lctl demo` installation — two workspaces, three accounts, a review queue — re-anchored to today at each milestone | Whatever the current test needs |
+| Custom-domain re-verification | **Off in a generated `.env.demo`** — `LINKCTRL_DOMAIN_VERIFY_INTERVAL=0`, the one setting here a real deployment must not copy. A demo whose env file predates that change is still **on**, and the paragraph directly below this table says why and what to do about it | On, at the shipped default |
+
+**Why the demo does not re-verify its hostname.** `lctl demo` verifies
+`go.linkctrl.example` through the real `VerifyDomain` against a stub resolver
+that lives inside the seeder process and dies with it. The name is an RFC 2606
+`.example` one that resolves for nobody, so the long-running server failed that
+check every hour and unverified the hostname 24 hours after every reseed —
+silently, because the coverage row asserting one verified domain seeds a
+throwaway database and asserts in the same instant, so it measures the seed and
+never the instance. Zero disables the pass, which is what the setting is
+documented to mean. `scripts/instance.sh` writes it into a freshly generated
+`.env.demo` with the full reasoning; **an existing `.env.demo` does not get it,
+because `instance.sh init` refuses to touch a file that is already there.**
+
+**Zero switches off a second job with it**, and the demo is arranged around that
+rather than unaffected by it. `jobRunner.runHostReload` returns immediately on a
+non-positive interval, so each replica's periodic re-read of the
+verified-hostname set stops too — the backstop F73 bought for a replica that
+missed a pub/sub invalidation. One replica is why the demo can spend it. The
+part that is not free is the reseed: `lctl demo --reset` deletes and rewrites the
+`domains` rows, `lctl` runs on the host with no Redis so it publishes no
+invalidation, and the set is held whole in memory precisely so an unknown `Host`
+costs no query — so nothing reloads it lazily either. **`make demo-update`
+therefore recreates the app container after the reseed, not only before it**, and
+that ordering is what keeps this setting safe here. Reversed, a fresh demo serves
+nothing on `go.linkctrl.example` and a repeat serves a cached entry naming a
+domain id the reseed deleted.
+
+**So the running demo needs the line added by hand, once**, before the next
+`make demo-update`: `.env.demo` is gitignored and generated, `Makefile`'s
+`instance.sh init` runs only when the file is absent, and no commit can reach it.
+Until it is there the pass runs, whatever this page says the setting is — which
+is why the row above states what the generator writes rather than what the
+instance is doing. Check with `docker exec linkctrl-demo-app-1 env | grep
+DOMAIN_VERIFY`.
 
 `test` is the default. Every target acts on it unless `INSTANCE=demo` is passed,
 because the alternative — a default that follows whichever stack is running — is
@@ -112,12 +147,24 @@ It is served only while `users` is empty, and answers `303 → /login` once an
 account exists — so a redirect there means the instance is already claimed, not
 that the route is missing.
 
-**The test instance's account, as rebuilt 2026-08-01:**
+**The test instance's account, as rebuilt 2026-08-11 for [M46.6](../build-notes/phase-details/m46.6.md):**
 
 | | |
 | --- | --- |
-| Address | `dev@killerofpie.com` |
-| Password | `linkctrl-test-owner-2026` |
+| Address | `review@killerofpie.com` |
+| Password | `m46-6-workspace-pair-2026` |
+
+Rebuilt because the credential recorded here from M51.9's rebuild no longer
+signed in — exactly the case the paragraph below prescribes a rebuild for. The
+instance carries `lctl demo`'s data, which is what gives this account the two
+memberships the workspace switcher needs to render at all.
+
+**This table is load-bearing now**: the kept browser spec
+`tools/agent-browser/specs/workspace-control.spec.mjs` asserts a signed-in
+surface and reads its credentials from `LINKCTRL_UI_EMAIL` /
+`LINKCTRL_UI_PASSWORD`, falling back to parsing the Address and Password rows
+above — so a rebuild that does not update this table turns `make verify-ui`
+red, with a message pointing here.
 
 Written down because it is the test instance and it is disposable — this is a
 local development credential for a stack that publishes nothing but HTTP on
@@ -241,15 +288,17 @@ Two consequences worth knowing before debugging:
 - **The test instance is not published and must not be.** The ingress has a
   single hostname and a catch-all `404`; adding `8081` would put a stack that
   gets `make rebuild` and load generators pointed at it on the public internet.
-- **Absolute URLs the application generates still say `localhost`.** `.env.demo`
-  sets `LINKCTRL_BASE_URL=http://localhost:8080` and no `LINKCTRL_APP_BASE_URL`,
-  and `Config.AppOrigin` falls back to `BaseURL` when the second is unset — so
-  an invitation link (`internal/invite/invite.go:904-906`) or a freshly minted
-  signed link arrives pointing at a host the recipient cannot reach. Ordinary
-  navigation is unaffected, because the application's own redirects are
-  relative. This is a property of how the demo is configured rather than a
-  defect to hunt when somebody notices it; setting `LINKCTRL_APP_BASE_URL` to
-  the tunnel hostname is what would change it.
+- **Absolute URLs the demo generates carry the tunnel hostname.** `.env.demo`
+  sets `LINKCTRL_BASE_URL=https://linkctrl-demo.devofpie.com` — owner-asked
+  2026-08-11, replacing `http://localhost:8080`, because the demo is reached
+  through the tunnel and displayed short links, invitation links
+  (`internal/invite/invite.go:904-906` at `a37f2d0`) and freshly minted signed
+  links were all pointing at a host the reader cannot reach. Both origins
+  follow `BaseURL` while `LINKCTRL_APP_BASE_URL` stays unset. The container
+  still binds `:8080` and answers `Host: localhost:8080` too — the base URL
+  names what URLs *say*, not what the listener accepts — and
+  `LINKCTRL_SECURE_COOKIES` stays `false`, since the VM-local paths that drive
+  the demo (`make demo-update`, the seeder) speak plain HTTP.
 
 ## When the test instance stops
 

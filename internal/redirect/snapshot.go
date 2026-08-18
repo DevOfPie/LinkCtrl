@@ -150,11 +150,79 @@ type Snapshot struct {
 	BotPolicy       domain.BotPolicy       `json:"bb,omitempty"`
 	DomainBotPolicy domain.DomainBotPolicy `json:"db,omitempty"`
 
+	// The link's named QR code slugs (M50), in creation order.
+	//
+	// **Slugs and nothing else.** A code also has a label and a style; the
+	// redirect path uses neither, and putting workspace free text into every
+	// cached entry to say something no request reads would be paying Redis for
+	// the dashboard's vocabulary.
+	//
+	// This is what makes attributing a scan to a code a *lookup* rather than a
+	// query. A payload carries `?src=qr&qrc=<slug>`, and the value has to be
+	// checked against the codes this link actually has — otherwise the parameter
+	// is an open write surface into `link_dimension_daily`, whose primary key
+	// includes the value, reachable by anybody who can read a URL. Checking it
+	// here is a scan of a slice bounded by domain.MaxQRCodesPerLink; checking it
+	// in Postgres would be a second query inside a 20ms budget.
+	//
+	// **No CacheKeyVersion bump, under the rule the bot-blocking comment above
+	// states.** An absent `qc` decodes as no named codes, every `qrc` value then
+	// resolves as unrecognised, and an unrecognised value is recorded as the
+	// default code — which is precisely how this alias behaved before M50
+	// existed. The zero value means the same thing to a visitor as the true value
+	// would: they are redirected identically, and the residue is one number in a
+	// breakdown being attributed to the link's default code for at most
+	// REDIRECT_TTL. It is not a control the owner configured being silently
+	// absent, which is the case that rule reserves a bump for.
+	//
+	// omitempty, so a link with no named codes — the default, and every link that
+	// existed before this milestone — carries exactly the payload it carried
+	// before.
+	//
+	// **Named still means "carries a slug", and M50's reopening moved which codes
+	// that is rather than what it means** (D183). A link's default code now has a
+	// slug of its own once a second code appears beside it, so it is in here like
+	// any other; a link's *only* code keeps the empty slug and stays out of this
+	// slice, which is what keeps the paragraph above — the one this milestone did
+	// not bump the version on — true of exactly the links it names.
+	//
+	// Two things keep it out and the order matters. `Resolver.attachCodes` drops
+	// every value ValidQRCodeSlug refuses, and it refuses the empty string, so
+	// nothing else in this file has to defend against one. The query's
+	// `q.slug <> ''` is upstream of that: it stops the value being aggregated,
+	// serialized out of Postgres and thrown away on the hot path once per
+	// resolve, for a link that could never have matched it — CodeSlug returns
+	// before it scans when the parameter is empty.
+	Codes []string `json:"qc,omitempty"`
+
 	// NotFound marks a negative cache entry. Storing misses matters: an
 	// unknown alias is the single most common request a public shortener
 	// receives, mostly from scanners, and without this every one of them is a
 	// database query.
 	NotFound bool `json:"n,omitempty"`
+}
+
+// CodeSlug resolves a raw code parameter against the codes this link has (M50).
+//
+// **The whole of the validation, and it is a scan rather than a query.** An
+// unrecognised value returns the empty string, which is the default code — the
+// one every payload without a code parameter already resolves to — so a stale
+// printed code, a mistyped URL and a deliberate probe are all attributed exactly
+// as they would have been before the parameter existed. Nothing a visitor types
+// is ever stored.
+//
+// Length and alphabet are checked before the scan, so a request carrying a large
+// value is refused by a comparison rather than by walking the slice with it.
+func (s *Snapshot) CodeSlug(raw string) string {
+	if raw == "" || !domain.ValidQRCodeSlug(raw) {
+		return ""
+	}
+	for _, slug := range s.Codes {
+		if slug == raw {
+			return slug
+		}
+	}
+	return ""
 }
 
 // SnapshotDest is one destination the redirect path may send somebody to.

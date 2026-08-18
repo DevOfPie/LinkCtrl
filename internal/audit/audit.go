@@ -267,6 +267,98 @@ const (
 	// person being the record; here the credential's owner was not present, may
 	// not know, and "who stopped it" is the question afterwards.
 	ActionAPIKeyRevoked = "apikey.revoked"
+
+	// One administrator cutting their organization out of somebody else's
+	// **account-wide** key (M54).
+	//
+	// A separate action rather than a flag on the one above, because the two
+	// records answer differently and an operator reading either has to know which
+	// happened without opening the metadata. `apikey.revoked` says a credential
+	// stopped existing. This one says a credential this organization can no
+	// longer be reached by is still working for its owner somewhere else — which
+	// is the honest description of what an administrator may do to a key minted
+	// by an account they hold no authority over, and the reason the outright
+	// revoke is refused for one.
+	//
+	// It is also the distinction the incident question turns on. "Was that key
+	// stopped" has two answers now, and a vocabulary that flattened them would
+	// leave somebody believing a leaked credential was dead when it is merely
+	// elsewhere.
+	//
+	//nolint:gosec // G101: an audit action slug, not a credential. The other
+	// entries escape the heuristic only by not containing "revoked" beside a
+	// word it reads as secret-shaped.
+	ActionAPIKeyReachRevoked = "apikey.reach_revoked"
+
+	// A password recovered from a mailbox (M51).
+	//
+	// The first action in this vocabulary with **no organization**, and that is
+	// the fact worth stating rather than an implementation detail. Every other
+	// entry is written by somebody standing in a tenant; this one is written by
+	// somebody holding no credential at all — that is what recovery is — so
+	// there is no workspace they were in and no honest way to choose among the
+	// organizations their account may belong to. The row lands with a NULL
+	// `organization_id` and is read through `audit.read.instance`, which is the
+	// right audience for "an account on this box was recovered".
+	//
+	// Only the recovery is here. An ordinary password change is not, and its
+	// absence is the same one minting a key has: the person held a session, so
+	// the session is the record. A reset is the case where they did not, and
+	// "who set this password, and from what network" is the question afterwards.
+	ActionPasswordReset = "password.reset"
+
+	// An account deleted by the person who owns it (M52).
+	//
+	// **Instance-wide, for the reason `password.reset` above is**, and the
+	// reasoning is F36's rather than a new one. An account is not a tenant: it
+	// may belong to several organizations, none of which it is *about*, and
+	// filing this under whichever one the person happened to be standing in
+	// would be the misattribution F36 names — visible to one tenant with no
+	// claim to it, invisible to the others it changed. An account that belongs
+	// to nothing at all, which is the ordinary state to delete from once every
+	// solely-owned organization has been handed over, would have no
+	// organization to be filed under in the first place.
+	//
+	// **It is written inside the deleting transaction**, which no other action
+	// in this vocabulary is, and the reason is specific to this one: the actor
+	// *is* the subject. A record written after the commit sits in the window
+	// between deletion and erasure carrying the account's address, and if the
+	// hourly sweep lands in that window the address stays in `audit_logs`
+	// forever, because `anonymized_at` is by then already set. Record's own
+	// documentation contemplated a caller inside a transaction; RecordTx is
+	// what finally gives one a way to join it.
+	ActionAccountDeleted = "account.deleted"
+
+	// The second factor's four lifecycle events (M53).
+	//
+	// **Instance-wide, on the reasoning `password.reset` and `account.deleted`
+	// already established.** A second factor is a property of a person, not of a
+	// tenant: the account may belong to several organizations or to none, and
+	// filing "this person now has a second factor" under whichever workspace they
+	// were standing in is F36's misattribution again. `audit.read.instance` is the
+	// audience, and it is the right one — who on this box can be signed in as, and
+	// what it takes, is the operator's question.
+	//
+	// **Four rather than two**, and the two beyond what m53.md names by name are
+	// here for the same reason those two are. Enabling is the moment an account
+	// stops being reachable by password alone; regenerating voids ten standing
+	// credentials at once. Both are credential-lifecycle changes with the same
+	// audience as the two the milestone spells out, and a vocabulary that recorded
+	// the removal of a factor but not its arrival would answer half of the only
+	// question it is read for.
+	ActionMFAEnabled  = "mfa.enabled"
+	ActionMFADisabled = "mfa.disabled"
+
+	// A recovery code spent at the sign-in prompt.
+	//
+	// The one m53.md asks for by name, and the reason it asks: a recovery code
+	// being spent is the signal that either the phone is gone or somebody else has
+	// it. The actor is the account itself — there is no session at the prompt and
+	// nobody else was present — which is the attribution `password.reset` makes
+	// for the same situation.
+	ActionMFARecoveryCodeUsed = "mfa.recovery_code_used"
+
+	ActionMFARecoveryCodesRegenerated = "mfa.recovery_codes_regenerated"
 )
 
 // Event is one thing that happened.
@@ -384,6 +476,28 @@ type Recorder interface {
 // generally logs and continues, because losing the change is worse than losing
 // the record of it.
 func (s *Service) Record(ctx context.Context, actor *auth.Identity, e Event) error {
+	return s.RecordTx(ctx, s.q, actor, e)
+}
+
+// RecordTx writes one event through the caller's own handle.
+//
+// The same function as Record — Record is this with the service's pool-backed
+// Queries — and it exists because M52 produced the first operation whose actor
+// the operation itself destroys. Everything else in this tree records *after* it
+// commits, deliberately: losing the change is worse than losing the record of
+// it. Account deletion cannot, because the erasure sweep scrubs the address out
+// of `audit_logs` by reading `users.anonymized_at`, and a record inserted after
+// the commit can arrive after the sweep has already been past. One transaction
+// makes the ordering a fact rather than a probability.
+//
+// The cost is the one Record's own documentation named: inside a transaction a
+// failed write fails the whole operation. That is the right answer here — an
+// account deletion nobody can find afterwards is worse than a deletion that did
+// not happen — and it is the wrong answer nearly everywhere else, which is why
+// this is a second entry point rather than a change to the first.
+func (s *Service) RecordTx(
+	ctx context.Context, q *dbgen.Queries, actor *auth.Identity, e Event,
+) error {
 	if e.Action == "" {
 		return errors.New("audit: event has no action")
 	}
@@ -448,7 +562,7 @@ func (s *Service) Record(ctx context.Context, actor *auth.Identity, e Event) err
 		params.IpPrefix = &prefix
 	}
 
-	if err := s.q.InsertAuditLog(ctx, params); err != nil {
+	if err := q.InsertAuditLog(ctx, params); err != nil {
 		return fmt.Errorf("audit: write %s: %w", e.Action, err)
 	}
 	return nil
@@ -512,20 +626,96 @@ func (s *Service) RecordAPIKeyRevocation(
 	})
 }
 
+// RecordAPIKeyReachRevocation satisfies auth.APIKeyAuditor, and is the M54 half
+// of the method above.
+//
+// The organization is not in the metadata: every record already carries the
+// organization it was written in, and that is exactly the organization cut out
+// of the key's reach. Repeating it would be a second copy of the same fact,
+// which is how the two come to disagree.
+func (s *Service) RecordAPIKeyReachRevocation(
+	ctx context.Context, actor *auth.Identity, ev auth.APIKeyRevocation,
+) error {
+	keyID := ev.KeyID
+	return s.Record(ctx, actor, Event{
+		Action:     ActionAPIKeyReachRevoked,
+		TargetType: "api_key",
+		TargetID:   &keyID,
+		Metadata: map[string]any{
+			"prefix":   ev.Prefix,
+			"owner_id": ev.OwnerID.String(),
+		},
+	})
+}
+
+// RecordMFAChange satisfies auth.MFAAuditor, and is on this side of the same
+// seam RecordAPIKeyRotation is (M53).
+//
+// It exists here rather than as a plain Record call from internal/auth because
+// the dependency runs one way: this package imports internal/auth to resolve an
+// actor into the label it stores, so internal/auth cannot import this one. auth
+// declares the narrow interface it needs and this is the implementation.
+//
+// **The metadata carries no secret and no code.** Not the TOTP secret, not a
+// recovery code, not a hash of one — the rule the whole vocabulary is held to, and
+// worth restating here because this is the first action whose subject *is* a
+// secret. What a reader gets is how many recovery codes are left, which is the one
+// number that changes an operator's answer to "should I be worried about this
+// account".
+//
+// The target is the account, `TargetType` "user", which is what
+// `password.reset` and `account.deleted` already use for the same subject.
+func (s *Service) RecordMFAChange(
+	ctx context.Context, actor *auth.Identity, ev auth.MFAChange,
+) error {
+	action, ok := mfaActions[ev.Kind]
+	if !ok {
+		return fmt.Errorf("audit: unknown second-factor change %q", ev.Kind)
+	}
+	userID := ev.UserID
+	return s.Record(ctx, actor, Event{
+		Action:     action,
+		TargetType: "user",
+		TargetID:   &userID,
+		Metadata: map[string]any{
+			"recovery_codes_remaining": ev.RecoveryCodesRemaining,
+		},
+		InstanceWide: true,
+	})
+}
+
+// mfaActions maps the seam's vocabulary onto this package's.
+//
+// A map rather than a switch with a default, so a kind added on the other side of
+// the seam and not here is an error at the call site instead of a record filed
+// under whichever action the default picked.
+var mfaActions = map[auth.MFAChangeKind]string{
+	auth.MFAEnabled:                  ActionMFAEnabled,
+	auth.MFADisabled:                 ActionMFADisabled,
+	auth.MFARecoveryCodeUsed:         ActionMFARecoveryCodeUsed,
+	auth.MFARecoveryCodesRegenerated: ActionMFARecoveryCodesRegenerated,
+}
+
 // actorLabel is the snapshot stored beside the actor's id.
 //
 // Email, because that is how a person is identified everywhere else in this
-// product and it stays meaningful if the account is ever deleted. Falling back
-// to the display name, then to a fixed string: a record with no readable actor
-// is still a record that something happened, and dropping the event instead
-// would lose more than it protects.
+// product and it stays meaningful after the account is deleted. Falling back to
+// the display name, then to a fixed string: a record with no readable actor is
+// still a record that something happened, and dropping the event instead would
+// lose more than it protects.
 //
-// *"If"* rather than *"after"*, corrected at M45: **no path in this product
-// deletes a user** (F44). `users` appears in none of the schema's DELETE
-// statements, nothing writes `users.deleted_at`, and `anonymized_at` has no
-// writer either. The snapshot is still the right design — it is what makes the
-// record survive a deletion that does not exist yet — but the present tense
-// described a lifecycle nobody had built.
+// **What this writes is not the last word on it.** M52's erasure sweep replaces
+// the label of an erased actor with a constant tombstone — internal/account's
+// TombstoneLabel — so what a reader sees is the address until the account is
+// deleted and swept, and a fixed string afterwards. Correlating one erased
+// actor's entries is `actor_user_id`, which erasure leaves alone (D148); this
+// function is why there is anything to replace rather than a row to delete.
+//
+// It said *"if the account is ever deleted"* between M45 and M52, and that was
+// correct at the time: no path in this product deleted a user, `users` appeared
+// in none of the schema's DELETE statements, and neither `deleted_at` nor
+// `anonymized_at` had a writer (F44). The snapshot was the right design for a
+// lifecycle nobody had built; M52 built it.
 func actorLabel(actor *auth.Identity) string {
 	if actor == nil {
 		return "system"
@@ -795,5 +985,12 @@ func AllActions() []string {
 		ActionAutomationFired,
 		ActionAPIKeyRotated,
 		ActionAPIKeyRevoked,
+		ActionAPIKeyReachRevoked,
+		ActionPasswordReset,
+		ActionAccountDeleted,
+		ActionMFAEnabled,
+		ActionMFADisabled,
+		ActionMFARecoveryCodeUsed,
+		ActionMFARecoveryCodesRegenerated,
 	}
 }

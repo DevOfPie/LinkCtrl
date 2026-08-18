@@ -25,10 +25,21 @@ const (
 // them from the fixture means a page that quietly stops carrying an identity
 // fails this test instead of silently lowering the expected count.
 //
-// The invitation, signup and verification pages join them for a different
-// reason from the other three: each is served to somebody who has no account at
-// all, which is the whole point of them, so there is no identity to draw.
-var chromelessPages = []string{"login", "setup", "error", "invite", "signup", "verify"}
+// The invitation, signup, verification and the two recovery pages join them for
+// a different reason from the other three: each is served to somebody with no
+// session — no account at all, in the first three, and a lost password in the
+// last two — which is the whole point of them, so there is no identity to draw.
+//
+// `mfa_challenge` is the newest of them and the most exactly so (M53). It is the
+// page between a right password and a session: the password has been accepted
+// and no session exists yet, which is the state the whole milestone is built
+// around. Drawing a header there would mean the layout had an identity to read,
+// and that would be the authentication bypass the milestone's own risk note
+// names.
+var chromelessPages = []string{
+	"login", "setup", "error", "invite", "signup", "verify", "forgot", "reset",
+	"mfa_challenge",
+}
 
 // hasOrganization reads the shell flag out of a page's test data.
 //
@@ -104,19 +115,29 @@ func TestExactlyOneIdentityMenuAndBellPerPage(t *testing.T) {
 // the top-level nav, plus the logo, which links to the dashboard too.
 var headerHrefs = regexp.MustCompile(`href="(/[^"]*)"`)
 
-// TestTopLevelNavHoldsThreeDestinations is F6 and F7's visible outcome.
+// TestTopLevelNavHoldsTwoDestinations is F6 and F7's visible outcome, as M46
+// amended it.
 //
 // Account is a preference surface and Notifications is a count; neither is a
-// place you go to do the work, and both spent a slot competing with the three
+// place you go to do the work, and both spent a slot competing with the ones
 // that are. The count is asserted rather than the absences, because "Account is
 // gone" would still pass if it had been replaced by something else that does not
-// belong at this level — and four milestones are queued behind this one, each
+// belong at this level — and milestones keep queueing up behind this one, each
 // wanting a slot.
-func TestTopLevelNavHoldsThreeDestinations(t *testing.T) {
+//
+// **It held three until M46, and API keys is the one that left.** Blind task 7's
+// first click went to the identity menu looking for it, which is the evidence
+// D35 asked a milestone to bring before moving anything at this level: a
+// top-level slot is for where work is done, and a key is minted once and then
+// not thought about. The assertion is renamed with the count rather than deleted
+// — the count is the point of it, and a test called ...Three asserting two would
+// be the next reader's wrong turn.
+func TestTopLevelNavHoldsTwoDestinations(t *testing.T) {
 	body := renderPage(t, "dashboard", nil)
 
-	// The right-hand group is where the switcher, the bell and the identity menu
-	// live. What sits between the opening <nav> and it is the top-level nav.
+	// The right-hand group is where the label, the switcher, the bell and the
+	// identity menu live. What sits between the opening <nav> and it is the
+	// top-level nav.
 	_, nav, opened := strings.Cut(body, "<nav ")
 	nav, _, found := strings.Cut(nav, `<div class="ml-auto`)
 	if !opened || !found {
@@ -128,7 +149,7 @@ func TestTopLevelNavHoldsThreeDestinations(t *testing.T) {
 	for _, m := range headerHrefs.FindAllStringSubmatch(nav, -1) {
 		got = append(got, m[1])
 	}
-	want := []string{"/dashboard", "/dashboard", "/links", "/keys"}
+	want := []string{"/dashboard", "/dashboard", "/links"}
 
 	if len(got) != len(want) {
 		t.Fatalf("the top-level nav links to %v, want %v (the first is the logo)", got, want)
@@ -137,6 +158,19 @@ func TestTopLevelNavHoldsThreeDestinations(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("the top-level nav links to %v, want %v", got, want)
 		}
+	}
+
+	// Where API keys went. A destination that left this level and a destination
+	// that became unreachable produce the same nav, so the move is asserted at
+	// its other end too.
+	at := strings.Index(body, `<a href="/keys"`)
+	if at < 0 {
+		t.Fatal("API keys is reachable from nowhere in the shell; it left the " +
+			"top-level nav and nothing caught it")
+	}
+	if menu := strings.Index(body, `id="linkctrl-identity-menu"`); menu < 0 || at < menu {
+		t.Error("API keys is not inside the identity menu, which is where blind " +
+			"task 7's first click went looking for it")
 	}
 }
 
@@ -220,6 +254,12 @@ func TestSignOutStaysAFormPost(t *testing.T) {
 // reach for and the CSP would then refuse to run.
 var inlineHandler = regexp.MustCompile(`(?i)\son(click|change|toggle|keydown|keyup|focus|blur|submit|load)\s*=`)
 
+// scriptTags cuts each opening <script> tag out of a page, so that which file a
+// tag loads and how it is loaded can be read together. Which of the two is
+// deferred is a claim about the first paint (F246a) and neither `strings.Count`
+// nor a search for "defer" can tell one tag from the other.
+var scriptTags = regexp.MustCompile(`<script\b[^>]*>`)
+
 // headerMenus is the two controls and the panels they open, by id.
 //
 // Named here rather than discovered from the markup so that a menu which loses
@@ -273,9 +313,49 @@ func TestHeaderMenusAreScriptFreePopovers(t *testing.T) {
 			"to run it, so the control it belongs to would be dead in a browser and "+
 			"alive in a test", strings.TrimSpace(m))
 	}
-	// One script tag, the deferred htmx bundle, and it is external.
-	if got := strings.Count(signedIn, "<script"); got != 1 {
-		t.Errorf("the page renders %d script tags, want 1 (htmx, external)", got)
+	// **Two script tags since M50.8, and both are external files.** The count is
+	// asserted rather than left open because what this test guards is a
+	// *script-free* header — a menu that grew a handler would still render and
+	// simply not open — and the way that regresses is a third tag arriving with
+	// nobody counting.
+	//
+	// The second is static/js/qr-size.js, the QR tab's size binding and its
+	// scroll restoration (D191). It is on every page for the reason layout.html
+	// gives — the tab arrives by htmx swap as often as by load, so the handlers
+	// are delegated from the document and the file is loaded once — and it does
+	// nothing on a page without a `#qr` on it, which the dashboard is.
+	//
+	// **They are no longer both deferred**, and that is M50.8's second reopening
+	// (F246a, D196). htmx still is. qr-size.js is not, and it is asserted so
+	// rather than merely allowed: a deferred script cannot run before the first
+	// paint, and withholding the first paint is the only thing that can put a
+	// reader back where they were without showing them somewhere else on the way.
+	// A later change that adds `defer` back to quiet a lighthouse warning would
+	// restore the flash and break no other test.
+	//
+	// **What is asserted is still the whole claim**: no inline script, so the
+	// CSP's `script-src 'self'` is untouched and no `unsafe-inline` waiver is
+	// needed for either file.
+	if got := strings.Count(signedIn, "<script"); got != 2 {
+		t.Errorf("the page renders %d script tags, want 2 (htmx and qr-size, both "+
+			"external files)", got)
+	}
+	for _, want := range []string{"js/htmx.min.js", "js/qr-size.js"} {
+		if !strings.Contains(signedIn, want) {
+			t.Errorf("the page does not load %s", want)
+		}
+	}
+	for _, tag := range scriptTags.FindAllString(signedIn, -1) {
+		switch {
+		case strings.Contains(tag, "js/htmx.min.js") && !strings.Contains(tag, "defer"):
+			t.Errorf("htmx is loaded without defer: %q. It blocks the parser for no "+
+				"reason — nothing on the page needs it before the document exists", tag)
+		case strings.Contains(tag, "js/qr-size.js") && strings.Contains(tag, "defer"):
+			t.Errorf("qr-size.js is deferred again: %q. A deferred script runs after the "+
+				"document is parsed, which is after it is painted, so the save that "+
+				"returns a reader to their position shows them the top of the page "+
+				"first — F246(a), reported twice", tag)
+		}
 	}
 	if strings.Contains(signedIn, "<script>") {
 		t.Error("the page carries an inline script")

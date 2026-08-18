@@ -81,6 +81,11 @@ func (s *SMTPSender) Addr() string {
 // warning and not a fatal error: the relay being down is not a reason for a
 // link shortener to stop serving redirects, and anything queued in the meantime
 // is retried from the outbox.
+//
+// **Called off the startup path**, in a goroutine of its own — never inline
+// before the HTTP listener binds. This dials, so an unreachable relay costs the
+// caller the whole of Timeout, and a caller that is the boot sequence spends
+// that with nothing serving (F173, D166).
 func (s *SMTPSender) Verify(ctx context.Context) error {
 	c, cleanup, err := s.connect(ctx)
 	if err != nil {

@@ -3,6 +3,7 @@ package httpx
 import (
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
@@ -26,7 +27,12 @@ type invitesPageData struct {
 	// Created is the invitation just issued. Rendered directly rather than
 	// redirected to, because the link exists only in this response — the same
 	// reason the keys page renders a new key instead of redirecting.
-	Created     *invite.Created
+	Created *invite.Created
+	// Form.Role is which role the select arrives on, and it is the *lowest* the
+	// inviter may offer (D173, F182). It used to be unset on a GET, so the
+	// browser selected the first option of a list ordered most powerful first
+	// and an owner who filled in nothing but the address sent an owner
+	// invitation — which cannot be narrowed afterwards without revoking it.
 	Form        struct{ Email, Role string }
 	FieldErrors map[string]string
 	Notice      string
@@ -57,6 +63,9 @@ func (h *Web) loadInvitesPage(w http.ResponseWriter, r *http.Request) (invitesPa
 		return data, false
 	}
 	data.RoleOptions = roles
+	data.Form.Role = weakestRole(roles, func(r invite.Role) (string, int32) {
+		return r.Slug, r.Rank
+	})
 	return data, true
 }
 
@@ -94,7 +103,24 @@ func (h *Web) InviteCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Form.Email = r.PostFormValue("email")
-		data.Form.Role = r.PostFormValue("role")
+		// Only when the posted slug is one this form is drawing. An empty role is
+		// one of the refusals that lands here, and putting it back would leave
+		// the select with nothing marked — which is the state F182 was, and a
+		// browser resolves it to the most powerful option it can find.
+		//
+		// **Membership, not non-emptiness**, because a non-empty slug the list
+		// does not hold does exactly the same thing: an admin posting
+		// `role=owner` is refused by D28's rank cap, and echoing `owner` back
+		// matches no `<option>` at invites.html:43 and lands the browser on the
+		// first one — which is the top of a list ordered most powerful first.
+		// This is what the members page's refusal path already does through
+		// pickRole; the normal path is weakestRole, above.
+		posted := r.PostFormValue("role")
+		if slices.ContainsFunc(data.RoleOptions, func(o invite.Role) bool {
+			return o.Slug == posted
+		}) {
+			data.Form.Role = posted
+		}
 		data.FieldErrors = fields
 		data.Error = general
 		h.render(w, r, http.StatusUnprocessableEntity, "invites", data)

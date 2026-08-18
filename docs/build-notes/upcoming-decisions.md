@@ -42,58 +42,72 @@ conclusions are what this file exists to stop.
 
 ## Open — a milestone needs this
 
-### M50.5 — where does an uploaded logo live?
+*The F204 shape question entered here on 2026-08-11 and left the same day, in
+the direction this file only travels: wireframes were drawn, the owner chose
+B1 and amended it to a chevron-only switch face, and the answer is in
+[decisions.md](decisions.md#2026-08-11--m466-the-workspace-pair-reads-as-one-control),
+with its `D` number — **D177**, assigned when [M46.6](phase-details/m46.6.md),
+the milestone planned from the answer, landed.*
 
-**Needed by:** [M50.5](phase-details/m50.5.md), and it cannot be deferred into
-the build: the answer decides whether [M57](phase-details/m57.md)'s conformance
-test still passes, and that test is written a phase-half later.
+*Both questions this section held were answered by the owner on 2026-08-08, at
+[M52](phase-details/m52.md)'s step 1, and have left it in the direction this
+file only travels: the answers are in
+[decisions.md](decisions.md#2026-08-08--m52-three-answers-at-step-1-and-the-conflict-resolved-by-the-command-that-meets-it)
+as **D148** (the erased actor's tombstone) and **D149** (the update checker's
+default), and in [Plan.md](../../Plan.md#phase-3-decisions)'s decision table.
+D149 was given ahead of the milestone that uses it, which is what this file is
+for; it is recorded with the date it was given and is used when
+[M55](phase-details/m55.md) lands.*
 
-This product has never stored a file. Three options, and each costs something it
-has so far avoided.
+*Nothing is waiting. The one question that arrived here today came from
+[step 3.4](phase-loop.md#3-land) rather than from
+[`/preview-decisions`](../../.claude/commands/preview-decisions.md) — the gap in
+an answer already given, found by building against it — and was answered the same
+day as **D164**, which corrects D159 in
+[decisions.md](decisions.md#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed).*
 
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **A `bytea` column on `qr_codes`** *(recommended)* | Deletion comes free with the foreign-key cascades that already exist, backup and restore need no new procedure, and a single container stays a single container — which is the constraint M57 turns into a test | Binary in the row and in every `pg_dump`. A capped image is small, but the cap becomes a database sizing question rather than a disk one, and Postgres is the one dependency this product cannot degrade without |
-| A filesystem path | Bytes stay out of the database, and serving is a file read | `docker-compose.yml` mounts only `pgdata`, so this needs a volume that does not exist and that `make demo-update` must not lose. It also makes deletion explicit everywhere a cascade would have handled it, and gives a multi-replica deployment a shared-storage problem it does not have today |
-| An object store | The answer that scales, and the one an operator running many replicas would expect | A **new required dependency**, which [M57](phase-details/m57.md)'s single-container conformance test is written to forbid. Choosing this means amending that test's claim before it is written |
+## Answered, awaiting the milestone that uses it
 
-**Default if unanswered:** **A**. It is the only option that adds no
-infrastructure and no new deletion path, and the caps are what keep its cost
-bounded. Moving to B or C later is a migration of bytes, not of behaviour.
-
-**Assumes:** that the caps M50.5 sets keep a stored image small enough for a
-column to be uncontroversial — which is true only once those numbers exist, so
-this answer is re-checked when they do; and that no milestone before M50.5
-introduces file storage for its own reasons. None does.
-
+One heading, kept for one reason: **other files link to it.** An answered
+question leaves this file, and this section is what stops that removal breaking
+a reference somebody wrote in good faith. It holds pointers, never answers —
+the rule at the top of this file is not weakened by a section that says *the
+answer is over there*. A heading leaves here for good once the milestone that
+uses it has landed and the references have moved with it.
 
 ### M55 — Does the update checker default on or off?
 
-**Needed by:** [M55](phase-details/m55.md). The milestone builds either way and
-deliberately does not pre-empt this; what changes is a sentence in
-`docs/SECURITY.md` that is part of why somebody self-hosts this product.
+**Answered 2026-08-08** by the owner, as
+[D149](../../Plan.md#phase-3-decisions) — recorded in
+[decisions.md](decisions.md#2026-08-08--m52-three-answers-at-step-1-and-the-conflict-resolved-by-the-command-that-meets-it)
+with the date it was given, and read by [M55](phase-details/m55.md), which
+carries what it obliges. The question, its three options and its recommendation
+are in the history of this file; they are not restated here, because a question
+whose answer exists is no longer a question.
 
-`docs/SECURITY.md:73` currently reads *"No telemetry, no phone-home, no
-third-party calls in the default configuration"*, and enumerates the four
-connections that leave this product rather than counting them — because that row
-said *two* until M45 and both of the missing ones were shipped features. An
-update checker is the fifth, and it is the first that would be **on** without an
-operator asking for it.
+Two entries link to this heading and were written while it was open —
+[the Phase 3 area-scoping decision](decisions.md#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots)
+and [phase-3-candidates.md](phase-3-candidates.md). Both say the default *is
+deliberately not decided here*, which was true when written; D149 is the later
+entry that corrects them, and neither is edited.
 
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **Off by default** *(recommended)* | The sentence above stays true, unedited. An operator who wants the check turns it on, which is the same shape `SMTP_HOST` and `FEED_URL` already have — the operator's connections are off until configured, and this joins that group without changing its rule | The people most likely to be running an outdated version are the least likely to find the setting. The feature exists and does nothing on almost every instance, which is close to not having built it. The recommendation states this against itself: the cheapest option to defend is not obviously the useful one |
-| On by default, with an opt-out | The feature works for the operators it was requested for, without them knowing it exists | `SECURITY.md:73` has to be rewritten rather than extended, and *no phone-home in the default configuration* becomes *no phone-home except this*. That is a real change to a claim this product has made since Phase 1, and it is made on behalf of every operator who read it |
-| On by default, prompted at first run | The operator decides knowingly, and the default is whatever they chose | There is no first-run prompt surface for instance-level settings; the setup form claims the instance and does not configure it. This invents one, inside a milestone that is otherwise a daily HTTP GET |
+**M55 has landed, and this heading stays anyway — checked at
+[M58](phase-details/m58.md)'s documentation pass rather than left to be
+noticed.** The rule above says a heading leaves for good once its milestone has
+landed *and the references have moved with it*. The milestone landed; one of the
+two references cannot move. It sits inside an entry in
+[decisions.md](decisions.md), which is append-only — *never edit an entry; a
+later entry corrects an earlier one* — so repointing it is not available, and
+deleting this heading would break a link that
+[`make check-links`](../../scripts/check-links.sh) is there to catch.
 
-**Default if unanswered:** **off**. It is the only option that does not require
-editing a security claim, and turning a default-off feature on later is a
-configuration change where turning a default-on feature off later is an apology.
-
-**Assumes:** that `docs/SECURITY.md:73` still enumerates rather than counts —
-true and verified 2026-08-06 by reading it — and that no milestone between here
-and M55 adds a sixth outbound connection. [M53](phase-details/m53.md) explicitly
-adds none.
+That is not a conflict between the two rules; it is this section doing the one
+job it was created for, and the first time it has had to. The heading is a
+pointer and holds no answer, which is the whole of what it is permitted to be.
+It leaves when `decisions.md` no longer points at it, which will be never, so in
+practice it is permanent — said plainly here so that a later reader does not
+find an *awaiting the milestone* heading for a shipped milestone and take it for
+an oversight.
 
 ## Open — nothing forces this
 
@@ -114,7 +128,7 @@ than a filter that could be widened.
 
 | Option | Buys | Costs |
 | --- | --- | --- |
-| **Phase 3, beside *Moving links between workspaces*** *(recommended)* | The two cross-workspace capabilities land together, and they share the hard part — every scoped query in `internal/link` and `internal/analytics` assumes one workspace id. Phase 2 has no milestone this belongs inside | Somebody with several workspaces keeps switching to compare, for the whole of Phase 2 |
+| **Phase 4, beside *Moving links between workspaces*** *(recommended)* | The two cross-workspace capabilities land together, and they share the hard part — every scoped query in `internal/link` and `internal/analytics` assumes one workspace id. Neither Phase 2 nor Phase 3 has a milestone this belongs inside | Somebody with several workspaces keeps switching to compare until it lands. *(This option read **Phase 3** until [M58](phase-details/m58.md). Phase 3 is closing without it, and its companion — Plan.md's `Moving links between workspaces` — was deferred to Phase 4 by the owner on 2026-08-07, so the option now names the phase its companion is actually in. The question itself is still open and still the owner's; the two remaining options are Phase 2's and are kept as the record of what was weighed.)* |
 | A Phase 2 milestone of its own | The demo M33.5 is about to make multi-workspace instances the normal thing to look at, which is exactly when the gap gets noticed | It is a new scope row late in a phase whose remaining milestones are already substrate for each other, and it widens a query path M34–M37 are about to build on |
 | Fold into [M37](phase-details/m37.md) | M37 is the dashboard milestone, so the surface is already being touched | M37 is about how a *dimension* is visualized, not which workspaces are in scope. Different question wearing the same page |
 

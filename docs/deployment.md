@@ -28,11 +28,12 @@ cd LinkCtrl
 cp .env.example .env
 ```
 
-Generate two independent secrets:
+Generate three independent secrets — two required, one for the second factor:
 
 ```sh
 openssl rand -base64 48   # LINKCTRL_API_KEY_PEPPER
 openssl rand -base64 32   # POSTGRES_PASSWORD
+openssl rand -base64 48   # LINKCTRL_MFA_SECRET_KEY  (optional; see below)
 ```
 
 Edit `.env`:
@@ -41,13 +42,14 @@ Edit `.env`:
 LINKCTRL_BASE_URL=https://links.example.com
 LINKCTRL_API_KEY_PEPPER=<48 random bytes>
 POSTGRES_PASSWORD=<32 random bytes>
+LINKCTRL_MFA_SECRET_KEY=<48 random bytes>   # omit to ship without a second factor
 
 LINKCTRL_APP_ENV=production
 LINKCTRL_SIGNUP_MODE=closed
 LINKCTRL_TRUSTED_PROXIES=172.16.0.0/12
 ```
 
-Four things about that file are worth more than a glance:
+Five things about that file are worth more than a glance:
 
 - **`LINKCTRL_BASE_URL` must be the public origin, with `https`.** It builds
   every short URL, scopes cookies, and is trusted as a CSRF origin. Getting it
@@ -57,6 +59,14 @@ Four things about that file are worth more than a glance:
   the `__Host-` prefix and browsers silently discard those over plain HTTP.
 - **`API_KEY_PEPPER` is not rotatable in place.** Every API key's hash is keyed
   with it; changing it invalidates every existing key at once.
+- **`MFA_SECRET_KEY` is optional and decides whether this instance has a second
+  factor at all.** Unset, nobody can enrol and the account page does not offer
+  it — which is what every instance before 0.3.0 was, so leaving it out is a
+  supported configuration rather than a broken one. Set it and it must be at
+  least 32 bytes; it encrypts each account's TOTP secret at rest, it is **not**
+  the pepper and must not be the same value, and losing it locks every enrolled
+  account out of its authenticator until they use a recovery code. See
+  [configuration.md](configuration.md) for the route back.
 - **`TRUSTED_PROXIES` must list your proxy and nothing else.** It is empty by
   default, and that default is the safe one: with it set, `X-Forwarded-For` is
   believed, and anything in that list can claim any client address — which
@@ -86,9 +96,16 @@ secrets:
 LINKCTRL_API_KEY_PEPPER_FILE=/run/secrets/api_key_pepper
 ```
 
-Supported for `API_KEY_PEPPER` and `DATABASE_URL`. Setting both the inline and
-`_FILE` form for the same secret is an error rather than a silent precedence
-rule.
+Supported for **five**, and the list is `config.FileSecretVars` rather than
+recollection: `API_KEY_PEPPER`, `MFA_SECRET_KEY`, `DATABASE_URL`,
+`SMTP_PASSWORD` and `FEED_AUTH_TOKEN`. Setting both the inline and `_FILE` form
+for the same secret is an error rather than a silent precedence rule.
+
+*(This said "`API_KEY_PEPPER` and `DATABASE_URL`" until 0.3.0, while the loader
+accepted five. It is [F45](build-notes/deferred-findings.md)'s class exactly — an
+enumeration that presents itself as complete and falls behind the code it
+describes — and it is the second time this particular list has done it, which is
+why the count leads and the source is named.)*
 
 Save `.env` with **LF line endings**. A CRLF makes `POSTGRES_PASSWORD` end in an
 invisible carriage return, Postgres initialises with a password nobody can type,
@@ -387,6 +404,18 @@ neither is a failed check:
 Visit `https://links.example.com`. A fresh instance redirects to a setup form
 that creates the first account as an owner, then returns 404 forever after.
 
+The form asks one question besides your name, address and password: **whether
+this instance may check for new LinkCtrl releases.** It is ticked by default,
+and what it does is one `GET` a day carrying this server's address and the
+version it runs and nothing else — the full enumeration is beside the control
+and in [configuration.md](configuration.md#update-check). Answering *no* here is
+recorded on the instance; `LINKCTRL_UPDATE_CHECK=false` in your environment is
+the same answer given from the deployment's side, and it overrides this one.
+
+**Upgrading an existing instance instead?** It has no first run left to be asked
+at, so the question is put on the dashboard to the first administrator who signs
+in after the upgrade, and **the check does nothing until they answer it**.
+
 On a headless box, or if you would rather not use a browser:
 
 ```sh
@@ -402,6 +431,12 @@ curl -sS -X POST https://links.example.com/api/v1/auth/setup \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","name":"You","password":"a-long-passphrase"}'
 ```
+
+`"update_check": false` in that body is the API's half of the same question, and
+`true` is the other half. **Omitting it answers nothing**, which leaves the
+check off and the question waiting on the dashboard for the first administrator
+who signs in — a client that has never heard of the field cannot agree to an
+outbound connection on your behalf by staying silent.
 
 `SIGNUP_MODE=closed` (the default) means nobody else can register, and nothing
 inside the running instance changes that — there is no runtime toggle, so
@@ -450,7 +485,7 @@ without you choosing to:
 
 ```sh
 # In .env
-LINKCTRL_TAG=0.1.0
+LINKCTRL_TAG=0.3.0
 ```
 
 ```sh
@@ -487,7 +522,7 @@ Every release also publishes static binaries — linux amd64/arm64, macOS
 amd64/arm64, and Windows amd64 — with a `SHA256SUMS` file:
 
 ```sh
-tar xzf linkctrl_0.1.0_linux_amd64.tar.gz
+tar xzf linkctrl_0.3.0_linux_amd64.tar.gz
 sha256sum -c SHA256SUMS --ignore-missing
 ./linkctrl version
 ```
@@ -511,9 +546,20 @@ loses whatever those columns held.
 ## Optional: geographic analytics
 
 Off unless you supply a database. MaxMind's licence does not allow redistributing
-one in the image, which is why this is optional at runtime rather than built in —
-without it the dashboard says geographic data is unavailable instead of drawing an
-empty chart.
+one in the image, which is why this is optional at runtime rather than built in.
+
+**What the dashboard draws follows the data, not this setting.** A link with
+countries in the window on screen gets its map and its ranked list whether or not
+a database is configured now — the rows are resolved and stored, and the
+database is only how new clicks join them. The *geographic data is unavailable*
+sentence is reached when nothing resolved **in that window** and nothing could
+resolve, which is the state it describes; with a database and no clicks yet it
+is the ordinary *no data yet* instead of an empty chart. The test is per link and
+per window rather than per instance, so a link whose countries all predate the
+selected window meets the sentence until the window is widened. **Removing the database
+therefore stops new clicks resolving and leaves the history readable**, which is
+worth knowing before you unmount the file. This section said the dashboard
+states the data unavailable without a database until 0.3.0.
 
 Download a **GeoLite2-Country** `.mmdb` (a free MaxMind account; the City database
 also works), mount it read-only, and point the variable at it:
@@ -572,12 +618,92 @@ Worth knowing so you do not spend an afternoon re-adding it:
   `/24` key would let one host exhaust the budget of 255 neighbours.
 - Log files rotate at 10 MB × 3 per service.
 
+## Air-gapped and egress-restricted deployments
+
+One thing in a default 0.3.0 instance reaches the public internet on a schedule:
+the daily release check. Set
+
+```sh
+LINKCTRL_UPDATE_CHECK=false
+```
+
+and restart. Nothing else in this product opens a socket outwards unless you
+configure it (`SMTP_HOST`, `FEED_URL`) or a workspace registers a webhook or a
+custom domain; the full accounting is the *Egress* row of
+[SECURITY.md](SECURITY.md).
+
+**What happens if you leave it on with no route out.** Nothing breaks. The check
+runs on the scheduler, times out after ten seconds, writes one line at debug
+level and does not retry until the next day. It cannot fail a startup, delay a
+shutdown, or surface to a user. What it does cost you is the attempt: an egress
+policy that logs or alerts on denied outbound connections will see one a day
+from the leader replica, to `api.github.com` on 443, and somebody will
+eventually have to explain it. Turning it off is cheaper than explaining it
+annually.
+
+**How loud it is, exactly.** At `LOG_LEVEL=info` — the default — you will see
+nothing at all. At `debug` you get one `update check did not complete` line per
+day. There is no metric, no alert and no notification for a check that fails,
+because a failed check is a question that went unanswered rather than a fault.
+
+**And the converse.** *No notification* is not evidence of being up to date. A
+blocked check and a check that found nothing look identical from the dashboard.
+If knowing about releases matters on a restricted network, watch the repository
+rather than this instance.
+
+**The same is true of an instance nobody signs into, and for a different
+reason.** The check is off until an operator answers the question — on the setup
+form for a fresh instance, on the dashboard at the first administrative sign-in
+for an upgraded one — and an instance that is deployed, left running and never
+signed into is never asked, so it never checks and never tells anybody a release
+exists. That is the case a release notification would be most use for, and it is
+the price of not answering on an operator's behalf: an upgrade cannot consent for
+you. If you run instances like that, watch the repository, or claim them and
+answer the question once.
+
 ## Scaling, honestly
 
-More than one `app` container works. Each replica keeps its own in-process cache
-in front of Redis, and invalidations are broadcast on a Redis pub/sub channel, so
-an edit on one replica clears every replica's copy rather than only the one that
-handled it. That was the limitation that made 0.1.0 a single-instance product.
+More than one `app` container is a **supported configuration** since 0.3.0, and
+what that means is narrow enough to state: there is a written contract for what
+each health endpoint promises, what a load balancer must do with it, and what
+happens to work in flight when a replica dies rather than shutting down
+politely. It is in
+[operations.md](operations.md#the-load-balancer-contract), each clause has a
+test behind it, and until it existed running two replicas was something you did
+at your own risk. Read it before you run several; the rest of this section is
+what to know first.
+
+**No component is added.** No coordinator, no external lock service, no second
+Postgres, no session affinity. Leadership for scheduled work is a Postgres
+advisory lock, which is released the instant the session holding it ends — so
+failover is *the absence* of a mechanism rather than one, and a single-container
+deployment is unaffected by every word of it.
+
+**A single container remains a supported, tested configuration, and nothing in
+the high-availability work is required to run it.** That is a gate rather than
+an intention: `scripts/single-instance-check.sh` starts the release image on a
+network carrying nothing but Postgres — no Redis, no load balancer, no second
+replica — and drives the redirect path, the dashboard, the API, the scheduler,
+cache invalidation and rate limiting over HTTP until each one answers. It runs
+in CI on every push, and a later change that makes any of those need a second
+component fails it. The required set is **Postgres**; everything else is
+optional.
+
+**What a rolling deploy actually costs, measured rather than described.** Three
+replicas behind a load balancer, every one of them destroyed and rebuilt while
+2,000 requests a second went through it: **zero requests failed, zero retried,
+cached p99 295µs, the whole replacement in 35 seconds.** The same replacement
+performed with SIGKILL instead — no drain — cost 905 retried requests, a worst
+case of a full second, and still zero failures, because the balancer retried
+them. Both runs, the method, and what the numbers cannot show are in
+[slo.md](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09). The
+difference between the two columns is the drain delay, which is the next
+paragraph's whole subject.
+
+Each replica keeps its own in-process cache in front of Redis, and invalidations
+are broadcast on a Redis pub/sub channel, so an edit on one replica clears every
+replica's copy rather than only the one that handled it. That was the limitation
+that made 0.1.0 a single-instance product.
 
 What to know before running several:
 
@@ -598,6 +724,23 @@ What to know before running several:
   direction the cache-is-optional rule requires. The 404-probe limiter stays per
   instance permanently, because it guards the redirect path: N replicas allow
   roughly N times its configured limit.
+- **The drain delay is per-deployment arithmetic, not a default to leave
+  alone.** `LINKCTRL_SHUTDOWN_DRAIN_DELAY` must outlast your load balancer's
+  health-check interval times its failure threshold, or the listener closes
+  while the balancer still believes the replica is healthy and clients see
+  resets during every deploy. The shipped `5s` is sized for having no balancer
+  at all. The arithmetic, and the 25-second ceiling it trades against, are in
+  [operations.md](operations.md#sizing-the-drain-delay). This is the one bullet
+  here with a measurement behind it rather than a reason: satisfied, a rolling
+  deploy of every replica dropped and retried **nothing**; unsatisfied — the
+  same replacement with the drain skipped entirely — **905 requests of 239,833
+  had to be retried and the worst one took a second**
+  ([slo.md](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09)).
+- **A replica killed without draining loses at most its buffered click events**,
+  and nothing else. Webhook deliveries and outbox mail are claimed under a
+  60-second lease, so a dead replica's claims come back on their own; scheduled
+  work moves to a follower within one tick of its family. Delivery is therefore
+  at-least-once, and `X-LinkCtrl-Delivery` is the key to dedupe on.
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
   their total under the server's `max_connections`; startup refuses to run when

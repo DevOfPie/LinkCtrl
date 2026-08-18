@@ -78,11 +78,23 @@ inserting. **Owner-set 2026-08-06, and explicitly revisitable.**
 Phase 2 ran **33**: 25 integers, M21 through M45, and 8 insertions. It was the
 phase that produced this target, and it is the number the target is set against.
 
-An insertion that would take a phase past the target is not forbidden by
-arithmetic — it is a **phase-boundary conversation**, the same as the last bullet
-above. Either something moves to the next phase or the target moves knowingly,
-and both are the owner's. What the target removes is the case where a phase grows
-by one insertion at a time and nobody is ever the person who decided it was large.
+**The target binds planning, not production. Owner-set 2026-08-11**, in these
+words: *the initial milestone limit in a phase is in place to restrict initial
+planning, adding a few needed milestones during production is acceptable.*
+
+So a phase is **planned** at fifteen and that number is a real ceiling on the
+plan. A milestone the build turns out to need — a defect that wants its own
+definition of done, a milestone that proves to be two — is added when it is
+needed, and it is not a phase-boundary conversation for having pushed the count
+past fifteen. *Needed* and *a few* are both load-bearing: this is not a licence
+for a phase to grow indefinitely, it is a statement that the ceiling was aimed at
+optimistic planning rather than at honest discovery.
+
+What the target still removes is the case the previous wording was written for —
+a phase that grows by one insertion at a time with nobody ever being the person
+who decided it was large. That protection now sits at planning time, where the
+count is a prediction somebody is making, rather than at build time, where it is
+an observation somebody is reporting.
 
 **It has been tested twice in one day, and it worked as designed both times.**
 Phase 3 was planned at fifteen with every slot spent.
@@ -102,10 +114,19 @@ milestones, and the way this one was caught was a review reading the milestone
 against *reviewability* rather than against the number. The rule's own sentence
 holds: if the target and a milestone's reviewability disagree, the target gives.
 
-Phase 3 therefore runs at **seventeen**, and that is a recorded exception rather
+Phase 3 therefore ran at **seventeen** as planned and built, and **eighteen**
+once [M57.5](phase-details/m57.5.md) was added after the close under the
+clarification above. That is a recorded exception rather
 than a new ceiling: **the rule here stays fifteen**. Moving the target for one
 phase and moving it for every phase after are different decisions, and only the
 first was taken — twice.
+
+*(Both of those conversations happened under the old reading, where any insertion
+past the target was a boundary conversation. Under the 2026-08-11 clarification
+neither would have been one — both were milestones the build turned out to need,
+which is exactly the case now allowed. They are left recorded as they happened
+rather than reinterpreted: the point of this section is that somebody decided,
+and somebody did.)*
 
 **The trap, stated because a target invites it.** A count is a number people plan
 *to*, so the cheapest way to satisfy this rule is fatter milestones — the same
@@ -123,7 +144,13 @@ milestone's reviewability disagree, the target is the thing that gives.
   the contract and every file that cites it.
 - **`X.1`–`X.8`** are insertions, placed in dependency order. Prefer the
   mid-band (`X.5`) so later insertions can still fall on either side.
-- **`X.9` is reserved for scheduled reviews.** A review covers everything
+- **`X.9` is reserved for scheduled reviews, and a review is final.** Nothing is
+  numbered above the last `X.9` of a phase except the close, and an insertion
+  added after a review has run is numbered **below** it and **reopens** it, so the
+  range it claims stays true. Leave room: prefer the mid-band so a later
+  insertion still has somewhere to go between yours and the review. Owner-set
+  2026-08-11, when M57.5 was first numbered M58.5 and a plan review found it
+  would ship outside every review's range. A review covers everything
   numerically below it, so keeping reviews at the top of the band guarantees
   any insertion between `X` and `X+1` stays inside the nearest following
   review's range. (Phase 1's M0.5 predates this reservation and stays where

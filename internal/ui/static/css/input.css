@@ -14,6 +14,346 @@
 @source "../../choropleth.go";
 
 /* ---------------------------------------------------------------------------
+ * The one control that opens an OS dialog (M50.5, F214b).
+ *
+ * `<input type="file">` hands the click to the operating system, and the file
+ * dialog takes around a second to appear. For that second the control looked
+ * exactly as it did before the click, which reads as a dead button and earns a
+ * second click on it. `:active` is the acknowledgement of the press and
+ * `:focus` is what carries the state through the wait — a file input keeps
+ * focus for as long as its dialog is up, which is the whole duration in
+ * question.
+ *
+ * **`:not(:focus-visible)` is why the keyboard path does not get this**, and it
+ * is a decision rather than an oversight. Focus outlives the dialog: a reader
+ * who merely tabs onto the control would otherwise sit in the pressed
+ * background indefinitely, having pressed nothing — a busy state that is
+ * permanent and false. `:focus-visible` is exactly the distinction the platform
+ * already draws, matching keyboard-driven focus and not a pointer click, so
+ * narrowing to `:focus:not(:focus-visible)` leaves the pointer path untouched
+ * and takes the false state off the keyboard one. What the keyboard path loses
+ * is the acknowledgement during its own dialog wait, and that is the cheaper
+ * loss: the dead-button reading comes from a click that appeared to do nothing,
+ * while a reader who pressed Enter on a control wearing a visible focus ring
+ * already knows which control they addressed. `:active` still fires on that
+ * press, so the keystroke is not silent either. The browser spec tabs to the
+ * input and asserts the pressed background is absent, because this rests on a
+ * `:focus-visible` behaviour no template scan can see.
+ *
+ * `.htmx-request` is the upload itself: the class is carried while the request
+ * is in flight, so the browse control goes inert rather than accepting a second
+ * file while the first one is being stored. **Two selectors for one state since
+ * M50.8's second reopening** (F246b): htmx puts the class on the element that
+ * issued the request, and that was the `<form>` until the input moved into the
+ * style form's grid and took the `hx-post` with it. The input carries it now.
+ * The form selector stays — the descendant form is still the one that would
+ * carry it if the attributes ever move back, and a busy state that quietly
+ * stops arriving is exactly the failure F214(b) was reopened for.
+ *
+ * **Written here rather than as utilities on the element.** A pseudo-element
+ * with two pseudo-class states is three stacked Tailwind variants whose
+ * generated selector has to be trusted rather than read, and F206 already
+ * settled that a state style for this product ships in this file — the htmx
+ * indicator stylesheet is off precisely because `style-src 'self'` refuses an
+ * injected one. Theme tokens, not palette values, on the same terms every
+ * template is held to.
+ * ------------------------------------------------------------------------- */
+.file-pick::file-selector-button {
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.file-pick:active::file-selector-button,
+.file-pick:focus:not(:focus-visible)::file-selector-button {
+  background-color: var(--t-line-strong);
+  box-shadow: inset 0 1px 2px var(--t-press-shadow);
+}
+form.htmx-request .file-pick,
+.file-pick.htmx-request {
+  opacity: 0.6;
+  pointer-events: none;
+}
+form.htmx-request .file-pick::file-selector-button,
+.file-pick.htmx-request::file-selector-button {
+  background-color: var(--t-line-strong);
+  cursor: progress;
+}
+
+/* ---------------------------------------------------------------------------
+ * The one slider this product draws (M49, second reopening; D182).
+ *
+ * `<input type="range">` is the one native control whose default appearance no
+ * engine agrees on: Chromium draws a blue track, Firefox a grey one with its
+ * own thumb, Safari a third. Left alone it would be the only control on the
+ * dashboard that ignores the theme and the only one whose focus ring is the
+ * platform's rather than this product's — and in dark mode a light-grey track
+ * on a dark card reads as a disabled control.
+ *
+ * `appearance: none` takes all three defaults away, so what is drawn below is
+ * drawn once. The track and the thumb need their engine-prefixed
+ * pseudo-elements *stated separately* — a selector list mixing `::-webkit-` and
+ * `::-moz-` is dropped whole by both engines, which is the mistake this comment
+ * exists to stop somebody making while tidying.
+ *
+ * **Written here for the reason .file-pick is**: a pseudo-element under a
+ * vendor prefix is not a Tailwind utility, and `style-src 'self'` refuses an
+ * injected stylesheet, so a state style for this product ships in this file.
+ * Theme tokens, never palette values.
+ *
+ * The marks the slider carries come from a <datalist> in the template. **That
+ * used to say they were "drawn by the engine where it draws them at all", and
+ * the rule above is what stopped it being true** (F246c): Chromium does draw
+ * ticks from a datalist, on the native track, and `appearance: none` takes the
+ * two away together. They are drawn by the block below now. Either way they are
+ * suggestions — the control is continuous, which is what makes both ends of the
+ * range reachable.
+ * ------------------------------------------------------------------------- */
+.qr-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  height: 1.25rem;
+  cursor: pointer;
+}
+.qr-slider::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background-color: var(--t-line-strong);
+}
+.qr-slider::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background-color: var(--t-line-strong);
+}
+.qr-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  /* The track is 0.25rem tall and the thumb 1rem, so it is lifted by the
+   * difference halved to sit centred on it. Webkit does not centre it. */
+  margin-top: -0.375rem;
+  border-radius: 9999px;
+  border: 1px solid var(--t-line-strong);
+  background-color: var(--t-accent);
+}
+.qr-slider::-moz-range-thumb {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  border: 1px solid var(--t-line-strong);
+  background-color: var(--t-accent);
+}
+.qr-slider:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: 2px;
+}
+
+/* The stops, drawn under the track (M50.8's second reopening, F246c, D198).
+ *
+ * The paragraph above is why they were not: `appearance: none` takes the native
+ * track and Chromium's datalist ticks with it, and giving the appearance back
+ * would trade the theme for the marks. So the template draws them as SVG
+ * geometry — attributes, which CSP does not restrict, which is the same route
+ * middleware.go names for the bar charts. What is left for this file is the
+ * colour and the one measurement.
+ *
+ * **Inset by half a thumb at each end**, because that is the span the thumb's
+ * *centre* travels: a range input's thumb stays inside its own track, so the
+ * value at `max` sits half a thumb short of the right-hand edge. The thumb is
+ * 1rem wide with a 1px border on each side, which is 18px, so the strip loses
+ * 9px at each end. A mark aligned to the edge instead of to the centre would be
+ * wrong by that much at the ends and right in the middle, which is the hardest
+ * kind of wrong to notice.
+ *
+ * **The inset is on a wrapper and not on the `<svg>`**, which is not a style
+ * choice: the drawing is `width: 100%` of its container, and a margin on it
+ * overhangs that container by 9px at the right instead of shrinking it. Caught
+ * in a browser, where the last mark sat outside the control it marks.
+ *
+ * `stroke` is on the elements rather than here: it is `currentColor`, so this
+ * rule is what sets it, and a mark drawn by a template that forgot the
+ * attribute should be invisible rather than black. */
+.qr-slider-marks {
+  margin-inline: 0.5625rem;
+  color: var(--t-line-strong);
+}
+
+/* ---------------------------------------------------------------------------
+ * The one frame a save must not paint (M50.8's second reopening, F246a, D196).
+ *
+ * static/js/qr-size.js puts this class on <html> from `<head>`, with parsing
+ * blocked, and takes it off once it has put the page back where the reader was.
+ * It is added only on a load that has a position to restore — the load after a
+ * write on the QR tab, and nothing else.
+ *
+ * `visibility` rather than `display` or `opacity`: the document must still lay
+ * out, because an unlaid-out document has no height and `scrollTo` against it
+ * clamps to zero, which is the whole reason the restore cannot simply run
+ * earlier. `body` rather than `html`, so the canvas keeps the page background
+ * and the reader waits on the product's own surface rather than on white.
+ *
+ * **Nothing else may set this class.** A page that keeps it is a page nobody
+ * can read; the script's three independent reveals are what that risk is worth,
+ * and they are argued where they are written.
+ * ------------------------------------------------------------------------- */
+.qr-restoring body {
+  visibility: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+ * The per-row download menu on the QR tab (M50.7, F224d).
+ *
+ * A popover — the mechanism D24 chose for the header's menus, for Escape and
+ * light dismiss — but repeated once per code rather than once per page, up to
+ * twenty times in one list. That repetition is the whole of what is new, and it
+ * is the least exercised corner of the pattern nav.html established.
+ *
+ * **Why this is here rather than as utilities on the elements.** An open
+ * popover is in the top layer, so its containing block is the viewport whatever
+ * it is nested inside; placing it beside its own row therefore needs CSS anchor
+ * positioning, and anchor positioning needs a *name*. Twenty rows want twenty
+ * anchors, and there are exactly two ways to get them — twenty names, or one
+ * name scoped twenty times. Twenty names cannot be written in the template at
+ * all: Tailwind generates only the classes it scans, so `[anchor-name:--qr-
+ * {{ .Slug }}]` reaches no stylesheet (F216), and `style-src 'self'` refuses
+ * the inline `style` attribute that would otherwise carry it.
+ *
+ * So: **one name, scoped per row**. `anchor-scope: --linkctrl-qr-menu` on each
+ * `<li>` bounds the name to that row's subtree, and every row's invoker
+ * declares the same name. Without the scope every menu in the list resolves to
+ * the last button that declares it, which is the failure m50.7.md named. The
+ * scope is a Tailwind arbitrary utility on the row because it is a literal
+ * there; only the anchored placement below needs a hand-written rule, because
+ * `anchor()` inside a `@supports` guard is three stacked variants whose
+ * generated selector would have to be trusted rather than read — the argument
+ * `.file-pick` and `.qr-slider` above are both here for.
+ *
+ * **Unguarded, the panel keeps the UA's centred placement**, which is where a
+ * popover with no positioning of its own lands. That is deliberately not
+ * nav.html's fallback: a viewport pin under the header is meaningful for a
+ * menu that hangs off the header and meaningless for one belonging to a row
+ * halfway down a list. A centred sheet is worse than an anchored menu and is
+ * somewhere a reader can see, which the alternative is not.
+ *
+ * Verified on 2026-08-13 in all three pinned engines — chromium, firefox and
+ * webkit — that `anchor-scope` is supported and that three menus in one list
+ * each land on their own row's button. The kept spec in
+ * tools/agent-browser/specs/qr-codes-list.spec.mjs is what holds it.
+ * ------------------------------------------------------------------------- */
+.qr-menu-anchor {
+  anchor-name: --linkctrl-qr-menu;
+}
+/* The add prompt's invoker (M50.8, F238h). A name of its own rather than the
+ * list's, and the reason is the scoping above: `--linkctrl-qr-menu` is declared
+ * by twenty buttons and bounded to twenty rows, and this one control sits
+ * outside every one of those subtrees. Sharing the name would make the add
+ * prompt's placement depend on which declarations happen to be in scope from the
+ * top layer, which is a question nobody should have to answer to read this file.
+ * One counter, one anchor, one name. */
+.qr-add-anchor {
+  anchor-name: --linkctrl-qr-add;
+}
+/* **Gated on what it uses, which is not what the list's menus use.** The add
+ * prompt needs `position-anchor` and `anchor()` and nothing else — it has one
+ * anchor, declared once, so no scoping is involved and `anchor-scope` is not
+ * asked for. Sharing the block below would make this control fall back to the
+ * UA's centred placement on an engine that ships anchor positioning without
+ * `anchor-scope`, for a reason that does not apply to it. Two guards, two
+ * features, and each control degrades only on the thing it actually needs. */
+@supports (position-anchor: --linkctrl-qr-add) {
+  .qr-add-menu {
+    position-anchor: --linkctrl-qr-add;
+    top: anchor(bottom);
+    right: anchor(right);
+    bottom: auto;
+    left: auto;
+    margin: 0.25rem 0 0 0;
+    max-width: calc(100vw - 2rem);
+  }
+}
+@supports (anchor-scope: --linkctrl-qr-menu) {
+  .qr-menu {
+    position-anchor: --linkctrl-qr-menu;
+    /* Hung under the invoker and right-aligned with it, then clamped to the
+     * viewport so a menu on a narrow screen cannot be pushed off the left
+     * edge. `inset` is reset rather than partly set: the UA gives a popover
+     * `inset: 0` with `margin: auto`, and leaving `top` and `bottom` at 0 with
+     * a non-auto height over-constrains the box and the auto margins absorb
+     * the slack — the drift nav.html's own POSITIONING note records. */
+    top: anchor(bottom);
+    right: anchor(right);
+    bottom: auto;
+    left: auto;
+    margin: 0.25rem 0 0 0;
+    max-width: calc(100vw - 2rem);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The tooltip this product owns (M50.8, D192).
+ *
+ * The QR tab's icon controls carried the browser's tooltip — a `<title>` inside
+ * the glyph — and the owner reported two things about it: that it says the wrong
+ * words, and that it is *"difficult to get the tooltip to show. Anywhere a click
+ * on the button would be accepted should also show the tooltip when hovered."*
+ * The second is geometry: the glyph is `h-3 w-3` inside a `p-1.5` button, so the
+ * hover target for the tooltip was about 12px inside a control about 30px wide.
+ *
+ * **Two things the native tooltip could not be made to do, and they are why this
+ * exists rather than the attribute moving onto the button.** It has no DOM
+ * presence, so no browser assertion can watch it appear — the claim would ship
+ * untested on the one surface this milestone leans on a browser for. And a
+ * `disabled` button is unfocusable, so a keyboard reader never triggers one at
+ * all, on the two controls whose whole purpose is to explain a refusal.
+ *
+ * So: a `<span role="tooltip">` the page draws, tied to its control by
+ * `aria-describedby`, shown on `:hover` and on `:focus-within`. The host carries
+ * `tabindex="0"` wherever the control it wraps is disabled — that is what gives
+ * the keyboard somewhere to land when the button itself refuses focus.
+ *
+ * **The delay is the "hovered for a short period" the owner asked for**, and it
+ * is on the transition rather than in script: 300ms in, none out, so sweeping
+ * the pointer across a row of controls does not trail tooltips behind it while
+ * resting on one still answers. `visibility` transitions with a delay rather
+ * than being switched, because `opacity` alone leaves an invisible box over the
+ * page and `display` cannot transition at all.
+ *
+ * `pointer-events: none` so the bubble cannot itself be hovered — a tooltip that
+ * keeps itself open under the pointer is a tooltip that will not close.
+ *
+ * **Written here rather than as utilities**, on `.file-pick`'s and `.qr-slider`'s
+ * reason: this is a state style with a transition and two pseudo-classes, and
+ * `style-src 'self'` refuses an injected stylesheet. Theme tokens, never palette
+ * values.
+ * ------------------------------------------------------------------------- */
+.qr-tip {
+  position: absolute;
+  bottom: calc(100% + 0.375rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: 16rem;
+  width: max-content;
+  border-radius: 0.375rem;
+  border: 1px solid var(--t-line-strong);
+  background-color: var(--t-raised);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--t-ink);
+  box-shadow: 0 4px 6px -1px var(--t-press-shadow);
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 120ms ease, visibility 0s linear 120ms;
+}
+.qr-tip-host:hover > .qr-tip,
+.qr-tip-host:focus-within > .qr-tip {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 120ms ease 300ms, visibility 0s linear 300ms;
+}
+
+/* ---------------------------------------------------------------------------
  * Theme tokens.
  *
  * Templates name meaning — surface, muted, danger — never a palette shade. One
@@ -134,6 +474,14 @@
   --t-line: #e2e8f0;
   --t-line-strong: #cbd5e1;
 
+  /* The inset a pressed control wears. Not a surface and not a line — it is a
+   * shadow, so it carries alpha and tints whatever it is drawn over rather than
+   * naming a colour of its own. It is a token because the depth a shadow has to
+   * be to read differs by theme: 0.25 black over `line-strong` at #cbd5e1 is a
+   * clear notch, and the same value over #475569 is nothing at all. Contrast
+   * figures do not apply — nothing is read on top of it. */
+  --t-press-shadow: rgb(0 0 0 / 0.25);
+
   --t-accent: #4f46e5;
   --t-accent-hover: #4338ca;
   --t-accent-ink: #4f46e5;
@@ -224,6 +572,7 @@
 
     --t-line: #334155;
     --t-line-strong: #475569;
+    --t-press-shadow: rgb(0 0 0 / 0.45);
 
     --t-accent: #4f46e5;
     --t-accent-hover: #4338ca;
@@ -278,6 +627,7 @@
 
   --t-line: #334155;
   --t-line-strong: #475569;
+  --t-press-shadow: rgb(0 0 0 / 0.45);
 
   --t-accent: #4f46e5;
   --t-accent-hover: #4338ca;

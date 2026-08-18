@@ -68,7 +68,10 @@ func (h *Web) VariantCreate(w http.ResponseWriter, r *http.Request) {
 		h.webError(w, r, err)
 		return
 	}
-	seeOther(w, r, "/links/"+id.String()+"?split=added")
+	// tab=split for the reason RuleCreate's redirect carries tab=routing: the
+	// page is tabs since M47's reopening, and a section-owned write re-derives
+	// its own tab rather than reading one off the request (D178).
+	seeOther(w, r, "/links/"+id.String()+"?tab=split&split=added")
 }
 
 // VariantToggle switches an arm on or off. This is the feature flag.
@@ -109,7 +112,7 @@ func (h *Web) variantAction(
 		h.webError(w, r, err)
 		return
 	}
-	seeOther(w, r, "/links/"+id.String()+"?split="+notice)
+	seeOther(w, r, "/links/"+id.String()+"?tab=split&split="+notice)
 }
 
 // rerenderWithSplitError puts the page back with the refusal above the split
@@ -119,6 +122,8 @@ func (h *Web) rerenderWithSplitError(w http.ResponseWriter, r *http.Request, mes
 	if !ok {
 		return
 	}
+	// Back onto the split tab, beside the form the refusal is about (D178).
+	data.Tab = "split"
 	data.Error = message
 	h.render(w, r, http.StatusUnprocessableEntity, "link_detail", data)
 }

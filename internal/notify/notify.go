@@ -43,6 +43,38 @@ const (
 	// redeemed. The organization gained a member, and the one account that
 	// certainly wants to know is the one that chose to add them.
 	KindInviteAccepted = "invite.accepted"
+
+	// KindMFAChanged tells an account that its second factor changed (M53).
+	//
+	// **One kind for four events, and that is the decision rather than an
+	// economy.** Enrolled, disabled, a recovery code spent, the codes
+	// regenerated — the recipient is the same person and what they do about any
+	// of them is the same thing: open /account and look. Four kinds would be four
+	// entries in internal/httpx's notificationTargets all returning the same
+	// path, which is a vocabulary describing the sender rather than the reader.
+	// The audit log is where the four are distinguished, because there the
+	// reader is an operator asking a different question.
+	//
+	// m53.md asks for the notification on the path that matters most — *a
+	// recovery code being spent is the signal that either the phone is gone or
+	// somebody else has it* — and the title is what carries which of the four
+	// happened.
+	KindMFAChanged = "mfa.changed"
+
+	// KindUpdateAvailable tells the instance principal that a newer LinkCtrl has
+	// been published (M55).
+	//
+	// **The instance principal, not every account.** Whether the box is up to
+	// date is an operator's question: upgrading it means pulling an image and
+	// restarting a service, which a workspace member cannot do and would only be
+	// made anxious by. Same recipient and same reasoning as KindAuditGrowth, and
+	// the same correction F49 recorded about telling people who cannot act.
+	//
+	// **No mail.** The audit-growth warning earned mail because the thing it warns
+	// about gets worse while it is ignored — the table keeps growing. A newer
+	// release does not: it is exactly as available next month, and the inbox is
+	// where somebody who signs in will see it.
+	KindUpdateAvailable = "update.available"
 )
 
 // MailAuditGrowth names the mail template for the same warning. It is the
@@ -187,6 +219,81 @@ func (s *Service) Notify(ctx context.Context, userID uuid.UUID, e Event) error {
 		return fmt.Errorf("notify: write %s: %w", e.Kind, err)
 	}
 	return nil
+}
+
+// NotifyMFAChange satisfies auth.MFANotifier (M53).
+//
+// The seam's implementation, on this side for the reason internal/audit's
+// RecordMFAChange is on that one: this package imports internal/auth, so
+// internal/auth cannot import it.
+//
+// **In-app only, and no mail.** That is the baseline this package is built on —
+// WithMail is an addition every consumer may decline — and here it is also the
+// right answer on its own terms. Three of the four events are things the person
+// just did, on a page they are looking at; the fourth reaches them at the moment
+// they are signing in, which is when they open the dashboard anyway. A mail would
+// make a second factor's ordinary use noisy, and noisy security mail is mail
+// people filter.
+//
+// The body names the number of recovery codes left, because that is the one fact
+// that turns "your second factor changed" into something to act on.
+func (s *Service) NotifyMFAChange(ctx context.Context, ev auth.MFAChange) error {
+	title, body := mfaNotice(ev)
+	return s.Notify(ctx, ev.UserID, Event{
+		Kind:  KindMFAChanged,
+		Title: title,
+		Body:  body,
+		Data: map[string]any{
+			"change":                   string(ev.Kind),
+			"recovery_codes_remaining": ev.RecoveryCodesRemaining,
+		},
+	})
+}
+
+// mfaNotice is the wording for each change.
+//
+// Written out per kind rather than assembled from fragments: these are the
+// sentences a person reads when something has happened to how they sign in, and
+// the one that matters is deliberately the bluntest of the four.
+func mfaNotice(ev auth.MFAChange) (title, body string) {
+	switch ev.Kind {
+	case auth.MFAEnabled:
+		return "Two-factor authentication is on",
+			fmt.Sprintf("Signing in to this account now needs a code from your authenticator app. "+
+				"You have %d recovery codes; keep them somewhere you can reach without your phone.",
+				ev.RecoveryCodesRemaining)
+	case auth.MFADisabled:
+		return "Two-factor authentication is off",
+			"This account now signs in with a password alone. Your authenticator entry and " +
+				"every recovery code have been removed. If you did not do this, change your " +
+				"password immediately."
+	case auth.MFARecoveryCodeUsed:
+		return "A recovery code was used to sign in",
+			fmt.Sprintf("Somebody signed in to this account with a recovery code instead of an "+
+				"authenticator code. That means either you no longer have your phone, or "+
+				"somebody else has your codes. %s",
+				remainingSentence(ev.RecoveryCodesRemaining))
+	case auth.MFARecoveryCodesRegenerated:
+		return "New recovery codes were issued",
+			fmt.Sprintf("Your previous recovery codes no longer work. You have %d new ones.",
+				ev.RecoveryCodesRemaining)
+	default:
+		return "Two-factor authentication changed",
+			"Something about this account's second factor changed. Open the account page to see."
+	}
+}
+
+// remainingSentence is the tail of the recovery-code notice.
+//
+// Zero gets its own sentence rather than "you have 0 remaining", because zero is
+// the state where the next lost phone is a conversation with whoever runs the
+// instance, and saying so is the whole value of counting.
+func remainingSentence(n int64) string {
+	if n == 0 {
+		return "That was your last recovery code. Sign in and issue a new set, or a lost " +
+			"phone will need whoever runs this instance to help."
+	}
+	return fmt.Sprintf("You have %d left.", n)
 }
 
 // Recipient is one person to tell, in both forms: the id an inbox row is keyed
@@ -492,6 +599,32 @@ func (s *Service) UnreadPreview(ctx context.Context, actor *auth.Identity, limit
 	return rows[0].UnreadTotal, items, nil
 }
 
+// Get returns one of the actor's own notifications.
+//
+// The click-through's first call (M48): where a notification leads is a function
+// of its kind and its data, and both are read off the row here rather than
+// carried on the request that asked to open it.
+//
+// A notification belonging to somebody else answers ErrNotFound, the same
+// answer an id that never existed gets, so the pair cannot be told apart. That
+// is the rule MarkRead below already follows, spelled as an error because this
+// one has a value to return.
+func (s *Service) Get(ctx context.Context, actor *auth.Identity, id uuid.UUID) (Notification, error) {
+	if actor == nil {
+		return Notification{}, domain.ErrUnauthorized
+	}
+	row, err := s.q.GetNotification(ctx, dbgen.GetNotificationParams{
+		ID: id, UserID: actor.UserID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Notification{}, domain.ErrNotFound
+	case err != nil:
+		return Notification{}, fmt.Errorf("get notification: %w", err)
+	}
+	return toNotification(row), nil
+}
+
 // MarkRead marks one notification read, reporting whether it changed anything.
 //
 // A notification that is not the actor's own is indistinguishable from one that
@@ -507,6 +640,30 @@ func (s *Service) MarkRead(ctx context.Context, actor *auth.Identity, id uuid.UU
 	}
 	// Deliberately not ErrNotFound on zero rows: already-read is the common
 	// case — two tabs, or a double click — and it is a success, not a 404.
+	return nil
+}
+
+// MarkUnread puts one notification back in the unread list.
+//
+// The owner's note is the whole justification: *"No way to mark a read message
+// as unread if it was accidentally marked as read"*. M48 is also what makes the
+// accident common — opening a notification now marks it read on the way past —
+// so the undo ships with the thing that needs undoing rather than after it.
+//
+// No schema change. `read_at` has been nullable since 00600 and NULL has always
+// been what unread means, so this is an UPDATE and not a migration.
+//
+// Same probe-resistance as MarkRead: somebody else's id changes no rows and
+// reports success, because a 404 here would confirm the id exists.
+func (s *Service) MarkUnread(ctx context.Context, actor *auth.Identity, id uuid.UUID) error {
+	if actor == nil {
+		return domain.ErrUnauthorized
+	}
+	if _, err := s.q.MarkNotificationUnread(ctx, dbgen.MarkNotificationUnreadParams{
+		ID: id, UserID: actor.UserID,
+	}); err != nil {
+		return fmt.Errorf("mark notification unread: %w", err)
+	}
 	return nil
 }
 
@@ -665,6 +822,82 @@ func (s *Service) WarnAuditGrowth(ctx context.Context, size, threshold int64) er
 			continue
 		}
 		if err := s.mailAuditGrowth(ctx, owner, size, threshold); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// AnnounceRelease tells the instance principal that a newer LinkCtrl exists
+// (M55), at most once for any one version.
+//
+// Here rather than in internal/update for the reason WarnAuditGrowth is here
+// rather than in the job runner: who hears it, and how often, is policy worth
+// testing, and internal/update should be able to be a client and a comparison
+// without also knowing what an instance principal is.
+//
+// # Once per version, not once per week
+//
+// WarnAuditGrowth suppresses on a clock because the condition it reports stays
+// true and gets worse. This one is keyed on the version itself: an operator told
+// about 0.4.0 is not told again about 0.4.0, ever, and 0.5.0 is a new fact that
+// arrives once. A weekly re-raise would be the product nagging about a decision
+// the operator has already made, which is how an inbox stops being read.
+//
+// The guard is per recipient, so appointing a second principal after a release
+// lands tells the new one and does not re-tell the first.
+//
+// # No mail, and an empty recipient set is not a failure
+//
+// See KindUpdateAvailable for the first. For the second: an instance whose
+// principal grants were all revoked hears nothing, exactly as it hears no
+// audit-growth warning, and fanning out to every tenant instead would be the
+// defect F49 recorded.
+//
+// `running` is what this binary reports and is used for the sentence alone —
+// internal/update has already decided that `available` is newer, and deciding it
+// twice in two places is how the two answers eventually differ. It is a
+// parameter rather than a read of internal/build so that this policy is
+// testable without a linker flag.
+func (s *Service) AnnounceRelease(ctx context.Context, running, available string) error {
+	if available == "" {
+		return errors.New("notify: a release announcement needs a version")
+	}
+
+	holders, err := s.q.ListInstanceGrantHolders(ctx, auth.PermInstanceAdmin)
+	if err != nil {
+		return fmt.Errorf("notify: list instance principals: %w", err)
+	}
+
+	var errs []error
+	for _, h := range holders {
+		told, err := s.q.CountNotificationsAboutVersion(ctx, dbgen.CountNotificationsAboutVersionParams{
+			UserID: h.ID, Kind: KindUpdateAvailable, Version: available,
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("notify: check whether %s knows about %s: %w",
+				h.ID, available, err))
+			continue
+		}
+		if told > 0 {
+			continue
+		}
+		if err := s.Notify(ctx, h.ID, Event{
+			Kind:  KindUpdateAvailable,
+			Title: "LinkCtrl " + available + " has been released",
+			// No link. Rendering one would mean this package deciding where
+			// somebody's releases live, and the notification's job is to say that
+			// there is something to look at rather than to be the release notes.
+			Body: fmt.Sprintf(
+				"This instance is running %s. Upgrading is the operator's to schedule; "+
+					"nothing here changes until you do. To stop this instance asking, set "+
+					"LINKCTRL_UPDATE_CHECK=false.", running),
+			// The version is in the data as well as in the title, and it is what
+			// the guard above reads: the record that this operator was told is the
+			// notification itself, so there is no second place for it to disagree
+			// with.
+			Data: map[string]any{"version": available, "running": running},
+		}); err != nil {
 			errs = append(errs, err)
 		}
 	}

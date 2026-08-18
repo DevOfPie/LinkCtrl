@@ -1,4 +1,30 @@
 {{define "content"}}
+{{if .AskUpdateCheck}}
+<div class="mb-6 rounded-lg border border-line-strong bg-raised p-4">
+  <h2 class="text-sm font-medium text-ink">Check for new LinkCtrl releases?</h2>
+  <p class="mt-2 text-sm text-muted">
+    This instance was upgraded, so nobody has been asked yet &mdash; and until
+    somebody is, it asks nothing. Turned on, it makes one request a day to
+    GitHub&rsquo;s releases API and puts a notification here if a newer version
+    exists.
+  </p>
+  <p class="mt-2 text-xs text-subtle">
+    The request carries this server&rsquo;s address and the version it is
+    running, in the <code>User-Agent</code>. Nothing else &mdash; no instance
+    identifier, no deployment size, no link counts, no configuration, and
+    nothing about the people using it. The reply is read for a version number
+    and discarded. Whichever you choose, this is asked once; setting
+    <code>LINKCTRL_UPDATE_CHECK=false</code> on the deployment turns the check
+    off afterwards and cannot turn it on.
+  </p>
+  <form method="post" action="/instance/update-check" class="mt-3 flex flex-wrap gap-2">
+    <button type="submit" name="answer" value="yes"
+            class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Check for releases</button>
+    <button type="submit" name="answer" value="no"
+            class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-surface">Do not check</button>
+  </form>
+</div>
+{{end}}
 <div class="mb-6 flex items-baseline justify-between">
   <h1 class="text-xl font-semibold tracking-tight">Dashboard</h1>
   <span class="text-sm text-muted">last 30 days</span>

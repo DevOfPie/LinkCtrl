@@ -20,7 +20,7 @@ type AnalyticsSalt struct {
 type ApiKey struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID
-	OrganizationID uuid.UUID
+	OrganizationID *uuid.UUID
 	WorkspaceID    *uuid.UUID
 	Name           string
 	Prefix         string
@@ -33,6 +33,13 @@ type ApiKey struct {
 	RotatedAt      *time.Time
 	GraceExpiresAt *time.Time
 	SuccessorID    *uuid.UUID
+}
+
+type ApiKeyOrgRevocation struct {
+	ApiKeyID       uuid.UUID
+	OrganizationID uuid.UUID
+	RevokedAt      time.Time
+	RevokedBy      *uuid.UUID
 }
 
 type AuditLog struct {
@@ -175,6 +182,13 @@ type InstanceGrant struct {
 	GrantedAt    time.Time
 }
 
+type InstanceSetting struct {
+	ID                 bool
+	UpdateCheckEnabled *bool
+	UpdateCheckedAt    *time.Time
+	UpdatedAt          time.Time
+}
+
 type Invitation struct {
 	ID             uuid.UUID
 	OrganizationID uuid.UUID
@@ -290,6 +304,25 @@ type Membership struct {
 	UpdatedAt      time.Time
 }
 
+type MfaPendingLogin struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	TokenHash  []byte
+	IpPrefix   *string
+	UserAgent  *string
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+}
+
+type MfaRecoveryCode struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	CodeHash  []byte
+	CreatedAt time.Time
+	UsedAt    *time.Time
+}
+
 type Notification struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID
@@ -311,6 +344,15 @@ type Organization struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	DeletedAt  *time.Time
+}
+
+type PasswordReset struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	TokenHash  []byte
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
 }
 
 type PendingRegistration struct {
@@ -338,6 +380,10 @@ type QrCode struct {
 	Style       []byte
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	Logo        []byte
+	IsDefault   bool
 }
 
 type ReservedAlias struct {
@@ -416,6 +462,7 @@ type User struct {
 	DeletedAt          *time.Time
 	DefaultWorkspaceID *uuid.UUID
 	LastWorkspaceID    *uuid.UUID
+	MfaLastStep        *int64
 }
 
 type Visitor struct {

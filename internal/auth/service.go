@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,8 +54,59 @@ type Identity struct {
 	// of a session cookie. Services consult it for the few operations that
 	// must require an interactive sign-in; everything else is deliberately
 	// blind to which credential was used.
-	APIKeyID    *uuid.UUID
-	permissions map[string]struct{}
+	APIKeyID *uuid.UUID
+	// APIKeyOrgID is the organization an API key is **pinned** to, and nil for
+	// every other case: a session, and an account-wide key (M54).
+	//
+	// Two nils meaning different things is worth the warning, and IsAPIKey is
+	// what tells them apart. A session has no key and no pin; an account-wide
+	// key has a key and no pin, because it reaches every organization its owner
+	// holds an organization-wide membership in rather than one named at mint
+	// time. OrgID above is where *this request* landed and is set for all three.
+	//
+	// It is carried because one rule still turns on the distinction. F103 bounded
+	// a key's reads to the organization it was issued for, and that reasoning
+	// survives for a pinned key and dies for an account-wide one — the premise
+	// was that a key is issued for one organization, which is no longer true of
+	// every key. Service.Workspaces is the site.
+	APIKeyOrgID *uuid.UUID
+	// APIKeyBarredOrgIDs are the organizations an administrator has cut this
+	// **account-wide** key out of (M54's reach revocation), and it is empty for
+	// every other case: a session, and a pinned key, which never has a
+	// revocation row because its organization is its whole reach.
+	//
+	// Carried rather than fetched because F183 is a read bound and a read bound
+	// that costs a query per listing is one somebody will later be tempted to
+	// drop. ResolveOrganizationForAPIKey has to consult these rows anyway to
+	// decide where the request lands, so the whole barred set rides back with
+	// the one organization it chose, on the round trip that was already
+	// happening.
+	//
+	// Nil for a pinned key is not the same nil as APIKeyOrgID's: there is
+	// nothing to bar, not an unknown. keyReaches is where the two are read
+	// together.
+	APIKeyBarredOrgIDs []uuid.UUID
+	permissions        map[string]struct{}
+}
+
+// keyReaches reports whether an API key identity may reach an organization —
+// the read bound, which is not the same question as where this request landed.
+//
+// Two reaches, one predicate. A **pinned** key reaches the organization it was
+// issued for and no other: F103's finding, and the premise M54 left standing for
+// the credential it was found on. An **account-wide** key reaches every
+// organization its owner does, less the ones an administrator has cut it out of
+// — which is F183, where the bound applied was pinned-or-not and the keys a
+// reach revocation applies to are exactly the ones that are not pinned.
+//
+// Not exported, and not an authorization check for *acting*: what a key may act
+// on is bounded by the organization the request resolved into, one tier up in
+// ResolveOrganizationForAPIKey. This answers only what it may be told about.
+func (i *Identity) keyReaches(orgID uuid.UUID) bool {
+	if i.APIKeyOrgID != nil {
+		return orgID == *i.APIKeyOrgID
+	}
+	return !slices.Contains(i.APIKeyBarredOrgIDs, orgID)
 }
 
 // Can reports whether the identity holds a permission.
@@ -321,6 +373,22 @@ type LoginResult struct {
 	Identity *Identity
 	Token    string
 	Expires  time.Time
+	// Pending is set instead of the three fields above when the account has a
+	// second factor and it has not been presented yet (M53).
+	//
+	// **Set means nothing else is.** Identity is nil, Token is empty and Expires
+	// is the zero time, so a surface that forgets to check this hands the browser
+	// an empty cookie rather than a working one — a failure that is visible on
+	// the first request instead of being an authentication bypass. Callers use
+	// SecondFactorRequired rather than testing the field, so the invariant has one
+	// name.
+	Pending *PendingSecondFactor
+}
+
+// SecondFactorRequired reports whether this result is a challenge rather than a
+// session.
+func (r *LoginResult) SecondFactorRequired() bool {
+	return r != nil && r.Pending != nil
 }
 
 // Login authenticates and starts a session.
@@ -409,10 +477,51 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 		}
 	}
 
-	if err := s.q.RecordSuccessfulLogin(ctx, user.ID); err != nil {
-		return nil, fmt.Errorf("record login: %w", err)
+	// The password is right, and for an account with no second factor that is
+	// the whole of the sign-in — which is what this records.
+	//
+	// **Guarded since M53, and the guard is a security property rather than
+	// tidiness.** RecordSuccessfulLogin clears `failed_login_count` and
+	// `locked_until`. An account with a second factor has not finished signing in
+	// here, so clearing the counter at this point would hand somebody who already
+	// holds the password a fresh lockout budget on every post while they guessed
+	// at six digits — and the lockout m53.md requires failed codes to share would
+	// then never fire. It runs at CompleteSecondFactor instead, where the login
+	// actually completes.
+	if user.MfaEnabledAt == nil {
+		if err := s.q.RecordSuccessfulLogin(ctx, user.ID); err != nil {
+			return nil, fmt.Errorf("record login: %w", err)
+		}
 	}
 
+	// --- the second factor is interposed exactly here (M53) ------------------
+	//
+	// Between the line above and the mint below: the password is verified, and
+	// no session token exists until the second factor is. What comes back is a
+	// LoginResult carrying a Pending challenge and no Token — the type makes
+	// "signed in" and "half signed in" different values rather than the same
+	// value with a flag, so a caller that ignores the distinction sets an empty
+	// cookie instead of a valid one.
+	if user.MfaEnabledAt != nil {
+		return s.pendingSecondFactor(ctx, user.ID, in.IP, in.UserAgent)
+	}
+
+	return s.mintSession(ctx, user.ID, user.Email, user.Name, in.IP, in.UserAgent)
+}
+
+// mintSession creates the session row and the identity that goes with it.
+//
+// **Extracted from Login by M53, and the extraction is the mechanism rather than
+// a tidy-up.** A second factor is only worth anything if there is exactly one
+// place a session token comes into existence; two call sites that agree today are
+// how the third one gets added without the factor. Login reaches it when the
+// account has no second factor, and CompleteSecondFactor reaches it when one has
+// been verified. There is no third caller and there is nothing else in this
+// package that calls CreateSession.
+func (s *Service) mintSession(
+	ctx context.Context, userID uuid.UUID, email, name string,
+	ip netip.Addr, userAgent string,
+) (*LoginResult, error) {
 	// No session id: this is the request that creates one. So a sign-in starts
 	// at the pinned default, or at the last workspace used, and the session
 	// carries that from its first row rather than being corrected afterwards.
@@ -422,7 +531,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	// sessions.workspace_id is nullable and is SET NULL when a workspace is
 	// deleted, so a signed-in browser was always going to reach this state; what
 	// changes here is that signing in can start in it.
-	ws, err := s.resolveWorkspace(ctx, user.ID, nil, nil)
+	ws, err := s.resolveWorkspace(ctx, userID, nil, nil)
 	if err != nil && !errors.Is(err, ErrNoWorkspace) {
 		return nil, err
 	}
@@ -434,13 +543,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	}
 	expires := time.Now().Add(s.ttl.Absolute)
 
-	ipPrefix := AnonymizeIP(in.IP)
+	ipPrefix := AnonymizeIP(ip)
 	params := dbgen.CreateSessionParams{
 		ID:        uuid.Must(uuid.NewV7()),
-		UserID:    user.ID,
+		UserID:    userID,
 		TokenHash: hash,
 		IpPrefix:  nullable(ipPrefix),
-		UserAgent: nullable(truncate(in.UserAgent, 512)),
+		UserAgent: nullable(truncate(userAgent, 512)),
 		ExpiresAt: expires,
 	}
 	if !orphaned {
@@ -453,10 +562,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 
 	var identity *Identity
 	if orphaned {
-		identity, err = s.identityWithoutOrganization(ctx, user.ID, user.Email, user.Name)
+		identity, err = s.identityWithoutOrganization(ctx, userID, email, name)
 	} else {
-		identity, err = s.identityFor(
-			ctx, user.ID, user.Email, user.Name, ws.ID, ws.OrganizationID)
+		identity, err = s.identityFor(ctx, userID, email, name, ws.ID, ws.OrganizationID)
 	}
 	if err != nil {
 		return nil, err
@@ -574,11 +682,60 @@ func validatePasswordLength(password, field string) error {
 	return nil
 }
 
-// ChangePassword updates a password and logs out every other session.
-func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.UUID, current, next string) error {
-	if err := validatePasswordLength(next, "new_password"); err != nil {
+// WritePassword hashes a password and stores it against an account.
+//
+// **The product's one password-writing path**, and it is exported for that
+// reason rather than for reuse. Two of them existed the moment M51 needed to
+// write a password without a session to verify against: this function is what
+// POST /account/password reaches through ChangePassword below, and what a
+// completed recovery reaches through internal/recovery. One statement, one
+// hasher, one place where `failed_login_count` and `locked_until` are cleared —
+// which matters more than it looks, because an account recovered while locked
+// out by the guessing that made its owner reset it would otherwise still refuse
+// the new password.
+//
+// It takes the Queries rather than reading the service's own, so a caller inside
+// a transaction passes the transactional handle and the write joins whatever
+// else that transaction is doing. Recovery needs exactly that: spending the
+// token and setting the password must not be separable.
+func WritePassword(
+	ctx context.Context, q *dbgen.Queries, h *Hasher, userID uuid.UUID, password string,
+) error {
+	hash, err := h.Hash(password)
+	if err != nil {
 		return err
 	}
+	if err := q.UpdateUserPassword(ctx, dbgen.UpdateUserPasswordParams{
+		ID: userID, PasswordHash: &hash,
+	}); err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	return nil
+}
+
+// VerifyPassword confirms an account's own password, and answers nothing else.
+//
+// **The product's one re-verification path**, exported for the reason
+// WritePassword above is: there is now more than one operation that asks
+// somebody to prove they are still the person holding the account, and two
+// copies of this would be two places deciding what a missing hash means and two
+// places mapping a mismatch onto a refusal. ChangePassword is the first caller
+// and account deletion (M52) is the second — irreversible operations gated on
+// the credential rather than on the session alone.
+//
+// A NULL `password_hash` is ErrInvalidCredentials rather than an error of its
+// own. The column is nullable for an SSO-only account — **unbuilt, and nothing
+// schedules it**; this read "(Phase 3)" until M58, and Phase 3 discharged only
+// the MFA limb of that scope row (D109) — and for one this
+// milestone's erasure pass has scrubbed, and neither of those can confirm a
+// password by typing one — which is precisely what "invalid credentials" says.
+//
+// No lockout counting, deliberately, and the same choice ChangePassword has
+// always made: the caller already holds a live session for this account, so
+// there is no credential-stuffing budget to spend and locking somebody out of
+// their own settings page for mistyping is a denial of service against them. The
+// rate limit on the routes that reach here is what bounds the guessing.
+func (s *Service) VerifyPassword(ctx context.Context, userID uuid.UUID, password string) error {
 	user, err := s.q.GetUserByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("look up user: %w", err)
@@ -586,18 +743,23 @@ func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.U
 	if user.PasswordHash == nil {
 		return ErrInvalidCredentials
 	}
-	if err := s.hasher.Verify(current, *user.PasswordHash); err != nil {
+	if err := s.hasher.Verify(password, *user.PasswordHash); err != nil {
 		return ErrInvalidCredentials
 	}
+	return nil
+}
 
-	hash, err := s.hasher.Hash(next)
-	if err != nil {
+// ChangePassword updates a password and logs out every other session.
+func (s *Service) ChangePassword(ctx context.Context, userID, keepSession uuid.UUID, current, next string) error {
+	if err := validatePasswordLength(next, "new_password"); err != nil {
 		return err
 	}
-	if err := s.q.UpdateUserPassword(ctx, dbgen.UpdateUserPasswordParams{
-		ID: userID, PasswordHash: &hash,
-	}); err != nil {
-		return fmt.Errorf("update password: %w", err)
+	if err := s.VerifyPassword(ctx, userID, current); err != nil {
+		return err
+	}
+
+	if err := WritePassword(ctx, s.q, s.hasher, userID, next); err != nil {
+		return err
 	}
 
 	// Anyone holding the old password must lose their sessions; that is the

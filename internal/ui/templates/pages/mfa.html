@@ -1,0 +1,113 @@
+{{define "content"}}
+<div class="mx-auto max-w-2xl space-y-6">
+  <div>
+    <h1 class="text-xl font-semibold tracking-tight">Two-factor authentication</h1>
+    <p class="mt-1 text-sm text-muted">A code from an authenticator app, on top of your password. <a href="/account" class="text-accent-ink hover:underline">Back to account</a></p>
+  </div>
+
+  {{template "flash_error" .Error}}
+
+  {{/* The codes, shown once. First on the page rather than last, because this is
+       the one thing on it that cannot be recovered by reloading — the hashes are
+       all that is stored, so a reader who scrolls past this block has lost
+       them. */}}
+  {{if .RecoveryCodes}}
+  <section class="rounded-lg border border-line-strong bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">{{if .Regenerated}}Your new recovery codes{{else}}Save your recovery codes{{end}}</h2>
+    <p class="mt-2 text-sm text-muted">
+      {{if .Regenerated}}Your previous codes stopped working the moment these were issued.{{else}}Two-factor authentication is now on for this account.{{end}}
+      Each code works once, and they are the only way in if you lose your phone. <strong class="font-medium text-ink">They are shown here and nowhere else</strong> — nothing on this instance can display them again.
+    </p>
+    <ul class="mt-4 grid grid-cols-2 gap-2 font-mono text-sm">
+      {{range .RecoveryCodes}}<li class="rounded border border-line bg-sunken px-3 py-2 text-ink">{{.}}</li>{{end}}
+    </ul>
+    <a href="/account" class="mt-4 inline-block text-sm font-medium text-accent-ink hover:underline">I have saved them</a>
+  </section>
+  {{end}}
+
+  {{if not .Status.Available}}
+  {{/* No MFA_SECRET_KEY. Said plainly, unlike most refusals in this product: an
+       operator who has configured no key knows it, a stranger learns nothing
+       from the sentence, and "unavailable" without the reason is advice nobody
+       can act on. */}}
+  <section class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">Not available on this instance</h2>
+    <p class="mt-2 text-sm text-muted">A second factor needs somewhere safe to keep its secret, and this instance has no <code class="font-mono text-xs">LINKCTRL_MFA_SECRET_KEY</code> set. Ask whoever runs it.</p>
+    {{if .Status.Enabled}}
+    <p class="mt-2 text-sm text-muted">This account is already enrolled. Until the key is restored, sign in with a recovery code instead of an authenticator code.</p>
+    {{end}}
+  </section>
+
+  {{else if .Status.Enabled}}
+  <section class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">Two-factor authentication is on</h2>
+    <p class="mt-2 text-sm text-muted">Signing in to this account needs a code from your authenticator app.{{if .Status.EnabledAt}} On since {{.Status.EnabledAt.Format "2 January 2006"}}.{{end}}</p>
+    <p class="mt-2 text-sm text-muted">
+      {{if eq .Status.RecoveryCodesRemaining 0}}
+      <strong class="font-medium text-ink">You have no recovery codes left.</strong> If you lose your phone now, only whoever runs this instance can help. Issue a new set.
+      {{else}}
+      You have {{.Status.RecoveryCodesRemaining}} unused recovery {{if eq .Status.RecoveryCodesRemaining 1}}code{{else}}codes{{end}}.
+      {{end}}
+    </p>
+    <form method="post" action="/account/mfa/recovery-codes" class="mt-4">
+      <button type="submit" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">Issue new recovery codes</button>
+    </form>
+    <p class="mt-2 text-xs text-subtle">Issuing a new set stops every code in the old one from working.</p>
+  </section>
+
+  <section class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">Turn it off</h2>
+    <p class="mt-2 text-sm text-muted">Your password <em>and</em> a code, because either alone is something somebody else might have. Turning it off removes the authenticator entry and every recovery code.</p>
+    <form method="post" action="/account/mfa/disable" class="mt-4 space-y-4">
+      <div>
+        <label for="disable_password" class="block text-sm font-medium text-ink">Your password</label>
+        <input id="disable_password" name="password" type="password" required autocomplete="current-password"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "password")}}
+      </div>
+      <div>
+        <label for="disable_code" class="block text-sm font-medium text-ink">A code</label>
+        <input id="disable_code" name="code" type="text" required inputmode="numeric" autocomplete="one-time-code" spellcheck="false"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm tracking-widest focus:border-accent focus:outline-none">
+        <p class="mt-1 text-xs text-subtle">From your authenticator, or one of your recovery codes.</p>
+        {{template "field_error" (index .FieldErrors "code")}}
+      </div>
+      <button type="submit" class="rounded-md border border-danger-line px-3 py-2 text-sm font-medium text-danger-ink hover:bg-danger-soft">Turn off two-factor authentication</button>
+    </form>
+  </section>
+
+  {{else}}
+  <section class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">Set it up</h2>
+    <p class="mt-2 text-sm text-muted">Scan this with an authenticator app, then confirm with the code it shows. Nothing changes on your account until you do.</p>
+
+    <div class="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
+      {{/* Drawn through internal/qr, the same generator the link pages use — a
+           new call site rather than a new capability. The code carries its own
+           background and does not follow the theme, exactly as the link page's
+           thumbnail does: a QR code inverted for a dark page is one many
+           scanners refuse. The frame is a theme token; the picture is not. */}}
+      <div class="w-40 shrink-0 rounded-md border border-line-strong p-1">{{.QR}}</div>
+      <div class="min-w-0 space-y-2">
+        <p class="text-sm text-muted">Cannot scan it? A phone cannot photograph its own screen, so type this in by hand instead:</p>
+        <p class="break-all rounded border border-line bg-sunken px-3 py-2 font-mono text-sm text-ink">{{.Secret}}</p>
+        <p class="text-xs text-subtle">Or <a href="{{.URI}}" class="text-accent-ink hover:underline">open it in an app on this device</a>.</p>
+      </div>
+    </div>
+
+    <form method="post" action="/account/mfa" class="mt-6 space-y-4">
+      {{/* The secret rides the form because nothing is stored until it verifies:
+           an enrolment somebody abandons leaves the account exactly as it was. */}}
+      <input type="hidden" name="secret" value="{{.Secret}}">
+      <div>
+        <label for="code" class="block text-sm font-medium text-ink">Code from the app</label>
+        <input id="code" name="code" type="text" required inputmode="numeric" autocomplete="one-time-code" spellcheck="false"
+               class="mt-1 block w-full max-w-xs rounded-md border border-line-strong px-3 py-2 text-sm tracking-widest focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "code")}}
+      </div>
+      <button type="submit" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Turn on two-factor authentication</button>
+    </form>
+  </section>
+  {{end}}
+</div>
+{{end}}

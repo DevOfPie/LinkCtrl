@@ -265,9 +265,10 @@ func TestThePrincipalDelegatesReviewAndADelegateCannotDelegateOnwards(t *testing
 // out of `InstanceGrantable` so no holder can mint another, and nothing in the
 // product deleting a `users` row. What that leaves reachable is an operator losing
 // the *account*: a forgotten password with no mailer, or a colleague who has left.
-// F141 established there is no account recovery in this product at all, so the
-// principal's password and the principal are one thing to lose, and the only
-// repair was `psql`.
+// F141 established there was no account recovery in this product at all; M51
+// built one, and it is delivered by email — so with no mailer the principal's
+// password and the principal are still one thing to lose, and the only repair
+// was `psql`.
 //
 // The claim under test is that the repair is now a command **and is still a
 // move**. The set of accounts that may appoint reviewers is one before and one

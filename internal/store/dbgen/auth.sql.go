@@ -145,7 +145,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, email, name, password_hash, status, email_verified_at)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id
+RETURNING id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id, mfa_last_step
 `
 
 type CreateUserParams struct {
@@ -186,6 +186,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.DeletedAt,
 		&i.DefaultWorkspaceID,
 		&i.LastWorkspaceID,
+		&i.MfaLastStep,
 	)
 	return i, err
 }
@@ -306,7 +307,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id FROM users
+SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id, mfa_last_step FROM users
 WHERE email_lower = lower($1::text)
   AND deleted_at IS NULL
 `
@@ -335,12 +336,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.DeletedAt,
 		&i.DefaultWorkspaceID,
 		&i.LastWorkspaceID,
+		&i.MfaLastStep,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id FROM users WHERE id = $1 AND deleted_at IS NULL
+SELECT id, email, email_lower, email_verified_at, name, password_hash, status, failed_login_count, locked_until, mfa_secret, mfa_enabled_at, anonymized_at, last_login_at, created_at, updated_at, deleted_at, default_workspace_id, last_workspace_id, mfa_last_step FROM users WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -365,6 +367,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.DeletedAt,
 		&i.DefaultWorkspaceID,
 		&i.LastWorkspaceID,
+		&i.MfaLastStep,
 	)
 	return i, err
 }

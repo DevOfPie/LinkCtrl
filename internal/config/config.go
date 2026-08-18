@@ -73,6 +73,47 @@ type Config struct {
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
 
+	// MFASecretKey encrypts the TOTP secret at rest (M53).
+	//
+	// **Its own variable, never the pepper**, which m53.md refuses by name. The
+	// pepper is bound to retained API-key rows and rotating it silently
+	// invalidates every issued key; sharing it would mean rotating an API-key
+	// secret also locks every account out of its second factor, coupling two
+	// credential lifecycles that have nothing to do with each other.
+	//
+	// **Optional, unlike the pepper, and the asymmetry is deliberate.** Unset is
+	// an instance with no second factor available, which is exactly what every
+	// deployment was before this milestone — making it required would refuse to
+	// boot every existing instance on upgrade to buy a feature nobody had asked
+	// for. Losing it after accounts have enrolled locks those accounts out of the
+	// second factor and no further: recovery codes are SHA-256 and do not involve
+	// this key, so an enrolled account signs in with one, disables the factor with
+	// another, and enrols again. docs/configuration.md states that chain beside
+	// the variable, in the same terms the pepper's consequence is stated in.
+	MFASecretKey Secret `env:"MFA_SECRET_KEY,unset"`
+
+	// UpdateCheck is whether this instance may ask, once a day, whether a newer
+	// LinkCtrl has been published (M55).
+	//
+	// **The deployment's half of a two-part switch, and it only ever says no.**
+	// The other half is `instance_settings.update_check_enabled`, which is the
+	// answer an operator gave when they were asked (D149, D164). The check runs
+	// when both allow it: this variable is what an air-gapped or egress-restricted
+	// deployment sets to `false` in the place such a deployment configures
+	// everything else, and setting it there cannot be undone from a browser by
+	// somebody who does not know why the box has no egress.
+	//
+	// **Default true, and true is permission rather than instruction.** The owner
+	// overruled a recommendation of off-by-default on the grounds that the
+	// operator is asked and therefore chooses knowingly (D149) — so what this
+	// default buys is that the question gets asked, not that the request gets
+	// made. The other half starts unanswered and reads as off (D164), which is
+	// where an instance upgrading into 0.3.0 sits until an administrator signs in.
+	// What the request carries is enumerated in docs/configuration.md beside this
+	// variable, and in internal/update's package comment, where a test holds the
+	// enumeration to the wire.
+	UpdateCheck bool `env:"UPDATE_CHECK" envDefault:"true"`
+
 	DocsEnabled    bool `env:"DOCS_ENABLED" envDefault:"true"`
 	SecureCookies  bool `env:"SECURE_COOKIES" envDefault:"true"`
 	MigrateOnStart bool `env:"MIGRATE_ON_START" envDefault:"true"`
@@ -242,6 +283,23 @@ type AuthConfig struct {
 	LoginRatePerMin  int `env:"LOGIN_RATE_PER_MIN" envDefault:"10"`
 	LockoutThreshold int `env:"LOGIN_LOCKOUT_THRESHOLD" envDefault:"5"`
 	APIRatePerMin    int `env:"API_RATE_PER_MIN" envDefault:"600"`
+
+	// UploadRatePerMin bounds how often one address may upload a file (M50.5).
+	//
+	// **A bucket of its own because an upload is not an API call.** Every other
+	// request under `/api/v1` carries a body this product caps at 256 KiB and
+	// parses as JSON; an upload carries up to `qr.MaxLogoUploadBytes` and is
+	// decoded, which is the one place a request's cost is set by its content
+	// rather than by its shape. `API_RATE_PER_MIN` defaults to 600, and 600
+	// megabyte uploads a minute is a bandwidth and decoder budget nobody chose
+	// by setting a number about JSON.
+	//
+	// Thirty is what somebody restyling a poster does — upload, look, upload
+	// again — with room to spare. It charges the *address* like every other
+	// limit here rather than the workspace: the resource being protected is this
+	// instance's, and an attacker with one account has as many addresses as they
+	// have hosts either way.
+	UploadRatePerMin int `env:"UPLOAD_RATE_PER_MIN" envDefault:"30"`
 }
 
 // IngestConfig tunes the click pipeline.
@@ -453,6 +511,7 @@ func Load() (Config, error) {
 // for Docker and Swarm secrets mounted under /run/secrets.
 var FileSecretVars = []string{
 	"API_KEY_PEPPER",
+	"MFA_SECRET_KEY",
 	"DATABASE_URL",
 	"SMTP_PASSWORD",
 	"FEED_AUTH_TOKEN",
@@ -757,6 +816,22 @@ func (c Config) Validate() error {
 		add("API_KEY_PEPPER: must be at least 32 bytes, got %d (generate: openssl rand -base64 48). "+
 			"Changing this invalidates every existing API key.", c.APIKeyPepper.Len())
 	}
+	// Checked only when set, because unset is a supported state: an instance with
+	// no MFA_SECRET_KEY offers no second factor, which is what every instance was
+	// before M53. A value too short to be meant seriously is refused rather than
+	// hashed into a working key — the derivation accepts anything, so the floor is
+	// the only thing that stops `MFA_SECRET_KEY=changeme` producing an instance
+	// that looks configured.
+	//
+	// 32 is written out here rather than imported from auth.MFAKeyMinBytes, for
+	// the reason the pepper's floor above is: this package reads the environment
+	// for every other package and depends on none of them. The two are held
+	// together by TestTheMFAKeyFloorIsTheOneConfigEnforces in internal/auth.
+	if !c.MFASecretKey.IsZero() && c.MFASecretKey.Len() < 32 {
+		add("MFA_SECRET_KEY: must be at least 32 bytes, got %d (generate: openssl rand -base64 48). "+
+			"Losing it locks every enrolled account out of its second factor; they fall back "+
+			"to recovery codes.", c.MFASecretKey.Len())
+	}
 	if c.DB.URL.IsZero() {
 		add("DATABASE_URL: is required")
 	}
@@ -869,6 +944,7 @@ func (c Config) Validate() error {
 	for name, v := range map[string]int{
 		"LOGIN_RATE_PER_MIN":       c.Auth.LoginRatePerMin,
 		"API_RATE_PER_MIN":         c.Auth.APIRatePerMin,
+		"UPLOAD_RATE_PER_MIN":      c.Auth.UploadRatePerMin,
 		"REDIRECT_404_RATE_LIMIT":  c.Redirect.NotFoundLimit,
 		"LINK_PASSWORD_RATE_LIMIT": c.Redirect.PasswordLimit,
 		"LOGIN_LOCKOUT_THRESHOLD":  c.Auth.LockoutThreshold,

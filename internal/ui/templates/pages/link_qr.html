@@ -1,0 +1,36 @@
+{{define "content"}}
+{{/* The QR contents, as an ordinary page (M48; the popup it backed retired at
+     the F212 reopening, 2026-08-11).
+
+     The contents are served at /links/{id}/qr and render here with the nav,
+     the heading and a way back, exactly as any other page does. The QR tab on
+     the link page renders the same block in flow; this route outlived the
+     popup as what a bookmark, a second tab and a shared URL reach, and
+     `?code=` on it opens the block on one particular code.
+
+     **The codes list no longer selects through it** (M50.8's third
+     reopening), which is the sentence that stood here. It did, on both
+     surfaces — so picking a code on the link page was a load onto this page,
+     which has no link heading row (F244b) and starts at the top (F246d). The
+     list names the code on the link page now; the rows *here* still point at
+     this route, because this page has no tab strip to swap.
+
+     There is no <noscript> and none is wanted. The dashboard requires
+     JavaScript (D103) and this page does not argue with that. */}}
+<div class="mb-6">
+  <a href="/links/{{.Link.ID}}" class="text-sm text-muted hover:text-ink">← /{{.Link.Alias}}</a>
+  <h1 class="mt-2 text-xl font-semibold tracking-tight">QR code</h1>
+  <p class="mt-1 break-all text-sm text-muted">{{.Link.ShortURL}}</p>
+</div>
+
+{{template "flash_ok" .Notice}}
+
+{{/* id="qr" on both surfaces. The QR tab's wrapper has carried it since the
+     F212 reopening — it is the anchor qrReturn names — and the logo form's
+     htmx swap targets it, so a refusal rendered from *this* page has to have
+     one too or the swap has nothing to replace. Same id, same contents, two
+     routes. */}}
+<div id="qr" class="rounded-lg border border-line bg-raised p-6">
+  {{template "link_qr_body" .}}
+</div>
+{{end}}

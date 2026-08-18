@@ -1,0 +1,53 @@
+{{define "content"}}
+<div class="mx-auto mt-16 max-w-sm">
+  <div class="mb-8 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">Reset your password</h1>
+    {{/* Not on the mailer-free instance (F175). The subtitle rendered above the
+         branch, so the page read "We send a link to your address" directly
+         above "This instance cannot send mail" — one response asserting a
+         capability and its absence, two lines apart, on the page an operator
+         reaches precisely when something is not working. */}}
+    {{if not .NoMailer}}<p class="mt-1 text-sm text-muted">We send a link to your address</p>{{end}}
+  </div>
+
+  {{if .NoMailer}}
+  {{/* The one place in this product that refuses instead of degrading when no
+       relay is configured (M51). The mail is the mechanism, so "we sent you a
+       link" on an instance that can send nothing would be worse than the lockout
+       it was meant to cure. The reason is named because "ask the operator" is
+       useless advice without it. */}}
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">This instance cannot send mail</h2>
+    <p class="mt-2 text-sm text-muted">Resetting a password works by emailing you a link, and no mail relay is configured here, so there is nothing to send it with.</p>
+    <p class="mt-2 text-sm text-muted">Whoever operates this instance can configure one, or set your password directly. There is no other route back into an account whose password has been lost.</p>
+    <a href="/login" class="mt-4 inline-block text-sm font-medium text-accent-ink hover:underline">Back to sign in</a>
+  </div>
+  {{else if .Sent}}
+  {{/* Deliberately says nothing about whether an account was found, and echoes
+       no address back. The bytes of this block are the same for every input,
+       which is half of the enumeration claim — the other half is the argon2 hash
+       the service spends on every branch. */}}
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    <h2 class="text-sm font-medium text-ink">Check your inbox</h2>
+    <p class="mt-2 text-sm text-muted">If that address can be recovered here, a link is on its way to it. If it cannot, the message in that inbox says so instead.</p>
+    <p class="mt-2 text-sm text-muted">The link works once and lapses after an hour. Asking again replaces it.</p>
+    <a href="/login" class="mt-4 inline-block text-sm font-medium text-accent-ink hover:underline">Back to sign in</a>
+  </div>
+  {{else}}
+  <div class="rounded-lg border border-line bg-raised p-6 shadow-sm">
+    {{template "flash_error" .Error}}
+    <p class="mb-4 text-sm text-muted">Enter the address you sign in with. We answer the same way whatever you type, so this page never says whether an address has an account — the message in the inbox does.</p>
+    <form method="post" action="/forgot" class="space-y-4">
+      <div>
+        <label for="email" class="block text-sm font-medium text-ink">Email</label>
+        <input id="email" name="email" type="email" required autofocus autocomplete="username" value="{{.Form.Email}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "email")}}
+      </div>
+      <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Email me a link</button>
+    </form>
+  </div>
+  <p class="mt-6 text-center text-sm text-muted">Remembered it? <a href="/login" class="font-medium text-accent-ink hover:underline">Sign in</a></p>
+  {{end}}
+</div>
+{{end}}

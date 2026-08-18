@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -51,6 +52,17 @@ type domainRow struct {
 	// unless the hostname is both serving and failing, because it is only a
 	// threat in that state.
 	StopsAt string
+	// StopsAtPassed is true once that deadline is behind us and the hostname is
+	// still being served (F161).
+	//
+	// **The hourly pass is what stops serving, so the state exists and is up to
+	// an hour wide.** Between the window expiring and the next pass reaching this
+	// row, `verified_at` is still set — the badge beside this correctly says
+	// links are served here — and the deadline is in the past. A line that only
+	// knows the future tense reads *"stop being served at <a time that has
+	// been>"* next to *"links are served here"*, which is the page disagreeing
+	// with itself about a hostname somebody is trying to diagnose.
+	StopsAtPassed bool
 	// RootRedirectURL is where this hostname's own root points. Empty answers
 	// 404, which is where every hostname starts.
 	RootRedirectURL string
@@ -103,12 +115,26 @@ func (h *Web) loadDomainsPage(w http.ResponseWriter, r *http.Request) (domainsPa
 			row.RecordName, row.RecordData = v.RecordName, v.RecordData
 			row.CheckError = v.Error
 			if v.StopsAt != nil {
-				row.StopsAt = v.StopsAt.UTC().Format("2 Jan 2006 15:04 MST")
+				row.StopsAt, row.StopsAtPassed = domainStopsAt(*v.StopsAt, time.Now())
 			}
 		}
 		data.Rows = append(data.Rows, row)
 	}
 	return data, true
+}
+
+// domainStopsAt renders the grace-window deadline and says whether it has passed.
+//
+// One function for both because they are one decision: the tense the row is
+// written in has to follow the same instant the timestamp is formatted from, and
+// a page that formatted the time in one place and chose the wording in another is
+// how the two came to disagree (F161).
+//
+// `now` is a parameter rather than a call, so the boundary is testable at all —
+// the state this exists for is at most an hour wide and lives on a hostname whose
+// DNS has already gone, which is not a state a test can wait for.
+func domainStopsAt(stopsAt, now time.Time) (label string, passed bool) {
+	return stopsAt.UTC().Format("2 Jan 2006 15:04 MST"), !stopsAt.After(now)
 }
 
 // domainSSLLabel says what this instance actually knows about a certificate,

@@ -91,13 +91,40 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	// principal (D98) — a permission held by a person over the whole instance
 	// rather than through a membership, which is the one thing this schema had no
 	// way to express and the reason F15, F31 and F36 all bottomed out at D38.
+	// And password_resets is M51's account recovery — the third table in this
+	// schema holding a bearer-shaped secret as its SHA-256, after invitations and
+	// pending_registrations, and the one that closed F141: until it existed a
+	// forgotten password was permanent on every instance.
+	//
+	// The last two are M53's second factor. mfa_recovery_codes holds ten
+	// single-use codes per enrolment, and mfa_pending_logins is the fourth
+	// bearer-token table and the shortest-lived — the five minutes between a right
+	// password and a session. A table rather than a signed cookie, because single
+	// use needs a server-side record of whether it has been spent, at which point
+	// the table is back and the cookie is an optimisation.
+	//
+	// The last is M54's api_key_org_revocations, and it is the first table whose
+	// rows are *subtractions*: one says an administrator cut their organization
+	// out of an account-wide key's reach. It exists because an account-wide key
+	// belongs to an account that acts in tenants no single administrator has
+	// authority over, so the outright revoke they hold over a pinned key is the
+	// wrong instrument and a narrowing is the right one.
+	//
+	// M55's instance_settings is the newest, and the first table in this schema
+	// that is about the *box* rather than about anybody in it: one row, held to
+	// one by its primary key, carrying the answers an operator gives for the
+	// instance as a whole. Today that is whether it may check for releases, which
+	// D149 made a question somebody is asked rather than a constant.
+	//
 	// Each is live and typed rather than dormant jsonb, because the feature that
 	// reads it arrived in the same commit. The number moves and the sentence says
 	// why, rather than the count silently growing whenever somebody adds a table.
-	if tables != 38 {
-		t.Errorf("got %d tables, want 38 (all 20 Plan.md entities, plus mail_outbox, "+
+	if tables != 43 {
+		t.Errorf("got %d tables, want 43 (all 20 Plan.md entities, plus mail_outbox, "+
 			"invitations, pending_registrations, blocked_destinations, "+
-			"destination_disputes, link_click_budget and instance_grants)", tables)
+			"destination_disputes, link_click_budget, instance_grants, "+
+			"password_resets, mfa_recovery_codes, mfa_pending_logins, "+
+			"api_key_org_revocations and instance_settings)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

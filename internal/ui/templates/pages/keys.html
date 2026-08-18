@@ -42,11 +42,13 @@
     <div>
       <label for="scope_reach" class="block text-sm font-medium text-ink">Reach</label>
       <select id="scope_reach" name="scope_reach" class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm sm:w-1/2">
-        <option value="workspace" {{if not .Form.OrgWide}}selected{{end}}>This workspace only</option>
-        <option value="organization" {{if .Form.OrgWide}}selected{{end}}>Every workspace in the organization</option>
+        <option value="workspace" {{if or (eq .Form.Reach "") (eq .Form.Reach "workspace")}}selected{{end}}>This workspace only</option>
+        <option value="organization" {{if eq .Form.Reach "organization"}}selected{{end}}>Every workspace in this organization</option>
+        <option value="account" {{if eq .Form.Reach "account"}}selected{{end}}>Every organization you belong to</option>
       </select>
-      <p class="mt-1 text-xs text-subtle">A workspace key acts only where you created it. An organization-wide key follows you into every workspace, which is why it is not the default.</p>
+      <p class="mt-1 text-xs text-subtle">A workspace key acts only where you created it. An organization key follows you into every workspace here, and no further. An account key follows you into every organization you belong to, including ones you join later — which is what it is for, and why it is not the default.</p>
       {{template "field_error" (index .FieldErrors "org_wide")}}
+      {{template "field_error" (index .FieldErrors "organization_id")}}
     </div>
     {{end}}
     <fieldset>
@@ -69,52 +71,72 @@
 <div class="rounded-lg border border-line bg-raised p-6">
   <h2 class="mb-4 text-sm font-medium text-ink">Your keys</h2>
   {{if .Keys}}
-  <table class="w-full text-sm">
-    <thead>
-      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
-        <th class="py-2 pr-4 font-medium">Name</th>
-        <th class="py-2 pr-4 font-medium">Key</th>
-        <th class="py-2 pr-4 font-medium">Reach</th>
-        <th class="py-2 pr-4 font-medium">Scopes</th>
-        <th class="py-2 pr-4 font-medium">Last used</th>
-        <th class="py-2 pr-4 font-medium">State</th>
-        <th class="py-2 font-medium"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Keys}}
-      <tr class="border-b border-line">
-        <td class="py-3 pr-4 font-medium">{{.Name}}</td>
-        <td class="py-3 pr-4 font-mono text-xs text-muted">{{.Prefix}}…</td>
-        <td class="py-3 pr-4 text-muted">{{if .OrgWide}}Organization{{else}}Workspace{{end}}</td>
-        <td class="py-3 pr-4">
-          {{range .Scopes}}<span class="mr-1 rounded bg-sunken px-1.5 py-0.5 text-xs text-muted">{{.}}</span>{{end}}
-        </td>
-        <td class="py-3 pr-4 text-muted">{{reltime .LastUsedAt}}</td>
-        <td class="py-3 pr-4">
-          {{if .RevokedAt}}<span class="{{statusBadge "disabled"}}">revoked</span>
-          {{else if .Expired}}<span class="{{statusBadge "expired"}}">expired</span>
-          {{/* An absolute time, not reltime: this deadline is in the future and
-               reltime measures backwards from now, so it would read "just now"
-               for a key with an hour left. */}}
-          {{else if .Superseded}}<span class="{{statusBadge "expired"}}">rotated</span>
-          <div class="mt-0.5 text-xs text-subtle">stops working {{datetime .GraceExpiresAt}}</div>
-          {{else}}<span class="{{statusBadge "active"}}">active</span>{{end}}
-        </td>
-        <td class="py-3 text-right">
-          {{if not .RevokedAt}}
-          {{/* hx-post so hx-confirm is honoured; see the note in link_detail.html. */}}
-          <form method="post" action="/keys/{{.ID}}/revoke"
-                hx-post="/keys/{{.ID}}/revoke"
-                hx-confirm="Revoke {{.Name}}? Anything using it stops working on its next request.">
-            <button type="submit" class="text-sm font-medium text-danger-ink hover:underline">Revoke</button>
-          </form>
-          {{end}}
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="overflow-x-auto">
+    <table class="w-full min-w-[40rem] text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th class="py-2 pr-4 font-medium">Name</th>
+          <th class="py-2 pr-4 font-medium">Key</th>
+          <th class="py-2 pr-4 font-medium">Reach</th>
+          <th class="py-2 pr-4 font-medium">Scopes</th>
+          <th class="py-2 pr-4 font-medium">Last used</th>
+          <th class="py-2 pr-4 font-medium">State</th>
+          <th class="py-2 font-medium"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Keys}}
+        <tr class="border-b border-line">
+          <td class="py-3 pr-4 font-medium">{{.Name}}</td>
+          <td class="py-3 pr-4 font-mono text-xs text-muted">{{.Prefix}}…</td>
+          {{/* Three reaches, two columns' worth of state: pinned to a workspace,
+               pinned to an organization, or account-wide. Spelled out rather
+               than left to a blank, because they are different credentials.
+
+               The cut-out organizations sit under the reach rather than in a
+               column of their own, because that is what they qualify: "Account"
+               on its own is a claim about where the key works, and it stopped
+               being the whole truth the moment an administrator revoked its
+               reach into one tenant (F178). Nothing is drawn for the keys that
+               have none, which is all of them until somebody does. */}}
+          <td class="py-3 pr-4 text-muted">
+            {{if not .OrgWide}}Workspace{{else if .OrganizationID}}Organization{{else}}Account{{end}}
+            {{if .RevokedOrganizations}}
+            <div class="mt-0.5 text-xs text-subtle">
+              cut out of
+              {{range $i, $r := .RevokedOrganizations}}{{if $i}}, {{end}}{{$r.OrganizationName}}{{end}}
+            </div>
+            {{end}}
+          </td>
+          <td class="py-3 pr-4">
+            {{range .Scopes}}<span class="mr-1 rounded bg-sunken px-1.5 py-0.5 text-xs text-muted">{{.}}</span>{{end}}
+          </td>
+          <td class="py-3 pr-4 text-muted">{{reltime .LastUsedAt}}</td>
+          <td class="py-3 pr-4">
+            {{if .RevokedAt}}<span class="{{statusBadge "disabled"}}">revoked</span>
+            {{else if .Expired}}<span class="{{statusBadge "expired"}}">expired</span>
+            {{/* An absolute time, not reltime: this deadline is in the future and
+                 reltime measures backwards from now, so it would read "just now"
+                 for a key with an hour left. */}}
+            {{else if .Superseded}}<span class="{{statusBadge "expired"}}">rotated</span>
+            <div class="mt-0.5 text-xs text-subtle">stops working {{datetime .GraceExpiresAt}}</div>
+            {{else}}<span class="{{statusBadge "active"}}">active</span>{{end}}
+          </td>
+          <td class="py-3 text-right">
+            {{if not .RevokedAt}}
+            {{/* hx-post so hx-confirm is honoured; see the note in link_detail.html. */}}
+            <form method="post" action="/keys/{{.ID}}/revoke"
+                  hx-post="/keys/{{.ID}}/revoke"
+                  hx-confirm="Revoke {{.Name}}? Anything using it stops working on its next request.">
+              <button type="submit" class="text-sm font-medium text-danger-ink hover:underline">Revoke</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
   {{else}}
   <p class="py-6 text-center text-sm text-subtle">No API keys yet.</p>
   {{end}}

@@ -54,6 +54,7 @@ func TestStatsCarriesEveryLimiterTheStructDoes(t *testing.T) {
 	cfg.Auth.APIRatePerMin = 1
 	cfg.Redirect.NotFoundLimit = 1
 	cfg.Redirect.PasswordLimit = 1
+	cfg.Auth.UploadRatePerMin = 1
 	l := NewLimiters(cfg, nil, nil)
 
 	stats := l.Stats()
@@ -62,7 +63,7 @@ func TestStatsCarriesEveryLimiterTheStructDoes(t *testing.T) {
 			"ones emit no series for any bookkeeping metric", len(stats), want)
 	}
 	for _, name := range []string{
-		"login", "api", "redirect_404", "link_password", "blocked_audit",
+		"login", "api", "redirect_404", "link_password", "blocked_audit", "upload",
 	} {
 		if _, ok := stats[name]; !ok {
 			t.Errorf("Stats() is missing %q: its tracked-keys, overflow and "+

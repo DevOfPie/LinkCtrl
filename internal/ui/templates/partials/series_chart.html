@@ -3,19 +3,41 @@
        utilities, so nothing here needs an inline style and the CSP stays
        strict. */ -}}
 {{if .Bars}}
-<svg viewBox="0 0 {{.W}} {{.H}}" preserveAspectRatio="none" class="h-40 w-full" role="img" aria-label="Clicks per day">
+{{- /* Two viewports, and the nesting is the whole reason the axis can be
+       labelled at all. The plot is stretched to whatever width the card is —
+       preserveAspectRatio="none" — and text in a non-uniformly scaled viewport
+       is stretched with it: at max-w-6xl this box is 1.49× its 720 units wide,
+       which is a 49% wider-than-tall digit.
+
+       So the bars keep the stretched inner viewport and the labels are drawn in
+       the outer one, which carries no viewBox — its user unit is therefore a
+       CSS pixel, h-40 makes it 160 of them tall, and the tick geometry Go
+       computed against H=160 lands on the gridlines it was computed from.
+       TestTheChartsLabelsLineUpWithItsGridlines is what keeps those two numbers
+       equal. */ -}}
+<svg class="h-40 w-full" role="img" aria-label="Clicks per day">
+  <svg width="100%" height="100%" viewBox="0 0 {{.W}} {{.H}}" preserveAspectRatio="none">
+    {{range .Ticks}}
+    <line x1="0" y1="{{.Y}}" x2="{{$.W}}" y2="{{.Y}}" class="stroke-line" stroke-width="1" stroke-dasharray="2 3"/>
+    {{end}}
+    {{range .Bars}}
+    <rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="1" class="fill-accent-hover hover:fill-accent">
+      <title>{{dayShort .Day}}: {{fmtInt .Clicks}} clicks, {{fmtInt .Visitors}} visitors{{if .Bots}}, {{fmtInt .Bots}} bots{{end}}</title>
+    </rect>
+    {{end}}
+  </svg>
+  {{- /* Each figure on a chip, because the leftmost bar is often the tallest and
+         a label over `fill-accent-hover` measures 1.66:1. On `sunken` the muted
+         ink is 6.92:1 light and 12.61:1 dark. Recomputed from input.css at M58,
+         where these read 1.82, 6.84 and 12.0; the argument is unchanged. */ -}}
   {{range .Ticks}}
-  <line x1="0" y1="{{.Y}}" x2="{{$.W}}" y2="{{.Y}}" class="stroke-line" stroke-width="1" stroke-dasharray="2 3"/>
-  {{end}}
-  {{range .Bars}}
-  <rect x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}" rx="1" class="fill-accent-hover hover:fill-accent">
-    <title>{{dayShort .Day}}: {{fmtInt .Clicks}} clicks, {{fmtInt .Visitors}} visitors{{if .Bots}}, {{fmtInt .Bots}} bots{{end}}</title>
-  </rect>
+  <rect x="0" y="{{.BoxY}}" width="{{.BoxW}}" height="{{.BoxH}}" rx="2" class="fill-sunken"/>
+  <text x="4" y="{{.LabelY}}" class="fill-current text-xs text-muted">{{.Label}}</text>
   {{end}}
 </svg>
 <div class="mt-1 flex justify-between text-xs text-subtle">
   <span>{{.First}}</span>
-  <span>peak {{fmtInt .MaxY}}/day</span>
+  <span>peak {{fmtInt .Peak}}/day</span>
   <span>{{.Last}}</span>
 </div>
 {{else}}

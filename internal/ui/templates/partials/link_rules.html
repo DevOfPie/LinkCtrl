@@ -1,0 +1,66 @@
+{{define "link_rules"}}
+{{- /* Routing rules (M34). Read for anybody who can see the link, written by
+       anybody who can edit it — a rule is where a link points, so it is guarded
+       by the link's own permissions and by no new one.
+
+       Third on the page since M47, immediately under the destination it
+       overrides: a rule and the edit form answer the same question — where this
+       link sends somebody — and reading them apart is how a link ends up
+       pointing somewhere nobody expected. */ -}}
+<div class="rounded-lg border border-line bg-raised p-6">
+  <div class="mb-1 flex items-center justify-between">
+    <h2 class="text-sm font-medium text-ink">Routing rules</h2>
+    <span class="text-xs text-subtle">{{len .Rules}} of 20</span>
+  </div>
+  <p class="mb-4 text-sm text-muted">
+    Checked in order, lowest priority number first. <strong>The first rule that matches wins</strong> and the rest are not consulted; a visitor matching none goes to the link's own destination above.
+  </p>
+
+  {{if .Rules}}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th class="py-2 pr-4 font-medium">#</th>
+          <th class="py-2 pr-4 font-medium">Matches</th>
+          <th class="py-2 pr-4 font-medium">Sends to</th>
+          <th class="py-2 font-medium">State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rules}}
+        <tr class="border-b border-line{{if not .Rule.Enabled}} text-muted{{end}}">
+          <td class="py-2 pr-4 tabular-nums">{{.Rule.Priority}}</td>
+          <td class="py-2 pr-4">{{.Summary}}</td>
+          <td class="py-2 pr-4 break-all">{{.Rule.URL}}</td>
+          <td class="py-2">
+            {{if and $.Identity ($.Identity.Can "links.update")}}
+            <div class="flex items-center gap-2">
+              <form method="post" action="/links/{{$.Link.ID}}/rules/{{.Rule.ID}}/toggle">
+                <input type="hidden" name="enabled" value="{{if .Rule.Enabled}}0{{else}}1{{end}}">
+                <button type="submit" class="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-ink hover:bg-surface">{{if .Rule.Enabled}}Disable{{else}}Enable{{end}}</button>
+              </form>
+              <form method="post" action="/links/{{$.Link.ID}}/rules/{{.Rule.ID}}/delete"
+                    hx-post="/links/{{$.Link.ID}}/rules/{{.Rule.ID}}/delete"
+                    hx-confirm="Delete this rule? Visitors it was catching will go to the link's own destination.">
+                <button type="submit" class="rounded-md px-2 py-1 text-xs font-medium text-danger-ink hover:bg-sunken">Delete</button>
+              </form>
+            </div>
+            {{else}}
+            {{if .Rule.Enabled}}Enabled{{else}}Disabled{{end}}
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="text-sm text-subtle">No rules. Every visitor goes to the destination above.</p>
+  {{end}}
+
+  {{if and .Identity (.Identity.Can "links.update")}}
+  {{template "link_rule_form" .}}
+  {{end}}
+</div>
+{{end}}

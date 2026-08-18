@@ -25,6 +25,50 @@ type Problem struct {
 	Detail   string              `json:"detail,omitempty"`
 	Instance string              `json:"instance,omitempty"`
 	Errors   []domain.FieldError `json:"errors,omitempty"`
+	// Extra carries extension members, which RFC 7807 §3.2 provides for and
+	// which this type had no way to emit until M53.
+	//
+	// **One caller, and it is the one that needs it.** A sign-in that stops at
+	// the second factor answers 401 with the pending token in the body: the
+	// refusal and the way forward are one document, because a client that got a
+	// 401 and had to make a second request to find out what to do would be a
+	// client most implementations never write. Anything that fits in `detail` or
+	// in `errors` belongs there instead — this is not a general escape hatch, and
+	// a second use of it is worth arguing about rather than copying.
+	//
+	// Keys that collide with a field above are dropped, so an extension cannot
+	// rewrite the status or the type of the document carrying it.
+	Extra map[string]any `json:"-"`
+}
+
+// MarshalJSON emits the document with its extension members merged in.
+//
+// The alias type is what stops this recursing: marshalling `Problem` from inside
+// `Problem.MarshalJSON` would call this method again.
+func (p Problem) MarshalJSON() ([]byte, error) {
+	type plain Problem
+	base, err := json.Marshal(plain(p))
+	if err != nil {
+		return nil, err
+	}
+	if len(p.Extra) == 0 {
+		return base, nil
+	}
+	var merged map[string]json.RawMessage
+	if err := json.Unmarshal(base, &merged); err != nil {
+		return nil, err
+	}
+	for k, v := range p.Extra {
+		if _, taken := merged[k]; taken {
+			continue
+		}
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		merged[k] = raw
+	}
+	return json.Marshal(merged)
 }
 
 const problemBase = "https://linkctrl.dev/problems/"

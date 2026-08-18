@@ -129,8 +129,15 @@ func TestTheQueueNeverRendersADisputedDestinationAsALink(t *testing.T) {
 // Crude on purpose: the assertion below is that a *particular* card carries a
 // particular pair of values, and a whole-page Contains would pass on a page that
 // printed the entry against the wrong dispute.
+//
+// Split on the card's own id rather than on its class list, which is what it
+// used to be. M48 gave each card `id="dispute-{{.ID}}"` — the anchor a
+// `dispute.filed` notification lands on — and moved the classes along behind it,
+// which silently turned this splitter into one that found nothing. The id is the
+// more honest seam anyway: a card is identified by the dispute it is about, and
+// a class list is styling that may change again.
 func disputeCards(body string) []string {
-	parts := strings.Split(body, `<li class="rounded-lg border`)
+	parts := strings.Split(body, `<li id="dispute-`)
 	if len(parts) < 2 {
 		return nil
 	}

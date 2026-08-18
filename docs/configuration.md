@@ -38,12 +38,40 @@ No defaults. The process refuses to start without them.
 | `LINKCTRL_API_KEY_PEPPER` | ≥32 bytes. `openssl rand -base64 48`. Keys the HMAC that protects every API key hash, so **changing it invalidates every existing API key**. Not rotatable in place. |
 | `LINKCTRL_DATABASE_URL` | pgx-compatible DSN. Compose builds it from the `POSTGRES_*` variables. |
 
-Four variables accept a `_FILE` suffix pointing at a file, for mounted secrets:
-`API_KEY_PEPPER` and `DATABASE_URL` here, and `SMTP_PASSWORD` and
-`FEED_AUTH_TOKEN` in their own sections below. Setting both forms of the same
-secret is an error, not a precedence rule. (This said two until 0.2.0, while the
-loader accepted four and the two missing ones were documented correctly in their
-own rows — a summary that had fallen behind the table it summarises, F45.)
+Five variables accept a `_FILE` suffix pointing at a file, for mounted secrets:
+`API_KEY_PEPPER` and `DATABASE_URL` here, `MFA_SECRET_KEY` below, and
+`SMTP_PASSWORD` and `FEED_AUTH_TOKEN` in their own sections. Setting both forms
+of the same secret is an error, not a precedence rule. (This said two until
+0.2.0, while the loader accepted four and the two missing ones were documented
+correctly in their own rows — a summary that had fallen behind the table it
+summarises, F45.)
+
+## Two-factor authentication
+
+One variable, and it is optional. Leaving it unset is a supported instance: the
+second factor is simply not offered, which is what every instance was before
+0.3.0.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_MFA_SECRET_KEY` | *(unset)* | ≥32 bytes. `openssl rand -base64 48`. Encrypts each account's TOTP secret at rest. Unset means nobody can enrol and the account page says so. |
+
+**Losing it locks every enrolled account out of the second factor, and no
+further.** The secret cannot be decrypted, so no authenticator code can be
+verified and an enrolled account stops at the code prompt. What still works is a
+**recovery code** — those are SHA-256 hashes and this key is not involved in
+them. The route back is: sign in with a recovery code, turn the second factor off
+with another one, then enrol again. An account that has neither is the operator's
+to repair, which is the same last resort a forgotten password has.
+
+**It is deliberately not `API_KEY_PEPPER`, and must not be set to the same
+value.** The pepper is bound to retained API-key rows and rotating it invalidates
+every issued key. Sharing one value would mean rotating an API-key secret also
+locked every account out of its authenticator — two credential lifecycles with
+nothing to do with each other, given one lifetime.
+
+Like the pepper, it is not rotatable in place: there is no re-encrypting sweep.
+Changing it has exactly the effect of losing it.
 
 ## Core
 
@@ -373,6 +401,93 @@ are all in [usage.md](usage.md#webhooks). What the address checks do and do not
 cover — in particular on a deployment with an egress proxy — is in
 [SECURITY.md](SECURITY.md).
 
+## Update check
+
+Once somebody administering this instance has been asked and said yes, it asks
+GitHub once a day whether a newer LinkCtrl has been released and, if there is
+one, puts a notification in the instance principal's inbox. It is **the only
+scheduled work in this product that opens a socket to a host outside your
+deployment**, which is why it is a job family of its own rather than a step in
+the hourly maintenance pass: what this instance connects to, and when, is one
+thing to read rather than several.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_UPDATE_CHECK` | `true` | Whether this instance may perform the check at all. `false` disables it outright: no client is built, no work is scheduled, and the prompts below are replaced by a line saying so. `true` is permission, not instruction — somebody here still has to be asked and say yes. |
+
+### What the request carries, enumerated
+
+Not summarized, because a summary is what you would have to trust:
+
+- **This server's source address.** A property of opening a socket, not
+  something the product chooses to send.
+- **The version it is running**, in the `User-Agent`, as `LinkCtrl/0.3.0`. No
+  platform, no Go version, no hostname.
+
+And nothing else. No instance identifier, no deployment size, no link counts, no
+account, no configuration, no request body, no query string, no cookie and no
+credential. The response is read for a version number and discarded — nothing
+else from it is stored anywhere.
+
+The destination is a constant in the source, not a setting. There is no variable
+that points the check somewhere else, deliberately: the value of a disclosed,
+auditable daily request is lost the moment it can be redirected.
+
+A test in `internal/update` compares the outgoing request against an exact
+expected form — method, URL, body and every header — so a field added to it
+fails the build rather than shipping quietly.
+
+### Two switches, and either one is enough
+
+The variable above is the **deployment's** answer, and it only ever says no. The
+other is the **operator's**, and it has three states rather than two: yes, no,
+and *nobody has been asked yet*. The check runs only when the variable allows it
+**and** somebody has said yes, so:
+
+- `LINKCTRL_UPDATE_CHECK=false` wins over any answer given in a browser. That is
+  deliberate — a deployment with no egress should not depend on somebody in the
+  dashboard knowing why.
+- Answering *no* stops the check on an instance whose configuration never
+  mentioned it.
+- An instance where the question is still open **does not check.** Unanswered is
+  off.
+
+### Where the question is asked
+
+| The instance | Asked | Until then |
+| --- | --- | --- |
+| Fresh | On the setup page that claims it, with the box ticked | It has no accounts, so nothing is running |
+| **Upgraded** into 0.3.0 | On the dashboard, at the first sign-in by an account holding `instance.admin` | The check is **off** |
+| Claimed through `POST /api/v1/auth/setup` without the `update_check` field | As an upgraded one: on the dashboard | The check is **off** |
+
+It is asked once. There is no settings page and no way to change the answer from
+a browser afterwards — the control that remains is `LINKCTRL_UPDATE_CHECK`,
+which is where a deployment's decisions belong and where somebody with shell
+access can always find it.
+
+**The bound this puts on the feature is real and is stated rather than left to
+be discovered: an instance nobody signs into stays quiet forever.** No
+administrator, no question, no answer, no check — on the very instance a release
+notification would be most use to. That is the price of not answering on an
+operator's behalf, and if it applies to you, watch the repository instead. See
+[deployment.md](deployment.md#air-gapped-and-egress-restricted-deployments).
+
+### What failure looks like
+
+A check that cannot complete is logged at debug and does nothing else. It never
+fails a startup, never delays a shutdown, never reaches a user, and is never
+retried — the day's attempt is recorded before the request is made, so a
+failure costs one attempt rather than one per tick.
+
+**No notification is not evidence of being up to date.** GitHub's
+unauthenticated API is rate-limited per source address, so a deployment behind a
+large NAT can be throttled into checking successfully rarely or never, and the
+symptom is silence. If being current matters, watch the releases rather than
+this.
+
+Air-gapped and egress-restricted deployments want `false`; see
+[deployment.md](deployment.md#air-gapped-and-egress-restricted-deployments).
+
 ## Authentication
 
 | Variable | Default | Notes |
@@ -408,8 +523,9 @@ saves. See *Per instance, unless the limit is shared* below.
 | `LINKCTRL_API_RATE_PER_MIN` | `600` | Everything under `/api/v1`. Dashboard pages, static assets and the health endpoints are not counted. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses on the redirect path, and misses only. |
 | `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Submissions to a password-protected link, charged per address **and** per alias. |
+| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | Uploading a QR code's logo — the only thing this product accepts a file for, at three addresses: the API's two logo `PUT`s and the dashboard's upload form on the QR tab. **On top of the API limit, not instead of it** — an API upload spends a token from both buckets — and **one bucket across all three**, so alternating between the dashboard and the API does not double the budget. |
 
-Four properties are worth knowing before you tune them.
+Five properties are worth knowing before you tune them.
 
 **Per address means per address as the server sees it.** Behind a reverse proxy
 with `TRUSTED_PROXIES` empty, every request appears to come from the proxy, so all
@@ -438,6 +554,15 @@ visitors, and a per-address bucket would never see them. It is charged only on a
 **submitted** password — visiting a password link and being shown the challenge
 costs nothing — and there is no lockout to go with it, because there is no
 account to lock.
+
+**The upload limit exists because an upload is not an API call.** Everything
+else under `/api/v1` is a JSON body capped at 256 KiB and parsed by the standard
+library; an upload is up to a megabyte handed to an image decoder, so what a
+request costs is decided by its content rather than by its shape.
+`API_RATE_PER_MIN`'s 600 was chosen about the first kind, and 600 megabyte
+uploads a minute is a bandwidth and decoder budget nobody set by tuning a number
+about JSON. It is shared through Redis like the credential limit, so it means one
+thing across replicas rather than N.
 
 **The 404 limit charges misses only, and never a request that costs nothing.**
 A working link never spends anything, so a popular link cannot throttle its own
@@ -481,7 +606,7 @@ the configured number of guesses, and a restart refills the local buckets.
 | `LINKCTRL_INGEST_BATCH_SIZE` | `500` | Must not exceed the queue size. |
 | `LINKCTRL_INGEST_FLUSH_INTERVAL` | `250ms` | |
 | `LINKCTRL_ANALYTICS_RETENTION_DAYS` | `395` | 13 months. Enforced hourly by dropping monthly partitions of `click_events` and `visitors`, and only once a partition's newest possible row is outside the window — so raw data survives up to a month longer than the number says. Rollups are separate tables and are never dropped, so charts outlive the events. `audit_logs` has its own window and is not covered by this one. `0` keeps everything. |
-| `LINKCTRL_GEOIP_MMDB_PATH` | *(empty)* | A MaxMind DB file. Resolves a country at ingest, from the address, before it is discarded — nothing is stored to resolve later. Also resolves a region and a city on the redirect path, transiently, for links whose routing rules ask; those two need a **City** database. Empty disables geographic reporting and geographic routing alike, and the dashboard says so. See [deployment.md](deployment.md#optional-geographic-analytics). |
+| `LINKCTRL_GEOIP_MMDB_PATH` | *(empty)* | A MaxMind DB file. Resolves a country at ingest, from the address, before it is discarded — nothing is stored to resolve later. Also resolves a region and a city on the redirect path, transiently, for links whose routing rules ask; those two need a **City** database. Empty stops both: no new click resolves a country, and no geographic routing condition can match. It does **not** hide country history already resolved — since 0.3.0 the dashboard draws the map and the ranked list from the rows, so the *geographic data is unavailable* sentence appears only when nothing resolved **for that link in the window on screen** and nothing could resolve. The rule form still asks about this variable, because whether a routing rule can ever match is genuinely a question about the database. See [deployment.md](deployment.md#optional-geographic-analytics). |
 
 **Country is the only geographic field stored, and that has not changed.**
 Region and city are in the same database and in the schema, and are deliberately
@@ -563,6 +688,13 @@ It cannot be granted to an API key — see [SECURITY.md](SECURITY.md).
 it does with this section deleted: notifications are delivered in the dashboard
 and nowhere else, nothing is queued, and no outbound connection is ever made.
 
+**One feature does not degrade — it refuses.** Account recovery is delivered by
+mail and has no second channel, so with no relay there is no *forgot your
+password?* link on the sign-in page, `/forgot` says the instance cannot send
+mail, and `POST /api/v1/auth/forgot` answers `503`. The server says so once at
+boot, beside the sign-up warning. On such an instance a forgotten password is
+still the operator's to fix, with database access.
+
 **Turning it off again is not the same as never turning it on.** Messages queued
 while a relay was configured stay in the outbox, and with no relay there is
 nothing to deliver them: the drain does not run. The scheduler abandons them
@@ -580,7 +712,7 @@ count. Put `SMTP_HOST` back inside the 30 days and the queue delivers instead.
 | `LINKCTRL_SMTP_FROM` | *(empty)* | Required once a host is set. A bare address or `LinkCtrl <links@example.com>`. Parsed at boot, not at the first send. |
 | `LINKCTRL_SMTP_USERNAME` | *(empty)* | PLAIN authentication. Set both this and the password, or neither. |
 | `LINKCTRL_SMTP_PASSWORD` | *(empty)* | Also accepts a `_FILE` suffix, for mounted secrets. Held as a secret that refuses to print itself. |
-| `LINKCTRL_SMTP_TIMEOUT` | `10s` | Bounds one delivery attempt end to end: dial, handshake, `DATA`. A batch of twenty is handed over together on a thirty-second tick, so a drain costs one of these rather than twenty; this is also how long a drain occupies the scheduler, which every other background job shares. The batch opens up to twenty sessions to this one relay — a relay that caps concurrent connections lower refuses the extra ones, and those messages retry with backoff. |
+| `LINKCTRL_SMTP_TIMEOUT` | `10s` | Bounds one delivery attempt end to end: dial, handshake, `DATA`. A batch of twenty is handed over together on a thirty-second tick, so a drain costs one of these rather than twenty; this is also how long a drain occupies the scheduler, which every other background job shares. The batch opens up to twenty sessions to this one relay — a relay that caps concurrent connections lower refuses the extra ones, and those messages retry with backoff. **It also bounds the reachability probe at boot, which since 0.3.0 runs off the startup path**: until then the probe was called inline and an unreachable relay held the whole server dark for the length of this timeout at every start — measured at 10.05s on the default, and long enough at a raised one that `docker compose up --wait` gave up ([F173](build-notes/deferred-findings.md)). Setting a long timeout no longer delays a boot; the `smtp relay reachable` line simply arrives after `http server listening` rather than before it. |
 
 ### What is supported, and what is not
 

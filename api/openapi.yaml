@@ -99,8 +99,9 @@ tags:
       evaluation runs on the leader-elected scheduler and nowhere else.
   - name: qr
     description: >
-      A link's QR code. SVG only, and the one non-JSON response this API has
-      besides the spec document itself.
+      A link's QR code, as JSON and as a picture. `qr.svg` and `qr.png` are the
+      two non-JSON responses this API has besides the spec document itself, and
+      they are the same image at the same size.
   - name: rules
     description: >
       Routing rules: which visitors a link sends where, evaluated in priority
@@ -159,7 +160,7 @@ paths:
         reach a fresh instance's setup endpoint deployed it.
       security: []
       requestBody:
-        $ref: "#/components/requestBodies/Credentials"
+        $ref: "#/components/requestBodies/SetupCredentials"
       responses:
         "201":
           description: Instance claimed
@@ -279,7 +280,24 @@ paths:
               schema:
                 $ref: "#/components/schemas/SessionCreated"
         "401":
-          $ref: "#/components/responses/Unauthorized"
+          description: |
+            A credential failure, or a sign-in that stopped at the second factor
+            (M53).
+
+            The two are told apart by `type`. Every credential failure is
+            `invalid-credentials` and says nothing more. A second factor is
+            `mfa-required`, and carries `mfa_token` and `mfa_expires_at` as
+            extension members — post them to `/auth/mfa/challenge` with a code.
+
+            **A 401 rather than a 200 with a flag, deliberately.** A client that
+            has never heard of a second factor treats this as a failed sign-in,
+            which is correct: it has no session and must not proceed. A 200
+            carrying `mfa_required: true` would be read as success by every
+            client that checks the status code.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "422":
           $ref: "#/components/responses/Validation"
         "429":
@@ -302,6 +320,413 @@ paths:
       responses:
         "204":
           description: Session revoked, cookie cleared
+
+  /auth/forgot:
+    post:
+      tags: [auth]
+      operationId: requestPasswordReset
+      summary: Ask for a password reset link
+      description: |
+        Mails a single-use link to the address, if the address can be recovered
+        on this instance.
+
+        **The answer is `202` for every address**, with the same body and the
+        same argon2 cost, whether or not the address has an account and whether
+        or not that account can be recovered. Neither the response nor a
+        stopwatch says which. The answer goes to the address by mail — an
+        address that cannot be recovered receives a message saying no link was
+        created, which is the stance `POST /auth/register` already takes: the
+        channel that proves an address exists is the mailbox, and a status code
+        reaches whoever typed the address into the form.
+
+        The stated cost is that this sends mail to addresses that never
+        registered. It is bounded by the login limiter and it is the same bound
+        registration already accepted.
+
+        **This endpoint requires a configured mailer and refuses without one.**
+        It is the one place in this product that does not degrade when
+        `SMTP_HOST` is unset: the mail is the mechanism, so a request that
+        succeeded into a void would be worse than the lockout it was meant to
+        cure. With no relay the answer is `503`, and the operator's route back
+        into a locked-out account is setting the hash directly.
+
+        Two accounts are refused, silently, and each gets the "no link created"
+        mail: one whose status is not `active`, and one with no password to
+        replace. A suspended account is not recoverable by the person who lost
+        the password, and saying so is the operator's job.
+
+        Shares the login limiter with `POST /auth/login`, deliberately, so an
+        attacker cannot double their budget by alternating between the two.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: >-
+            A message has been queued to the address. The same answer whether or
+            not it has an account, and the body carries nothing that varies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [reset_requested]
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/NoMailer"
+
+  /auth/reset:
+    post:
+      tags: [auth]
+      operationId: completePasswordReset
+      summary: Spend a reset token and set a new password
+      description: |
+        Writes the new password through the same argon2 path
+        `POST /auth/password` uses, then **revokes every session on the
+        account** — including any the caller did not open, which is the whole
+        point of a recovery. API keys are deliberately not revoked: a key is a
+        separate credential with its own rotation story, and taking them out
+        here would make recovery an outage.
+
+        Every outstanding reset token for the account is spent at the same time,
+        not only the one presented. A recovery that left a second live token
+        behind would have recovered nothing.
+
+        **`404` is the answer to every refusal, and never `410`.** A token that
+        does not exist, one that has expired, one already used, an account whose
+        status is not `active` and an account with no password are
+        indistinguishable to a caller enumerating.
+
+        `204` rather than a session: the caller signs in with the password they
+        just set, which is also the proof they know it.
+
+        The token travels in the body rather than in the path. A URL reaches the
+        access log, the referrer header and the client's own history, and this
+        one sets a password — the browser form has no choice, because a link in
+        a mail is a URL, and a JSON client has no such excuse.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, new_password]
+              properties:
+                token:
+                  type: string
+                  description: The token from the emailed link.
+                new_password:
+                  type: string
+                  minLength: 12
+      responses:
+        "204":
+          description: Password set; every session on the account revoked
+        "404":
+          description: |
+            The link is not valid. Expired, already spent, never existed, or an
+            account this mechanism refuses — the five are one answer on purpose.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/NoMailer"
+
+  /auth/mfa:
+    get:
+      tags: [auth]
+      operationId: getMFAStatus
+      summary: Whether this account has a second factor
+      description: |
+        `available` is the instance's answer rather than the account's: it is
+        `false` when no `LINKCTRL_MFA_SECRET_KEY` is configured, which means
+        nobody can enrol. An account that enrolled while a key was present and is
+        read while it is absent reports `available: false` with `enabled: true`,
+        which is a real state and the one an operator needs to see — those
+        accounts sign in with a recovery code until the key comes back.
+      responses:
+        "200":
+          description: The account's second factor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFAStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [auth]
+      operationId: disableMFA
+      summary: Turn the second factor off
+      description: |
+        The password **and** a code, because either alone is a downgrade somebody
+        else can perform: a stolen session would otherwise remove the factor it
+        was meant to be stopped by. `code` takes an authenticator code or a
+        recovery code.
+
+        Requires an interactive session — an API key is refused, on D87's limb
+        that the session is the authority for operations whose subject is the
+        person.
+
+        Clearing the factor clears the stored secret and every recovery code in
+        the same transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password, code]
+              properties:
+                password:
+                  type: string
+                code:
+                  type: string
+                  description: An authenticator code, or a recovery code.
+      responses:
+        "204":
+          description: The second factor is off
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account has no second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/enrol:
+    post:
+      tags: [auth]
+      operationId: beginMFAEnrolment
+      summary: Offer a TOTP secret and the QR code that carries it
+      description: |
+        **Nothing is stored.** The account is untouched until `POST
+        /auth/mfa/confirm` presents a code computed from this secret, so an
+        enrolment that is started and abandoned leaves the account exactly as it
+        was. Calling this twice offers two different secrets and at most one of
+        them ever becomes real.
+
+        `qr_svg` is the `otpauth://` URI drawn by the same generator the link
+        pages use. It is here so a client has the picture without knowing how to
+        encode one; `secret` is the same value in text, for anybody enrolling on
+        the device they are reading — a phone cannot photograph its own screen.
+
+        RFC 6238 with the parameters every authenticator app assumes: HMAC-SHA-1,
+        six digits, a thirty-second period. They are in the URI and repeated in
+        the body so a client never has to parse one to know the other.
+      responses:
+        "200":
+          description: An enrolment offer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, uri, qr_svg, digits, period]
+                properties:
+                  secret:
+                    type: string
+                    description: Base32, unpadded, as an authenticator app expects it.
+                  uri:
+                    type: string
+                    description: The `otpauth://totp/…` URI.
+                  qr_svg:
+                    type: string
+                    description: The URI drawn as an SVG document.
+                  digits:
+                    type: integer
+                    example: 6
+                  period:
+                    type: integer
+                    description: Seconds in one step.
+                    example: 30
+                  issuer:
+                    type: string
+                  message:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account already has a second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: |
+            This instance has no `MFA_SECRET_KEY`, so a secret has nowhere safe
+            to be kept.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmMFAEnrolment
+      summary: Turn an offered secret into the account's second factor
+      description: |
+        `secret` is the value `POST /auth/mfa/enrol` returned and `code` is a
+        current code computed from it. The secret is written, `mfa_enabled_at` is
+        stamped and ten recovery codes are issued, all in one transaction — an
+        account never has a factor without codes or codes without a factor.
+
+        **`recovery_codes` is returned here and nowhere else.** Only their hashes
+        are stored, so a client that discards this body has
+        `POST /auth/mfa/recovery-codes` and nothing else.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [secret, code]
+              properties:
+                secret:
+                  type: string
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Enrolled, with the recovery codes shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFARecoveryCodes"
+        "401":
+          description: |
+            The code is not valid. Codes last about thirty seconds and each one
+            works once.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account already has a second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: This instance has no `MFA_SECRET_KEY`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [auth]
+      operationId: regenerateMFARecoveryCodes
+      summary: Void the previous recovery codes and issue a new set
+      description: |
+        Every code goes, spent ones included: the previous set is void in full,
+        and a count of leftovers from a void set would be a lie. The TOTP secret
+        is unchanged — this is the answer to a lost piece of paper, not to a lost
+        phone.
+      responses:
+        "200":
+          description: A new set, shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFARecoveryCodes"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: This account has no second factor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /auth/mfa/challenge:
+    post:
+      tags: [auth]
+      operationId: completeSecondFactor
+      summary: Finish a sign-in that stopped at the second factor
+      description: |
+        `POST /auth/login` answers `401` with an `mfa-required` problem carrying
+        `mfa_token` when the password was right and the account has a second
+        factor. This is where that token is spent, and the success body is
+        `POST /auth/login`'s byte for byte — the same operation finished.
+
+        `code` takes an authenticator code or a recovery code. A recovery code is
+        single use, is audited, and notifies the account: a recovery code being
+        spent means either the phone is gone or somebody else has it.
+
+        **Failed attempts count against the account's own lockout**, the same
+        counter and the same policy failed passwords use. A second factor with a
+        budget of its own would hand an attacker who already has the password an
+        unlimited supply of guesses.
+
+        The pending token is single use and lives for minutes. A wrong code does
+        not spend it — a typo would otherwise cost a full re-authentication.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, code]
+              properties:
+                token:
+                  type: string
+                  description: The `mfa_token` from the sign-in refusal.
+                code:
+                  type: string
+                  description: An authenticator code, or a recovery code.
+      responses:
+        "200":
+          description: Signed in; the session cookie is set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCreated"
+        "401":
+          description: |
+            The code is not valid, the sign-in can no longer be completed, or the
+            account locked itself out while guessing. One answer for all of them.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /auth/password:
     post:
@@ -335,6 +760,79 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /account:
+    delete:
+      tags: [auth]
+      operationId: deleteAccount
+      summary: Delete the authenticated account
+      description: |
+        Acts on the **calling account and no other**. There is no
+        administrative delete-somebody-else: who may end another person's
+        account is a permission-model question, and this endpoint does not
+        answer it.
+
+        Requires an interactive session — an API key is refused, for the reason
+        a password change refuses one. The subject of this operation is the
+        person, not the credential.
+
+        **What happens immediately, in one transaction.** Sessions, API keys,
+        memberships, notifications, outstanding password-reset tokens and any
+        instance-level grants are removed; the account is marked deleted; the
+        address becomes available for a new account. When this returns, no
+        credential reaches the account.
+
+        **What happens within the hour.** Records *about* you that ending the
+        account does not remove keep their rows, because they are records of
+        what happened rather than records of a person, and an hourly pass takes
+        you out of them: the audit log and the destination-dispute queue, which
+        carry no foreign key to the account at all; the invitations you
+        redeemed and the notification your inviter received when you accepted,
+        which belong to somebody else and so were never yours to delete. It
+        replaces the actor snapshot **and the address held in a record's
+        detail** with a fixed label, blanks the address on the invitations you
+        redeemed — an empty value rather than a label, because redemption
+        compares against that column — and clears the account's remaining
+        fields. Until it runs, those still hold the address; access is already
+        gone either way. `docs/SECURITY.md` states the bound, the enumeration,
+        and the two addresses this deliberately leaves.
+
+        **Two refusals**, both `409`, both naming what to do about it: the
+        account that administers the instance (move the principal first), and
+        the sole owner of an organization that still exists (hand it over or
+        delete it first, and the detail says which organizations).
+
+        Belonging to no organization is **not** a refusal. Handing over every
+        organization you own alone is how most people arrive here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  description: >-
+                    The account's own password, re-verified. In the body rather
+                    than in a query parameter, which is why this DELETE carries
+                    one: a password in a URL lands in access logs and browser
+                    history.
+      responses:
+        "204":
+          description: >-
+            Account deleted. The session cookie is expired on this response;
+            the residue is erased by the hourly pass.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -1277,7 +1775,8 @@ paths:
         The JSON view. `GET /links/{id}/qr.svg` beside it is the picture.
 
         `content` is exactly what the code encodes: the link's short URL with
-        `?src=qr` on it. That parameter is what makes a scan countable — a
+        `?src=qr` on it, and `&qrc=<slug>` once this link carries more than one
+        code — a code gains a printed identity when it stops being the only one. That parameter is what makes a scan countable — a
         camera sends no `Referer`, so without it every scan would arrive
         indistinguishable from somebody typing the URL. It is read by the
         redirect path, attributed through the existing `referrer` breakdown as
@@ -1338,9 +1837,19 @@ paths:
       operationId: deleteLinkQR
       summary: Put the link's code back to the default style
       description: |
-        Not "delete the QR code" — there is no such thing to delete, because
-        every link has one. A link that had no stored style still answers 204:
-        "draw this at the default" was already true.
+        Not "delete the QR code" — the code stays and the *style* goes back to
+        black on white at the default size. A link that had no stored style
+        still answers 204: "draw this at the default" was already true.
+
+        **It is the code's row that survives, and that is what changed.** The
+        row used to hold nothing but the preference being withdrawn, so this
+        deleted it; it now holds the code's identity — the slug printed in its
+        payload, and the flag that says untagged scans resolve through it — and
+        neither of those is a style. Any logo on the code stays too: removing
+        one is its own operation with its own sentence.
+
+        This is the default code's shorthand. Restoring any other code's style
+        is a `PUT /links/{id}/qr/codes/{slug}` carrying an empty `style`.
       responses:
         "204":
           description: Back to the default style
@@ -1359,17 +1868,21 @@ paths:
       operationId: getLinkQRSVG
       summary: The link's QR code, drawn
       description: |
-        SVG, and only SVG (decision D11): the output is vector text, so no image
-        encoder is in this program's dependency set and nothing rasterises on a
-        request. A PNG download, if it is ever wanted, is an additive change.
+        The vector form. `GET /links/{id}/qr.png` beside it is the same picture
+        rasterised, and both are drawn from one matrix at one geometry, so they
+        describe the same image at the same size.
+
+        The SVG carries explicit pixel `width` and `height` as well as a
+        `viewBox`, so *drawn at the set size* is what a browser actually does
+        with it rather than something a stylesheet has to arrange.
 
         The picture paints its own background across the quiet zone rather than
         leaving it transparent. A QR code inverted onto a dark field is refused
         by a large share of scanners, and a transparent one inverts itself the
         moment it is placed on one.
 
-        A second path rather than content negotiation on `Accept`, because an
-        `<img>` and a download both send an `Accept` header nobody chose.
+        A path per format rather than content negotiation on `Accept`, because
+        an `<img>` and a download both send an `Accept` header nobody chose.
       responses:
         "200":
           description: The code as an SVG document
@@ -1383,6 +1896,474 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /links/{id}/qr.png:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [qr]
+      operationId: getLinkQRPNG
+      summary: The link's QR code, as an image file
+      description: |
+        The raster form, and the one endpoint on this API that rasterises.
+
+        **This is decision D11 reversed, and the reversal keeps its reasoning.**
+        D11 said SVG only *because* no image encoder was in the dependency set
+        and nothing should rasterise on a request. The encoder is now
+        `image/png` from the Go standard library, so the dependency set has not
+        moved; and the rasteriser runs only when somebody asks for a file, under
+        a stated bound. Output stops at **2048 pixels** — a two-colour paletted
+        bitmap, so the largest buffer a request can cause is 4,194,304 bytes —
+        and a code whose stored style draws larger than that is refused with a
+        `422` rather than drawn.
+
+        Same content as `qr.svg`, same geometry, same caching. The response
+        carries `Content-Disposition: attachment`, because a file somebody can
+        save is the point of it.
+      responses:
+        "200":
+          description: The code as a PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/logo:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    put:
+      tags: [qr]
+      operationId: setLinkQRLogo
+      summary: Upload the default code's logo
+      description: |
+        **The link's default code, addressed the way `qr.svg` and `qr.png`
+        address it: without a slug.** The default is the code an untagged scan
+        resolves through, which is a role rather than an address — so this
+        shorthand answers for whichever code holds it, and the code's own
+        address in the collection is the one that does not move.
+
+        Everything `PUT /links/{id}/qr/codes/{slug}/logo` says applies here
+        unchanged: one `multipart/form-data` part named `logo`, `links.update`,
+        PNG and JPEG decided by the bytes, an SVG refused by name, the stored
+        image re-encoded by this server, the same three bounds, the same
+        resize-to-fit and its `resampled` report, and the same separate upload
+        rate limit.
+
+        The response is keyed `qr` rather than `code`, as every other
+        `/links/{id}/qr` operation's is.
+      requestBody:
+        $ref: "#/components/requestBodies/QRLogoUpload"
+      responses:
+        "200":
+          description: The default code, now carrying a logo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [qr]
+      operationId: deleteLinkQRLogo
+      summary: Remove the default code's logo
+      description: |
+        **The image goes, and the code stays.** Idempotent, and it stays a `204`
+        for a link whose default code has never been styled or uploaded to —
+        that code has no stored row at all, so "it carries no logo" is already
+        true. A link this workspace cannot see is still a `404`.
+      responses:
+        "204":
+          description: The default code carries no logo
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/qr/codes:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+    get:
+      tags: [qr]
+      operationId: listLinkQRCodes
+      summary: Every QR code this link carries
+      description: |
+        A link may carry several codes — a print run and a shop window against
+        the same destination — and this is all of them, the default code first.
+
+        **The default code is the one whose `default` is true**, and it is what
+        an *untagged* scan resolves through — a picture carrying `?src=qr` and
+        no `qrc`, which is the payload of every code this product drew before
+        per-code identity existed. Every code here carries a slug, the default
+        included, and every one of them is addressable in this collection and
+        removable while the link has more than one.
+
+        The one exception is a link whose default code has never been written
+        down: it has one code, no row, an empty `slug`, and the shorthand at
+        `/links/{id}/qr` is the only address it has. That code has nothing to be
+        told apart from, which is what a `qrc` tag is for.
+
+        Every link has a default whether or not a row holds it, so this list is
+        never empty for a link that exists.
+      responses:
+        "200":
+          description: The link's codes, and how many one link may hold
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QRCodeList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [qr]
+      operationId: createLinkQRCode
+      summary: Add a named QR code to this link
+      description: |
+        The new code points at the same link — a code with a destination of its
+        own would be a link, and this product already has links. What it buys is
+        that a scan of it is told apart from a scan of the others.
+
+        **The slug is generated and cannot be supplied.** It is printed inside
+        the picture, so a caller-chosen one would be a name the caller has to
+        keep unique across the link's codes and correct across every copy
+        already in the world. `style` in the request is accepted for symmetry
+        with the PUT below; omitting it starts the code at the style the link is
+        already drawing at, so a second poster looks like the first one.
+
+        **This is the one operation that changes what an existing code
+        encodes**, and it re-fits that code's stored size rather than letting
+        the drawing discover the change. A link whose only code has no slug
+        gains one here — that is the moment there is something to tell it apart
+        from — and `&qrc=<slug>` on the end of a payload can push it into a
+        larger symbol than its stored `style.size` holds with a quiet zone
+        anything can read. Both rows are re-fitted: nearly always the size is
+        kept and only `style.scale` moves, and where it cannot be kept the size
+        rises to the smallest one that works and the response carries `refit`
+        with both numbers. Nothing already printed changes what it says —
+        a picture carrying no `qrc` is still counted against whichever code is
+        the default.
+
+        `422` when the link already holds the maximum number of codes.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QRCodeRequest"
+      responses:
+        "201":
+          description: The code, with the slug its payload will carry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/codes/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    get:
+      tags: [qr]
+      operationId: getLinkQRCode
+      summary: One of the link's named codes
+      responses:
+        "200":
+          description: The code, its style, and the levels a style may name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [qr]
+      operationId: setLinkQRCode
+      summary: Replace a named code's label and style
+      description: |
+        A PUT rather than a PATCH, for the reason `PUT /links/{id}/qr` is one:
+        the resource is replaced whole and an omitted field means its default.
+        That applies to the label as well as to the style — omitting it clears
+        the name — because a request that replaces a resource whole and quietly
+        preserves one field is a shape nobody can predict.
+
+        The slug is not writable. It is printed, and moving it would break every
+        copy of the code already in the world.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QRCodeRequest"
+      responses:
+        "200":
+          description: The code, as it will now be drawn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+    delete:
+      tags: [qr]
+      operationId: deleteLinkQRCode
+      summary: Remove a code
+      description: |
+        **What the code already recorded stays in the breakdown.** A scan
+        arriving afterwards from a picture printed with this slug is recorded as
+        no code at all, because an unrecognised identity is never stored — so
+        the removed code's history stops accumulating rather than being
+        reassigned, and the rows it already earned are still reported, marked
+        `removed`.
+
+        **Any code can be removed, the default included, while the link has more
+        than one.** Removing the default promotes the oldest code that is left,
+        and the promotion is not in this response: re-list the codes to see
+        which one now carries `default`. It matters, because an untagged scan is
+        counted against whichever code that is.
+
+        **A link's last code cannot be removed** — a link always has a code, and
+        every picture of it already printed resolves through this one. That is a
+        `422`, not a `404`. Restoring its style is `DELETE /links/{id}/qr` for
+        the default code, or a `PUT` here carrying an empty `style` for any
+        code.
+      responses:
+        "204":
+          description: The code is gone
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/codes/{slug}/default:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    put:
+      tags: [qr]
+      operationId: setLinkDefaultQRCode
+      summary: Make this the code untagged scans resolve through
+      description: |
+        **The default is which code a scan carrying no `qrc` is counted
+        against.** Every picture this product drew before per-code identity
+        existed carries exactly that payload, so this decides where all of them
+        land — and it decides it for the pictures already printed as well as the
+        ones printed next, because nothing about a picture changes here.
+
+        **Its own sub-resource rather than a field on the code.** Setting it
+        takes the flag off another code, so a `PUT` on the code carrying
+        `"default": true` would be a request that rewrites a resource it does
+        not name. There is no `DELETE`: a link always has a default, so the flag
+        moves and is never cleared.
+
+        No body. Setting the flag on the code that already holds it succeeds and
+        changes nothing.
+      responses:
+        "200":
+          description: The code, now the link's default
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /links/{id}/qr/codes/{slug}/logo:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    put:
+      tags: [qr]
+      operationId: setLinkQRCodeLogo
+      summary: Upload a named code's logo
+      description: |
+        **One of the two operations in this API that accept a file**, the other
+        being the same operation against the link's default code at
+        `PUT /links/{id}/qr/logo`. It takes a `multipart/form-data` body
+        carrying one part named `logo`, and it is governed by `links.update` —
+        the permission that already styles a code, because a logo is style and a
+        code is a picture of the link's own URL.
+
+        **PNG and JPEG, decided by the bytes.** Neither the part's filename nor
+        its declared `Content-Type` is read: the decoder is chosen by the
+        content, so a `.png` holding a JPEG is decoded as a JPEG and a file that
+        is neither is refused whatever it is called. **An SVG is refused by
+        name** — it is a document that can carry script and fetch other files,
+        and accepting one would mean sanitising markup this product then serves.
+
+        **What is stored is a PNG this server encoded**, never the bytes you
+        sent. That strips metadata, and it means a polyglot file stops being
+        one. Do not expect the response's `has_logo` to imply your exact bytes
+        are retrievable — no operation here returns them.
+
+        Three bounds, in this order, and each is a number rather than a promise:
+        the request body stops at **1,048,576 bytes**; the image's declared
+        dimensions must be at most **1024 pixels a side**, checked from the
+        header before anything is decoded; and the re-encoded result must fit
+        **1,060,000 bytes**. Exceeding any of them is a `422` naming which one,
+        and what the image measured.
+
+        **A large image is resized rather than refused.** A stored logo holds at
+        most **262,144 pixels in total**, and that is a target, not a bound:
+        anything over it is resampled down to fit with its aspect ratio kept,
+        and the response then carries `resampled` with both sizes. It is absent
+        when the image was stored at the size you sent. *(That figure was a
+        second header bound until now, and an image over it was a `422`. No
+        released version ever answered that `422` — this endpoint is itself new
+        in 0.3.0, which is unreleased.)*
+
+        Uploading again replaces what is there. Uploads are rate-limited
+        separately from the rest of this API — see `UPLOAD_RATE_PER_MIN` — so a
+        `429` here can arrive while other calls are still being served.
+      requestBody:
+        $ref: "#/components/requestBodies/QRLogoUpload"
+      responses:
+        "200":
+          description: The code, now carrying a logo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SingleQRCodeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [qr]
+      operationId: deleteLinkQRCodeLogo
+      summary: Remove a named code's logo
+      description: |
+        **The image goes, and the code stays.** The stored bytes are removed
+        rather than merely dereferenced, so nothing is left behind for a sweep
+        to find.
+
+        Idempotent: a code that carries no logo answers `204` too, because
+        "this code has no logo" is already true and reporting `404` would make
+        the operation care whether one had ever been uploaded. A slug this link
+        never issued is still a `404`.
+      responses:
+        "204":
+          description: The code carries no logo
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/qr/codes/{slug}/image.svg:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    get:
+      tags: [qr]
+      operationId: getLinkQRCodeSVG
+      summary: A named code, drawn
+      description: |
+        Everything `GET /links/{id}/qr.svg` says, for one code addressed by its
+        own slug. Every code's picture carries its slug in its payload, which is
+        what a scanner sends back and what makes one code's scans
+        distinguishable from another's.
+
+        The path carries `image.svg` rather than ending in `{slug}.svg` for a
+        mechanical reason: a route wildcard matches a whole path segment, so
+        `{slug}.svg` is not a pattern that exists.
+      responses:
+        "200":
+          description: The code as an SVG document
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /links/{id}/qr/codes/{slug}/image.png:
+    parameters:
+      - $ref: "#/components/parameters/LinkID"
+      - $ref: "#/components/parameters/QRCodeSlug"
+    get:
+      tags: [qr]
+      operationId: getLinkQRCodePNG
+      summary: A named code, as an image file
+      description: |
+        Everything `GET /links/{id}/qr.png` says, for one named code — including
+        the 2048-pixel bound and the `422` for a stored style that draws larger.
+      responses:
+        "200":
+          description: The code as a PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
 
   /campaigns:
     get:
@@ -2074,6 +3055,14 @@ paths:
         reaper removes them, because "which keys existed" is the question
         asked after an incident. The secret is never listed — only its hash
         is stored.
+
+        **Every key you own, from every organization** (0.3.0). It used to be
+        scoped to the organization you were acting in while revoking was scoped
+        to you alone, and the two disagreeing was a weak existence oracle: a key
+        invisible here still answered `204` to a `DELETE`. They ask the same
+        question now — whose key is this — and an account-wide key has no
+        organization to be filtered by. `organization_id` on each row is what
+        tells them apart.
       responses:
         "200":
           description: Your keys, newest first
@@ -2104,8 +3093,15 @@ paths:
 
         The key is bound to the workspace you are acting in unless you ask for
         `org_wide`, which leaves it unpinned — one workspace still resolved per
-        request, the way a sign-in does, within the organization it was issued
-        in — and needs an organization-wide membership to grant.
+        request, the way a sign-in does — and needs an organization-wide
+        membership to grant.
+
+        An unpinned key is **account-wide** unless you also send
+        `organization_id` (0.3.0): it belongs to your account and reaches the
+        organizations your account belongs to, the way a personal access token
+        does, rather than to the tenant you happened to be in when you minted it.
+        Pin it if you want today's memberships frozen — that choice is
+        irreversible, and it is the only one on this operation that is.
       requestBody:
         required: true
         content:
@@ -2140,8 +3136,12 @@ paths:
 
         The successor is *identical or narrower*: scopes are this key's, or a
         subset you name; the workspace binding is copied verbatim and cannot be
-        changed; nothing widens. `apikeys.write` is still not a scope any key
-        may hold, and that is what makes handing rotation to a credential safe.
+        changed; the reach is this key's, or `reach: organization` to pin an
+        account-wide key to the organization this request resolved into; nothing
+        widens. A pinned key asking for `reach: account` is refused. That second
+        axis arrived with account-wide keys in 0.3.0 and is the same rule applied
+        to tenancy. `apikeys.write` is still not a scope any key may hold, and
+        that is what makes handing rotation to a credential safe.
 
         This key keeps working for `grace_seconds` and then stops, on every
         replica, whether or not the housekeeping job that writes its revocation
@@ -2196,7 +3196,19 @@ paths:
         somebody else's writes an `apikey.revoked` audit record; revoking your
         own does not, because you are the record.
 
+        **Somebody else's account-wide key is narrowed, not destroyed** (0.3.0).
+        Such a key belongs to an account that also acts in tenants you hold no
+        authority over, so what this endpoint cuts is your organization out of
+        its reach: the key stops resolving here and keeps working elsewhere, and
+        the record is `apikey.reach_revoked` rather than `apikey.revoked`. You do
+        not choose between the two — which happens is a property of the key, and
+        offering the choice would be offering an outright revoke you may not
+        have. Your own account-wide key is still revoked outright, because it is
+        yours.
+
         A key you may not act on returns 404, not 403, so ids cannot be probed.
+        An account-wide key whose owner holds no organization-wide membership in
+        your organization answers the same way, because it does not reach you.
       parameters:
         - name: id
           in: path
@@ -2228,13 +3240,19 @@ paths:
         wrong custodian for that.
 
         Actors are stored as a snapshot taken when the event was written, so a
-        record would stay readable if the account it names were ever deleted —
-        and nothing in this product deletes one, so in practice `actor_label` is
-        belt and braces rather than the load-bearing field it was designed as.
-        `actor_id` is the acting user, and it is **never cleared**: it is absent
-        only on records written by something that is not a person, such as the
-        domain-verification job. This said "present only while the user still
-        exists" until 0.2.0, which described a lifecycle nothing implements.
+        record stays readable after the account it names is deleted. Since 0.3.0
+        that is a lifecycle rather than a hypothetical: `DELETE /account` exists,
+        and an hourly pass replaces the snapshot of an erased actor with the
+        fixed label `deleted account`.
+
+        `actor_id` is the acting user and it is **never cleared**, erasure
+        included. It is absent only on records written by something that is not
+        a person, such as the domain-verification job. That is deliberate and it
+        is what makes an erased actor's entries still correlate with each other:
+        the label is a constant, so it distinguishes nobody, and the id is the
+        only thing that tells one erased actor from another. The id identifies
+        nobody from inside this instance once the account is erased — see
+        `docs/SECURITY.md` for what that does and does not claim.
 
         Addresses are never recorded. `ip_prefix` is a network — `/24` for
         IPv4, `/48` for IPv6 — which is enough to tell "the usual office" from
@@ -2920,9 +3938,16 @@ paths:
         So a workspace-scoped admin grants access in their own workspace and
         nowhere else, and cannot grant themselves into a second one.
 
-        The person must already hold an organization-wide membership. Somebody
-        whose only place here is one workspace was deliberately scoped to it,
-        and somebody with no membership at all is invited rather than granted.
+        The person must already be a member of the organization — by **any**
+        membership, organization-wide or scoped to a single workspace. Somebody
+        with no membership at all is invited rather than granted, because a
+        grant is not a way into an organization.
+
+        This said an organization-wide membership was required, until 0.3.0. It
+        never was: `GetOrganizationMember` admits either and orders
+        `workspace_id NULLS FIRST` only to pick a label, and the service says so
+        in as many words. An integrator reading the old sentence would have
+        built a precondition this product does not have.
 
         The role is capped at your own rank, exactly as an invitation's is.
         Requires `members.write`.
@@ -3247,6 +4272,35 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "422":
           $ref: "#/components/responses/Validation"
+    delete:
+      tags: [notifications]
+      operationId: markNotificationUnread
+      summary: Put one notification back in the unread list
+      description: |
+        The undo for the line above, and for the click-through the dashboard
+        performs: opening a notification marks it read on the way past, so
+        having read one by accident is a common state rather than a rare one.
+
+        `read_at` is set back to `NULL`, which is what unread has always meant —
+        no schema change, and no separate "unread" flag to disagree with the
+        timestamp. The first-seen timestamp is discarded, deliberately, by the
+        person it belongs to; `POST` deliberately never overwrites one, and this
+        is the only way to lose it.
+
+        Idempotent, and someone else's id is indistinguishable from one that
+        does not exist — both answer `204`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Marked unread (idempotent)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
 
   /workspaces:
     get:
@@ -3257,10 +4311,17 @@ paths:
         Your own memberships, so there is no permission for it — the same
         reasoning as the notification inbox.
 
-        **An API key sees only the organization it was issued for.** A session
-        sees every organization you belong to, because moving between them is
-        what the switcher is for; a key was issued for one and cannot act
-        outside it, so it is not told the names of the others.
+        **An API key sees the organizations it reaches, and no more** (0.3.0).
+        A session sees every organization you belong to, because moving between
+        them is what the switcher is for. A **pinned** key was issued for one
+        and cannot act outside it, so it is not told the names of the others.
+        An **account-wide** key acts in the organizations its owner belongs to,
+        so those are exactly what it is told about — minus any an administrator
+        has cut it out of, which is an organization it no longer works in.
+
+        This description said *only the organization it was issued for* until
+        0.3.0, which was the whole truth while every key was pinned. See
+        `organization_id` on `APIKey` for the reach a key has.
 
         `current` marks the workspace this request is acting in. `default`
         marks the one pinned as where new sessions start; when nothing is
@@ -3517,6 +4578,18 @@ components:
       description: Set by `POST /auth/login`. Unsafe cross-origin requests are refused.
 
   parameters:
+    QRCodeSlug:
+      name: slug
+      in: path
+      required: true
+      description: >
+        The identity printed in the code's payload. Every stored code has one,
+        the default included; the only code without one is the default of a link
+        that has never been written down, which is reached through the
+        `/links/{id}/qr` shorthand instead.
+      schema:
+        type: string
+        pattern: "^[a-z0-9]{1,16}$"
     LinkID:
       name: id
       in: path
@@ -3575,6 +4648,27 @@ components:
       description: Inclusive, UTC. Defaults to today.
 
   requestBodies:
+    QRLogoUpload:
+      required: true
+      description: >
+        The image, as one `multipart/form-data` part named `logo`. Shared by the
+        default code's shorthand and the named-code collection, because they are
+        one operation at two addresses — a second copy of this shape is a second
+        thing that can disagree with the handler.
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [logo]
+            properties:
+              logo:
+                type: string
+                format: binary
+                description: >
+                  The image, as PNG or JPEG. At most 1024 pixels a side; one
+                  larger than the stored bound is resized to fit rather than
+                  refused.
     Credentials:
       required: true
       content:
@@ -3594,6 +4688,54 @@ components:
               name:
                 type: string
                 description: Display name; defaults to the mailbox part of the email.
+
+    SetupCredentials:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [email, password]
+            properties:
+              email:
+                type: string
+                format: email
+              password:
+                type: string
+                minLength: 12
+                description: Length is the only rule (NIST SP 800-63B).
+              name:
+                type: string
+                description: Display name; defaults to the mailbox part of the email.
+              update_check:
+                type: boolean
+                description: |
+                  The API's half of the first-run prompt the dashboard's setup
+                  page shows: whether this instance may ask GitHub, once a day,
+                  whether a newer LinkCtrl has been released.
+
+                  **Omitted answers nothing**, which is a third state the
+                  setting has: the check stays off, and the question is put to
+                  the first account holding `instance.admin` that signs in to
+                  the dashboard. A client written before this field existed
+                  claims an instance exactly as it always did, and cannot agree
+                  to an outbound connection on its operator's behalf by staying
+                  silent.
+
+                  What the check sends, in full: this server's source address,
+                  and the version it is running, in the `User-Agent`. Nothing
+                  else — no instance identifier, no deployment size, no link
+                  counts, no configuration. The response is read for a version
+                  and discarded.
+
+                  `LINKCTRL_UPDATE_CHECK=false` on the deployment overrides this
+                  downwards and cannot be overridden by it; a value sent to an
+                  instance configured that way is accepted and has no effect.
+
+                  There is no endpoint that changes the answer afterwards. It
+                  is asked once, and the control that remains is the
+                  environment variable.
 
   responses:
     Unauthorized:
@@ -3651,7 +4793,53 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
 
+    NoMailer:
+      description: |
+        This instance has no SMTP relay configured, so it cannot send the mail
+        the operation depends on. `503` rather than `403` or `404`: the
+        mechanism exists and is unavailable rather than forbidden or absent, and
+        a client that retries after the operator configures a relay will
+        succeed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
   schemas:
+    MFAStatus:
+      type: object
+      required: [available, enabled, recovery_codes_remaining]
+      properties:
+        available:
+          type: boolean
+          description: |
+            Whether this **instance** can store a second factor at all, which is
+            whether `LINKCTRL_MFA_SECRET_KEY` is configured.
+        enabled:
+          type: boolean
+        enabled_at:
+          type: string
+          format: date-time
+          nullable: true
+        recovery_codes_remaining:
+          type: integer
+          format: int64
+          description: Unspent codes. Zero on an account with no second factor.
+
+    MFARecoveryCodes:
+      type: object
+      required: [recovery_codes]
+      properties:
+        enabled:
+          type: boolean
+        recovery_codes:
+          type: array
+          description: |
+            Shown once. Only their hashes are stored, so this is the only
+            response that ever carries them.
+          items:
+            type: string
+
     Problem:
       type: object
       description: RFC 9457 problem details. Clients should branch on `type`, not prose.
@@ -4420,7 +5608,9 @@ components:
       additionalProperties: false
       description: >
         How a code is drawn. Every field is optional and an omitted one is its
-        default, so `{}` is plain black on white.
+        default, so `{}` is plain black on white — except `level`, which is a
+        floor resolved against the payload rather than a constant. See the
+        field.
       properties:
         foreground:
           type: string
@@ -4437,43 +5627,281 @@ components:
           type: string
           enum: [L, M, Q, H]
           description: >
-            Error correction, as ISO/IEC 18004 names the levels. Default `M`. A
-            higher level survives more damage and packs the code tighter at the
-            same printed size.
+            Error correction, as ISO/IEC 18004 names the levels. A higher level
+            survives more damage and packs the code tighter at the same printed
+            size.
+
+            **Every code is drawn at the strongest level that does not make the
+            symbol any bigger.** A QR symbol steps between versions and
+            correction below the next step is free, so a code is drawn at the
+            best level its own payload admits for nothing — usually `Q` for a
+            short URL, where the old default of `M` bought a level of damage
+            tolerance less at exactly the same density. The module count is the
+            one `M` would have produced, so the picture is the same size to the
+            pixel. Since 0.3.0, and nothing stored was rewritten: a style
+            naming `M` and a style naming nothing resolve alike.
+
+            **This field is a floor, not an instruction: it is honoured upward
+            and ignored downward.** Naming `H` gets `H`, at whatever version
+            that costs — a logo forces exactly that. Naming `L`, or `M` on a
+            payload where `Q` is free, gets the free level, because no caller
+            may ask for less correction than costs nothing. **`L` is accepted
+            and is a level nothing draws**, since the free level is never below
+            `M`. What this API loses with it is the ability to request a weaker
+            code than the payload gets for free.
+
+            `GET` reports the level the picture actually carries. For a style
+            naming a weaker level that is not the string the style holds, and
+            the style is left as it was written rather than rewritten behind
+            the caller.
+
+            **This field is API-only.** The dashboard stopped offering it at
+            M49: it is a scannability tradeoff a dashboard user has no basis to
+            make and a script might, so it is chosen here and carried forward
+            unchanged by a save from the panel.
+
+            **A code carrying a logo is always `H`, and a request naming
+            anything else is accepted and overridden rather than refused.** A
+            logo covers modules and `H` is the level that makes covering them
+            survivable, so it is not a preference while there is one. This
+            request replaces the style whole, and an omitted `level` means the
+            floor above — so refusing would answer `422` to a caller changing a
+            colour on a code whose logo it never mentioned. Nothing is silent
+            about it: the response to this request, and every later `GET`,
+            report `H`. **Removing the logo returns the code to the rule**
+            rather than to a remembered level: the payload is unchanged, so
+            every picture already printed still resolves, and holding `H` on an
+            uncovered code packs in modules it does not need.
         margin:
           type: integer
           minimum: 0
           maximum: 16
           description: >
-            The quiet zone, in modules. Default 4, which is the minimum
-            ISO/IEC 18004 specifies.
+            The quiet zone, in modules, and **the fallback rather than the
+            usual answer since 2026-08-12**. It decides the picture only when
+            `size` is absent: the picture is then the symbol plus this many
+            modules on each side, which is what every style written before that
+            date carries and what a caller setting `margin` and `scale` alone
+            still gets, stored and drawn as given with no fit consulted.
+
+            When `size` is set, the quiet zone is the pixels that size leaves
+            over and this field is only what the drawing falls back to if the
+            content ever outgrows the stored size — a link renamed into a longer
+            alias encodes to a larger symbol, and a picture that cannot hold its
+            own symbol is not a picture.
+
+            Default 4, which is the minimum ISO/IEC 18004 specifies. The
+            dashboard's size control writes 4 here and puts its answer in
+            `size`.
         scale:
           type: integer
           minimum: 2
-          maximum: 32
+          maximum: 75
           description: >
-            Pixels per module. Decides the `width` and `height` attributes only
-            — the drawing itself is in module units inside a `viewBox`, so a
-            consumer sizing the element with CSS gets the same code at any size.
-            Default 8.
+            Pixels per module. Default 8, and the one number both forms of this
+            geometry share, because a module is a whole number of pixels in
+            either. With `size` it decides how much of the picture is symbol and
+            how much is quiet zone; without it, `(module count + 2 × margin) ×
+            scale` is the output size. The SVG carries the result as explicit
+            `width` and `height`, drawn inside a `viewBox` of the same extent,
+            so a consumer sizing the element with CSS still gets the same code
+            at any size; the PNG is rasterised at it.
+
+            The ceiling was 32 until 2026-08-12, then 68, and is derived from
+            the raster bound: the smallest symbol is 21 modules, the narrowest
+            quiet zone the size control produces adds six, and 2048 ÷ 27 is 75.
+            That is the largest pixels-per-module the dashboard's size control
+            can resolve to, so every size it offers is a style this endpoint
+            accepts. A large `scale` with a large `margin` still draws past
+            2048px, and the image endpoints answer `422` for that as they
+            always have.
+        size:
+          type: integer
+          minimum: 64
+          maximum: 2048
+          description: >
+            The output size in pixels, and when it is set it is **exactly** what
+            the picture measures. Omit it for the older `margin`-and-`scale`
+            geometry above.
+
+            **Only the symbol needs whole modules.** The quiet zone is white
+            space and can be any pixel count, so the picture is `size` across,
+            the symbol is `module count × scale` of that centred inside it, and
+            the remainder is the quiet zone — which is what makes every
+            requested size reachable rather than snapping to the nearest one a
+            module grid admits. An odd remainder puts one more pixel on the
+            right and the bottom than on the left and the top; centring it
+            perfectly would cost the exact size, which is the point.
+
+            **This is the field the dashboard's size control writes**, and it is
+            what makes a size set there the size served back. That control also
+            picks `scale` so the quiet zone lands near four modules — inside
+            three to five wherever the grid admits one, and wide of it rather
+            than narrow where it does not.
+
+            A `size` too small for the symbol is **refused rather than
+            squeezed**, and the floor is `scale × (module count + 6)` pixels —
+            the symbol at the module width you asked for, plus three modules of
+            quiet zone a side. At the smallest module width that is `2 × (module
+            count + 6)`: 70 for a 29-module code and 366 for the largest symbol
+            this encoder produces, and no size below it is drawable at any
+            scale. The refusal names both numbers, because lowering `scale` is
+            the other way to be accepted. Neither is a property of this schema —
+            they come from the content and from the style together — so the
+            schema states the range and the endpoint states the rest.
 
     QRCode:
       type: object
       additionalProperties: false
-      required: [link_id, content, style, stored]
+      required: [link_id, slug, default, label, content, style, stored, size, has_logo]
       properties:
+        id:
+          type: string
+          format: uuid
+          description: >
+            The stored row. Absent for a default code nobody has styled or
+            named, which has no row yet — and which is therefore also the one
+            code with no `slug`. Reported for completeness; the slug is what
+            addresses a code.
         link_id: { type: string, format: uuid }
+        slug:
+          type: string
+          description: >
+            The identity this code prints in its payload, as `&qrc=<slug>`
+            beside `?src=qr`. Generated, never chosen, and never rewritten.
+
+            **Every stored code has one, the default included.** It used to be
+            empty for the default code, and that emptiness *was* the default's
+            identity — which is what made it unremovable. The identity is
+            `default` below now, and what is left empty is only a link whose
+            default code has never been written down: one code, no row, and a
+            payload with no `qrc` in it, which is what every picture drawn
+            before per-code identity existed carries.
+
+            A picture already printed is unaffected either way. One carrying no
+            `qrc` is counted against whichever code is the default; one carrying
+            a `qrc` is counted against that slug exactly as before.
+        default:
+          type: boolean
+          description: >
+            Whether a scan carrying no `qrc` is counted against this code. True
+            for exactly one of a link's codes, and for the synthesised code of a
+            link whose default has no row — a link always has a default. Moved
+            with `PUT /links/{id}/qr/codes/{slug}/default`; never set by writing
+            a code.
+        label:
+          type: string
+          description: >
+            What the workspace calls this code. Free text, never in a URL and
+            never in the picture; the redirect path never sees it. Empty for a
+            code nobody has named.
         content:
           type: string
           description: >
             Exactly what the picture encodes: the link's short URL carrying
-            `?src=qr`.
+            `?src=qr`, and `&qrc=<slug>` for every code that has a slug — which
+            is every stored code, the default included.
         style: { $ref: "#/components/schemas/QRStyle" }
         stored:
           type: boolean
           description: >
             False for a link whose style has never been set, which renders at
             the default rather than not at all.
+        size:
+          type: integer
+          description: >
+            The output size in pixels this style draws this content at — the
+            width and the height, since a code is square. **Read-only and
+            derived**, and what it is derived from depends on the style: a style
+            carrying `style.size` reports that number back, and one carrying
+            only `margin` and `scale` reports what those come to against the
+            module count this content encodes to.
+        has_logo:
+          type: boolean
+          description: >
+            Whether an image has been uploaded against this code. **A boolean
+            rather than the image, and there is no operation anywhere in this
+            document that returns the bytes** — the two that exist replace one
+            and remove one. Every code can carry one, the default included: it
+            is addressed at `/links/{id}/qr/logo`, the same shorthand `qr.svg`
+            and `qr.png` use, because that shorthand answers for whichever code
+            is the default.
+
+            **When this is true, both picture endpoints draw the image into the
+            middle of the code**: a centred square three tenths of the
+            symbol's width — 9% of its area — with the modules under it
+            destroyed and `level` forced to `H` so they can be recovered. The
+            fraction is bounded by what `H` corrects and chosen inside that
+            bound by decoding every combination this product draws, at
+            simulated distance, through two independent decoders; the logo is
+            centred because the derivation holds for no other placement. **The drawn size is
+            held where it was**: `H` packs more modules into the symbol, so the
+            style is re-fitted against the larger one to keep the picture at the
+            size the code was already drawn at — a code near the raster ceiling
+            would otherwise cross it and its PNG would start answering `422`.
+            Since 2026-08-12 that is the identical integer rather than the
+            nearest achievable one, because the quiet zone carries the
+            remainder. This read *a code can grow when a logo is added* until
+            0.3.0.
+
+            **One case still grows, and it is the case where holding the size is
+            impossible.** The floor a symbol can be drawn at is `2 × (module
+            count + 6)` pixels and `H`'s module count is the larger one, so a
+            code drawn below the `H` symbol's floor cannot be re-fitted into the
+            size it had. The style is then left as it stands and the picture is
+            drawn from its `margin` and `scale` instead, which is larger — the
+            alternative would be refusing an upload the SVG draws correctly, or
+            serving a quiet zone nothing can read. It is reachable only from a
+            code already close to its own floor.
+
+    LogoResample:
+      type: object
+      additionalProperties: false
+      required: [from_width, from_height, width, height]
+      description: >
+        What an uploaded logo was, and what it became. **Present only on a logo
+        upload that had to be shrunk** — an image inside the stored bound is
+        stored as it arrived and this key is absent, so its presence is the
+        whole signal. Both pairs are given because a client that sent artwork
+        and got a `200` would otherwise have no way to know the bytes it sent
+        are not the bytes now stored.
+      properties:
+        from_width:
+          type: integer
+          description: The width, in pixels, of the image that was uploaded.
+        from_height:
+          type: integer
+          description: The height, in pixels, of the image that was uploaded.
+        width:
+          type: integer
+          description: The width, in pixels, of the image that is stored.
+        height:
+          type: integer
+          description: The height, in pixels, of the image that is stored.
+
+    QRSizeRefit:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      description: >
+        A stored `style.size` that had to be **raised**, and what it was raised
+        from. **Present only on a create that could not keep a size** — adding a
+        code gives the link's existing default code a printed identity, which
+        makes what that code encodes longer and can push it into a larger symbol
+        than its stored size holds with a quiet zone anything can read. The size
+        then rises to the smallest one that does, on both the new code and the
+        one that gained the identity.
+
+        A create that kept every size omits this key, which is the usual
+        answer: a larger symbol at the same number of pixels is normally still
+        drawable, and only the pixels-per-module move.
+      properties:
+        from:
+          type: integer
+          description: The size, in pixels, that was stored before the create.
+        to:
+          type: integer
+          description: The size, in pixels, that is stored now.
 
     QRCodeResponse:
       type: object
@@ -4483,8 +5911,78 @@ components:
         qr: { $ref: "#/components/schemas/QRCode" }
         levels:
           type: array
-          description: The error-correction levels a style may name.
+          description: >
+            The error-correction levels a style may name. `L` is accepted and
+            never drawn: since D187 the level is a floor and the strongest free
+            level is never below `M`, so a style naming `L` is drawn at that
+            free level. A picker built from this list should say so.
           items: { type: string, enum: [L, M, Q, H] }
+        resampled:
+          allOf: [{ $ref: "#/components/schemas/LogoResample" }]
+          description: >
+            Only `PUT /links/{id}/qr/logo` ever sets this, and only when the
+            image it stored is smaller than the one it was sent.
+
+    QRCodeList:
+      type: object
+      additionalProperties: false
+      required: [codes, max]
+      properties:
+        codes:
+          type: array
+          items:
+            $ref: "#/components/schemas/QRCode"
+          description: >
+            The link's codes, in alphabetical order by name, compared without
+            regard to case and tie-broken by id. A code nobody has named sorts
+            first. The order does **not** move when the default does: which code
+            carries `default` is a field on each entry, not a position. It was
+            default-first-then-creation-order until 0.3.0.
+        max:
+          type: integer
+          description: >
+            How many codes one link may carry. The bound exists because each
+            code is a value in the link's own analytics breakdown, and a link
+            with a thousand of them is a link whose analytics page cannot be
+            drawn.
+
+    SingleQRCodeResponse:
+      type: object
+      additionalProperties: false
+      required: [code, levels]
+      properties:
+        code: { $ref: "#/components/schemas/QRCode" }
+        levels:
+          type: array
+          description: >
+            The error-correction levels a style may name. `L` is accepted and
+            never drawn: since D187 the level is a floor and the strongest free
+            level is never below `M`, so a style naming `L` is drawn at that
+            free level. A picker built from this list should say so.
+          items: { type: string, enum: [L, M, Q, H] }
+        resampled:
+          allOf: [{ $ref: "#/components/schemas/LogoResample" }]
+          description: >
+            Only `PUT /links/{id}/qr/codes/{slug}/logo` ever sets this, and only
+            when the image it stored is smaller than the one it was sent.
+        refit:
+          allOf: [{ $ref: "#/components/schemas/QRSizeRefit" }]
+          description: >
+            Only `POST /links/{id}/qr/codes` ever sets this, and only when
+            adding the code had to raise a stored `style.size`. Absent means
+            every size was kept, which is the usual answer.
+
+    QRCodeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+          maxLength: 60
+          description: >
+            What to call this code. Omitted means unnamed; on a PUT, omitting it
+            clears an existing name.
+        style: { $ref: "#/components/schemas/QRStyle" }
 
     SetQRRequest:
       type: object
@@ -5323,7 +6821,7 @@ components:
     LinkStats:
       type: object
       additionalProperties: false
-      required: [link_id, from, to, totals, series, dimensions, destinations, caveat]
+      required: [link_id, from, to, totals, series, dimensions, destinations, qr_codes, caveat]
       properties:
         link_id: { type: string, format: uuid }
         from: { type: string, format: date }
@@ -5351,9 +6849,58 @@ components:
             destination, which is every link on a default instance.
           items:
             $ref: "#/components/schemas/DestinationSplit"
+        qr_codes:
+          type: array
+          nullable: true
+          description: >
+            The per-code breakdown (M50). Null for a link nobody has scanned and
+            whose codes nobody has added to, which is every link on a default
+            instance. **A filter over the `referrer` dimension rather than a
+            rollup of its own** — a scan's code *is* its referrer value, `qr` for
+            a scan carrying no code and `qr:<slug>` for one that names a code —
+            so the `referrer` breakdown above still reports every scan under the
+            single value `qr`, unchanged by how many codes a link carries.
+
+            The bare `qr` is not a code's own value and never was a slug: it is
+            what an untagged picture records, and it is counted against whichever
+            code is the default. That is what let today's default code gain a
+            slug without a single already-recorded scan being rewritten.
+          items:
+            $ref: "#/components/schemas/QRCodeSplit"
         caveat:
           type: string
           description: The honest limitation of cookie-free counting, attached to the numbers it qualifies.
+
+    QRCodeSplit:
+      type: object
+      additionalProperties: false
+      required: [slug, label, clicks, unique_visitors]
+      properties:
+        slug:
+          type: string
+          description: >
+            The code's own slug. Empty only for the default code of a link that
+            has never been written down.
+
+            **The default code's row includes every untagged scan.** A picture
+            carrying no `qrc` — which is every picture drawn before per-code
+            identity existed — is recorded without a code, and those are counted
+            against whichever code is the default when this breakdown is read.
+            Making a different code the default therefore moves them; that is
+            what the default *is*.
+        label:
+          type: string
+          description: What the workspace calls this code. Empty for one nobody named.
+        removed:
+          type: boolean
+          description: >
+            Scans attributed to a code that no longer exists. Reported rather
+            than dropped: a link's history must not change because somebody
+            retired a poster. The row stops growing when the code is deleted,
+            because a payload naming a slug the link no longer has is recorded
+            without a code and is therefore counted against the default one.
+        clicks: { type: integer }
+        unique_visitors: { type: integer }
 
     Overview:
       type: object
@@ -5391,8 +6938,9 @@ components:
       type: object
       additionalProperties: false
       required:
-        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
-         revoked_at, rotated_at, grace_expires_at, successor_id, created_at]
+        [id, name, prefix, scopes, org_wide, organization_id,
+         revoked_organizations, last_used_at, expires_at, revoked_at,
+         rotated_at, grace_expires_at, successor_id, created_at]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -5413,9 +6961,62 @@ components:
             Not pinned is not *all at once*. There is no per-request workspace
             selector, so a request made with such a key resolves exactly one
             workspace the way a sign-in does — the owner's pinned default,
-            otherwise the one they last used — bounded to the organization the key
-            was issued in. It follows its owner's current choice, a switch made in
-            a browser included.
+            otherwise the one they last used — bounded to one organization. It
+            follows its owner's current choice, a switch made in a browser
+            included.
+
+            Which organization is `organization_id` below, and the two fields are
+            not redundant: this one is about workspaces and that one is about
+            tenants.
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The key's **reach** (0.3.0). Set is a key pinned to one organization
+            for its whole life. `null` is an *account-wide* key: it reaches every
+            organization its owner holds an organization-wide membership in, and
+            each request resolves one of them the way a sign-in does.
+
+            Account-wide is what an unpinned key created from 0.3.0 on is unless
+            it was pinned deliberately, and pinning cannot be undone by rotation.
+            Every key issued before 0.3.0 is pinned and stayed pinned; the
+            migration changed no row's reach.
+
+            Two consequences worth stating rather than discovering. An
+            account-wide key reaches an organization its owner joins **after** the
+            key was minted — that is what account-wide means, and somebody who
+            wants a snapshot of today's memberships pins the key instead. And its
+            permissions differ per organization: the scopes are intersected with
+            the owner's role *there*, so the same key is more powerful in one
+            tenant than another, and demoting its owner in one narrows it there
+            and nowhere else.
+
+            `false` on `org_wide` implies this is set: a workspace belongs to
+            exactly one organization, so a workspace-bound key is pinned by
+            construction.
+
+            An account-wide key's reach is not the whole story on its own — see
+            `revoked_organizations` below.
+        revoked_organizations:
+          type: array
+          items: { $ref: '#/components/schemas/APIKeyOrgRevocation' }
+          description: |
+            The organizations an administrator has cut this key out of (0.3.0).
+
+            An account-wide key reaches every organization its owner holds an
+            organization-wide membership in, and an administrator of any of them
+            may revoke its reach into *theirs* without touching the credential
+            elsewhere — `DELETE /api/v1/api-keys/{id}` called by somebody who is
+            not the owner. Afterwards the key authenticates, works everywhere
+            else, and resolves into that organization never again. This array is
+            the only place the owner can see that happened: the audit record is
+            written in the administrator's organization, which the owner may hold
+            no `audit.read` in.
+
+            Always present, and empty for a **pinned** key however it was
+            revoked. An organization is a pinned key's entire reach, so cutting
+            it is an outright revoke and `revoked_at` is where that shows.
         last_used_at:
           type: string
           format: date-time
@@ -5462,8 +7063,9 @@ components:
         because `additionalProperties: false` on the base would reject the very
         field this schema adds.
       required:
-        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
-         revoked_at, rotated_at, grace_expires_at, successor_id, created_at, key]
+        [id, name, prefix, scopes, org_wide, organization_id,
+         revoked_organizations, last_used_at, expires_at, revoked_at,
+         rotated_at, grace_expires_at, successor_id, created_at, key]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -5472,6 +7074,18 @@ components:
           type: array
           items: { type: string }
         org_wide: { type: boolean }
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The key's reach. See `organization_id` on APIKey.
+        revoked_organizations:
+          type: array
+          items: { $ref: '#/components/schemas/APIKeyOrgRevocation' }
+          description: |
+            Always empty here. Nothing can have barred a key that did not exist
+            when the bar would have been written. Present because the shape of a
+            key is one shape wherever it appears.
         last_used_at: { type: string, format: date-time, nullable: true }
         expires_at: { type: string, format: date-time, nullable: true }
         revoked_at: { type: string, format: date-time, nullable: true }
@@ -5490,9 +7104,10 @@ components:
         The successor, plus the fate of the key it replaced. Spelled out for the
         reason CreatedAPIKey is.
       required:
-        [id, name, prefix, scopes, org_wide, last_used_at, expires_at,
-         revoked_at, rotated_at, grace_expires_at, successor_id, created_at,
-         key, predecessor]
+        [id, name, prefix, scopes, org_wide, organization_id,
+         revoked_organizations, last_used_at, expires_at, revoked_at,
+         rotated_at, grace_expires_at, successor_id, created_at, key,
+         predecessor]
       properties:
         id: { type: string, format: uuid }
         name:
@@ -5503,6 +7118,32 @@ components:
           type: array
           items: { type: string }
         org_wide: { type: boolean }
+        organization_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The successor's reach: the predecessor's, or narrower. `null` only
+            when the key it replaced was already account-wide — a successor may
+            not reach more organizations than its predecessor.
+        revoked_organizations:
+          type: array
+          items: { $ref: '#/components/schemas/APIKeyOrgRevocation' }
+          description: |
+            **The predecessor's bars, carried onto the successor** — not empty,
+            and this is the one key shape where it is not. A reach revocation
+            names a key id and rotation mints a new one, so the rows are copied
+            inside the rotation transaction; without that the bar would be
+            escapable by the credential it was aimed at, using nothing but its
+            own token. The `revoked_at` and the administrator behind each bar are
+            the predecessor's, unchanged, so rotating does not re-date somebody
+            else's decision.
+
+            Empty in the two pinned directions, because neither has rows to
+            carry: nothing bars a key whose one organization *is* its reach —
+            cutting that reach revokes the key outright — and an account-wide key
+            that rotates into a pinned successor is pinned to an organization it
+            was by construction not barred from.
         last_used_at: { type: string, format: date-time, nullable: true }
         expires_at:
           type: string
@@ -5534,6 +7175,27 @@ components:
               type: string
               format: date-time
               description: The far edge of the grace window. After it the predecessor authenticates nothing.
+
+    APIKeyOrgRevocation:
+      type: object
+      additionalProperties: false
+      required: [organization_id, organization_name, revoked_at]
+      description: |
+        One organization cut out of an account-wide key's reach (0.3.0).
+      properties:
+        organization_id: { type: string, format: uuid }
+        organization_name:
+          type: string
+          description: |
+            Carried because the question this answers is asked in words — *why
+            does my key work in Acme and not in Beta* — and a uuid answers it in
+            none of them. It discloses nothing new: a bar can only exist on a key
+            whose owner held an organization-wide membership there.
+        revoked_at: { type: string, format: date-time }
+      # Who did it is deliberately absent. The row records it, and naming an
+      # administrator of another organization to a credential's holder is a
+      # disclosure nothing asked for; the audit record in that organization is
+      # where the actor is, for the people entitled to read it.
 
     CreateAPIKeyRequest:
       type: object
@@ -5574,8 +7236,32 @@ components:
             workspace.
 
             It does not act in every workspace at once: each request resolves a
-            single workspace the way a sign-in does, bounded to the organization
-            the key is issued in. See `org_wide` on the key itself.
+            single workspace the way a sign-in does, bounded to one organization.
+            See `org_wide` on the key itself.
+        organization_id:
+          type: string
+          format: uuid
+          description: |
+            Pin the key to one organization (0.3.0). Omit it and an `org_wide`
+            key is **account-wide**: it reaches every organization you hold an
+            organization-wide membership in, including ones you join after the
+            key is minted, which is what a personal access token does elsewhere.
+
+            The only value accepted is the organization you are acting in;
+            anything else is a `422` on this field. Minting into a tenant you are
+            not currently in would need authority nothing has checked, and
+            switching organization and creating it there is the same act with the
+            authorization visible.
+
+            Ignored when `org_wide` is `false`: a workspace-bound key is pinned to
+            its workspace's organization by construction. Naming your own
+            organization there is a no-op; naming a different one is still
+            refused.
+
+            Pinning cannot be undone. A pinned key may rotate into another pinned
+            key and never into an account-wide one, so this field is the one
+            irreversible choice on this form — which is why omitting it is the
+            wide answer and supplying it is the narrow one.
 
     RotateAPIKeyRequest:
       type: object
@@ -5602,6 +7288,25 @@ components:
             times the `last_used_at` flush cadence, so "has anything still used
             the old key" is answerable before the window closes; the ceiling is
             what keeps a rotated-away credential's life finite.
+        reach:
+          type: string
+          enum: [organization, account]
+          description: |
+            Narrows the successor's tenancy (0.3.0), which is the second axis of
+            *identical or narrower*. Omit to copy this key's reach, which is what
+            an unattended rotation sends.
+
+            `organization` pins the successor to the organization this request
+            resolved into. Available to an account-wide key, and a no-op for one
+            that is already pinned there.
+
+            `account` asks for an account-wide successor. A no-op for a key that
+            is already account-wide, and a `422` on this field for a pinned one:
+            a successor may not reach more organizations than the key it
+            replaces, and rotation is authorized by the key's own token, so
+            widening would be a credential granting itself a tenant nobody signed
+            in to authorize. It exists so that refusal can be *said* rather than
+            being a shape the API declines to have a word for.
 
     InvitationStatus:
       type: string
@@ -5735,14 +7440,18 @@ components:
           description: |
             Who acted, snapshotted when the event was written so the record
             survives the account being deleted. Usually an email address;
-            `system` for an action with no signed-in actor.
+            `system` for an action with no signed-in actor; `deleted account`
+            once the account has been deleted and the hourly erasure pass has
+            run, which is a constant and therefore identical for every erased
+            actor.
         actor_id:
           type: string
           format: uuid
           description: >-
             The acting user. Absent on records written by something that is not
-            a person — the domain-verification job, a migration. Never cleared:
-            nothing in this product deletes a user.
+            a person — the domain-verification job, a migration. Never cleared,
+            erasure included, which is what keeps one erased actor's entries
+            distinguishable from another's.
         actor_api_key_id:
           type: string
           format: uuid
@@ -5799,7 +7508,10 @@ components:
           description: |
             Per-kind detail, returned verbatim. `audit.growth` carries `bytes`
             and `threshold`, so a client can render the numbers without parsing
-            them back out of the sentence.
+            them back out of the sentence. `update.available` carries `version`
+            and `running`, for the same reason — and `version` is also what
+            records that this reader has already been told about that release,
+            so it is never repeated.
         workspace_id:
           type: string
           format: uuid

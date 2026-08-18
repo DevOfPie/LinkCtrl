@@ -1,10 +1,14 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func decode(t *testing.T, rr *httptest.ResponseRecorder) Report {
@@ -36,6 +40,70 @@ func TestLiveDoesNotTouchDependencies(t *testing.T) {
 	}
 	if got := rr.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
+}
+
+// deadPool is a real *pgxpool.Pool whose Postgres is not there.
+//
+// pgxpool.New does not dial, so this costs nothing to build; the first Ping
+// gets ECONNREFUSED from the loopback discard port. It is the difference
+// between "the field is nil" and "the database is gone", and only the second
+// one is the outage the liveness contract is about.
+func deadPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(),
+		"postgres://nobody:nobody@127.0.0.1:1/nothing?sslmode=disable&connect_timeout=1")
+	if err != nil {
+		t.Fatalf("build a pool that cannot connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+// TestLivenessSurvivesPostgresGoingAway is the load-balancer contract's first
+// clause, as a claim that can be shown false: **liveness never depends on a
+// dependency.**
+//
+// The two endpoints are asserted together and on the same Health, because the
+// contract is about the difference between them. A database outage must move
+// `/readyz` to 503 — take this replica out of rotation, it can resolve nothing —
+// and must leave `/healthz` at 200, because a liveness probe that follows
+// Postgres restarts every replica simultaneously and turns a recoverable
+// dependency failure into a far worse outage. An operator who wires liveness to
+// `/readyz` gets exactly that, which is why the two are documented as separate
+// promises in docs/operations.md rather than as two spellings of "healthy".
+//
+// TestLiveDoesNotTouchDependencies covers the nil case, which proves Live reads
+// nothing. This one proves the endpoint answers while a real dependency is
+// failing a real probe.
+func TestLivenessSurvivesPostgresGoingAway(t *testing.T) {
+	h := &Health{DB: deadPool(t), Redis: nil}
+
+	start := time.Now()
+	live := httptest.NewRecorder()
+	h.Live(live, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	elapsed := time.Since(start)
+
+	if live.Code != http.StatusOK {
+		t.Errorf("GET /healthz = %d with Postgres unreachable, want 200; "+
+			"a liveness probe that follows the database restarts every replica at once",
+			live.Code)
+	}
+	// Not a performance assertion. A liveness handler that had grown a database
+	// call would spend postgres.PingTimeout here, and the point is that it
+	// cannot spend anything.
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("liveness took %s against an unreachable database; it is waiting on something", elapsed)
+	}
+
+	ready := httptest.NewRecorder()
+	h.Ready(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /readyz = %d with Postgres unreachable, want 503; "+
+			"the rest of this test would prove nothing", ready.Code)
+	}
+	if rep := decode(t, ready); rep.Status != "unavailable" {
+		t.Errorf("readiness status = %q with Postgres unreachable, want unavailable", rep.Status)
 	}
 }
 

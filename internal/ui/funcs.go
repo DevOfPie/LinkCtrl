@@ -31,7 +31,16 @@ type DayCount struct {
 type Chart struct {
 	W, H  int
 	PlotH int
-	MaxY  int64
+	// MaxY is the top of the axis: a rounded ceiling nobody observed, which is
+	// what makes the gridlines readable. It is **not** a reading, and labelling
+	// it as one is the defect F164 records — a 30-day maximum of 2,351 rendered
+	// as "peak 5,000/day", 113% high, with nothing beside it to contradict the
+	// number.
+	MaxY int64
+	// Peak is the largest reading in the series, which is the figure a reader
+	// takes "peak" to mean. Zero for an empty series, like every other field
+	// here.
+	Peak  int64
 	Bars  []Bar
 	Ticks []Tick
 	First string // label of the first day, for the x axis
@@ -47,8 +56,56 @@ type Bar struct {
 }
 
 type Tick struct {
-	Y     int
-	Label string
+	// Y is the gridline, in the plot's own coordinates.
+	Y int
+	// LabelY is the baseline the label sits on, in the outer viewport's — see
+	// series_chart.html for why the two are the same number of units and only
+	// the labels escape the horizontal stretch. Text hangs above its baseline,
+	// so the top gridline's label drops below the line and every other one sits
+	// just above it; a label drawn at Y=0 renders outside the box entirely.
+	LabelY int
+	Label  string
+	// BoxY, BoxW and BoxH are the chip the label is drawn on.
+	//
+	// Not decoration. A gridline label sits at the left of the plot and the
+	// leftmost bar is often the tallest, so the figure lands on `fill-accent-
+	// hover` — where `subtle` ink measures **1.66:1** in the light theme and
+	// 3.08:1 in the dark, against a package that has never shipped text under
+	// 4.5:1. The chip is `sunken`, which puts `muted` at 6.92:1 and 12.61:1.
+	// All four are WCAG 2.x ratios computed from input.css's own hex values at
+	// M58 — they read 1.82, 3.15, 6.84 and 12.0 until then, and every
+	// conclusion drawn from them is unchanged.
+	BoxY, BoxW, BoxH int
+}
+
+// The geometry of a tick label, in user units — CSS pixels, because the labels
+// are drawn in the chart's unstretched outer viewport.
+//
+// text-xs is 12px. So 11 clears the top edge with a pixel to spare, 4 keeps a
+// label clear of the line it belongs to, and the chip is a pixel taller than the
+// text with its top ten above the baseline.
+//
+// tickCharW is a digit's advance at 12px in the default sans stack, rounded up:
+// a comma is narrower, so a chip is at worst a few pixels wide of its figure,
+// which reads as padding rather than as a mistake. The alternative is measuring
+// a font in Go.
+const (
+	tickLabelDrop = 11
+	tickLabelLift = 4
+	tickChipUp    = 10
+	tickChipH     = 13
+	tickChipPad   = 6
+	tickCharW     = 7
+)
+
+// tick assembles one gridline and the label that names it.
+func tick(y int, baseline int, label string) Tick {
+	return Tick{
+		Y: y, LabelY: baseline, Label: label,
+		BoxY: baseline - tickChipUp,
+		BoxW: tickChipPad + tickCharW*len(label),
+		BoxH: tickChipH,
+	}
 }
 
 // BarChart lays out a day series in a w×h viewBox.
@@ -91,10 +148,36 @@ func BarChart(points []DayCount, w, h int) Chart {
 	}
 
 	c.MaxY = top
-	c.Ticks = []Tick{
-		{Y: 0, Label: fmtInt(top)},
-		{Y: c.PlotH / 2, Label: fmtInt(top / 2)},
+	// The peak is the largest reading, not the axis it is drawn against. The
+	// rounding above is correct and stays — an axis of 5,000 is readable where
+	// one of 2,351 is not — but the rounded ceiling is not an observation, and
+	// the footer that called it one was the only number the chart carried.
+	c.Peak = maxV
+	// The top and the baseline, and the last of them is what the 16 units above
+	// the bottom edge were held back for. `PlotH = h - 16` has reserved that band
+	// since the chart was written and nothing was ever drawn in it, because no
+	// label was drawn at all — so the baseline label goes there, clear of every
+	// bar, and the reservation stops being a tenth of the box spent on nothing.
+	//
+	// The middle one is drawn **only when halving the axis is exact**. `fmtInt`
+	// takes an int64 and `top/2` is integer division, so an odd ceiling labels
+	// the middle gridline with a figure it is not drawn at — which is F164's
+	// defect, an unobserved number presented as a reading, at a third of the size
+	// and on the line a reader measures every bar against.
+	//
+	// niceCeil's candidates are 1, 2, 5 and the powers of ten between, so odd is
+	// exactly two cases and both are at the small end: top=1, the all-zero week
+	// designed for above, where the middle line would read "0" beside a baseline
+	// already reading "0"; and top=5, where a 2.5 gridline would read "2". Each
+	// loses one gridline of three on an axis with at most five to read off, which
+	// is cheaper than a line whose label is wrong — and cheaper than teaching this
+	// chart to render a decimal for two values of `top`.
+	c.Ticks = []Tick{tick(0, tickLabelDrop, fmtInt(top))}
+	if top%2 == 0 {
+		c.Ticks = append(c.Ticks,
+			tick(c.PlotH/2, c.PlotH/2-tickLabelLift, fmtInt(top/2)))
 	}
+	c.Ticks = append(c.Ticks, tick(c.PlotH, c.PlotH+tickLabelDrop, "0"))
 	c.First = dayShort(points[0].Day)
 	c.Last = dayShort(points[len(points)-1].Day)
 	return c
@@ -459,6 +542,7 @@ func (r *Renderer) funcs() template.FuncMap {
 		"dict":        dict,
 		"add":         add,
 		"mul":         mul,
+		"rangePct":    rangePct,
 	}
 }
 
@@ -474,3 +558,31 @@ func add(a, b int) int { return a + b }
 // loop's own index, and carrying an x on every band would be a second copy of
 // the counter.
 func mul(a, b int) int { return a * b }
+
+// rangePct is where a value sits between two bounds, as a percentage, for a
+// mark drawn along a track. It answers the size slider's detents (M50.8, D198).
+//
+// **A function rather than a field, for the reason add and mul are.** The
+// position is arithmetic about the drawing, not a fact about the data: a
+// `QRSizeMarks` beside `QRSizeStops` would be a second copy of the same list,
+// and the two could then disagree about which sizes a code offers — which is
+// exactly what the marks exist to say truthfully.
+//
+// **A string rather than a float, because the caller is an SVG attribute.** Two
+// decimals: the track is a few hundred pixels wide, so whole percents would put
+// a mark two of them away from the value it names, and more than two decimals is
+// below a device pixel on any track this product draws.
+//
+// A degenerate range gives "0" and an out-of-range value clamps, so a mark is
+// always somewhere on the strip. Neither can happen from qrSizeStops, which
+// filters to the code's own floor and to qr.MaxSize; the clamp is what keeps a
+// future caller's bad bounds a visible mark rather than an invisible one.
+func rangePct(v, lo, hi int) string {
+	if hi <= lo || v <= lo {
+		return "0"
+	}
+	if v >= hi {
+		return "100"
+	}
+	return strconv.FormatFloat(float64(v-lo)*100/float64(hi-lo), 'f', 2, 64)
+}

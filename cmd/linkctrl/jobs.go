@@ -12,7 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/automation"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
@@ -20,10 +22,12 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/mail"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
+	"github.com/DevOfPie/LinkCtrl/internal/update"
 	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
@@ -66,6 +70,19 @@ type jobRunner struct {
 	// the service is always built — but held as a pointer so a test runner
 	// without one skips the sweep rather than panicking.
 	signup *signup.Service
+	// recovery sweeps password-reset tokens (M51), on the same terms as signup
+	// above and for the same reason: a waiting-room table with no sweep is the
+	// one shape that grows forever with nothing watching it.
+	recovery *recovery.Service
+	// accounts erases the residue of deleted accounts (M52), on the same terms
+	// as recovery above: it is a sweep rather than a job family, because a new
+	// advisory key and a new goroutine for a pass that finds nothing on almost
+	// every run is cost without a reason.
+	accounts *account.Service
+	// mfa sweeps the pending logins that sit between a right password and a
+	// session (M53) — lapsed ones and spent ones. Third instance of the same
+	// waiting-room shape, held on the same terms.
+	mfa *auth.MFAService
 	// links re-verifies custom domains (M40). Nil skips the pass entirely,
 	// which is what a runner built without the link service gets.
 	links *link.Service
@@ -89,7 +106,16 @@ type jobRunner struct {
 	// and which is what makes "evaluation runs here and nowhere else" a property
 	// of the wiring rather than a promise.
 	automation *automation.Service
-	cancel     context.CancelFunc
+	// updates asks whether a newer LinkCtrl has been published (M55).
+	//
+	// **Nil is LINKCTRL_UPDATE_CHECK=false**, and it is where that variable takes
+	// effect: main does not build the service at all, so the pass has nothing to
+	// call and this process opens no socket outwards on any schedule. The
+	// operator's *other* half of the switch — the answer they gave at first run —
+	// is inside the service, in the statement that claims the day, because that
+	// is a row somebody may change after boot.
+	updates *update.Service
+	cancel  context.CancelFunc
 	// wg accounts for every family goroutine start launches; stop waits on it,
 	// so shutdown never leaves a pass mid-flight against a pool that is about
 	// to close. The single scheduler goroutine had a done channel doing this
@@ -115,16 +141,33 @@ type jobRunner struct {
 // across binaries instead of within one: an old binary still holds its keys
 // for as long as a rolling deploy keeps it alive.
 //
-// Deploy overlap, stated as a cost rather than discovered: the generation-0
-// binary holds advisoryLockKeyRetiredV1 for everything, and none of the keys
-// below contend with it, so for the length of a rolling deploy each family can
-// have two leaders — one old, one new. The window costs duplicate effort, not
-// duplicate effects: the drains claim rows with FOR UPDATE SKIP LOCKED, the
-// rollups recompute whole days idempotently, partition creation is
-// IF-NOT-EXISTS-shaped, and the automation watermark is compare-and-set — all
-// of which already had to hold, because an advisory lock is released the
-// moment its holder dies and two leaders was always a window, not an
-// impossibility.
+// Deploy overlap, and the bound M57 put on it. This paragraph used to say that
+// for the length of a rolling deploy each family can have two leaders, because
+// the generation-0 binary holds advisoryLockKeyRetiredV1 for everything and
+// none of the keys below contend with it. That is still true of a generation-0
+// binary — and a generation-0 binary cannot be in a supported rolling deploy.
+// Generation 1 shipped in 0.2.0, several replicas became a supported
+// configuration in 0.3.0 (docs/deployment.md, "Scaling, honestly"), so both
+// binaries in any upgrade a deployment is allowed to perform take the keys
+// below and pg_try_advisory_lock is what excludes the second leader.
+// TestAReleasedFamilyKeepsItsAdvisoryKey is what keeps that true: a family that
+// has shipped may not be renumbered, because renumbering it re-opens exactly
+// the window generation 0 had.
+//
+// What is left is not deploy-shaped and is not bounded by one. The lock is held
+// on a connection of its own while fn works on another (see withLeadership), so
+// a leader whose *lock* connection dies — terminated backend, dropped network,
+// a pause long enough for keepalives to give up — releases the lock while its
+// pass keeps running. The next follower to tick then takes it. That is the
+// window, it costs duplicate effort rather than duplicate effects, and the
+// defences are second-layer by design: the drains claim rows with FOR UPDATE
+// SKIP LOCKED, the rollups recompute whole days idempotently, partition
+// creation is IF-NOT-EXISTS-shaped, the automation watermark is compare-and-set,
+// and ClaimUpdateCheck is one UPDATE nobody can match twice. All of it already
+// had to hold, because an advisory lock is released the moment its holder dies
+// and two leaders was always a window, not an impossibility. The one pass whose
+// second layer is a read rather than a write is domain verification — F180,
+// deferred rather than fixed here.
 const (
 	// advisoryLockKeyRetiredV1 is generation 0: one key serializing every job
 	// on one goroutine. Nothing takes it any more. It stays declared so no
@@ -139,12 +182,22 @@ const (
 	advisoryLockKeyMaintenance int64 = 0x6c63_6a6f_6273_0105 // 7810203205416190213
 	advisoryLockKeyDomains     int64 = 0x6c63_6a6f_6273_0106 // 7810203205416190214
 	advisoryLockKeyAutomation  int64 = 0x6c63_6a6f_6273_0107 // 7810203205416190215
+
+	// The update check (M55). Its own key because it is its own family, and it
+	// is its own family because it is the only scheduled work in this product
+	// that opens a socket to a host outside the deployment — putting the one
+	// outbound job inside a family called *maintenance* is how egress stops
+	// being auditable in one place.
+	advisoryLockKeyUpdates int64 = 0x6c63_6a6f_6273_0108 // 7810203205416190216
 )
 
 func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analytics.Roller,
 	log *slog.Logger, metrics *observability.Metrics, notifier *notify.Service,
-	mailer *mail.Service, signups *signup.Service, links *link.Service,
+	mailer *mail.Service, signups *signup.Service, resets *recovery.Service,
+	accounts *account.Service, mfa *auth.MFAService,
+	links *link.Service,
 	webhooks *webhook.Service, automations *automation.Service, hosts *redirect.HostCache,
+	updates *update.Service,
 	domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
@@ -161,6 +214,9 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		auditSizeWarnBytes:     auditSizeWarnBytes,
 		mailer:                 mailer,
 		signup:                 signups,
+		recovery:               resets,
+		accounts:               accounts,
+		mfa:                    mfa,
 		links:                  links,
 		//nolint:gosec // G115: range-checked above.
 		domainVerifyInterval: domains.VerifyInterval,
@@ -168,6 +224,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		webhooks:             webhooks,
 		automation:           automations,
 		hosts:                hosts,
+		updates:              updates,
 	}
 }
 
@@ -309,6 +366,28 @@ func (j *jobRunner) families() []jobFamily {
 			// one subject.
 			name: "automation", key: advisoryLockKeyAutomation, every: domain.AutomationInterval,
 			onStart: j.runAutomation, onTick: j.runAutomation,
+		},
+		{
+			// The update check (M55), and the one family whose work leaves the
+			// deployment. It is separate from `maintenance` on the same grounds
+			// its advisory key is separate: an operator asking *what does this
+			// process connect to, and when* has one family to read, and a later
+			// step added to the hourly pass cannot quietly become a second
+			// outbound call under a name that does not suggest one.
+			//
+			// **The ticker is hourly and the period is daily**, which is not a
+			// contradiction. The day is bounded by the row ClaimUpdateCheck
+			// updates, so a fast ticker cannot produce a second request; what it
+			// buys is that an instance redeployed most afternoons still checks,
+			// where a 24-hour ticker on a process that rarely lives 24 hours
+			// would check on the startup run and never again. One indexed UPDATE
+			// an hour that usually matches nothing is the whole cost.
+			//
+			// The startup run is deliberate for the same reason and is safe for
+			// the same one: a box that has been off for a week asks on the way
+			// up, and a box restarted twice in ten minutes asks once.
+			name: "update-check", key: advisoryLockKeyUpdates, every: time.Hour,
+			onStart: j.runUpdateCheck, onTick: j.runUpdateCheck,
 		},
 	}
 }
@@ -628,6 +707,35 @@ func (j *jobRunner) runAutomation(ctx context.Context) {
 	})
 }
 
+// runUpdateCheck asks whether a newer LinkCtrl has been published (M55).
+//
+// **Under leadership, so an eight-replica deployment makes one request a day and
+// not eight.** That is the milestone's own bullet, and it is belt-and-braces
+// with the row: ClaimUpdateCheck would already stop the other seven, since only
+// one UPDATE can match a row whose timestamp the first one moved. Leadership is
+// what stops the race being run at all, and the pair is the same choice D77 made
+// for webhook delivery and for the same reason — an advisory lock is released
+// the moment its holder dies, so two leaders is a window rather than an
+// impossibility, and here that window would be a second socket opened to a host
+// outside the deployment.
+//
+// Nil service is LINKCTRL_UPDATE_CHECK=false and nothing runs, not even the
+// lock acquisition.
+//
+// The timeout is short because the work is one small GET with its own ten-second
+// bound inside this one. Nothing here is retried: see update.Service.Run.
+func (j *jobRunner) runUpdateCheck(ctx context.Context) {
+	if j.updates == nil {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	j.withLeadership(runCtx, advisoryLockKeyUpdates, "update-check", func(ctx context.Context) error {
+		return j.updates.Run(ctx)
+	})
+}
+
 func (j *jobRunner) runMaintenance(ctx context.Context) {
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -785,6 +893,103 @@ func (j *jobRunner) housekeeping(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("delete expired sessions: %w", err))
 	} else if n > 0 {
 		j.log.Debug("expired sessions deleted", slog.Int64("count", n))
+	}
+
+	// Reset tokens nobody used, and spent ones past the same short window a
+	// spent registration gets (M51).
+	//
+	// Here rather than in a job family of its own, deliberately: a new advisory
+	// key and a new goroutine to delete a handful of rows an hour is cost
+	// without a reason, and this pass already holds the lock and already runs
+	// the two sweeps this one is shaped like. Batched at purgeBatch for the
+	// reason the link purge is — a burst drains over a few runs instead of
+	// holding row locks for one long one.
+	//
+	// Debug rather than Info. Unlike the link purge, nothing irreversible about
+	// a person's data goes here: the token is already dead by expiry or by use,
+	// and the audit record of the reset is what survives.
+	if j.recovery != nil {
+		if n, err := j.recovery.PurgeFinished(ctx, purgeBatch); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Debug("finished password resets purged", slog.Int64("count", n))
+		}
+	}
+
+	// Pending second-factor logins that lapsed, and the ones already spent
+	// (M53). Same shape and same reasoning as the reset sweep above; no
+	// retention window, because a spent pending login is evidence of nothing —
+	// the session it minted is the record.
+	if j.mfa != nil {
+		if n, err := j.mfa.PurgePendingLogins(ctx, purgeBatch); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Debug("finished second-factor logins purged", slog.Int64("count", n))
+		}
+	}
+
+	// The residue of accounts somebody deleted (M52).
+	//
+	// **The one sweep here that is not reclaiming space.** Everything else in
+	// this pass removes rows whose deadline passed; this one *keeps* the rows and
+	// takes the person out of them. Deleting them would be destroying the trail;
+	// leaving them as they were would be keeping an address somebody asked to
+	// have removed.
+	//
+	// **Five tables, not two**, and *no foreign key to `users`* stopped being the
+	// criterion that finds them: this comment read that way until M58, describing
+	// `audit_logs` and `destination_disputes` alone. The sweep writes those two,
+	// `notifications` and `invitations` — which do carry a foreign key, but to a
+	// *different* reader, so ending this account was never going to remove
+	// them — and the account row itself. What holds over all five is *a record
+	// about this person that ending the account does not remove*. The
+	// enumeration is kept once, on `EraseDeletedAccounts` in
+	// `internal/store/query/accounts.sql`, and this comment deliberately does not
+	// restate it; a second copy is how the first one went stale.
+	//
+	// Hourly is the whole bound on how long the residue lasts, and it is
+	// documented as a number in docs/SECURITY.md rather than left to be
+	// discovered here: access ends inside the deleting transaction, and only the
+	// residue waits. Batched at purgeBatch for the reason the link purge is.
+	//
+	// Info rather than Debug: this is the irreversible destruction of somebody's
+	// identifying data, done on their instruction, and — like the link purge —
+	// this line is its only record. The count and nothing else; naming the
+	// account here would write the identifier into a log the sweep cannot reach.
+	if j.accounts != nil {
+		if n, err := j.accounts.ErasePending(ctx, purgeBatch); err != nil {
+			errs = append(errs, err)
+		} else if n > 0 {
+			j.log.Info("deleted accounts erased", slog.Int64("count", n))
+		}
+	}
+
+	// Uploaded QR logos belonging to links that are already deleted (M50.5).
+	//
+	// **The only orphan a column can leave, and it exists because one of the
+	// four deletions is soft.** Removing a code, a workspace or an organization
+	// takes its logos by cascade, and replacing one is a single UPDATE, so none
+	// of those can separate the row from the bytes — that is what D134 bought.
+	// Deleting a *link* does not: the row is kept with a purge deadline so the
+	// alias stays reserved and the link can be brought back by hand, and its
+	// `qr_codes` rows go on holding up to a megabyte each, unreachable through
+	// every read (they filter on `l.deleted_at IS NULL`) and therefore
+	// unclearable through the endpoint that would clear them.
+	//
+	// Directly above the link purge's own statement in this function and after
+	// it in the pass, which is the ordering that matters: a link the purge has
+	// already removed took its logos with it, so what is left here is only the
+	// window between deletion and purge — bounded by the trash window for a
+	// small backlog and by purgeBatch for a large one.
+	//
+	// Idempotent, and it does nothing on almost every run: the predicate is
+	// `logo IS NOT NULL`, and the partial index 03800 adds is what makes asking
+	// cheap. Info rather than Debug, because it is irreversible deletion of
+	// something a workspace uploaded, and this line is its only record.
+	if n, err := q.ClearOrphanedQRCodeLogos(ctx, purgeBatch); err != nil {
+		errs = append(errs, fmt.Errorf("clear orphaned qr code logos: %w", err))
+	} else if n > 0 {
+		j.log.Info("qr code logos removed from deleted links", slog.Int64("count", n))
 	}
 
 	// Rotated predecessors whose grace window has closed (M44).

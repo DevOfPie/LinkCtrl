@@ -241,6 +241,137 @@ file. Append a row when you append an entry.
 | [QR logos, the first file this product accepts, and the target moving](#2026-08-07--qr-logos-the-first-file-this-product-accepts-and-the-target-moving) | D115: no upload surface exists anywhere; why a logo is a milestone not a parameter; the storage decision M57's test bounds; the target moves to sixteen for this phase only |
 | [The logo milestone was two, and a review found it the same day it was written](#2026-08-07--the-logo-milestone-was-two-and-a-review-found-it-the-same-day-it-was-written) | D116: the split; the erasure limb that was wrong in the dangerous direction; a cap ordering that specified the bomb; a decode test naming a decoder the tree does not have |
 | [Reviewing the specification, not only the thing built from it](#2026-08-07--reviewing-the-specification-not-only-the-thing-built-from-it) | W36 made: a plan is reviewed before it is built against; why a different model from the writer's; what the reviewer is deliberately not given; findings are evidence, not a verdict |
+| [M46: the three choices the milestone gave itself, and the header that could not fit](#2026-08-07--m46-the-three-choices-the-milestone-gave-itself-and-the-header-that-could-not-fit) | D117–D119: the switcher drops the workspace you are in and the header gains a label; API keys leaves the top-level nav on D35's own reasoning; one hot filter because one is all any task reached for; why `<details>` here is not D24 reversed; what the overflow scan does and does not enforce, measured in a browser at three widths |
+| [M47: the line count M46 moved](#2026-08-07--m47-the-line-count-m46-moved) | An amendment, not a decision: `link_detail.html` is 805 lines and m47.md said 803, because M46's own table wrapper landed in it the day before |
+| [M47: the three choices it gave itself, and the 1883 pixels](#2026-08-07--m47-the-three-choices-it-gave-itself-and-the-1883-pixels) | D120–D122: the analytics go below and the tiles go with them; the order, with the row at which measurement stops and an argument starts; a 60-line cap fixed by the shortest partial's body rather than by the page's length; one sentence for two facts that were adjacent and did not compose; 1883px to 327px, three engines; what the fold test cannot check and the sabotage that proved both its limbs |
+| [The demo reset could not clean up after itself](#2026-08-07--the-demo-reset-could-not-clean-up-after-itself) | F168, which stopped a milestone landing: why the reset is scoped to aliases and not to a workspace, why it deletes by *not the default* rather than by a slug, the widening that costs, and the half of the row that did not close |
+| [M48: three facts the last two milestones moved](#2026-08-07--m48-three-facts-the-last-two-milestones-moved) | An amendment, not a decision: two line references and a list of four notification kinds, one of which the demo has never seeded. And the pattern behind three amendments in three milestones |
+| [M48: the panel, the thumbnail that could not go where it was asked, and where a notification leads](#2026-08-07--m48-the-panel-the-thumbnail-that-could-not-go-where-it-was-asked-and-where-a-notification-leads) | D123–D125: a panel is a route first and a popup second, and why that is not D24 reversed or D120 reversed; the QR thumbnail stays below the edit form because M47's fold test refuses a picture above it, and what went in the heading row instead; a map rather than a switch so that *has a mapping* is a question code can ask; the two kinds that lead nowhere and say so; three of seven kinds the demo has never seeded and why no coverage row demands them; and the permission a test fixture had been missing since M47, which hid three sections of the link page from every test that renders it |
+| [M48: the owner overrules D124 — the picture goes up, and the guard narrows](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows) | Owner-set. Why a narrowing and not an exemption, what M47's claim now has to be re-measured against, and why M47 is not reopened |
+| [M48: the picture goes up — the rule that let it, and the page re-measured](#2026-08-07--m48-the-picture-goes-up-the-rule-that-let-it-and-the-page-re-measured) | D126: what M47's fold guard became — a height class and a 160px budget rather than a blanket refusal of `<svg>`, and why the `height` attribute could not be what is read; one constant, three consumers, and the fixture that would otherwise measure a page nobody is served; `internal/qr` gaining a validated class; and the re-measurement in three engines — 327→349px, 443→465px — checked by reproducing M47's own figures with the picture removed |
+| [M49: what B left behind it](#2026-08-07--m49-what-b-left-behind-it) | An amendment, not a decision: the QR panel is not a line range in `link_detail.html` any more, and the generator is 395 lines rather than 338. Fourth amendment in four milestones, and the first where the moved thing is a *file* rather than a line |
+| [M49: the size, the second encoder, and D11 spent on purpose](#2026-08-07--m49-the-size-the-second-encoder-and-d11-spent-on-purpose) | D127–D129: what bounds a rasteriser that D11 refused to allow at all, stated as an allocation rather than as a word; why the quiet zone became the second knob and what the search costs in tie-breaks; why `qr.Style` gained no field and what that bought for every row already in the table; why a form that stopped asking about error correction needed a new service operation rather than a default; and the two encoders sharing one arithmetic, with the claim they are held to and the one they are not |
+| [M50: two line numbers, and the references that held](#2026-08-07--m50-two-line-numbers-and-the-references-that-held) | An amendment, not a decision. Also the first milestone in the phase whose *migration* number was still right, and why that is not luck |
+| [M50: the empty slug, the parameter that stayed closed, and the rollup that was not written](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written) | D130–D133: why the default code's identity is its *absence* of an identifier and what that bought for every code already printed; why a code identity could not ride inside `src` and how the second parameter is bounded instead; why per-code counts are a filter over the referrer dimension rather than the new rollup campaign analytics was deferred for, and what the Referrers panel therefore still shows; and why the five shipped QR endpoints stayed the default-code shorthand |
+| [M50.5: where an uploaded logo lives](#2026-08-07--m505-where-an-uploaded-logo-lives) | D134, owner-set. The answer to the phase's one pre-filed question, and what it obliges M50.5 to measure before M57 is written |
+| [M50.5: the first file this product accepts](#2026-08-07--m505-the-first-file-this-product-accepts) | D135–D138: the caps as numbers and the worst-case row D134 was owed, including why the upload cap does not bound the database; why only a named code carries a logo and what gap that leaves; what an orphan even is once the bytes are the row; and why an upload does not inherit the API's rate limit |
+| [M50.5: the owner overrules D136 — the default code gets a logo too](#2026-08-07--m505-the-owner-overrules-d136-the-default-code-gets-a-logo-too) | Owner-set. Why the bullet counts capabilities rather than operations, why the shorthand and not a reserved slug, and what D130 is protected from |
+| [M50.5: the shorthand that carries a logo, and the row it has to write](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write) | D139: what the owner's ruling became — two more members of D133's family, the row a `bytea` column obliges a code with no row to acquire, and the style it is written at; the multipart body the dashboard needs because a file cannot travel in a urlencoded form; and the four sabotages |
+| [M50.6: the logo in the picture](#2026-08-07--m506-the-logo-in-the-picture-a-cap-that-is-arithmetic-a-level-that-is-not-a-preference-and-the-ring-a-measurement-bought) | D140–D142: the occlusion cap as arithmetic rather than a plausible fraction — what level H actually recovers, why a contiguous square costs more than its area, and why it may spend only half; why a request naming another level is accepted and overridden rather than refused, and where the forcing has to happen twice; why the logo is embedded as a data URI rather than served, what that does to the rasteriser's allocation figure, and why `img-src` had to be pinned; and the one module of background a hand decode check bought |
+| [M50.6: the logo reference that is still not a reference](#2026-08-07--m506-the-logo-reference-that-is-still-not-a-reference) | An amendment, not a decision. Two files said M50.6 fills a Phase 1 promise; D134 is what made that false, one milestone before this one |
+| [M51: the migration number this run used up](#2026-08-07--m51-the-migration-number-this-run-used-up) | An amendment, not a decision. A milestone file reserved a number two later milestones then took, and the third kind of drift this phase has produced |
+| [M51: the mail-free instance, and the one rule this product breaks on purpose](#2026-08-07--m51-the-mail-free-instance-and-the-one-rule-this-product-breaks-on-purpose) | D143: why recovery refuses instead of degrading when `SMTP_HOST` is unset, the two alternatives that were refused, and why this refusal names its reason where the sign-up form's does not |
+| [M51: what the mailbox is told, and how long the link lives](#2026-08-07--m51-what-the-mailbox-is-told-and-how-long-the-link-lives) | D144: one unavailable template rather than two and what that costs a suspended account's owner; the login limiter as the only bound and the mail it sends to strangers; one hour against signup's day; and the response that carries no timestamp so there is no second value to keep identical |
+| [M51: what a completed reset ends, what it starts, and where the record goes](#2026-08-07--m51-what-a-completed-reset-ends-what-it-starts-and-where-the-record-goes) | D145: every session and every sibling token, no new session, and API keys deliberately untouched; `auth.WritePassword` as one function rather than two call sites that agree; and the first audit action in the product written by somebody holding no credential, which is why its row belongs to no organization |
+| [M51.9: what the mid-phase review checked, found, and could not run](#2026-08-08--m519-the-mid-phase-review-what-it-checked-what-it-found-and-the-one-bullet-it-could-not-run) | D146: the eighteen blind tasks are recorded nowhere, so the bullet asking for them is struck and the cost — D121's ordering and D124/D126's placement go un-rechecked — is stated. D147: the doc-cost judgement, trimming 2930 bytes of a 6409-byte resume-charge growth and defending the rest. F172–F175, and the two candidates that were refuted |
+| [M46 reopened: the overflow bullet narrowed on the milestone's own instruction](#2026-08-08--m46-the-overflow-bullet-narrowed-on-the-milestones-own-instruction) | F172 closed. Why a claim about a guard that does not exist reopens the milestone rather than arriving as a successor, and why writing the narrowing into the test file discharged nothing |
+| [F174: the demo's QR codes were pictures of a link that answers Gone](#2026-08-08--f174-the-demos-qr-codes-were-pictures-of-a-link-that-answers-gone) | Why four demoCoverage() rows counting qr_codes all passed while every code on the demo resolved to 410, and the row that now counts the reachability they imply |
+| [M52: the residue column nobody counted, and a comment that moved](#2026-08-08--m52-the-residue-column-nobody-counted-and-a-comment-that-moved) | An amendment, not a decision: the actor snapshot label moved because M45 rewrote it, and `destination_disputes` holds two address-bearing snapshots where the bullet scrubbed one. Why the second is a fact and not an assertion, and what would have made it a prompt |
+| [M52: three answers at step 1, and the conflict resolved by the command that meets it](#2026-08-08--m52-three-answers-at-step-1-and-the-conflict-resolved-by-the-command-that-meets-it) | D148: the tombstone is a constant and the ids survive, what that costs the SECURITY.md claim, and why A can migrate to B but not back. D149: the update checker is on by default and asks at first run, overruling the recommendation and obliging M55 to build a surface that does not exist. And the hosting conflict — `/work phase` is the request, reversing the previous run's ruling on evidence it did not have |
+| [M52: a soft delete fires no cascade, and two comments that said it would](#2026-08-08--m52-a-soft-delete-fires-no-cascade-and-two-comments-that-said-it-would) | Why the deletion path writes out six DELETEs, why two tables joined m52.md's four, and the transaction-scoped audit writer the first operation whose actor it destroys needed |
+| [M52: the cascade the bullet promised, amended at acceptance](#2026-08-08--m52-the-cascade-the-bullet-promised-amended-at-acceptance) | The amendment record for the entry above, made at step 3.4 rather than step 1: the bullet as it stood, as amended to six explicit statements, and the tree fact that `ON DELETE CASCADE` never fires on an `UPDATE`. Why it is a fact and not an assertion, and why that is the difference between an amendment and a rejection |
+| [M53: the two facts the milestone before it moved](#2026-08-08--m53-the-two-facts-the-milestone-before-it-moved) | An amendment, not a decision: M52 moved the session mint out from under M53's bullet and gave `mfa_secret` its first writer, which is the one that clears it. The first time this phase a milestone's validation corrected facts broken by its immediate predecessor |
+| [M53: five choices a second factor forced](#2026-08-08--m53-five-choices-a-second-factor-forced) | D150: `MFA_SECRET_KEY` is its own variable and is **optional**, so an instance without one offers no second factor and an instance that loses one falls back to recovery codes. D151: the second factor lives in `internal/auth` behind two seams rather than in a package of its own, and why the reason `internal/account` gives does not apply. D152: the enrolment offer travels in the form because the milestone forbids the alternative. D153: `RecordSuccessfulLogin` is guarded rather than moved, which is the only way both of the login flow's bullets hold at once. D154: four audit actions and one notification kind, because the two surfaces answer different questions |
+| [M54: the second milestone file to reserve a migration number it did not get](#2026-08-08--m54-the-second-milestone-file-to-reserve-a-migration-number-it-did-not-get) | An amendment, not a decision: `037xx` is not merely stale but occupied, so a worker following the bullet would collide rather than fail. Why a reserved migration number is a prediction about build order |
+| [M54: a key belongs to an account, and the four decisions that had to be re-derived to say so](#2026-08-08--m54-a-key-belongs-to-an-account-and-the-four-decisions-that-had-to-be-re-derived-to-say-so) | D155: reach is a second column rather than a widening of the first, and account-wide is what an unpinned key created from 0.3.0 on *is* — the widening-by-default is deliberate and pinning is the irreversible half. D156: an account-wide key requires an **organization-wide** membership wherever it lands, which is M44's existing bar carried across the tenancy boundary. D157: the organization is resolved one tier above the workspace, by its own query, so M44's parameter survives with a value rather than being deleted. D158: an administrator narrows somebody else's account-wide key instead of destroying it, in a table of subtractions and under an audit action of its own. And the four re-derivations — F103's bound, M44's parameter, D43's cap, D87's rotation rule — each with the limb it matched |
+| [M54: the function the authority bullet named answers one permission](#2026-08-08--m54-the-function-the-authority-bullet-named-answers-one-permission) | An amendment, not a decision: `LoadMembershipAuthority` takes one permission, so a scope set through it is a query per scope on the auth path. Why the assertion is untouched, and why an amendment that widened what is intersected would be this milestone's own failure mode wearing a correction's clothes |
+| [M55: four line references, and the one that pointed at the wrong claim](#2026-08-08--m55-four-line-references-and-the-one-that-pointed-at-the-wrong-claim) | An amendment, not a decision. `SECURITY.md:73` had become the QR-codes row, so the citation still landed on a real claim and read as correct — the failure mode a moved line does not have. And how one stale reference became two the same day |
+| [M55: an update checker, and the five choices a daily GET turned out to need](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) | D159: an instance **upgrading** into 0.3.0 gets the default — on — because it has no first run left to be asked at, which is the one case D149's prompt cannot reach. D160: two switches, ANDed, and the environment variable only ever says *no*. D161: a singleton `instance_settings` table and a control on the setup form, rather than a key/value store or the settings page nobody asked for. D162: the comparison reads the leading `vX.Y.Z` and drops everything after it, because `git describe` means *past this tag* and semver would read it as *before* it. D163: the re-notify guard is keyed on the version and lives in the notification itself, not on a clock and not in a column |
+| [M55: D159 corrected — an upgraded instance is asked, not assumed](#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed) | D164, owner-set. Why D149 bought knowing consent rather than a default, why that makes *unanswered* a third state the column has to hold, and the bound this inherits from the option it resembles |
+| [M55: where an upgraded instance is asked, and what the third state costs](#2026-08-09--m55-where-an-upgraded-instance-is-asked-and-what-the-third-state-costs) | D165: the question D164 owes an upgraded instance is put on the dashboard, to a holder of `instance.admin`, once — not in an interstitial, not in the shell, and not on the settings page D161 declined to build. Why *omitted* on the API's setup field now means unanswered rather than yes, why the write is conditional rather than guarded by a read, and the audit row that is deliberately not written |
+| [M56: nine references that moved, and one job on the wrong side of a distinction](#2026-08-08--m56-nine-references-that-moved-and-one-job-on-the-wrong-side-of-a-distinction) | An amendment, not a decision. The heaviest drift in the phase, including sixty lines in `deployment.md` — and a bullet that counted three per-replica jobs when the third runs under `withLeadership`, which is the distinction the bullet exists to document |
+| [M56: the failover contract, and the probe that was holding the door open](#2026-08-09--m56-the-failover-contract-and-the-probe-that-was-holding-the-door-open) | D166: the boot-time relay probe moves into a goroutine rather than after the listener, because *after* is not available at the cost it implies and nothing was ever reading its result — F173's ten seconds of dead server bought the order of two log lines. D167: the readiness contract is two status codes rather than three words, because the failure it prevents is an operator wiring `degraded` to *remove* and taking the whole deployment out during a Redis outage. And the two things the Risks section asked to be recorded either way: the kill-a-leader test stayed an assertion rather than becoming M57's measurement, and the per-replica job count is now a test rather than a sentence |
+| [M56: a milestone file that had not heard about D104](#2026-08-08--m56-a-milestone-file-that-had-not-heard-about-d104) | An amendment, not a decision. A milestone file instructed a README edit that D104 forbids, and D104 predates it — so the conflict the worker reported had no live choice in it. Why the substance never conflicted, and what would have made it a prompt |
+| [M57: the proof got a job bigger while the phase was running](#2026-08-08--m57-the-proof-got-a-job-bigger-while-the-phase-was-running) | An amendment, not a decision: seven job families became eight when M55 landed hours earlier, and the count is the size of M57's obligation rather than decoration. The new family is the only one that opens a socket outwards |
+| [M57: a rolling deploy that cost nothing, and the window that turned out to be closed](#2026-08-09--m57-a-rolling-deploy-that-cost-nothing-and-the-window-that-turned-out-to-be-closed) | D168: the deploy-shaped two-leader window is **closed** — generation 1 shipped whole in 0.2.0 and several replicas became supported in 0.3.0, so no supported upgrade puts a generation-0 binary in a deploy, and a test freezes the released key assignments so a renumber cannot re-open it one family at a time. What is left is the crash-shaped window, which has no bound and keeps its second-layer defences; seven families are safe under two leaders and domain verification is not (F180). D169: the single-instance guarantee is a behavioural run of the release image on a Postgres-only network rather than a list of required dependencies, and it rides `ci-image-smoke` rather than a workflow step. D170: the rolling deploy is measured through a balancer that satisfies M56's own inequality, in two columns — SIGTERM and SIGKILL — because one column is a number with nothing to compare it to, and the difference between them is the drain delay priced. D171: the server histogram is summed per replica rather than deltaed, because a rolling deploy destroys the counters a delta needs, and the size of the resulting undercount is itself the drain |
+| [M57.9: the pre-release review — what it checked, what it found, and what it refuted](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted) | The by-use record: an upgrade from a 0.2.0-built database, a second factor driven by an independent RFC 6238 implementation, an account deleted and its residue read back, the SLO on the final build, and the conformance test sabotaged into failing. F181–F184, four candidates refuted, and D172: the doc-cost growth is one amendment to one line and is defended rather than trimmed |
+| [M57.9's triage: four rows approved, and the one the owner widened](#2026-08-09--m579s-triage-four-rows-approved-and-the-one-the-owner-widened) | D173: F181 is scrubbed in the erasure pass rather than documented, F182 defaults **both** creation forms to the lowest role rather than the invitation form alone, F183's read half is closed rather than stated as a bound, and F184 is fixed **and** made visible to a test — the one answer that took more than was recommended, on the reasoning that a fix no test can see regresses the way this one arrived |
+| [M58's triage: sixteen rows, and the conflict that decided seven of them](#2026-08-09--m58s-triage-sixteen-rows-and-the-conflict-that-decided-seven-of-them) | D174: every remaining open row is dispositioned, and the count was **sixteen** rather than the twenty the row above and the run's note both claimed. D114 is held to have approved F160–F166 at planning, so seven stale *Reviewed* columns are corrected rather than the rows approved a second time; F167, F169, F170, F171, F177, F178 and F180 are approved as work; F171's design question is answered in the same breath — re-fit at H on upload, silently; F176 and F179's reorder need no decision at all, being documentation under the standing approval; and F179's test half is approved because it is F143 recurring |
+| [M58, amendment: the SSO comment is not where the bullet says](#2026-08-09--m58-amendment-the-sso-comment-is-not-where-the-bullet-says) | A fact and not a choice, corrected at step 1 before the worker was spawned: the comment-truth sweep named `internal/auth/service.go:379`, which mentions no SSO at all. The two sites carrying a `(Phase 3)` marker are `00200_identity.sql:20` and `service.go:690`; a third mention at `:410` carries no phase number and is named so the sweep does not re-find it |
+| [M58: the phase close, and the seven counts that were wrong](#2026-08-09--m58-the-phase-close-and-the-seven-counts-that-were-wrong) | Every enumeration this close checked had drifted — seven of them, each true when written. F176's gap was thirteen where the row said fifteen and the triage said twelve; the comment sweep found eleven `Phase 3` sites where the milestone counted eight; three operator documents had fallen behind and one named a test that does not exist. Also: why a count in a definition of done earns its place where a count in a comment does not, the eight rows filed rather than fixed, the one abuse path the standing rule pulled into scope instead, F162's fix not reaching the running demo, and the doc-cost judgement — the resume floor grew **358 bytes**, all of it one amendment note, half of it paid for by merging the note it supersedes, and the rest defended |
+| [A third actor, for the claim nobody was checking](#2026-08-09--a-third-actor-for-the-claim-nobody-was-checking) | W38: an independent reviewer reads the tree between the worker's report and acceptance, on every milestone. Why the two-actor split cannot see the failure it is aimed at, why the reviewer is given the milestone file and not the worker's report, why it edits nothing at all, and why a reviewer that found nothing has to say so |
+| [M58: the eight rows its own work filed, and the bullet that could not be true](#2026-08-09--m58-the-eight-rows-its-own-work-filed-and-the-bullet-that-could-not-be-true) | The amendment first — *every row has been owner-reviewed* is unsatisfiable at any commit, because fixing findings files findings, and M58's own work filed eight. Owner-answered, so a prompt rather than a correction. Then D175: **all eight are work**, over a recommendation that carried five of them, and **F187 reopens [M52](phase-details/m52.md)** rather than arriving as a successor — the rule applied rather than waived, at the cost of a second commit on an already-built tree |
+| [M58: the second pass, and the three fixes that went wider than their notes](#2026-08-10--m58-the-second-pass-and-the-three-fixes-that-went-wider-than-their-notes) | **D176**: an erasure scrub reaches the sentence a reader sees and not only the key a query reads, so F188 clears the address from the inviter's notification *title* as well as its jsonb detail — the fix note named the detail, and a fix that stopped there would have left the row's own headline claim true. Also: F186 was never intermittent and was never the test's fault — the cause is proved by reproduction and was already fixed before the row was written — and two fixture rows needed more than their fix notes said, because a faithful copy of a fixture the scan cannot reach is still a fixture the scan cannot reach |
+| [M58: the third pass, and the documents a diff falsified on its way past](#2026-08-10--m58-the-third-pass-and-the-documents-a-diff-falsified-on-its-way-past) | [W38](workflow-changes.md#made)'s first run as a third actor, on the milestone whose acceptance asked for it: twelve findings and five minors, eight of them documents this diff wrote or walked past while the same diff made them false. Three amendments and why each is a fact rather than a prompt — m37.md's choropleth bullet, D65's refusal clause, and the *Permissions* rule's *see* limb for the second time. Why F187 is stated with its exception in three documents and deliberately **not** in m52.md. And four defects the diff introduced, including F161 inverted by its own fix and F164's class inside the chart work F164 caused |
+| [M58: the fourth pass, and counting a class instead of patching a list](#2026-08-10--m58-the-fourth-pass-and-counting-a-class-instead-of-patching-a-list) | The second rejection's own diagnosis: a worker handed file:line pairs fixes the pairs and the next review finds the same shape further out, so each class is **enumerated and counted** here instead. Choropleth suppression: 14 sites, 5 changed. Erasure reach: 16, 8 changed — both miscounts were inside comments rewritten this milestone *to fix a miscount*. API-key reach after M54: 14, 2 changed. Bot-bypass "Phase 3": 8, 4 changed, and three different counts of one set were in the tree at once. A fifth class the review filed as one finding — what a logo does to a code's size: 6 sites, 2 changed. Plus why `decisions.md`'s two mentions stay, why `m52.md` is touched for the criterion and not for F187, and four contrast ratios recomputed from `input.css` rather than repeated |
+| [M58, amendment: the four bot-bypass sites were seven](#2026-08-10--m58-amendment-the-four-bot-bypass-sites-were-seven) | The second amendment to the same bullet, and the same defect it already confessed to. It read *four sites*; `git grep` over the tracked tree returns seven — a test's assertion message and both of M32.5's. A count, so a fact and not an assertion, amended rather than prompted |
+| [The 2,691 bytes W38 added to every resume, defended](#2026-08-10--the-2691-bytes-w38-added-to-every-resume-defended) | The judgement nobody had made: M58's doc-cost pass was true against HEAD and therefore silent about the growth **in** HEAD. Defended rather than trimmed — 2463 bytes of phase-loop.md and 228 of workflow.md bought a step that found 30 things across three runs on the milestone that added it, several of them claims that milestone's own diff made false. The read ratios say where the bytes landed, and one of them is an argument against phase-loop.md's shape rather than against W38 |
+| [M58: the fifth pass, a scope, a scan, and two counts that missed a member](#2026-08-10--m58-the-fifth-pass-a-scope-a-scan-and-two-counts-that-missed-a-member) | Four findings, bounded by the owner. F160's fix is per link and per window while twenty-two of the twenty-nine statements written for it said *instance* or *history* — corrected, and the behaviour deferred as F195 rather than widened, because widening it needs a query the page is defined by not making. The column scan that closed F193 assumed a trailing pipe, which is exactly and only the shape it missed; its replacement is a gate in `check-links.sh` and it was proven red on F103 before F103 was touched — 2,100 rows in 40 files, one mismatch. Area G's close-out counted one entitlement anchor and there are two, the missed one in a shipped milestone's file again. The release-notes `awk` run and recorded, clean, with the false comment above it routed as F196. Plus five secondaries, including the demo interval that turns off two jobs and the pinned default D61 said could not be repointed |
+| [M58, amendment: the third move of one number, so the number goes](#2026-08-10--m58-amendment-the-third-move-of-one-number-so-the-number-goes) | Eight, then nine, then twelve — a bullet counting the rows this milestone filed, inside a milestone that kept filing them. The count is deleted rather than corrected a third time, and the property is stated with the command that takes it. F69 chose this remedy once already |
+| [M58: the sixth pass, the response that disagreed with its own transaction, and the demo that would not have resolved](#2026-08-10--m58-the-sixth-pass-the-response-that-disagreed-with-its-own-transaction-and-the-demo-that-would-not-have-resolved) | Two release blockers and four false sentences on surfaces the tag publishes, fixed; seven rows filed. `POST /api/v1/api-keys/rotate` now reads the successor's carried bars back rather than hardcoding an empty array, and `make demo-update` recreates the app **after** the reseed, which is what makes `DOMAIN_VERIFY_INTERVAL=0` safe on the demo rather than merely cheap |
+| [M52, reopened: both dispute labels in one statement](#2026-08-10--m52-reopened-both-dispute-labels-in-one-statement) | The reopening [D175](../../Plan.md#phase-3-decisions) scheduled, and its whole scope: [F187](deferred-findings.md#closed). `scrubbed_filed` and `scrubbed_decided` were two data-modifying CTEs writing one `destination_disputes` row, so Postgres applied one and dropped the other whenever a batch held both halves of a dispute — which two ordinary situations produce. Merged into the shape `scrubbed_audit` already had, sabotage-verified against the split, and the six sites in three documents that stated it as a live exception at 0.3.0 now state the requirement. Plus why one link this diff staled was fixed while [F203](deferred-findings.md#open)'s sixty-four stay |
+| [A queue row typed `issue` against a design that was deliberate](#2026-08-10--a-queue-row-typed-issue-against-a-design-that-was-deliberate) | The routing judgement `/process-queue` forces and does not name: when the tree says the behaviour is exactly as designed and the owner has typed the row `issue` anyway, the type stands and the as-designed conflict becomes the row's evidence. Why that is not the *typed issue, is neither* dispute, and why F204 carries three fix shapes rather than a prompt |
+| [The target was aimed at the plan, not at the build](#2026-08-11--the-target-was-aimed-at-the-plan-not-at-the-build) | W40: a phase is planned at fifteen milestones and that ceiling is real, but a milestone the build turns out to need is added when it is needed rather than costing a phase-boundary conversation. What the rule was protecting, and where that protection now sits |
+| [A gate nobody runs](#2026-08-11--a-gate-nobody-runs) | W41: `check-links` was enforced by a human typing it and by a script that runs at release time only, so the table gate M58 added was unenforced from the day it landed. Why the row was split rather than taken whole, and why the wiring half needed no milestone |
+| [M57.5: six repairs a phase close could not have contained](#2026-08-11--m575-six-repairs-a-phase-close-could-not-have-contained) | Why an eighteenth milestone rather than Phase 4 or a standing-approval sweep, why it is `.5` and not `M59`, which four of the ten open rows are excluded and on what test, and the one bullet written as a constraint rather than an outcome because the obvious fix is the recurrence |
+| [A review that is not final is not a review](#2026-08-11--a-review-that-is-not-final-is-not-a-review) | W43: scope added after an `X.9` has run is numbered **below** it and **reopens** it. Why the three offered options were all worse, and the one cost this creates — a number and a dependency edge pointing opposite ways |
+| [How an agent drives this product's UI, and where that check runs](#2026-08-11--how-an-agent-drives-this-products-ui-and-where-that-check-runs) | Owner-set: `@playwright/cli` for the exploring sub-agent, terminating in kept Playwright specs; gated at the `X.9` reviews rather than in CI. Why not an MCP server, why `X.9` beats every CI option offered, the measured costs, and the CSP defect found in the first ten minutes of running it |
+| [Which review owns a reopening](#2026-08-11--which-review-owns-a-reopening) | W44: the latest review whose range contains it, not every one. Why the earlier review gets a note rather than a second run, and the cost that leaves |
+| [The link page becomes tabs, and what each tab says about itself](#2026-08-11--the-link-page-becomes-tabs-and-what-each-tab-says-about-itself) | The M47 redesign settled with the owner over five rounds: tabs with state on the tabs, `0` for empty counts, a cross for empty and a check for the one true binary, a count of active protections on Edit, and two Split glyphs that are a size comparison rather than a symbol — after four rotation marks failed at badge size |
+| [Seven tabs, and M47 split along the seam the design was drawn on](#2026-08-11--seven-tabs-and-m47-split-along-the-seam-the-design-was-drawn-on) | Activity folds into Analytics and Danger keeps its own tab, so the strip is seven. M47 becomes M47 and M47.5 — the layout and the state feedback, which is how the design was assembled in the first place. Also the nine findings a plan review caught before either was built against |
+| [Reviews carry a browser check](#2026-08-11--reviews-carry-a-browser-check) | W45: every `X.9` review answers whether the pages its range touched render and behave as claimed, console included — worded as a question so it survives the tool, chosen over four declined CI shapes |
+| [M46.5: a browser an agent can drive](#2026-08-11--m465-a-browser-an-agent-can-drive) | Two Playwright pins on purpose (no stable 1.63 exists; every CLI version bundles an alpha); the kept spec on `/login`, born red; the JSON-failure filter; the branded-Chrome wrap; F206 fixed and closed |
+| [M57.5, built: six repairs, and the audit line one of them answers](#2026-08-11--m575-built-six-repairs-and-the-audit-line-one-of-them-answers) | The false *checked and deliberately unchanged* line answered, not edited; the delimiter half of the table gate, with its permanent fenced fixture; the unreachable QR guard removed on the owner's answer; two fixture classes repaired; m54.md annotated. All six rows closed |
+| [M47, the split repaired in the files that recorded it](#2026-08-11--m47-the-split-repaired-in-the-files-that-recorded-it) | bb76018 left m47.md with two contradictory Reopened blocks and m47.5.md with no badge section; owner-approved reconstruction from the existing text, five named deviations, the shipped label excluded |
+| [Citations are true as of their own commit](#2026-08-11--citations-are-true-as-of-their-own-commit) | W39 answered: accept the rot and state it, citations carry a commit identifier when written after their milestone, the enforcing test and the blanket rewrite declined, F194 closed unrepaired |
+| [M46.6, the workspace pair reads as one control](#2026-08-11--m466-the-workspace-pair-reads-as-one-control) | F204 approved into Phase 3, shape B1 chosen from wireframes and owner-amended to a chevron-only switch face; shapes a and c declined with reasons; placement beside M46 |
+| [M46.6 built: the boundary, the chevron, and D177](#2026-08-11--m466-built-the-boundary-the-chevron-and-d177) | The shape answer becomes D177; the shared container is a define in the nav partial; the chevron-only face is an empty-labelled placeholder, chosen by a three-engine probe; the kept browser spec gains a session and instances.md becomes load-bearing |
+| [M46.6, one bullet amended at acceptance](#2026-08-11--m466-one-bullet-amended-at-acceptance) | The opened-list-unchanged clause gave way to the chevron-only face on a three-engine probe; empty-labelled placeholder is the only cross-engine mechanism; quoted before and after |
+| [M47, a citation amended at validation](#2026-08-11--m47-a-citation-amended-at-validation) | nav.html:88 became :130 when M46.6 restyled the switcher; the htmx pattern the bullet leans on is unchanged |
+| [M47 built: the stack becomes tabs, and D178](#2026-08-11--m47-built-the-stack-becomes-tabs-and-d178) | D178 — tab state is `?tab=`, validated against a permission-built strip, and every section-owned write re-derives its own tab server-side; `next` stays a two-value choice. The strip is a partial, so the 60-line cap did not move. The QR panel renders at page level because the thumbnail invokes it from every tab, and `id="qr"` travels with it. Archive and restore stay tabless, and why that trade was taken. Two integration tests amended, named; the whole-page scans render once per tab (F167 at page scale). The blind-task re-run is owed and is the owner's |
+| [M47.5 built: the badges, the glyph size, and the lie a browser caught](#2026-08-11--m475-built-the-badges-the-glyph-size-and-the-lie-a-browser-caught) | The size is 12px because 10px collapses the weighted glyph's outlined share in all three engines — measured on a fixture assembled from the product's own files, and the wireframes' 9/11 did not survive. Two contract readings stated: Signed reads the stored `RequireSignature`, QR counts the codes the panel lists. The icon home is four defines in `partials/icons.html`, baseline arithmetic at 20.5. And the split badge lied for an hour — GetSplit's empty-not-nil answer — caught by the kept spec's badge count against the running product, pinned in a handler-side test |
+| [M47.5, one bullet amended at acceptance](#2026-08-11--m475-one-bullet-amended-at-acceptance) | Same-width-set-or-empty overstated the constant-chip mechanism; two-digit counts widen; quoted before and after with the class-level fact |
+| [M46.6 reopened: the popup the wireframes could not draw](#2026-08-11--m466-reopened-the-popup-the-wireframes-could-not-draw) | F209: four owner-named symptoms, one cause — the native select popup; reopened over deferral; rebuilt on the D24 popover pattern; the placeholder assertion retires with its premise |
+| [M46.6 rebuilt: the panel, the anchor, and the width from two insets](#2026-08-11--m466-rebuilt-the-panel-the-anchor-and-the-width-from-two-insets) | The opened state is the D24 popover pattern, scriptless — htmx left with the select; right alignment is CSS anchor positioning, probed in all three pinned engines, literal fallback behind `@supports`; a fixed-width panel overflowed 360px on the kept spec's first run, so the width comes from a clamped left inset and `w-auto` defeats the UA `[popover]` margin trap; the placeholder and hx-* assertions retired with their premises, every recorded answer re-asserted |
+| [Three reopenings from one look at the running product](#2026-08-11--three-reopenings-from-one-look-at-the-running-product) | F210 the antimeridian bands reopen M37, F211 the Edit badge goes from M47.5, F212 the QR popup folds into the tab at M48; the demo base URL fixed in the environment; M37 covered by M57.9 rather than reopening a released phase review |
+| [M37 rebuilt: the antimeridian split, and the ring as the unit of the claim](#2026-08-11--m37-rebuilt-the-antimeridian-split-and-the-ring-as-the-unit-of-the-claim) | Unwrap-then-clip at ±180 in mapgen; a third wrapped ring (Wrangel) beyond F210's two; why the width test asserts per ring and not per country; the recorded look over a kept spec |
+| [M37, one bullet amended at acceptance](#2026-08-11--m37-one-bullet-amended-at-acceptance) | The width test asserts per ring, not per country path — a correctly split Russia touches both frame edges, so the bullet as written failed on the fix it protects |
+| [M47.5 reopened: the Edit badge goes](#2026-08-11--m475-reopened-the-edit-badge-goes) | F211 closed: the edit case leaves `attachTabBadges`, five positions remain, and the bare state is asserted with every protection on so no boolean resurrects the count. Three claims amended where they stand; every six-position record carries its supersession note; the kept spec's count 6 → 5, red against the running strip before the move |
+| [M48 reopened: the QR popup folds into its tab](#2026-08-11--m48-reopened-the-qr-popup-folds-into-its-tab) | F212 closed: the thumbnail opens the QR tab in the strip's own swap, the page-level popup retires with its contents enumerated piece by piece — the body folds into the tab in flow, the chrome retires, the route and the `next` mechanism survive untouched — and two shipped claims are amended where they stand |
+| [Three more reopenings, from the owner's QR-tab report](#2026-08-12--three-more-reopenings-from-the-owners-qr-tab-report) | F213 M49 (preview footprint, quiet zone, Restore defaults), F214 M50.5 (downscale with warning, specific refusals, apply-on-select, click feedback), F215 M50.6 (logo as big as still decodes, gated by simulated distance-scanning) |
+| [M49 rebuilt: the quiet zone stops absorbing the rounding, and D179](#2026-08-12--m49-rebuilt-the-quiet-zone-stops-absorbing-the-rounding-and-d179) | D179 — the quiet zone pins at the ISO floor and the whole remainder lands on the drawn size, where the snap notice already reports it, superseding D128's quiet-zone half and naming it rather than editing it; fractional modules and a wider margin both rejected with reasons. Old-against-new measured across every module count: at 2000px a 21-module code went from 15.7% code by area to 52.4%. `MaxScale` 32 → 68, derived from the raster bound so every fit is a style the API accepts; `MaxMargin = 16` revisited and kept as a stored-row ceiling only. Stored rows render unchanged and a re-save moves and reports, asserted on a margin-14 row. The preview frame becomes 18rem square and the page states the served size beside it, saying whether it is a stored size or the default; the reset button becomes *Restore defaults* |
+| [M50.5 rebuilt: an oversized logo is resized, not refused, and D180](#2026-08-12--m505-rebuilt-an-oversized-logo-is-resized-not-refused-and-d180) | D180 — two header caps collapse to one, because an 813×813 upload passed the side and failed the area and the sentence could name no verdict; the area figure becomes the size a stored logo is resized *to*, both sizes reported. The trade is memory and it is stated: the decode allocation quadruples to 8,388,608 bytes and the image buffers an upload holds come to 14,680,064, with the encoder's own working state bounded beside them at under 4 MiB rather than folded in, in `docs/SECURITY.md` and in the constant block — eight bytes a pixel, because a bit-depth-16 PNG decodes to `image.NRGBA64` and four was what the shipped figures wrongly assumed, so the correction reaches D135 too. Refusing bit depth 16 to keep four true was the alternative and is recorded as rejected; the figures are now measured against a real decode rather than re-derived by the test meant to hold them. The header-first ordering is untouched. M50.6's scaler reused rather than copied, so no module joins the require block; the drawing path grows the area check the upload path gave up, so D142's raster figure stays true. The upload form applies the file on selection over an htmx `change` trigger, which makes it the first form in the panel to meet htmx's refusal to swap a 4xx — the refusal renders at 200 for an htmx request and at 422 for a native post. The browse control gains a pressed state in `app.css`, keyed on `:focus:not(:focus-visible)` so a reader who merely tabbed to it is not left looking at a permanent one, and drawn with a new `--t-press-shadow` token rather than a raw black. A kept browser spec drives the whole flow, because the 200 rests on a claim about htmx nothing here exercised; both halves were born red. The two SQL sources still naming the superseded decode bound are corrected, and the JavaScript-off sentences in README.md and `docs/usage.md` stop contradicting the paragraphs above them |
+| [M50.5, the enforcement-order bullet names a cap that stopped refusing](#2026-08-12--m505-the-enforcement-order-bullet-names-a-cap-that-stopped-refusing) | An orchestrator amendment at step 3.4, fact-level and therefore not a prompt: m50.5.md's enforcement order said the dimension **and pixel-count** caps are enforced at `image.DecodeConfig`, and since D180 the pixel-count figure refuses nothing — it is the size a stored logo is fitted to. The order the bullet asserts is unchanged and the bomb test still measures it |
+| [M50.5, D178's refusal status is now conditional on the caller](#2026-08-12--m505-d178s-refusal-status-is-now-conditional-on-the-caller) | A second orchestrator amendment, also fact-level: D178 said the QR write re-derives its tab "including the 422 refusal", and the logo form's htmx post now gets a 200 because htmx swaps no 4xx. What D178 asserts — re-derivation from the write rather than from the request — is unchanged on both branches. The wider class is [F218](deferred-findings.md) |
+| [M50.6 rebuilt: the logo grows to a measured size, and D181](#2026-08-12--m506-rebuilt-the-logo-grows-to-a-measured-size-and-d181) | D181 — three tenths of the symbol's width, chosen by decoding a corpus at simulated distance through two pinned decoders; the check is kept as `make verify-scan`. The no-logo control was a three-version sample while every document called it the whole range, which is the corpus the first attempt's 444 counted; widened to all thirty-four it is 816 pictures, the control reads clean and the exculpation the fraction rests on holds |
+| [M50.6, two amendments to the milestone file, and a worker that made five](#2026-08-12--m506-two-amendments-to-the-milestone-file-and-a-worker-that-made-five) | A worker edited m50.6.md in five places; only the orchestrator amends. The file was restored by counter-edit and two fact-level amendments re-applied — the cap bullet's superseded fraction, and a codeword count nothing computed that had survived five days in three documents. Three edits did not return, one of them because it retired a bullet that is still true. The owner kept three tenths with the zbarimg dissent put to them, explicitly revisitable |
+| [M49, the size stops snapping, and D182 reverses D179 the same day](#2026-08-12--m49-the-size-stops-snapping-and-d182-reverses-d179-the-same-day) | D182 — the requested size is exact at every value, because only the *symbol* needs whole modules and the quiet zone can be any pixel count; the band is the ISO floor ±25%, so 3 to 5 modules, with the low end measured through `make verify-scan` because three is below the specification. Where the band cannot be held at the bottom of the range it is stated rather than hidden. `MaxSize` 2000 → 2048; the control becomes a slider with stops and an editable number. **Reverses D179 four hours after it landed** — not a correction, the owner used the shipped behaviour and preferred the other side of the trade |
+| [M50, the default code becomes a property rather than an absence, and D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183) | D183 — the default stops being the row with the empty slug and becomes a flag any code may hold; the flag is what an untagged scan resolves through. Every code carries a `qrc` tag, the parameter already being named that, so nothing is renamed and nothing already printed changes meaning. Today's default gains a generated slug; removing the flag-holder promotes another code and says so. `ResetQRStyle` is scoped to the selected code in the same reopening — it clears the default's style whichever code is selected |
+| [M50.6, the level is the highest that costs nothing, and D184](#2026-08-12--m506-the-level-is-the-highest-that-costs-nothing-and-d184) | D184 — error correction becomes the strongest level whose version equals the weakest level's, so correction is taken wherever it is free and never at the cost of density; H while a logo is drawn, recomputed by the rule when it leaves rather than restored. Measured: H is ~30% more modules a side than the shipped default M, which is ~30% less scanning distance at a given printed size |
+| [M50.7 added: the QR tab stops costing more attention than it is worth](#2026-08-12--m507-added-the-qr-tab-stops-costing-more-attention-than-it-is-worth) | Placement after M50's reopening and M49's second, because it re-lays-out the controls those reshape. A milestone rather than four reopenings because every surface it touches does what its milestone claims — the report is about the tab's total cost in attention, not about any promise being false. Owner-chosen over folding it into the reopenings and over planning.md's new-scope route |
+| [M49 built: the size is exact, the floor moves per code, and three modules is measured](#2026-08-12--m49-built-the-size-is-exact-the-floor-moves-per-code-and-three-modules-is-measured) | The build of D182, and the three things D182 left to it. The geometry is carried as a new `qr.Style.size` in pixels rather than a margin in pixels, because a symmetric pixel margin can only reach sizes of one parity — an 89-module code at 2048px gets 6.7 modules of quiet zone that way against 4.24 this way — with `margin` kept as the fallback for a symbol that outgrows a stored size. The floor moves per code (`qr.MinSizeFor`, 70 at 29 modules and 366 at version 40) rather than `MinSize` rising, because the pixels a symbol needs are a property of the symbol. The band's *upper* half is what gives way: inside 3 to 5 modules above `(modules+10)(modules+6)/4` pixels, wide of it below and only where forced — 3789 in band against 1083 forced, none under three. **The first reopening's *majority of the picture is code* is given up**, named rather than dropped: it is not simultaneously satisfiable with an exact size. Three modules measured through a corpus grown to 1360 pictures, 9256 of 9256 exact. `SizeFit.Snapped` and its flash message go; the SVG's viewBox moves into pixel space, which the logo's three-decimal rounding goes with; the slider is two inputs and a server-side witness because no script may exist to sync them |
+| [M49, four amendments the second reopening forced](#2026-08-13--m49-four-amendments-the-second-reopening-forced) | Fact-level orchestrator amendments on milestone files. The quiet-zone floor is three modules, not the specification's four. **The first reopening's majority-code claim is given up** — an exact size and a majority-code guarantee are not simultaneously satisfiable, measured at 48% for an 89-module code at 256px — which is the second thing the owner's first report bought that their second one spends. The band bullet's either/or was an incomplete enumeration and the build took a third answer, a floor that moves per code. And `MaxScale` 68 → 75 corrected where M50.6 had written it |
+| [M49, the exact-size claim gets an enforcement on the API](#2026-08-13--m49-the-exact-size-claim-gets-an-enforcement-on-the-api) | `PUT /links/{id}/qr` accepted a `size` the symbol had outgrown and served a picture that was not it, falsifying the reopening's first bullet on the door the dashboard's control does not guard. It refuses now, at `qr.MinSizeForStyle` — the floor at the caller's own `scale`, because an API caller sets both fields and `MinSizeFor` binds only when the scale is chosen too. Rejected: re-fitting `scale` server-side, which would silently rewrite a field the caller set. The logo re-fit's escape from *the drawn size is held* stays, and is now written down outside the code comment |
+| [M49, what the exact size falsified where nothing was looking](#2026-08-13--m49-what-the-exact-size-falsified-where-nothing-was-looking) | Four survivals of the snap, in files the change reached but did not rewrite: two comments on `QRSizeInput`/`SetQRSize` still describing a snap and a size derived on read, D181's corpus description in `composite.go` left at three stored sizes and 816 pictures, two integration assertions still allowing half a span, and two comments citing the deleted `want`/`got` pair as live. The assertions are the substance — sabotage measured both passing a 20px drift they are meant to catch. `composite.go` keeps its 816-picture figures rather than restating them, because the two styles that grew the corpus test the quiet zone and not the cap |
+| [M50.7's plan review, and the three records it caught before anything was built](#2026-08-13--m507s-plan-review-and-the-three-records-it-caught-before-anything-was-built) | Thirteen findings from planning.md §7's independent review. Three count sentences corrected, and W43 found breached by the very commit that added M50.7 — M57.9's *what the re-run owes* list never named either QR-tab report or the three decisions that came with them, the **third** time that paragraph has been caught short by a plan review. The sharpest finding is held open deliberately: M50.7 claims nothing it touches is defective and then deletes M49's shipped preview claim |
+| [M50 rebuilt: the default is a flag, and the untagged bucket is what makes that free](#2026-08-13--m50-rebuilt-the-default-is-a-flag-and-the-untagged-bucket-is-what-makes-that-free) | The build of D183, and the two things it left open. Promotion goes to the **oldest** code left, the only candidate that is a property of the data rather than of a surface. Today's default gains a slug **on its row**, and the redirect path is untouched: an untagged scan still records the bare `qr` and the breakdown folds that bucket onto the flag-holder, so no recorded scan is rewritten and no link's history splits. A code gains a slug when it **stops being alone**, because handing one out on a style write would falsify M41's *restyling never changes what a code says*. The statement that takes the empty slug off a row writes the flag in the same clause — for a row the previous release left behind the two are spellings of one fact — and the removal refusal counts the codes a link **has** rather than the rows it stores, because those differ by one on exactly that link |
+| [Five owner answers, taken between milestones, before anything is built against them](#2026-08-13--five-owner-answers-taken-between-milestones-before-anything-is-built-against-them) | Carries no milestone number because none was under way. A stored size re-fits whenever the payload grows, silently unless the size itself must rise; the `N/20` counter and the tab badge are different quantities so both stand; M50.7 stays one milestone with the popover priced honestly; **QR generation stays on the server** — it is already not stored, and a client encoder would cost three shipped claims; and the preview paragraph **reopens M49 a third time** rather than being reversed from M50.7, the owner taking the strict route over the cheap one |
+| [M49, a size is fitted against a payload and a payload can change (D185)](#2026-08-13--m49-a-size-is-fitted-against-a-payload-and-a-payload-can-change-d185) | The third reopening, built. `CreateQRCode` is the one operation that changes what an *existing* code encodes, so it re-fits both rows: the size the reader set is kept wherever the larger symbol admits a scale — 512px keeps 512 and moves the scale — and rises to that code's own floor where none does, reported then and silent otherwise. `fitStyleTo` is the arithmetic shared with `refitForLogo`; the arm where nothing fits is **not** shared, because D174's number is one nobody chose. The preview paragraph and `TestTheQRPreviewSaysWhichSizeIsServed` are gone, with F213(a) re-pointed at the fixed frame. A link's alias and the read-only viewer's lost number are filed as F228 and F229 rather than taken |
+| [M50.6, the level is a rule and the tab does not print it (D186)](#2026-08-13--m506-the-level-is-a-rule-and-the-tab-does-not-print-it-d186) | D186 — the tab does not print the level and names it where it changes. D184's *weakest level* is read as the product default `M` rather than as `L`; the build's unset-only reading was offered and overruled by D187, so nothing is migrated and a stored `M` is inert. Where the floor cannot raise the symbol the module count is `M`'s, which is what carries M49's exact size through it — and where it can, every site that fits a size encodes through the rule |
+| [M50.6, the rule binds a level somebody named, and D187](#2026-08-13--m506-the-rule-binds-a-level-somebody-named-and-d187) | D187 — the free-level rule is a floor under every code, not a default for codes that named nothing. Owner-answered against the build's recommendation: the drawn level is the stronger of what the row names and what the rule gives, so a named `L` where `Q` is free is drawn at `Q`. The rule never lowers, which is what keeps `H` under a logo; the API's `level` is honoured upward and ignored downward |
+| [M50.7's plan, three answers taken before a worker exists](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists) | D188 — the QR tab's prose is bounded at **900** characters, over 1200 and 1500, with the cost of reaching it named and taken. The default control becomes a filled/empty icon on **every** row, which is neither shape offered — the state becomes readable without reading, at the price of an inert control on the default's own row and a radio group's semantics. Rename's server side stays when its button goes, commented as deliberately unreachable |
+| [M50.7 built: one anchor name serves twenty menus, and four explanations were spent](#2026-08-14--m507-built-one-anchor-name-serves-twenty-menus-and-four-explanations-were-spent) | D189 — the per-row popover menus take **one** shared anchor name scoped per row (`anchor-scope`) rather than the twenty slug-derived names m50.7.md describes, which cannot exist: Tailwind generates only the classes it scans and `style-src 'self'` refuses the inline attribute, so a name built from a slug reaches no stylesheet at all. Verified in all three pinned engines. Which explanations the 900-character bound cost, all four, named as D188 requires: the size half of the size-and-contrast paragraph and *why* level H helps under a logo, which the derivation predicted, plus the logo paragraph's promise that you are told what an oversized image became and the last-code sentence's clause about pictures already printed, which it did not. And a proxy corrected rather than a claim broken — *no panel on this tab* had been asserted as *no popover inside `<main>`*, which stopped fitting the moment a control that is not a panel used the platform's popover API, so the assertion now names the exception (the row menus, only where the codes list renders) rather than dropping the rule at the three sites that carried it |
+| [M50.7, two answers its reviewer's findings needed](#2026-08-14--m507-two-answers-its-reviewers-findings-needed) | D190 — the default indicator renders for a `links.read` viewer as the static filled/empty pair, because D188 bought legibility rather than a control and a gated icon delivered it only to editors; and the download menu's fallback, where `anchor-scope` is unsupported, is the UA's own centred placement, over the header's viewport pin and over keeping the two-button row alive |
+| [M50.8 added: the QR tab's third report, and the first script](#2026-08-14--m508-added-the-qr-tabs-third-report-and-the-first-script) | D191 — the owner's third QR-tab report becomes **one new milestone built before M57.9**, not four reopenings: most limbs are not defects, two belong to no existing milestone, and building after the review would tag 0.3.0 over code no review covered. M50.8 is the **last slot** between M50 and M51, `M50.9` being reserved. The size slider gets this product's **first hand-written interactive script** — `script-src 'self'` unchanged, no Node, no CDN, no build step — with what the file may contain bounded in the milestone, because the precedent outlives the feature |
+| [M50.8, the two its plan review turned into questions](#2026-08-14--m508-the-two-its-plan-review-turned-into-questions) | D192 — the tab gets a **tooltip this product owns**, shown on hover *and* focus with `aria-describedby`, over moving the native `title` onto the button: a native tooltip has no DOM presence so nothing can assert it appears, and a `disabled` button is unfocusable so a keyboard user never sees the one explaining a refusal. And the `+` add control is **disabled with its reason at capacity** rather than absent, so one list stops carrying two conventions |
+| [M50.8 built: a remembered position, and two readers that mistook the flag for a place](#2026-08-14--m508-built-a-remembered-position-and-two-readers-that-mistook-the-flag-for-a-place) | D193 — a save on the QR tab returns to a **remembered scroll position** rather than to a fragment on the redirect: the owner asked for *"its current position"*, and a fragment lands every reader on one element whichever control they were using. Kept in `sessionStorage`, applied once, and yielded back the moment the reader scrolls. And the sort change's hidden edge, named because it was a defect this milestone would otherwise have shipped: `link.ListQRCodes` and `analytics.qrCodeSplit` both read **position 0** to decide whether any row held the default, which was the whole set's answer only while the query put the flag-holder first. And the tab's prose bound, **900 → 750**: two owner-set cuts left it measuring 715 by [D188](../../Plan.md#phase-3-decisions)'s unchanged method, rounded up to the next fifty |
+| [M50.8, two amendments its reviewer forced](#2026-08-14--m508-two-amendments-its-reviewer-forced) | Fact-level orchestrator amendments on a milestone file, both **enumerations that were short**. The records citing the reversed sort order are **three**, not two — `internal/httpx/web_links.go:675` documents the view field filled from the service whose order changed. And the default control's strings are **two pairs at four sites**, not one pair at two: the `links.read` branch renders the same control unwritable, and the glyph going decorative on both branches is what obliged it to move. `Not the Default QR Code` is the build's wording rather than the owner's, the report naming only a control a reader can press |
+| [M50.8, five more amendments, three of them on a shipped milestone](#2026-08-14--m508-five-more-amendments-three-of-them-on-a-shipped-milestone) | Fact-level orchestrator amendments, three of them on **`m50.7.md`, which is `done`** — and that is not a reopening, because reopening is for a claim false by *defect* and F238(i) is the owner asking M50.7's claims to stop being true. A shipped file superseded by a later milestone is amended where it is superseded, naming which one did it. The default icons' accessible name is on the **button** and names no code; `icons.html` now draws a decorative shape as well as a named one. M50.8's own order test is an **integration** test, the order being SQL, and its scroll case asserts the **Save** button, far enough down the tab to tell a restored position from the `#qr` fragment's landing |
+| [M50.8, the prose bound moved and the file that derives it did not](#2026-08-14--m508-the-prose-bound-moved-and-the-file-that-derives-it-did-not) | The third review's three findings, all records and all the orchestrator's. `m50.7.md`'s bound section — the one that says *move the number in this file* — still derived **900** while the index and the log carried 750; the number had been moved everywhere except the file that gave the instruction. The milestone's title in `Plan.md` and the phase-details README still carried the *"first script this product writes"* overclaim its own plan review struck. And `docs/usage.md` claimed alphabetical *by name* where the sort is on the stored **label** and an unnamed code draws a substitute — corrected, with the design question behind it filed as [F243](deferred-findings.md#open) |
+| [M50.8, the fourth report and where its seven items go](#2026-08-14--m508-the-fourth-report-and-where-its-seven-items-go) | D194 — the tab's **fourth** report reopens M50.8 for five of its seven limbs, the M50 band being exhausted so no new M50.x can hold them. Four are the owner's choice; **limb (a) joined by rule** — the screen showing the top of the card before jumping back makes *"a save returns you to where you were"* false, and a false claim reopens rather than succeeds. It is not a bug in the restoration: `qr-size.js` restores a **second** time precisely because the browser's `#qr` fragment scroll lands after `DOMContentLoaded`, so the correction is by construction after a paint, and D193 left the fragment on the redirect it chose a remembered position over. **Three probes saw none of it** — one skipped in silence on a wrong selector, one let the driver auto-scroll away the position it meant to store — so the enforcement is an assertion about the interval rather than the endpoint. (b) and (e) are Phase 4 rows |
+| [M50.8, the fragment yields rather than being out-scrolled](#2026-08-14--m508-the-fragment-yields-rather-than-being-out-scrolled) | D195 — two mechanisms were aiming at one scroll and the later existed to undo the earlier, so the **fragment yields**: `qr-size.js` takes `#qr` off the URL with `replaceState` before the browser acts on it, and only on the loads where a remembered position is being applied. Measured on the build being corrected — `DOMContentLoaded 230, load 409, frames 230` — which is why the intermediate position is real, why a frame sampler in headless cannot see it, and why the enforcement asserts the **`load` event**. Costs the reader whose browser refuses `replaceState` their position outright — the fragment survives, and the second application that used to correct it is gone, so they **end** at the card top rather than jumping and settling. Stated rather than fixed: the fallback is a branch nothing in the kept suite can reach. Rejected: deleting the fragment outright, which is D178's no-script return path; and guarding the second application, which M50.8 already tried and which cannot tell a reader's scroll from the browser's |
+| [M50.8, the logo picker above the save button, and the prose bound at 300](#2026-08-14--m508-the-logo-picker-above-the-save-button-and-the-prose-bound-at-300) | The reopening's four other limbs. The logo controls move **ahead of the whole style form**, which is the only position above its Save button and outside it — a file needs `multipart/form-data` and forms do not nest, so *between the fields and the submit* is not a place that exists. F244(d) takes the last statement on the tab of what the default *does*, leaving the icon and its name to say which one it is; the test that asserted the sentence now asserts its absence **and** the icon's name, so losing both cannot pass. F244(f) rests on a refusal that names the limit with the reader's own numbers in it. The prose bound is **300**: measured 252 across two paragraphs, rounded up to the next fifty |
+| [M50.8's reopening, four citations its own diff moved](#2026-08-14--m508s-reopening-four-citations-its-own-diff-moved) | Fact-level orchestrator amendments: four line numbers in the reopening's own bullets, stale because the build moved them by doing what the bullets asked. **The third time in two days this hazard has cost an amendment** — a citation written against a diff in flight goes stale before the diff lands, and the answer is re-reading at step 3.4 rather than citing less. Also records that the three removed sentences still appear as quotations inside the comments recording their removal, which is convention and not a failed deletion |
+| [Three shipped entries the fourth report's removals falsified](#2026-08-14--three-shipped-entries-the-fourth-reports-removals-falsified) | Corrections **by a later entry**, this file being append-only. M50.7's defence of its meta-line cut, M50.7's claim that the logo paragraph still names level H, and D186's citation of that same paragraph were all falsified by F244(c), (d) and (f). A fourth: **`logo_applied` is a symbol that has never existed** — the marker is `"logo"` — and it survived review in a landed entry because the sentence around it was right. D186 stands and is discharged by the **upload notice** at `internal/httpx/web_qr.go:650-663` rather than by prose on the tab. The rule the run earned: **entries about this surface cite the mechanism, not the sentence** — a claim that *the tab still says X* has a lifetime, and this tab has been reported four times in three days |
+| [M50.8, the paint is held, the logo submits to a form it is not in, and the slider draws its own stops](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops) | D196 — the QR tab's save is put back **before the first paint**, which cannot mean restoring earlier: a script in `<head>` runs before the document has any height and `scrollTo` against it clamps to 0. So the paint is *withheld* — `qr-size.js` is parser-blocking now, marks `<html>` when it holds an offset for this path, and app.css keeps `body` unpainted until the scroll lands at `DOMContentLoaded`. Only on the load after a write; three independent reveals, because a page that stays hidden is worse than a page that jumps. Rejected: a head-time restore (cannot work, not merely costly) and a server-rendered offset (same timing, and the position leaves the browser). D197 — the logo's controls move **into the style form's grid** by `form="…"`, which reverses one reopening's *"it does not move into the style form"*: the nesting ban is on the `<form>` element, not on a control that names one. The `change` trigger moves onto the input with it — `change` bubbles up the DOM, not to the form a control names — and htmx serializes the form the control **owns** rather than the one it sits in, which was measured and which deleted an `hx-params` filter the build had written on the opposite belief. D198 — the size slider's detents are **SVG geometry the template renders**, because `style-src 'self'` refuses the style attribute a custom property would ride on and `appearance: auto` would trade the theme for the marks. One `<line>` per stop, positioned `(stop − min) / (max − min)`, inset by half a thumb |
+| [M50.8, selecting a code is the tab strip's own swap](#2026-08-17--m508-selecting-a-code-is-the-tab-strips-own-swap) | D199 — a row in the codes list **swaps `#link-tabs` on the page the reader is already on**, with the tab strip's own four attributes and `&code=` on the request, and its `href` is that same URL. No load, so there is nothing to remember and nothing to restore — the position is never disturbed rather than preserved — and the heading thumbnail stays because it renders outside the swapped element, which closes F244(b) as a consequence of F246(d)'s fix. `web_links.go:970` reads `?code=` now, keeping linkQR's existing fallback for a slug the link does not have; `qrReturn` carries the code on the link-page branch as well as the panel one, and the refusal path re-derives it from the posted field the way it already re-derives the tab. Rejected: swapping `#qr` from the panel route, which is the cheaper request but pushes the panel URL onto the link page or else gives one control two addresses; keeping the href on the panel route under the swap, which leaves the script-blocked reader on the defect D178 exists for; and a script of this list's own, which m50.8.md bounds out |
+| [M57.9's reopened run: what it checked, what it found, what it refuted, and one amendment](#2026-08-17--m579s-reopened-run-what-it-checked-what-it-found-what-it-refuted-and-one-amendment) | The by-use record for the additive range: the SLO re-measured on the final build at 240,001 cached redirects 100% under 0.5 ms, the single-instance guarantee re-confirmed, `verify-scan` at 9256 of 9256 exact, `verify-ui` green at 17, and M50.8's third reopening driven under the 80 ms profile that broke the two before it — zero painted frames at an offset the reader did not stand at. F251, F248 counted from three to 39, three candidates refuted, and D200: the doc-cost growth is **split by realized read ratio** — 2,515 bytes of history trimmed out of the files whose ratio fell, and phase-loop.md's growth defended because its ratio rose |
+| [M57.9's triage: three rows scheduled, and the one the owner took further than was recommended](#2026-08-17--m579s-triage-three-rows-scheduled-and-the-one-the-owner-took-further-than-was-recommended) | D201: F251 **reopens M58** rather than being fixed inside the review, and carries a `release-check` gate refusing a non-empty `[Unreleased]` when a version is named — a fix no gate can see regresses the way this one arrived. D202: F248 gets **both** the gate and the seventeen corrections, `decisions.md`'s twenty-two left as append-only. D203: F249 and F250 go into **M50.8's fourth reopening**, against a recommendation of Phase 4 for both, with the size-target cost on the record — and F249 still owes the meaning of the thumbnail before it can be built |
+| [Two reopenings from M57.9's triage, and what the QR thumbnail means](#2026-08-17--two-reopenings-from-m579s-triage-and-what-the-qr-thumbnail-means) | D204 — the heading thumbnail means *this link has a QR code*, so its picture stays the default's and only its `href` carries the selection. The reading that would make it follow the selection was declined on mechanism: it renders outside `#link-tabs`, which is what let F244(b) close, so redrawing it needs `hx-swap-oob` or a second target — new htmx on the surface M50.8 bounded its scripting to |
+| [M50.8, the offset is forgotten when the request ends, not when it swaps](#2026-08-17--m508-the-offset-is-forgotten-when-the-request-ends-not-when-it-swaps) | D205 — the QR tab's stored scroll offset is forgotten on `htmx:afterRequest` rather than on `htmx:afterSwap`, superseding D196: a swap is observable only when there is one, and the requests that must be forgotten for — a 5xx, a refusal htmx will not swap, an abort, a timeout — produce none. Since the third reopening every row of the codes list issues one. F250's fourth ending, a reader who navigates away mid-request, is **not** claimed: its handler would have to run during document teardown and nothing here demonstrates that it does. Guarded on `HX-Redirect` and `HX-Refresh`, because htmx fires the ending **before** the navigation those headers ask for, and an unguarded listener would drop the offset on the one load that reads it back. Rejected: a listener per failure event, which needs no guard and misses every success htmx declines to swap |
+| [M50.8, the thumbnail was already right, and D204 asked a question it then over-answered](#2026-08-17--m508-the-thumbnail-was-already-right-and-d204-asked-a-question-it-then-over-answered) | D206 — the heading thumbnail stays the default's **and** clicking it opens the tab on the default, which is what the tree already did. F249 closes with no change and D204's second half is withdrawn: the owner was asked what the thumbnail *means* and D204 inferred a *behaviour* from the answer that they had not chosen. What sent it back was the price — the anchor renders outside `#link-tabs` and a selection is a swap of it, so carrying the selection needed exactly the `hx-swap-oob` D204 declined for the reading it rejected |
+| [M58, the release notes fold into 0.3.0, and the date a gate keeps honest](#2026-08-17--m58-the-release-notes-fold-into-030-and-the-date-a-gate-keeps-honest) | D207 — the `0.3.0` section is dated **2026-08-17**, the day the fold was made, and is defensible only because D208 refuses a stale one. D208 — `release-check`'s new gate checks the **date** as well as an empty `[Unreleased]`, and that the `[Unreleased]` heading is still there at all, all three as failures rather than warnings, none of them built from a regex holding the version. The rehearsal cost is discharged in `docs/releasing.md` rather than merely stated, and the standing conflict with the per-commit Docs gate is [F254](deferred-findings.md#open) |
+| [The conformance gate waits on the socket the application uses, and a streak alone was not enough](#2026-08-18--the-conformance-gate-waits-on-the-socket-the-application-uses-and-a-streak-alone-was-not-enough) | D209 — the single-instance check's readiness wait asks over **TCP**, because the `initdb` temporary server runs with `listen_addresses=''` and cannot be seen there: socket polls `........RR...RRRR`, TCP polls `............RRRRR`, zero transitions. The first fix kept the socket and required three consecutive successes, and measurement killed it — a temporary server answered ready for exactly three polls. A boundary rather than a margin, sabotage-verified against the new mechanism. F256 closes |
 
 ---
 
@@ -7080,6 +7211,7 @@ milestone that shipped the pages is the milestone whose tests passed while they
 were broken, which is why the reopening asks for a structural assertion — no
 page struct may redeclare a field the shell already provides — rather than a
 fix to two lines.
+
 ## 2026-08-01 — M28, the page field that shadowed the shell
 
 The reopening, built. [F20](deferred-findings.md) is closed and the entry above
@@ -11477,6 +11609,7 @@ cross-organization case beside it as an assertion of the bound. Correcting the
 setup of a test whose premise the product never had is not the same as editing a
 test to make a change pass, and the difference is that the original claim survives
 in the file rather than being quietly dropped.
+
 ## 2026-08-04 — M44.9, the pre-release review, and what refutation cost the findings
 
 m44.9.md requires that the review's own output be recorded — what was checked,
@@ -19874,3 +20007,10729 @@ explicitly excludes annotations, re-homing rows and count fixes, where the
 review would cost more than it could find. If the cost stops being worth paying,
 the trigger narrows deliberately and in writing rather than the step being
 skipped quietly.
+
+## 2026-08-07 — M46, the three choices the milestone gave itself, and the header that could not fit
+
+[m46.md](phase-details/m46.md) does something the milestone files rarely do: it
+names three choices, refuses to pre-answer any of them, and writes down the
+criterion each has to be decided against. This entry is the answers, with the
+criterion applied and the evidence beside it. Nothing here was put to the owner,
+because nothing here was left open — a milestone that assigns itself a decision
+*and* the test for it has not deferred a decision, it has scheduled one.
+
+### D117 — the switcher stops offering the workspace you are already in
+
+The criterion is task 9, and task 9 contained a contradiction: the owner could
+not confirm which workspace they were acting in, and in the same note asked for
+the current workspace to be **removed** from the switcher as redundant. The
+selected option was the only place in the whole shell the answer appeared, so
+granting the second request would have made the first failure permanent.
+
+The resolution is the one neither note asked for, and it is the same one D114
+sketched: **a label in the header, and a switcher that lists the places you can
+go.** With `workspace_label` rendering the current organization and workspace on
+every page, removing the current entry from the select costs nothing and the
+control finally means what its name says.
+
+Two consequences worth stating, because both are one edit from being wrong.
+
+The select needs something to display in its closed state, and it must not be
+another workspace's name — a control reading *Acme · Marketing* while you are in
+*Owner · Default* is this milestone's own defect wearing a different hat. So the
+first option is a **selected, disabled placeholder**. `disabled` and not merely
+unselected: a keyboard user can otherwise arrow back onto it and post an empty
+`workspace_id`.
+
+And **M25 is honoured rather than reversed.** Its ruling was that "a control that
+cannot do anything" stays absent, and the guard it produced —
+`{{if gt (len .Workspaces) 1}}` — is untouched. What fills the single-membership
+gap is a label, which is not a control. The candidate row filed on 2026-08-02
+said exactly this and it turned out to be right: the decision was always about
+the control, and the gap was always the label.
+
+### D118 — the top-level nav holds two destinations, and API keys is the one that left
+
+The criterion is F6 and F7's own evidence, read before anything moved, which is
+what m46.md's risk section asked for.
+
+F6 and F7 cut the header from five destinations to three. The reasoning was not
+about the number: it was that Account is a preference surface and Notifications
+is a count, and neither is a place you go to do the work. D35 then applied the
+same reasoning to Members, Invitations and Workspaces, M39 to Domains, M42 to
+Webhooks and M43 to Automation — six destinations, one after another, each
+argued into the identity menu on the grounds that it is visited when something
+*changes* rather than while work is being done.
+
+**API keys is the only destination in the product that matches that description
+and was not in the menu.** A key is minted once and then not thought about until
+it stops working. Blind task 7 is the evidence that the mismatch was visible from
+outside the repository: the owner's first click for API keys went to the identity
+menu, which is where the reasoning above says it should have been all along.
+
+So the outcome is amended, not reversed, and both deferred rows say so. The
+count is now two — Dashboard and Links — and
+`TestTopLevelNavHoldsThreeDestinations` was **renamed and updated** rather than
+deleted, which is what m46.md required: a test called *...Three* asserting two is
+the next reader's wrong turn. It now also asserts where API keys *went*, because
+a destination that left this level and a destination that became unreachable
+produce an identical nav bar.
+
+The gating did not change with the location. `/keys` requires an organization and
+nothing else, and the menu entry is gated on exactly that — moving a destination
+must not quietly change who can see it.
+
+### D119 — one hot filter, and the second slot left empty on purpose
+
+The owner's prescription was *"only leave 1-2 hot controls on the page and add a
+filter control that displays all the filter controls including the hot ones"*.
+The criterion m46.md set is **what the tasks reached for**, and applying it
+honestly produces an answer the prescription permits but did not predict.
+
+Search is hot. It is named in a task note — the owner *"accidentally clicked on
+the create a link destination URL box instead of the search box a few times"* —
+which is a reach for it, repeated, recorded.
+
+**Nothing else in that bar was reached for by name in eighteen tasks.** Status,
+sort, folder, campaign and hostname appear in no note. The prescription allows
+one hot control as readily as two, so the second slot is left empty rather than
+filled with whichever of the five looked most plausible. Filling it would be a
+guess wearing evidence's clothes, and the milestone's criterion exists to stop
+exactly that.
+
+**Search is not repeated inside the panel**, and this is the one place the
+prescription is not followed to the letter. Two elements named `search` in one
+form submit `?search=a&search=b` for a parameter this milestone promised not to
+change, and the two copies can disagree about what is in the box. The purpose the
+words serve is that nobody has to look in two places for a filter; with one hot
+control sitting immediately against the panel's own summary, both are on screen
+at once, which delivers the purpose without the defect.
+
+The panel **opens by itself when any hidden filter is set**, server-rendered, no
+script. That is the whole risk of demoting five controls — a list filtered for a
+reason nobody can see — and it is answered in markup rather than in a note.
+
+### The mechanism, and why it is not D24 reversed
+
+Both panels on the links page are `<details>`/`<summary>`. The header menus are
+the Popover API and D24 is emphatic about why: `<details>` cannot close on
+Escape, in any engine, and M26.5 asked for exactly that.
+
+D24 is about **overlay menus**, and neither of these is one. A disclosure in flow
+pushes the list down instead of covering it, is dismissed by the control that
+opened it, and needs no geometry — where a top-layer element mid-page would need
+to be positioned against the viewport, because that is what a top layer's
+containing block is. It also has the property this milestone specifically needs
+and a popover does not: **`open` is an attribute a server can write.** The create
+panel has to be open when the last attempt failed, since the typed values, the
+field errors and the low-confidence appeal are all inside it and a shut panel
+would render a page that appears to have done nothing.
+
+`TestHeaderMenusAreScriptFreePopovers` asserts `<details>` is absent, and it is
+left exactly as it was: it renders the dashboard, its message reads "a header
+menu is a `<details>` disclosure again", and the header still holds none.
+
+### The header could not fit, and the arithmetic is the decision
+
+*"Page needs to be scrolled to the side to see anything past half of the
+workspace switcher."*
+
+Adding a label to that bar makes it worse before it makes it better, so the
+question was whether one row can hold the logo, the destinations, the label, the
+switcher, the bell and the identity control at 360px. It cannot, and this is not
+a judgement — at 360px the padding leaves 328px, the logo and two destinations
+take about 156 of it, and the bell and identity control take about 126 more. What
+is left for an organization name and a workspace switcher is roughly twenty
+pixels.
+
+So **the bar wraps below `sm` and does not above it**, at `h-20` and `h-14`
+respectively. Both heights are exact rather than `min-*` because the two header
+panels are in the top layer, positioned against the viewport, and need a header
+height they can be written against: `top-[5.25rem] sm:top-[3.75rem]` clears each
+by the same 3px the original comment claimed.
+
+This is **not** the mobile navigation rework, which stays parked in Plan.md's
+*Not in Phase 2* with its reason. A nav that reflows for a phone decides what to
+show and what to fold away; this one shows everything it showed before, on two
+lines instead of one.
+
+### What the overflow scan actually enforces, and what it does not
+
+m46.md asks for "any element that can exceed the viewport" to sit in a container
+that scrolls on its own, and its own risk section says that if the scan cannot be
+written to mean that, **the bullet is narrowed to what the scan checks and the
+remainder is stated as unenforced**. It cannot, so it is.
+
+`TestWideElementsScrollInsideTheirOwnContainer` renders every page and fails any
+`<table>` or `<pre>` that no ancestor scrolls. Those two are the elements that
+cannot reflow — a table is as wide as its columns, a `<pre>` as wide as its
+longest line. Six tables were bare and are now wrapped, each with a `min-w-` so
+the container it sits in actually scrolls instead of squeezing five columns into
+360px.
+
+Not enforced, and stated rather than implied: a flex row of controls, an unbroken
+string in a table cell, a fixed-width SVG. None is distinguishable from markup
+that is fine, and a scan that guessed would be worse than one with a stated
+boundary. The header — the one that produced the complaint — has its own
+assertion instead, over the properties that make it shrink rather than over
+pixels.
+
+The scan is over the **rendered pages**, not the template sources, because a
+table and its wrapper need not be in the same file: `links_table.html` holds the
+one on the links page and `pages/links.html` renders it. It also fails loudly if
+its own tag stack does not balance, so a page whose nesting it cannot follow
+reports that rather than quietly answering "no ancestor found".
+
+### Measured, not asserted
+
+The claim is a pixel claim, so it was checked in a browser rather than argued
+from markup — Playwright is already in this repository for
+[`tools/render-verify`](../../tools/render-verify/README.md), which D25 permits
+on the condition that Node stays out of the product.
+
+Every page was rendered at 360, 640 and 1280px, before and after, with the
+`before` build produced from a worktree at the previous commit so the comparison
+is the same pages and the same stylesheet pipeline:
+
+| | 360px | 640px | 1280px |
+| --- | --- | --- | --- |
+| Before (HEAD, 23 pages) | **16 overflow** | **16 overflow** | none |
+| After | none | none | none |
+
+Re-run with a 71-character organization name and a 62-character workspace name
+substituted into three pages: still none, at all three widths. Panel clearance
+measured 3px at 360, 640 and 1280.
+
+The harness that took those measurements is **not committed**. The milestone's
+enforcement is the template scan, this was evidence for a one-time claim, and
+`make verify-render` — which is committed, and which passed unchanged in Blink,
+Gecko and WebKit — now says in as many words that it checks the wide half of the
+header geometry and not the narrow one.
+
+### The one existing test that had to change, and why that is not the claim breaking
+
+m46.md's falsifiable claim is that **every existing integration test touching
+these pages passes unmodified**, and it bounds what that means: routes, form
+field names and query parameters unchanged, OpenAPI untouched. All of that held —
+`/workspace/switch`, `workspace_id`, `next`, every links-list query parameter,
+and no API surface was involved at all.
+
+One assertion inside `TestWebWorkspaceSwitcher` did not:
+
+```go
+if !strings.Contains(account, second.String()+`" selected`) {
+    t.Error("after switching, the header control does not show the new workspace as current")
+}
+```
+
+Its subject — *the header says which workspace you are in after a switch* — is
+the same subject as D117, and the milestone instructed this decision to be taken.
+The selected option was the mechanism that assertion happened to read, and it is
+the mechanism blind task 9 established does not work: a workspace id inside an
+attribute is not an answer a person can read, which is why the owner could not
+complete the task while looking straight at it.
+
+So the assertion **moved onto the label** rather than being deleted or weakened.
+It now reads the two names in the header, at the same moment, and adds the
+inverse — that the switched-to workspace has not come back as a selected option.
+Two assertions were added beside it, so the integration test carries the new
+contract rather than merely tolerating it: two options for two memberships, and a
+selected disabled placeholder.
+
+Recorded here because m46.md required exactly that — *a test that needs changing
+means a behaviour change, which is either reverted or justified in the commit*.
+This one is justified: the behaviour it read is the behaviour this milestone was
+told to decide.
+
+### Campaigns and Folders are navigation now
+
+They were two text links in the top-right corner of the links page, which the
+owner had *"not even noticed … existed until now"*. They are a second chrome bar
+drawn for every page whose `Nav` is `links` — the list, a link, campaigns,
+folders.
+
+In the chrome and not in the page, for two reasons that both matter. One bar in
+one place cannot disagree with itself the way three pasted copies can. And the
+links page's search box has to be the first control inside `<main>`, which is
+this milestone's other claim about that page — a sub-navigation rendered as page
+content would sit in front of it and re-create the trap in different markup.
+
+Not three more top-level slots: the top bar holds the places you go, and these
+are one place seen three ways. That is D35's argument applied one level down, not
+a new rule.
+
+The mirror-image links went with them. `pages/campaigns.html` and
+`pages/folders.html` each carried a *Links →* in the same corner, which is the
+same pattern pointing the other way; with the bar drawn above `<main>` on both
+pages, keeping them would put a second Links link a few centimetres from the
+first. `link_detail.html`'s *← Links* stays: it is *up one level from this
+object* rather than a peer destination, and that page belongs to
+[M47](phase-details/m47.md).
+
+## 2026-08-07 — M47, the line count M46 moved
+
+An amendment under [phase-loop.md](phase-loop.md#amending-a-bullet), logged
+because the rule says every amendment is logged and not because two lines are
+interesting. It is a **fact**, not an assertion: nobody could have decided the
+file was a different length.
+
+The bullet as it stood:
+
+> `pages/link_detail.html` is **803 lines**, more than a fifth of every template
+> in this product put together
+
+As amended:
+
+> `pages/link_detail.html` is **805 lines**, more than a fifth of every template
+> in this product put together
+
+The tree fact: `wc -l internal/ui/templates/pages/link_detail.html` reports 805
+at `099b561`. [M46](phase-details/m46.md) is what moved it — its overflow bullet
+wrapped the recent-activity table in an `overflow-x-auto` div, which is 24
+insertions against 22 deletions in that file and a net of two. The milestone file
+was written on 2026-08-06, before M46 was built, and 803 was true then.
+
+Nothing else in m47.md drifted, and that was checked rather than assumed:
+`loadLinkDetail` is still at `internal/httpx/web_links.go:513` and runs to `:719`,
+which is 207 lines and inside the bullet's *roughly 220*; the `max_clicks` label
+is still at `pages/link_detail.html:211` with `ClicksConsumed` at `:217`;
+`withBudget` is still at `internal/link/gates.go:167`; and the page still carries
+exactly the eight top-level sections the bullet names, in the order it names
+them — clicks per day, edit, signed links, QR, routing rules, split test, danger
+zone, recent activity.
+
+Worth noticing rather than filing: the drift is a milestone changing a file the
+*next* milestone measures, one day apart. The cap M47 has to choose is a line
+count in the same file, and a cap chosen from a number that moved is the failure
+this entry is the cheap version of.
+
+## 2026-08-07 — M47, the three choices it gave itself, and the 1883 pixels
+
+[m47.md](phase-details/m47.md) does what [m46.md](phase-details/m46.md) did the
+day before: it names the choices it will not pre-answer and states the criterion
+each has to be decided against. Nothing here was put to the owner, because
+nothing here was left open — the milestone file says in as many words that where
+the analytics go and what the line cap is are *"the milestone's to decide and to
+record"*.
+
+### D120 — the analytics go below, and it is the only one of the three options that costs nothing
+
+m47.md offers three: below, behind a tab, or on their own route. The bullet is
+emphatic about which half is negotiable — *"that they no longer sit between the
+reader and the edit form is not"* — so the criterion is what the other two cost
+against a milestone whose other claim is that **behaviour does not change**.
+
+A **tab** needs state, and there are two ways to hold it. A query parameter
+changes what `/links/{id}` answers, which is the thing this milestone promised
+not to touch; a script contradicts nothing but adds the first piece of
+client-side view state in the product to the page with the largest diff of the
+phase. A **route** is worse on the same axis: `/links/{id}/analytics` is a new
+page, a new handler, a new nav state, and it splits one object across two URLs
+one milestone before [M48](phase-details/m48.md) starts putting things *back*
+onto this page as panels.
+
+**Below** changes no route, no query parameter, no handler signature and no
+test, and it fully satisfies the half of the bullet that is not negotiable. It
+also leaves M48 free: a panel is a better home for the analytics than a tab
+would have been, and M48 owns that mechanism.
+
+**The three statistic tiles went down with the rest**, and that is the part
+worth stating rather than assuming. Keeping a summary strip at the top is the
+obvious compromise and it fails the bullet's own words — *"analytics stop being
+the first thing on a configuration page"*. A tile is analytics. Leaving three of
+them in front of the edit form would have put the reader back behind exactly
+what they were behind, in a shorter costume.
+
+One consequence, and it is the kind of thing a reorder leaves behind: two
+sentences on the page said *above* about something that is now below. The QR
+panel's *"show up under **qr** in the referrers breakdown above"* and the click
+limit's *"not by the click total above, which is approximate"* both now read
+*below*. Every other directional word on the page was checked rather than
+assumed — the rules and the split both say the destination is *above* them, and
+it is; the edit form says a signed link is made *below*, and it is.
+
+### D121 — the order, and the point at which the evidence runs out
+
+The order is **edit, QR code, routing rules, split test, signed links,
+analytics, recent activity, danger zone**. m47.md asks for it to be *"written
+down with what it was derived from, so a later reader can disagree with the
+evidence rather than with a preference"*, so here is the derivation with the
+join between the two clearly marked.
+
+**Measured, from the round-one blind tasks:**
+
+| # | Section | The evidence |
+| --- | --- | --- |
+| 1 | Edit | Changing where a link points is *"the most ordinary thing anybody does to a link"* and took **~35 seconds**, with the note *"scrolling, which is worse when not looking for the massive QR code"*. It is the only section with a task about the thing the section does |
+| 2 | QR code | Task 1 took **~26 seconds** to reach it, and [M48](phase-details/m48.md) exists because it is buried. A whole milestone naming a section is the second-strongest evidence in the set |
+
+**Not measured, and ranked by a stated secondary criterion instead.** No blind
+task reached for routing rules, the split test, signed links or the danger zone
+by name. Ranking them by preference and calling it frequency would be the thing
+m47.md's phrasing is written to prevent, so the criterion is named instead:
+**how close the section is to the question the edit form answers — where does
+this link send somebody.**
+
+| # | Section | Why there |
+| --- | --- | --- |
+| 3 | Routing rules | The same question, per visitor. A rule overrides the destination directly above it, and reading the two apart is how a link ends up pointing somewhere nobody expected |
+| 4 | Split test | The same question again, per share of the traffic — and strictly downstream, since a split is applied only to visitors no rule claimed. The page says so itself, so the order on the page is now the order the redirect path evaluates in |
+| 5 | Signed links | Not where it goes but who may follow it. It is also the `require_signature` checkbox's companion, and that checkbox says the signed link is *"made below"*, which stays true |
+| 6 | Analytics | Reading, not configuring, on a page whose complaint was that it is a configuration page you cannot configure from. Task 6 shows the breakdowns are used, which is why they are above the log rather than at the bottom |
+| 7 | Recent activity | The same data as 6, one row at a time, and nothing reached for it |
+| 8 | Danger zone | Last, and the one position that needed no derivation: a link is deleted once, and it is the only section whose accidental use cannot be undone from the dashboard |
+
+**What a later reader should disagree with.** Rows 3 to 8 are an argument, not a
+measurement, and one person's seven tasks are the whole of rows 1 and 2.
+[M51.9](phase-details/m51.9.md) re-runs those tasks against the built tree,
+which is the check on all of it.
+
+### D122 — the cap is 60 lines, and the number that fixes it is 21
+
+`pages/link_detail.html` was **805 lines** and is **50**. The cap m47.md asks
+for is **60**, and its risk section is right that this is the milestone's
+genuine unknown: *"set too high it enforces nothing; set too low it forces
+partials that exist only to satisfy a number."*
+
+The number that resolves it is not the page's length. It is **the length of the
+shortest thing that could be put back into it.** What a regression costs this
+file is a section's *body* — the markup between `{{define}}` and `{{end}}`,
+which is what a paste carries — and the eleven bodies this page renders run from
+`link_signed`'s **21 lines** to `link_edit`'s **201**. So any cap below 71
+refuses even the smallest of them, and 60 refuses it by eleven lines while
+leaving ten for three more sections and their lines in the order comment.
+
+This was measured rather than reasoned to. The cap was first written at 70 on
+the arithmetic of whole *files* — `link_signed.html` is 28 lines — and the
+sabotage run that is supposed to prove a test works put the file at **72
+against a cap of 70**. A two-line margin is luck, not enforcement, and the error
+was counting the `{{define}}`, the comment and the `{{end}}` as though a paste
+would bring them along. The cap is stated in bodies now, and the margin is
+eleven.
+
+It bounds **this page and no other**. A cap across `pages/` would be a number
+nobody derived applied to templates nobody complained about; this one has 805
+lines and a stopwatch behind it.
+
+### The one label, and why a third element was not available
+
+`max_clicks` read *Click limit (empty = none)* with `416 used so far` in its own
+`<strong>` six lines below. The owner set a limit and wrote: *"Unsure if done
+properly as nothing notes whether the field is setting for additional clicks or
+total clicks. Current clicks was 416, was setting the field to 50 or 466
+correct?"* The answer is 466.
+
+**Both facts were already on the page, adjacent, and still did not compose.**
+That is what rules out the cheap fix — a third element saying *total* would be a
+third thing to relate. So the two became one sentence: *"A total and not an
+allowance on top of what has gone before: 416 of the 466 are already spent, and
+past the limit the link answers 410."*
+
+`TestTheClickLimitNamesTheTotalAndWhatIsSpent` asserts both numbers appear in
+**one sentence** rather than merely on the page, which is the only form of the
+assertion that would have failed before. It reads the markup *past* the input's
+closing bracket, because the box carries `value="466"` and a region starting
+inside the tag would let the limit be named by an attribute nobody reads — the
+assertion passing for precisely the reason the defect existed.
+
+The gate is untouched. `MaxClicks` stays absolute, because changing it would
+silently redefine every limit already set on every instance.
+
+### Measured, not asserted
+
+The bullet is a pixel claim, so it was taken in a browser. Playwright is already
+here for [`tools/render-verify`](../../tools/render-verify/README.md), which D25
+permits on the condition that Node stays out of the product.
+
+The page was rendered at **1280×800** from `internal/ui`'s own fixture, before
+and after, the `before` from a worktree at `099b561` so the comparison is the
+same page through the same stylesheet pipeline:
+
+| | Destination box, top edge | Alias field, bottom edge | Horizontal scroll |
+| --- | --- | --- | --- |
+| Before (`099b561`) | **1883px** | 1999px | none |
+| After | **327px** | **443px** | none |
+
+Identical to the pixel in Blink, Gecko and WebKit. Both fields are inside the
+viewport with 357px to spare, where before they were a screen and a half below
+it.
+
+The harness is **not committed**, for the reason M46's was not: the milestone's
+enforcement is the template scan, this was evidence for a one-time claim, and
+`tools/render-verify` is opt-in and reachable from no gate — a pixel assertion
+living there would protect nothing between the two occasions somebody ran it.
+
+### What the fold test enforces, and what it does not
+
+`TestTheEditControlIsReachableWithoutScrolling` cannot re-take that measurement.
+`internal/ui` renders HTML and does no layout, and that is not a gap to close —
+it is why the package depends on nothing but the standard library. What it
+asserts instead is the structural property the measurement rests on, in the two
+directions that can regress:
+
+- the destination and the alias are the **first two** controls the page draws,
+  so nothing interactive can be put in front of them;
+- what *is* in front of them is text and only text — no `<table>`, `<svg>`,
+  `<img>`, `<ul>`, `<details>` or the rest, whose heights cannot be read off
+  markup — under a 400-character budget against the 93 characters it draws
+  today.
+
+Both limbs earn their place, and the sabotage run is what shows it. Putting the
+analytics back on top failed the second limb twice and the third once, and did
+**not** fail the first: the analytics block contains no named form control, so
+an ordinal assertion alone would have watched 1556 pixels of chart and map move
+in front of the edit form and reported success.
+
+Stated rather than implied, in m46.md's idiom for the overflow scan: this does
+not check pixels. A section whose own content grew taller would pass it. The cap
+on the page's length and the recorded order are what make that unlikely; the
+measurement above is what makes it false today; [M51.9](phase-details/m51.9.md)
+is what re-checks it against a person.
+
+### The unmodified-tests claim, and what it is worth
+
+m47.md's falsifiable claim is that **every existing integration test touching
+the link page passes unmodified**. It held, and nothing under `test/integration`
+was touched: `web_test.go`, `qr_test.go`, `routing_test.go`, `split_test.go`,
+`gates_test.go`, `bots_test.go`, `folders_test.go`, `expiry_test.go` and
+`contract_test.go` all pass against the restructured page. Routes, form field
+names, redirect targets and flash behaviour are unchanged; `api/openapi.yaml`
+was not opened.
+
+Two unit-test files did change, and neither is that claim:
+`internal/ui/ui_test.go`'s fixture gained `Link.ClicksConsumed` and
+`Form.MaxClicks`, because the sentence M47 wrote has a branch for a gated link
+and a fixture with no budget would leave it unrendered on every run; and
+`mainOf` in `internal/ui/links_test.go` now cuts the `<main>` tag's own
+attributes away with it. That helper returned `class="mx-auto max-w-6xl px-4
+py-8">` as part of what the page drew, which was invisible to every caller until
+one of them started **counting** the text in front of a control.
+
+### The handler was split along the same seam, and the seam is the failure rule
+
+`loadLinkDetail` was 207 lines filling eight sections in one pass. It is now six
+functions, and the largest — `fillLinkEdit` at 75 lines including its comments —
+assembles one section rather than a quarter of the page.
+
+The seam is not only *which section*. It is **what a failure costs**: three
+reads replace the page when they fail, because without the link, its statistics
+or its recent clicks there is nothing to render, and every read below them fails
+soft and leaves its own section empty. That was already the behaviour, scattered
+through five comments each re-arguing it. The helpers therefore **return
+nothing** — a signature that says the thing the comments were saying — and
+`fillLinkAnalytics` has no receiver and no context at all, because every figure
+it lays out is already in hand and it cannot fail.
+
+### One deferred row read and left open
+
+[F164](deferred-findings.md) — every bar chart labels its axis ceiling as the
+peak — reaches `series_chart.html`, which this page renders. It was checked
+against [step 1](phase-loop.md#1-validate)'s deferred-overlap rule and makes no
+M47 claim false: this milestone claims where the chart *is*, never what its
+numbers say. It stays for [M58](phase-details/m58.md).
+
+
+## 2026-08-07 — The demo reset could not clean up after itself
+
+No milestone was being built. [M47](phase-details/m47.md) was accepted, committed
+and unpushed when its step 3.7 — `make demo-update` — failed twice on the same
+cause, which is what prompted this and what the owner approved fixing as work of
+its own.
+
+**What was broken.** `make demo-update` is the loop's last gate before work is
+published, and it had jammed permanently: `create "spring-webinar": conflict:
+alias "spring-webinar" is already in use on default`, identically on every run.
+Four of `demoWorkspace2Catalogue()`'s five aliases were sitting in the demo's
+**Default** workspace while the second workspace held none, and aliases are
+unique per *domain* rather than per workspace — so the strays refused the next
+run's creation of the same names, and the reset could not remove them because it
+reached links only by deleting the workspace they were supposed to be inside.
+Recorded as [F168](deferred-findings.md#closed) with the reproduction.
+
+**Why the fix is two edits and not one.** The jam needed both.
+
+*The alias list.* `demoReset` collected only `demoCatalogue()`'s aliases; it now
+collects `demoWorkspace2Catalogue()`'s as well. The delete those aliases feed is
+already scoped to the organization rather than to a workspace, so widening the
+list is enough to reach a stray wherever it landed. This costs nothing in the
+ordinary case — the workspace delete gets there first and the alias match finds
+nothing — and it is the entire recovery when the ordinary case did not happen.
+The principle it restores is the one the function's own comment claims: *run
+twice, the same demo.* An idempotency that depends on the previous run having
+filed every row correctly is not idempotency, it is luck with a comment.
+
+*The workspace delete.* It read `slug = $2` against `demoWorkspace2Slug`, which
+deletes exactly what today's constant creates and nothing else. Renaming the
+second workspace therefore orphans whatever the previous name made, silently and
+forever — and the demo instance had been carrying the proof since 2026-08-02: a
+`Marketing` workspace, slug `marketing`, still in the organization with zero
+links, because the constant had become `campaigns` and the delete stopped
+matching. It is now `slug <> 'default'`, `default` being the slug
+`auth.Register` gives the workspace it provisions with the account
+(`internal/auth/service.go:796-797`) and therefore the one thing in that
+organization the seeder did not make.
+
+**The widening, stated rather than buried.** That delete now removes a workspace
+a demo *visitor* created, where before it left one standing. That is a real
+change and it is the same trade every other statement in the reset already
+makes: the demo is rebuilt from nothing at every milestone, and the command
+refuses to run against production without `--force`. The alternative — enumerate
+the slugs the seeder is allowed to delete — is the construction that just failed,
+one rename later.
+
+**How it was verified, which is the part worth copying.** Against the broken
+instance rather than a fresh one. A fix for a jam is only proved by the jam: the
+demo database that could not be seeded was seeded, with no manual SQL, and then
+seeded again to show the result was stable. `Marketing` is gone. Rebuilding the
+instance first would have tested the fix against the one state in which the bug
+does not exist.
+
+**What did not close with it.** [F169](deferred-findings.md#open). The strays are
+still created in the wrong workspace — `actAs` writes the user's *last* workspace
+while the demo owner has a *pinned default*, and `ResolveWorkspaceForUser` ranks
+the pin higher, so the seeder cannot move the owner at all. The reset now
+recovers from a state that should not arise, and saying so is the point: this
+entry fixed the recovery, not the cause. The demo's second workspace has never
+held a link, and the workspace scoping it exists to demonstrate has never been
+demonstrable.
+
+
+## 2026-08-07 — M48, three facts the last two milestones moved
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet), all three
+**facts** rather than assertions: a line number, a line range, and which four
+strings a seeder writes. Nobody could have decided any of them differently, and
+none changes what m48.md asks for.
+
+**One.** The bullet as it stood: *"`pages/links.html:122` has a `<noscript>`
+submit"*. As amended: *"`pages/links.html:65`"*. The tree fact:
+`grep -n noscript internal/ui/templates/pages/links.html` reports one hit, at 65.
+[M46](phase-details/m46.md) moved it into the hot filter row the day before, and
+said so.
+
+**Two.** As it stood: *"the workspace switcher deliberately does not (D103/F21,
+`partials/nav.html:9-36`)"*. As amended: *"`partials/nav.html:41-95`"*. The tree
+fact: `{{define "workspace_label"}}` now occupies line 30, the switcher's comment
+opens at 41 and `{{define "workspace_switch"}}` is at 83. Lines 9-36 are the
+label M46 added — the very control the citation was contrasting the switcher
+*with*, so the stale range pointed at the wrong half of its own argument.
+
+**Three.** As it stood: *"The demo already seeds four notification kinds —
+`domain.failing`, `automation.fired`, `dispute.filed`, `dispute.decided`"*. As
+amended: *"`automation.fired`, `dispute.filed`, `dispute.decided`,
+`invite.accepted`"*. The tree fact: `SELECT kind, count(*) FROM notifications
+GROUP BY kind` against the demo instance returns exactly those four —
+`automation.fired` 1, `dispute.decided` 2, `dispute.filed` 3, `invite.accepted`
+2. `domain.failing` is a real kind (`internal/notify/domains.go:24`) and the demo
+has never written one. The count of four is right and one of the four names was
+not, which is the wrong half to be right about: the bullet immediately below it
+says a coverage row is owed for *"a kind with no seeded example"*, and this
+correction changes which kinds that sentence is about.
+
+**The pattern, which is the part worth keeping.** This is the third amendment in
+three milestones and every one has the same cause: a milestone moved something
+the *next* milestone's file had already measured. M47's was M46 adding two lines
+to a file M47 quoted a length of; both of M48's line references are M46's edits
+again. The milestone files for a phase are written together, before any of them
+is built, so every reference in them is a photograph of the tree on planning day
+— and the first milestones to land are the ones that invalidate the rest.
+
+That is not an argument against writing the references. They are what makes a
+bullet falsifiable, and finding them stale is [step 1](phase-loop.md#1-validate)
+working rather than failing. It is an argument for expecting them, which
+validation now does: all three were found by checking every reference in the file
+rather than by tripping over one. The cost is a few greps per milestone and the
+alternative is a worker building against a citation that quietly points somewhere
+else.
+
+**What did not drift, checked rather than assumed.**
+`00600_phase2_dormant.sql:116-126` still declares `read_at timestamptz` with no
+`NOT NULL`, so the mark-unread bullet's premise holds. And the risk section's
+genuine unknown — whether notification kinds are *"strings scattered across
+packages rather than an enumerable set"* — resolves in the milestone's favour:
+they are exported constants (`internal/notify/notify.go:40,45`,
+`domains.go:24,29`, `automation.go:26`), so the test that keeps the mapping
+honest can be written as described rather than narrowed.
+
+
+## 2026-08-07 — M48, the panel, the thumbnail that could not go where it was asked, and where a notification leads
+
+Three decisions, one constraint that forced the second of them, and two things
+found while building that are worth more than the decisions.
+
+## D123 — a panel is a route first and a popup second
+
+m48.md states the property as a requirement rather than as a preference: *"Its
+contents stay reachable without JavaScript. The panel is a route that renders as
+an ordinary page when opened directly, and the popup is what the browser does
+with it when it can."* Everything below follows from reading that literally.
+
+**What was built.** `partials/panel.html` holds the chrome — an invoker, a
+`popover="auto"` container, a heading, a `Close` button and an `Open as a page`
+link — and each caller writes its body between `panel_open` and `panel_close`.
+The body is a partial of its own, and a page under `pages/` renders that same
+partial inside the ordinary layout. So `/links/{id}/qr` and `/disputes/reviewers`
+serve exactly what the two popups hold.
+
+**Three mechanisms were available and two were refused.**
+
+*htmx into an overlay* is the shape a reader expects, and it cannot be built
+here. htmx will fetch a fragment and swap it into a container; nothing in HTML
+opens a popover, and `showPopover()` is a script the CSP has no `script-src`
+allowance for. Making it work means either an inline handler — a `'unsafe-inline'`
+waiver, which the inherited *`ui` stays stdlib-only* rule forbids in as many
+words — or a served JavaScript file, which is the modal framework the milestone
+says not to add. It also fetches, which means the panel's contents do not exist
+until the network says so, which is the opposite of the requirement.
+
+*`<details>` in flow* is what M46 used for the links page's filter panel, and
+D120 is the entry that chose it. It is refused here for the reason D120 gave for
+choosing it: a disclosure pushes the page down and these panels cover it. D24
+already made this distinction for the header menus and chose the Popover API for
+one word — Escape — and the same argument reaches a mid-page overlay unchanged.
+**Neither decision is reversed.** The links page's filter panel is still a
+`<details>`, and it should be: it is in flow.
+
+*The Popover API with server-rendered contents* is what shipped. No fetch, no
+script, no CSP change, and the failure mode below the floor D24 already raised —
+Chrome 114, Safari 17, Firefox 125 — is that the attribute is ignored and the
+panel renders as an ordinary block inside the page. Every control in it still
+works. That is a better answer than a `<noscript>` fallback would have been,
+because it is not a fallback: it is the same markup, unaugmented.
+
+**The geometry is written out in the partial** and it needs to be. A top-layer
+element's containing block is the viewport, and Tailwind's preflight zeroes
+`margin` on every element — which silently defeats the UA stylesheet's
+`:where([popover]) { margin: auto }`, since a `:where()` rule has zero
+specificity. Left alone, the panel pins itself to the top-left corner of the
+window. `inset-0 m-auto` re-states the centring the UA sheet meant to provide.
+
+**What stops it becoming two patterns** is a test that reads rendered HTML rather
+than templates: `TestBothPanelsUseTheOnePanelMechanism` finds the panel inside
+each host page's `<main>`, requires exactly one, and requires the two class
+strings to be **byte-identical**. A surface that hand-rolls a popover fails on
+the class comparison; a surface that adds a second popup fails on the count. The
+sabotage run replaced the reviewer panel's `panel_open` call with a hand-written
+`<div popover="auto" class="fixed w-96 …">` and the test named both class strings
+in its failure.
+
+## D124 — the QR thumbnail is not above the edit form, and the reason is M47's test
+
+m48.md asks for *"a small rendered code … in the link page's upper region"*,
+quoting the owner: *"a small render of the QR code near the top that I can click
+on to open the settings/download button in a pop-up"*. The natural reading is
+that the picture goes in the page's heading row, above the edit form.
+
+It cannot, and the thing that stops it is a test M47 shipped four commits ago.
+`TestTheEditControlIsReachableWithoutScrolling` fails on any `<table> <svg> <img>
+<iframe> <video> <canvas> <ul> <ol> <details>` rendered before `id="url"`, for a
+reason it states: *"Its height cannot be read off the markup, so it can push the
+control below the fold without failing anything here."* A QR thumbnail is an
+`<svg>`. The test is stricter than the claim it protects — a 99px picture would
+move the destination box from 327px to about 430px, still half a screen inside a
+1280×800 viewport — but the claim is not what is asserted, and D121's first two
+rows are the *measured* half of the link page's order. Weakening either one
+milestone after they landed is a decision about M47, not about M48.
+
+**So the heading row gets a word and the QR section keeps the picture.**
+`panel_trigger` renders a plain `<button>` labelled *QR code* beside the short
+URL: a button carries no `name`, so `namedControls` does not count it and the
+destination and alias are still the first two controls; and *QR code* is seven
+characters against a 400-character text budget that was spending 93. Both limbs
+of M47's test still pass, unmodified. The thumbnail, the worded trigger beside it
+and the heading-row button all carry `popovertarget` for the same id — an invoker
+may sit anywhere in the document, including before the panel it names — so there
+is one panel and three ways into it, and the code is one click from the top of
+the page without anything tall being drawn there.
+
+**What this does not claim.** It does not claim the retrieval path is faster. The
+milestone says the figure is recorded rather than asserted and that
+[M51.9](phase-details/m51.9.md) re-runs the task, so the honest position is that
+the QR section shrank from a settings panel to a strip, the invoker reached the
+first screen, and the number is M51.9's to produce.
+
+## D125 — where a notification leads
+
+**A map, not a switch**, and that is the whole design. m48.md asks that *"a test
+asserts every declared kind constant has a mapping"*, and a `switch` with a
+`default:` arm answers "does this kind have a destination" with *yes* for every
+string in the language. `notificationTargets` is a `map[string]func(...) string`,
+so presence is a question code can ask; `notificationTarget` is the one function
+from kind plus data that m48.md specifies, and it reads the map.
+
+**The enumeration is discovered, never listed.** `declaredNotificationKinds`
+walks `internal/` with `go/ast` and collects exported constants whose identifier
+begins with `Kind` and whose value contains a dot. The value test is what keeps
+it honest in both directions: without it the scan picks up `MailKind`,
+`MailKindExists` and four `RuleKind*` constants in `internal/domain`; with it,
+exactly the seven notification kinds match. It walks the whole tree rather than
+the two packages that hold kinds today, because the vocabulary is *already* split
+across `internal/notify` and `internal/dispute` — dispute imports notify, so
+notify cannot hold dispute's — and naming two packages would be the list the
+function exists to avoid. Both directions are asserted: a declared kind with no
+entry fails, and an entry no constant declares fails.
+
+**Two kinds lead nowhere, and that is an answer.**
+
+`audit.growth` has no destination because the audit log has no dashboard page. It
+is an API surface and a retention environment variable, the recipient is the
+instance principal, and what they have to do about the warning is set
+`LINKCTRL_AUDIT_RETENTION_DAYS` on the deployment. Linking it to
+`/notifications` would be a link back to the page the reader is on.
+
+`dispute.decided` depends on its data, and it is the only mapping that does more
+than read an id. The recipient is whoever *filed* the dispute, who is an ordinary
+account: `/disputes` needs `destinations.review`, so sending them to the queue
+would be sending them to a refusal. Allowed → `/links`, because what the outcome
+means for them is that they can create the link now, which is what the
+notification's own body says. Upheld → nowhere, because no page in this product
+shows a refusal that stands.
+
+The surfaces render a kind with no destination as plain text with the mark-read
+control it always had. `""` and *absent* are therefore different states, which is
+why the map holds an entry returning `""` rather than simply omitting the kind.
+
+**The click-through is a POST.** Opening a notification marks it read, and a
+state change behind a `GET` is one a prefetch, a link checker or an `<img>` on
+somebody else's page can fire — the notification would be read before anybody saw
+it. The title is a submit button styled as a heading, which is the trade the
+header's sign-out control already makes. The destination is computed from the
+row, never from the request: the id in the path is all the caller supplies.
+
+**Mark-unread ships with it** rather than after it, because this milestone is
+what makes the accident common. It is `read_at = NULL`, which is what unread has
+always meant, so there is no migration — asserted by
+`TestNotificationsNeedNoMigration`, which fails if any migration but `00600`
+shapes the table, and by `TestReadAtIsNullable`, which reads the column's
+declaration. Both were sabotaged: a throwaway `ALTER TABLE notifications` and a
+`NOT NULL` on the column, each reverted by counter-edit.
+
+The `MarkNotificationUnread` statement deliberately carries no guard, unlike
+`MarkNotificationRead`, which refuses to touch an already-read row so that "when
+did you first see this" survives a double click. Unreading discards that
+timestamp. It is the person it belongs to doing it, on purpose, and a guard here
+would mean a notification read a week ago could not be un-read.
+
+## The demo seeds four of seven kinds, and no coverage row demands the other three
+
+m48.md leaves this open: *"`demoCoverage()` gains a row only if a kind ends up
+with no seeded example; whether it does is settled during the work rather than
+guessed here, and the answer is written down either way."*
+
+**Three kinds have no seeded example**: `audit.growth`, `domain.failing` and
+`domain.unverified`. The other four — `automation.fired`, `dispute.filed`,
+`dispute.decided`, `invite.accepted` — are written by the seeder's own service
+calls.
+
+**No row demands the missing three, and that is deliberate.** Each would require
+the demo to assert something untrue about itself. An `audit.growth` row says this
+instance's audit log has outgrown its threshold; a `domain.failing` row says a
+hostname the demo serves has stopped verifying. Seeding either to satisfy a
+coverage list would make the demo lie in order to demonstrate a link.
+
+The row that *was* added asserts what the feature needs instead: **more than one
+kind in the owner's inbox**, so clicking two notifications goes to two different
+places. Counted as `count(DISTINCT kind)` rather than as a list of kinds, for the
+reason `quotedScopes` exists in that file — a query naming the vocabulary would be
+a second enumeration of it, written in SQL where no test would notice it going
+stale.
+
+The no-destination branch is visible in the demo anyway, without seeding
+`audit.growth`: the demo upholds one dispute, and `dispute.decided` with status
+`upheld` is one of the two kinds that lead nowhere.
+
+## The fixture that had been rendering three sections of the link page as nothing
+
+Found while building, and it is the finding worth keeping.
+
+`internal/ui`'s `owner()` fixture held `links.create`, `links.update` and
+`links.delete` and **not `links.read`**. Three sections of the link page are
+guarded on it — `link_qr`, `link_rules` and `link_split` — so since M47
+decomposed the page, every test that renders `link_detail` has been rendering a
+link page with no QR code, no routing rules and no split test. `TestEveryPageRenders`
+included. The templates parsed, so nothing failed; they were simply never
+executed.
+
+It surfaced because M48 could not assert its panel renders on the link page until
+the section carrying it did. Adding the permission immediately produced a real
+template error — `link_rules.html:13:40: executing "link_rules" at <len .Rules>` —
+which is the shape of it: the fixture had no `Rules`, no `Split` and no
+vocabulary for either form, because nothing had ever asked for them.
+
+**In spec, under workflow.md's rule** that a defect making the current
+milestone's claim false is in spec whatever it looks like: the claim is that the
+panel renders on the link page, and it was unassertable. Fixed by adding the
+permission and the three sections' data — one enabled rule and one disabled, a
+weighted split with an arm of each state and a fallback.
+
+**M47's own claim is not made false and the milestone is not reopened.** All
+three sections sit below the edit form, so
+`TestTheEditControlIsReachableWithoutScrolling`'s assertions — the first two
+controls, and nothing tall in front of them — were unaffected by their absence,
+and they pass unchanged with the sections present.
+
+What it says about the guard: `TestEveryPageRenders` proves a page's data shape is
+*sufficient*, never that it is *complete*. A permission missing from a fixture
+silences a section without failing anything, and there is no test in this tree
+that would notice. Recording it rather than fixing it further — a scan asserting
+every `{{if .Identity.Can}}` branch on a page is exercised by some fixture is a
+real mechanism and it is a milestone, not a paragraph.
+
+
+## 2026-08-07 — M48, the owner overrules D124: the picture goes up, and the guard narrows
+
+Owner-set, 2026-08-07, at [M48](phase-details/m48.md)'s acceptance. Written down
+before it is acted on, because it arrived in conversation and the build that
+follows it is the thing that would otherwise be the only record.
+
+**The question.** m48.md asks for *"a small rendered code … in the link page's
+upper region"*. The first worker built the clickable thumbnail exactly as the
+owner's note describes it but left it in the QR section — second of eight, below
+a 208-line edit form — and put a worded button in the heading row instead. Its
+reasoning was **D124**: [M47](phase-details/m47.md)'s
+`TestTheEditControlIsReachableWithoutScrolling` fails on any `<svg>` drawn before
+`id="url"`, and reversing that one milestone after it was measured is a decision
+about M47 rather than about M48. The worker named the conflict instead of burying
+it, which is why it reached the owner at all.
+
+**The answer: the picture goes to the top, and M47's guard narrows to let it.**
+
+The objection D124 rests on is mechanical rather than principled. That test
+refuses `<svg>` because *"an image's height cannot be read off the markup"* —
+true of an image with no stated size, and false of one carrying explicit size
+classes. So the refusal becomes: an `<svg>` **with no explicit height class**.
+That is a rule, and it has to be written as one. An exemption for this one
+element would be the first hole in a guard that is four hours old, and the next
+milestone would widen it by pointing at the precedent rather than at the reason.
+
+**What this does not do.** It does not reopen M47. M47's claim is that the
+destination and the alias are reachable without scrolling at 1280×800, and that
+claim survives a bounded thumbnail — but *survives* is a measurement and not an
+argument, so it is re-measured with the thumbnail in place rather than assumed.
+The test's first limb is untouched: the thumbnail is a `<button>` with no `name`,
+so `namedControls` does not count it and the destination and alias are still the
+first two controls the page draws.
+
+**D124 stands as the reasoning it was**, and is overruled rather than deleted.
+The worker was right that the choice was not its own to make; it was wrong only
+in which way the owner would make it. That distinction is the whole reason a
+worker returns a prompt instead of an answer.
+
+
+## 2026-08-07 — M48, the picture goes up: the rule that let it, and the page re-measured
+
+One decision and one measurement, both owed to the
+[owner's ruling above](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows).
+The ruling settled *what*; this is what it turned out to be, and the numbers it
+required rather than allowed to be assumed.
+
+## D126 — a picture in front of the destination box states its own height
+
+**The rule, as it is written.** `TestTheEditControlIsReachableWithoutScrolling`
+refused nine tags outright, `<svg>` among them, and the failure message said why:
+*"its height cannot be read off the markup"*. `<svg>` has left that list and
+acquired a rule of its own — every `<svg>` rendered before `id="url"` must carry
+a Tailwind height utility naming a fixed length, and their declared heights
+together must stay inside a 160px budget. The other eight tags are untouched.
+
+**Why this is a narrowing and not a hole.** The refusal's own sentence is false
+of an element that states its height, so the list was refusing a tag for a
+property that tag does not always have. What replaces it is stricter in the
+direction that matters: the old rule asked *is there a picture up there*, and
+this one asks *how tall is it, and is that within what was measured*. An `<img>`
+with `h-24` on it would still fail, and deliberately — its height class governs a
+box whose contents arrive over the network, and this page has none.
+
+`statedHeight` accepts `h-24`, `h-0.5`, `h-px`. It refuses `h-full`, `h-screen`,
+`h-auto`, `h-min`, `h-max` and `h-fit`, each of which is a height decided by the
+parent, the viewport or the content — which is the situation being refused,
+spelled differently — and it refuses Tailwind's arbitrary values (`h-[6rem]`)
+for the smaller reason that they are a second syntax to parse for a box the
+spacing scale already states.
+
+**Why a class and not the `height` attribute, which is right there.** Because
+the attribute is a function of the data. `internal/qr` sizes the drawing from the
+encoded version: at the thumbnail's scale a short URL with `?src=qr` on it is
+111px square and the demo's longer host is 123px, and a link with a long alias
+would be larger again. So a guard reading the attribute would be reading a number
+the *content* chose, and the fold claim would hold for some links and not others
+without anything failing. `ui.QRThumbClass` is `h-24` for every link in the
+product, which is what makes the heading row's height a property of the page.
+
+**One constant, three consumers, and that is on purpose.** `ui.QRThumbClass` is
+read by `internal/httpx` when it draws the picture, by the `internal/ui` fixture
+the guard measures, and by the guard's own error messages. The fixture is the
+weak link — a stub free to state a height the product does not render would be a
+guard measuring a page nobody is served — so it names the constant instead of
+copying it, and `TestTheQRThumbnailStatesItsOwnHeight` in `internal/httpx` is the
+assertion that the rendering end still puts it on the element.
+
+**`internal/qr` grew `RenderClass`, and it validates.** The class is a Go
+constant and no attacker is anywhere near it, which is exactly the argument that
+stops being true the first time somebody derives one from data. The package
+comment promises that the bytes of an SVG it emits cannot hold a `<` this
+codebase did not write, and that promise is worth more than the argument:
+`validClass` accepts letters, digits, `-`, `_` and spaces, so a quote, an angle
+bracket or a newline is refused rather than escaped. `Render` is unchanged and
+writes no attribute at all, because the same drawing is what `/qr.svg` serves and
+downloads.
+
+### The re-measurement, which the ruling required rather than permitted
+
+M47's claim is that the destination and the alias are reachable without scrolling
+at 1280×800. With the thumbnail in the heading row, in Blink, Gecko and WebKit
+identically:
+
+| | M47, measured | M48, re-measured |
+| --- | --- | --- |
+| `#url` top edge | 327px | **349px** |
+| `#alias` bottom edge | 443px | **465px** |
+| Viewport left below the alias | 357px | **335px** |
+
+**22px for a 96px picture**, because it sits *beside* the heading rather than
+above it: the heading block was already 74px of text — back link, alias row,
+destination — and a 96px square next to it costs the difference. The page's
+heading block became a two-column flex to get that, which is the whole of the
+layout change.
+
+The harness is not committed, for the reason M47's and M46's were not:
+`tools/render-verify` is opt-in and reachable from no gate, so a pixel assertion
+living there would protect nothing between the two times somebody ran it. What
+makes this the *same* measurement rather than a new one is that it reproduces
+M47's figures exactly — remove the thumbnail from the rendered DOM and the same
+harness reports 327px and 443px in all three engines. A harness that agreed with
+the old numbers only after being told them would be worth nothing.
+
+**160px, and where it came from.** A rule that read a height and then ignored it
+would be asking for a number for its own sake, so the declared heights are added
+up and compared to the room the measurement found. 96px is spent and 335px is
+left; 160 spends 64 of it and keeps 271. It refuses a second thumbnail beside the
+first, and it never has to be raised for a longer URL — the class is the same for
+every link, which is the whole reason the class is what is read.
+
+### What did not change
+
+**M47 is not reopened.** Its first limb is untouched and untouchable by this: the
+thumbnail is a `<button>` with no `name`, so `namedControls` does not count it,
+and the destination and the alias are still the first two controls the page
+draws. Its character budget is untouched too — the picture draws no text, and the
+prefix still spends 93 of 400.
+
+**D124 stands, and is marked overruled rather than removed.** Its Plan.md row now
+says so in its first words and keeps its reasoning after them, because a reader
+who finds the row alone has to learn both things: that the QR section is not
+where the picture went, and that the argument for putting it there was a real one
+that reached the owner and was decided the other way. The entry in this file is
+unedited, as every entry in this file is.
+
+**The QR section keeps a worded trigger and loses the picture.** Two renderings
+of the same code on one page would be noise, and the section is still where the
+page order puts the subject — so *Settings and download* stays there and opens
+the same panel the thumbnail does. `popovertarget` names an id, so both invokers
+reach one panel from opposite ends of the document.
+
+**And the retrieval figure is still M51.9's**, which D124 said and this does not
+change. m48.md asks for the new number to be *recorded* rather than for an
+improvement to be asserted, and what can be recorded here is where things are,
+not how long they take somebody who has not seen the page: the code is now on
+the first screen at 1280×800, measured above, and it is one click from there.
+Task 1 took ~26 seconds. Whether the picture being visible is worth any of them
+is a blind task's answer, and [M51.9](phase-details/m51.9.md) re-runs it.
+
+
+## 2026-08-07 — M49, what B left behind it
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet). Three facts,
+no assertions, and none changes what m49.md asks for.
+
+**One, and it is the interesting one.** As it stood: *"The QR panel is a section
+of `link_detail.html` (`:272-355`)"*. As amended: *"The QR panel is
+`internal/ui/templates/partials/link_qr.html` (171 lines) plus the panel body at
+`pages/link_qr.html`"*. The tree fact: `pages/link_detail.html` is **57 lines**
+and holds no QR markup at all. [M47](phase-details/m47.md) decomposed the page
+into eleven partials and [M48](phase-details/m48.md) split the QR area again,
+into a thumbnail, a section and a panel body served at `/links/{id}/qr`.
+
+This is the first amendment in the phase where the reference did not merely
+*move* — the thing it named stopped existing in that shape. A line range into an
+803-line file is a citation with a short half-life by construction, and the
+milestone that made it short is the one m49.md declares a dependency on. The
+sentence around it survives unchanged, which is the test of whether an amendment
+is a fact or an assertion: *landing a settings rewrite into a page being rebuilt
+means writing it twice* is exactly as true of three partials as it was of one
+range, and it is now in the past tense because the rebuild has happened.
+
+**Two.** As it stood: *"338 lines of hand-rolled SVG with a test file nearly as
+long"*. As amended: *"395 lines … with a test file longer still"*. The tree fact:
+`wc -l internal/qr/qr.go internal/qr/qr_test.go` reports 395 and 413. M48 added
+`RenderClass`, `SVGClass` and `validClass` for the thumbnail's height class. The
+risk this sentence is sizing — that the generator is large and hand-rolled — is
+unchanged and slightly larger.
+
+**Three.** `internal/httpx/api_qr.go:32` is the last line of `SVGMaxAge`'s doc
+comment; the constant is at `:33`. Amended.
+
+**Checked and still true**, because a reference that survives is worth saying so:
+`internal/qr/qr.go:3-5`'s package doc still reads *"A PNG download, if it is ever
+wanted, is an additive change here and nowhere else"*; `00600_phase2_dormant.sql:60`
+still declares `style jsonb`; `demo_phase2.go:1108` still seeds
+`Level: qr.LevelQ, Margin: 4, Scale: 10`; `demo_coverage_test.go:522` still holds
+the M41 row *A QR code somebody has styled*; Plan.md:918 still carries the *Not in
+Phase 2* row this milestone discharges; and no `image/png` import exists anywhere
+under `internal/qr`, so nothing here is already built.
+
+**Four milestones, four amendments.** The [M48 entry](#2026-08-07--m48-three-facts-the-last-two-milestones-moved)
+argued this is validation working rather than failing, and the pattern has now
+held long enough to be worth a number rather than an anecdote: every milestone
+file in this phase was written before any of them was built, so every reference
+in the unbuilt ones is a photograph of a tree that the built ones are actively
+changing. Checking all of them at [step 1](phase-loop.md#1-validate) costs a
+handful of greps. Not checking them costs a worker building against a citation
+that points at somebody else's code.
+
+
+## 2026-08-07 — M49, the size, the second encoder, and D11 spent on purpose
+
+Three decisions, D127–D129, and one thing that is not a decision at all: the
+package comment in `internal/qr/qr.go` had said since M41 that *"a PNG download,
+if it is ever wanted, is an additive change here and nowhere else"*, and this
+milestone is the test of that sentence. It held. The generator gained a second
+encoder, a size resolver and a colour parser; nothing outside `internal/qr`
+learned how a QR code is drawn.
+
+### D127 — the bound is a number, because "bounded" is not one
+
+[D11](../../Plan.md#phase-2-decisions) refused an image encoder for two reasons
+and only one of them was about dependencies. The other was that nothing should
+rasterise on a request, and that one is not answered by `image/png` being in the
+standard library — it is answered by saying how much memory a request can cause
+this process to allocate, and refusing anything above it.
+
+**2000 pixels, `image.Paletted`, two colours, one byte a pixel: 4,000,000
+bytes.** A paletted image is not a size optimisation here; it is what makes the
+figure calculable. An `image.NRGBA` of the same picture is 16,000,000 bytes and
+three quarters of it is padding, since a QR code has exactly two colours and any
+third one would be a bug. Go's encoder writes a two-entry palette at one bit per
+pixel, so the file is small as a consequence rather than as an aim.
+
+**Refused, not clamped**, which is the rule margin and scale have had since M41:
+`TestOutOfRangeSizesAreRefusedRatherThanClamped` exists because clamping reports
+success for a setting nobody asked for.
+
+The refusal has a second reachable path and it is the interesting one. A style
+*stored* before this milestone carries whatever margin and scale it was given —
+up to 16 and 32 — and a 64-character alias at those settings describes a picture
+several times the cap. So `qr.ErrTooLarge` is not dead code guarding an
+impossible request; it is the answer for a row that already exists in somebody's
+database. It surfaces as a `422` rather than a `500`, because the reader can make
+the code smaller, and `RenderQRPNG` is where that translation happens.
+
+The SVG path is not capped and does not need one: vector text allocates nothing
+proportional to the pixel size, which is the whole reason D11 preferred it.
+Neither endpoint is on the redirect path, so no `slo.md` re-verification is
+owed — said here rather than left out, so the omission is visible.
+
+### D128 — one number in the interface, two knobs behind it
+
+The form asked for a quiet zone in modules and a module size in pixels. Nobody
+printing a poster knows either. It now asks how big they want it.
+
+**The quiet zone is derived rather than held at the floor**, and that is the
+choice inside the choice. `qr.FitSize` searches margin (4 to 16) against scale (2
+to 32) and takes the nearest whole-module size: on a 29-module code, 300px lands
+on **301** with a 7-module quiet zone, where holding the margin at the floor and
+rounding the scale gives 296. The alternative — one knob, quiet zone fixed at 4 —
+is simpler and coarser, and it was rejected because the extra margin costs a
+scanner nothing. ISO/IEC 18004's floor is a minimum, not a target, and the search
+only ever goes up from it.
+
+Ties break twice, in this order: **the smaller picture, then the smaller quiet
+zone.** Smaller picture first, so a request at the cap cannot snap past it.
+Smaller quiet zone second, so equal-sized candidates resolve to the largest code
+that fits rather than the same code with more white around it.
+
+The alternative the milestone file records and rejects — honour the requested
+size exactly and let modules land on fractional boundaries — is what would make
+the SVG and the PNG round differently, which is precisely the claim below.
+
+**`qr.Style` gained no field.** The size is derived from the margin and scale on
+every read, and that one decision is what makes read-forward free: a
+`qr_codes.style` blob written by M41 has the same five keys it always had, so
+there is no migration, no default to invent for rows that predate the field, and
+no way for a stored size and a stored geometry to disagree. Re-saving a pre-M49
+code at the size the panel shows is a byte-identical no-op, asserted end to end
+by `TestAStyleStoredBeforeM49DrawsExactlyWhatItAlwaysDrew` — which inserts the
+blob by hand, because the claim is about a row that already exists rather than
+about one this code wrote.
+
+The number is on the API's `QRCode` as a read-only `size`. The inherited rule is
+that every UI feature has API support, and a form asking in pixels while the API
+could not report pixels would be two answers to one question. Setting it stays
+`margin` and `scale`: those are strictly more expressive, and a script that wants
+an exact size has the same arithmetic available that the dashboard uses.
+
+### D129 — a form that stopped asking must not answer
+
+Error correction left the dashboard for the API. That much is m49.md's, and the
+reasoning is its: a scannability tradeoff a dashboard user has no basis to make
+and a script might, which is what *"the rest handled in the background"* has to
+mean if background is not to mean unreachable.
+
+What is decided here is the **mechanism**, and it is a new service operation
+rather than a call to the old one with defaults. `Service.SetQRSize` reads the
+stored level and carries it forward; `SetQRStyle` still replaces the style whole,
+which is what makes `{}` mean plain black on white over the API. Had the form
+posted through `SetQRStyle` with the level omitted, every styled code would have
+gone back to `M` the first time anybody adjusted a colour — the level's own
+default doing exactly what it is supposed to do, in a place where the absence of
+a value now means *unchanged* rather than *default*. Two operations, because the
+two surfaces mean different things by an absent field.
+
+The demo seeds through both, in that order: level `Q` the way a script sets it,
+then 400px the way the panel does. A demo seeded only through `SetQRStyle` would
+show a margin and a scale nobody chose, which is the vocabulary this milestone
+removed.
+
+### The claim the two encoders are held to, and the one they are not
+
+**One arithmetic, two encoders.** `Code.geometry` computes the span, the scale,
+the pixel size and the origin offset once; `Code.runs` walks the dark modules as
+horizontal runs once. `SVGClass` writes a `<rect>` per run and `PNG` fills a
+block per run, and neither of them recomputes `margin * scale`. A module one
+encoder drew and the other did not would have to come from `runs`, where there is
+one of it.
+
+`TestTheSVGAndThePNGAreTheSamePicture` parses the SVG's rects back into a grid
+and asks the decoded PNG what colour it put at the **centre** of every module in
+the span — a corner would be shared by four modules and would agree with the
+wrong one under the off-by-one this is meant to catch. Foreground and background
+both, and the counts of each are asserted non-zero, because "both were empty" is
+the shape this class of test fails in.
+
+**Stated as a limit, in m46.md's idiom:** this asserts the module *geometry*
+matches. It does not assert that a browser's rasterisation of the SVG is
+byte-identical to the PNG. That is untrue of any two rasterisers, it is not what
+was asked for, and a test claiming it would fail for reasons nobody can act on.
+
+### The demo, and the coverage row that was left alone
+
+m49.md's demo section left one thing to the milestone: whether the seeded style
+carrying an explicit size needs its own `demoCoverage()` row, or an amendment to
+M41's. **Neither.** The M41 row asserts that exactly one link in the demo carries
+a stored style, bounded `Min: 1, Max: 1`, and that is still exactly what is true
+and exactly what it should assert. What the style *contains* is the seeder's, and
+the seeder is what changed. A coverage row that asserted a particular size would
+be a row that fails when somebody picks a different one, which is not a demo
+being wrong.
+
+### Four milestones, four amendments, and a fifth that did not happen
+
+The amendment entry above this one corrected three facts in m49.md before the
+build started. Nothing in the tree contradicted the file after that — the
+package doc, the migration line, the demo seed and the coverage row all said what
+the file said they said. That is worth recording, because the pattern the M48
+entry named is about *unbuilt* milestone files photographing a moving tree, and
+the prediction it implies is that checking every reference at step 1 exhausts the
+drift rather than sampling it. On this milestone it did.
+
+
+## 2026-08-07 — M50, two line numbers, and the references that held
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet). Two facts, no
+assertions.
+
+**One.** As it stood: *"Deleting a link cascades its codes, which the existing
+foreign key already does (`00600:56`)"*. As amended: *"(`00600:57`)"*. The tree
+fact: `00600_phase2_dormant.sql:56` is `id uuid PRIMARY KEY`; the cascading
+reference is the line below it. Off by one, and nothing moved it — the reference
+was written a line short.
+
+**Two, and it is the one that mattered.** As it stood: *"`link.QRContent`
+(`internal/link/qr.go:186-198`)"*. As amended: *"(`internal/link/qr.go:322-334`)"*. **Amended a second time at
+[step 3.4](phase-loop.md#3-land), to `:718-730`** — M50's own work moved it
+again, and `QRContent` now takes a slug as well as a URL. Two amendments to one
+reference inside one milestone is not a mistake repeated; it is the same fact
+being true at two different times, and the second one is what a reader of the
+shipped milestone needs.
+The tree fact: `QRContent` is declared at `internal/link/qr.go:322`.
+[M49](phase-details/m49.md) rewrote that file the previous commit, and lines
+186-198 are now somewhere else entirely. The bullet's point — that one function
+builds the payload so *"the encoded payload and the redirect's expectation cannot
+drift apart"* — is unchanged and is precisely the property M50 is about to lean
+on.
+
+**What held, and why it is worth a paragraph.** Every other reference in m50.md
+is still exact: `02700_qr_and_campaigns.sql:34` still drops `scan_count`, `:38-48`
+still carries the comment this milestone quotes back, `:48` still creates
+`qr_codes_link_key`, `internal/domain/attribution.go:36` and `:39` still declare
+`ClickSourceParam` and `ClickSourceQR` with the closed vocabulary below them,
+`domain.MaxCampaignsPerWorkspace` still exists, and Plan.md:926 still carries the
+*Not in Phase 2* row this discharges.
+
+The pattern across five milestones is sharper than *references rot*. **What rots
+is a reference into Go or template source; what holds is a reference into a
+migration.** Every amendment this phase has been the first kind, and every
+migration citation has survived untouched — because a migration is append-only by
+this project's own DDL rule, so a line in `02700` is a line in `02700` forever.
+That is not luck and it is worth knowing when writing the next phase's milestone
+files: cite the thing that cannot move, and where the code has to be cited, cite
+a symbol name beside the number so a reader can find it after the number is
+wrong.
+
+m50.md's own `037xx` is the same shape pointing forward, and it is still right:
+the highest migration in the tree is `03600_automation_watermark_subject.sql`, so
+the next one is `03700`.
+
+
+## 2026-08-07 — M50, the empty slug, the parameter that stayed closed, and the rollup that was not written
+
+Four decisions, and they are one design read four ways. m50.md set the problem
+with unusual precision — a code needs an identity, `src`'s vocabulary must stay
+closed, no counter column may return, per-code counts must be *a filter on an
+existing dimension and not a new rollup*, and the redirect's validation must come
+from data the resolver already holds. Each of the four below is what those
+constraints leave once they are taken together rather than one at a time.
+
+### D130 — The default code's identity is the absence of one
+
+**The empty slug is a link's default code, and its payload carries no code
+parameter at all.**
+
+The obvious design gives every code a generated slug, backfills one onto each of
+`qr_codes`' existing rows, and prints it. It is wrong, and the reason is outside
+the database: **the pictures are already in the world.** Every QR code this
+product has ever drawn encodes `<short url>?src=qr` and nothing else. Give the
+code those pictures are of a slug, and from the moment M50 ships, a poster
+printed last month records as *no code* while a reprint of the same poster
+records as `qr:<slug>` — one code's history split in two, for a code nobody
+touched, with no event anywhere to explain the discontinuity.
+
+So the default code keeps the payload it has. Its identity is that it has no
+`qrc`, which makes it the thing an absent parameter resolves to, which is what
+every already-printed code carries. Migration `03700` therefore backfills
+nothing: `label` and `slug` land as `NOT NULL DEFAULT ''`, and every existing row
+is already the default code of its link.
+
+Three consequences worth writing down, because each is a property somebody will
+later be tempted to change:
+
+- **`qr_codes_link_slug_key` is unique on `(link_id, slug)`**, so `('', link_id)`
+  appears once. A link cannot acquire two unnamed codes and leave the redirect
+  path with two answers to *which code has no parameter*.
+- **The default code cannot be deleted.** Removing it would leave every printed
+  picture resolving to a code that is not there. The API does not expose it —
+  `/qr/codes/{slug}` has no slug for it — and the service refuses `slug == ""`
+  with a sentence naming `DELETE /links/{id}/qr`, which resets its style and is
+  what somebody reaching for the button almost always means.
+- **An unrecognised slug resolves to it.** m50.md's risk section requires that a
+  deleted code's history *stop accumulating rather than be reassigned*, and this
+  satisfies the letter of it: the rows the deleted code earned stay under its own
+  slug forever, and scans arriving afterwards join the default code's bucket
+  rather than some other named code's. It is not nothing — a workspace that
+  retires a poster will see its numbers stop and the default's resume — and
+  `docs/usage.md` says so in the words a reader needs rather than leaving it to
+  be discovered.
+
+Rejected: giving the default code a slug and accepting the split, which is a
+silent data discontinuity; and creating a `qr_codes` row for every link at
+creation time so the slug could be printed from the start, which is the twenty
+rows saying nothing that M41's own comment refused.
+
+### D131 — The identity rides beside `src`, never inside it, and is bounded by resolution
+
+**A new reserved parameter, `qrc`, whose value is resolved against the link's own
+codes before anything is stored.**
+
+`domain.ClickSource`'s vocabulary is closed because `link_dimension_daily`'s
+primary key includes the value: an open one lets anybody append `?src=` and a
+fresh random string to a popular link and grow this project's largest table a row
+at a time. A code identity cannot go in there — it is workspace data, so
+enumerating it is exactly what cannot be done — and widening `src` to admit
+unknown values would reopen the hole the allowlist exists to shut.
+
+The second parameter has the same primary key underneath it, so it needs a bound
+of its own, and it is a different kind: **the value must already be one of this
+link's slugs.** That turns an unbounded set into a set the workspace controls and
+`domain.MaxQRCodesPerLink` caps. Anything else is recorded as no code, which is
+the default code, which is what the request would have recorded before the
+parameter existed.
+
+**Whether that check could be a lookup rather than a query was the milestone's
+stated unknown, and it is a lookup.** m50.md named the alternatives — attribute
+optimistically and validate off the path, or do not ship it in this form — and
+said choosing between them would be a prompt. Neither was needed: the link's
+slugs come home inside `ResolveAliasForRedirect`'s existing round trip, in a
+second lateral on the `qr_codes_link_idx` that `03700` restores, and
+`Snapshot.Codes` carries them. This is the third time that bargain has been made
+on this query — the domain join is M32.5's, the rules lateral is M34's — and it
+is made for the reason both of those were: the alternative is a second query at
+request time or a second cache with its own invalidation, and this is neither.
+
+The snapshot gained the field **without a `CacheKeyVersion` bump**, under the
+rule the bot-blocking comment in `snapshot.go` states: an absent `qc` decodes as
+no named codes, every `qrc` then resolves as unrecognised, and an unrecognised
+value is the default code — which is how the alias behaved before M50. The zero
+value means the same thing to a visitor as the true value would; the residue is
+one number attributed to the default code for at most `REDIRECT_TTL`, not a
+control the owner configured being silently absent. What the field *does* need is
+invalidation, and adding or removing a code publishes one — without it, a replica
+holding a deleted slug goes on crediting a retired poster, which is the one case
+where a stale snapshot writes something wrong rather than merely stale.
+
+Measured: three k6 runs on one image, 240,002 / 240,001 / 240,002 requests, 100%
+under 20ms in all three, means of 93.67µs (no query), 93.86µs (`?src=qr`) and
+93.08µs (`?src=qr&qrc=…`). The resolving column is the fastest of the three,
+which is not a claim that resolution is free — it is that a slice scan over one
+eight-character string is below this measurement's resolution. `docs/slo.md` has
+the run, including the check that it measured the branch it claims: 240,003 click
+events stored as `qr:sloqrcod`.
+
+### D132 — Per-code counts are a filter over the referrer dimension, and the Referrers panel does not change
+
+**A scan's code *is* its stored referrer value: `qr` for the default code and
+`qr:<slug>` for a named one.**
+
+m50.md drew a line and put the milestone on one side of it. Campaign analytics
+was deferred out of this phase because it is *a new pass over `click_events`
+grouped by a mostly-null column, stacked on the job M37 was rewritten to fit*;
+per-code counts had to be *a filter on an existing dimension, not a new rollup*,
+and needing a rollup was to be a finding and a prompt rather than a quiet
+addition.
+
+The tempting shape is M36's: a `click_events.qr_code_id` column, a partial index,
+and a `RollupQRCodeDaily` pass beside `RollupDestinationDaily`. It is precisely
+the thing named as too expensive — a new pass over `click_events` grouped by a
+column that is null on every link that has one code — so it is not what was
+built.
+
+What was built instead adds **nothing at all** to the rollup. M41 already stores a
+scan's source *in* `referrer_host`, and `RollupDimensionDaily` already expands
+that column into the `referrer` dimension. Storing `qr:<slug>` there instead of
+the bare `qr` means the per-code rows are written by the pass that was already
+running, at the same cost, and read by `GetLinkDimensions`' own shape. The colon
+is what makes it safe to namespace: the column otherwise holds hostnames and the
+`direct` sentinel, and a hostname cannot contain one. The number of distinct
+values a link can produce is `MaxQRCodesPerLink + 1`, which is the workspace's
+cap and not the visitor's choice.
+
+**The Referrers panel still shows one `qr` row, and that is deliberate.** D76 put
+scans in that breakdown as a single value beside `direct`, and a link that grew a
+second code would otherwise turn one row into a row per code — a shipped surface
+changing shape because of a feature the reader is not looking at. `Reader` sums
+the QR values back into one row for that dimension and reports the split
+separately, as `LinkStats.QRCodes`. So M41's claim is untouched, and the
+per-code numbers are a section of their own rather than a mutation of somebody
+else's.
+
+`GetLinkQRDimensions` is a separate statement rather than a reuse of
+`GetLinkDimensions` for one reason: that query is bounded at twenty rows ordered
+by clicks, and a link whose busiest referrers are twenty real hostnames would
+lose its own codes off the end of its own breakdown. Same table, same index, same
+shape; only the predicate and the bound differ.
+
+### D133 — The five shipped QR endpoints stay the default-code shorthand
+
+m50.md required this be decided in the milestone and recorded, because silently
+changing what a shipped endpoint answers for is what the contract test exists to
+catch. `GET/PUT/DELETE /links/{id}/qr` and the two picture paths were the whole
+QR surface as of 0.2.0, and a link now has several codes, so they either grow an
+identifier or keep meaning one particular code.
+
+**They keep meaning one code: the default.** A client written against the
+previous release goes on receiving the same picture with the same payload, and
+the endpoint's own sentence — *every link has a code* — stays true without
+qualification. Growing them an identifier would have meant either a required
+parameter, which breaks every existing caller, or an optional one defaulting to
+the same code, which is the shorthand with extra syntax.
+
+The collection lives beside them at `/links/{id}/qr/codes`, keyed by slug rather
+than by row id, because the slug is what a person holding a printed code has in
+hand. `image.svg` and `image.png` sit one segment deeper than the older
+`qr.svg`/`qr.png` for a mechanical reason worth stating so it does not read as
+inconsistency: a `ServeMux` wildcard matches a whole path segment, so
+`{slug}.svg` is not a pattern that exists.
+
+
+## 2026-08-07 — M50.5, where an uploaded logo lives
+
+**D134. A `bytea` column on `qr_codes`.** Owner-set 2026-08-07, against a
+question filed in [upcoming-decisions.md](upcoming-decisions.md) on 2026-08-06 —
+so the decision predates the work, which is the whole reason that file exists.
+The entry has left it, which is the only way an entry ever leaves it.
+
+The three options and their costs are not restated here; they were written when
+the question was filed and the owner answered against them. What is recorded is
+what the answer obliges.
+
+**It is not deferrable and that is why it was asked first.** The other two
+options each add something [M57](phase-details/m57.md)'s conformance test is
+written to forbid: a filesystem path needs a volume `docker-compose.yml` does not
+mount, and an object store is a new required dependency. M57 asserts one
+container with no Redis exercises the full surface, and it is written a
+phase-half after M50.5 builds against this. Answering it inside the build would
+have meant discovering the conflict from a failing test in [M57](phase-details/m57.md)
+rather than from a question in M50.5.
+
+**The assumption the answer rests on is still unverified, deliberately.** The
+filed entry says so: *"that the caps M50.5 sets keep a stored image small enough
+for a column to be uncontroversial — which is true only once those numbers
+exist"*. They do not exist yet; M50.5 is what sets them. So the obligation
+transfers rather than discharging — **M50.5 states the cap as a number and states
+the resulting worst-case bytes per row**, the same way [M49](phase-details/m49.md)
+was required to state the rasteriser's bound rather than promise one. A cap
+chosen without that arithmetic written down would make this decision true by
+assertion.
+
+**Two amendments to m50.5.md came with it**, both facts. Its *Where it is
+stored* section instructed the milestone to pick one and is now the record that
+the owner already did — a milestone that re-derives an answered question is how a
+decision gets taken twice and differently. And `internal/httpx/api_qr.go:18-20`,
+its citation for D75's permission, became `:20-22` when [M49](phase-details/m49.md)
+and [M50](phase-details/m50.md) edited that file; the sixth reference in six
+milestones to be moved by an earlier one, and the sixth into Go rather than into
+a migration.
+
+**The accepted cost, said plainly so nobody rediscovers it as a surprise.**
+Binary lives in the row and therefore in every `pg_dump`. Postgres is the one
+dependency this product cannot degrade without, and this makes it carry bytes it
+did not carry before. That is the price of deletion coming free with the cascades
+already there and of the container count not moving, and it was paid knowingly.
+
+
+## 2026-08-07 — M50.5, the first file this product accepts
+
+**D135–D138.** The upload surface itself. [D134](../../Plan.md#phase-3-decisions)
+had already settled *where* a logo lives; these are the four choices building
+against it forced, and the first of them is the one D134 explicitly transferred.
+
+### D135 — the caps, and the row they imply
+
+**1,048,576 bytes of request body; 1024 pixels a side and 262,144 pixels in
+total; 1,060,000 bytes stored.** Every one of them is in
+`internal/qr/logo.go`'s constant block with the allocation it bounds, which is
+the standard [M49](phase-details/m49.md) set for its rasteriser — 2000px at one
+byte a pixel is 4,000,000 bytes — and which D134 turned from a habit into an
+obligation. The owner chose a column against an assumption nobody could check at
+the time: *that the caps this milestone sets keep a stored image small enough for
+a column to be uncontroversial.* Without the arithmetic written down that
+assumption stays unchecked and the decision is true by assertion.
+
+**So the arithmetic, in full, because that is the point of it.** The decoded
+image is normalized to `image.NRGBA` — four bytes a pixel, one buffer shape
+whatever the input was — so the largest decode a request can cause is 262,144 ×
+4 = 1,048,576 bytes. The stored artefact is a PNG encoded from that buffer, and
+its worst case is an image whose pixels do not compress at all *and* whose shape
+is the tallest the area cap admits, because PNG spends a filter byte per
+scanline: 1024 × (1 + 256×4) = 1,049,600 filtered bytes, plus 85 for deflate's
+stored-block framing, 6 for the zlib header and checksum, 396 for IDAT chunking
+and 45 for the signature, IHDR and IEND — **1,050,132**. `MaxLogoStoredBytes` is
+1,060,000, that figure with room over it because two of its terms are properties
+of Go's encoder rather than of the PNG format.
+
+**Enforced, not merely derived.** `NormalizeLogo` refuses an encoding above the
+constant. That branch is unreachable through the caps above it, which is exactly
+why it is there: a Go release that frames its output differently should produce a
+failed upload rather than a row past the bound, and an arithmetic claim nothing
+checks is the shape D134 asked this milestone not to leave behind.
+`TestTheWorstCaseLogoFitsTheStatedBound` builds the worst case and pins both
+halves — that the real figure is close to the derivation, and that it is under
+the constant.
+
+**The fixture that test uses is a finding rather than a detail.** It is a
+*paletted* PNG, because the stored bound is not implied by the upload cap:
+incompressible pixels are incompressible on the way in too, so a truecolour
+upload near the worst case would not fit through the body cap at all. One byte of
+palette index per pixel does fit — about 263 KB on the wire — and expands to four
+bytes a pixel when it is normalized. The worst stored row is therefore reachable,
+and reachable through a file a quarter of its size. A cap on the request body is
+not a cap on the database.
+
+**So the number D134 is owed: 1,060,000 bytes a row**, and at
+`domain.MaxQRCodesPerLink` — twenty — **21,200,000 bytes a link**, about 20 MiB.
+That is in the row, in every backup and in every `pg_dump`.
+
+**Two caps rather than one, and each refuses something the other admits.** A
+2048×1 strip is 2048 pixels of nothing: it fails the side cap and passes the area
+cap. A 1024×1024 image is a megapixel buffer: it passes the side cap and fails
+the area one. The area is what the allocation is proportional to; the side is
+what [M50.6](phase-details/m50.6.md)'s geometry has to place inside a code that
+stops at `qr.MaxSize`. `TestBothCapsRefuseSomethingTheOtherAdmits` is what keeps
+the pair from decaying into one cap and a redundant constant.
+
+**And the reads stopped using `q.*`.** `GetQRCode`, `ListQRCodes` and
+`UpsertQRCode` all projected every column; with a megabyte-a-row `bytea` in the
+table, drawing a list of twenty code names would have fetched twenty megabytes.
+They carry explicit column lists now and report `(logo IS NOT NULL)::boolean`,
+which Postgres answers from the row's TOAST pointer without detoasting anything.
+The cost is three sqlc row structs where there was one model type, absorbed by a
+`qrRow` of the service's own; the alternative was a performance defect shipped
+inside a security milestone.
+
+### D136 — only a named code carries a logo
+
+**The default code cannot have one, and this is a consequence of the milestone's
+own count rather than a preference.** m50.5.md asks for *one upload operation
+against a QR code, and one to clear it*. The collection where a code is addressed
+by name is `/links/{id}/qr/codes/{slug}`; the default code has no slug — its
+identity is the *absence* of one, which is what [D130](../../Plan.md#phase-3-decisions)
+made load-bearing — and it is reached through the `/qr` shorthand
+[D133](../../Plan.md#phase-3-decisions) kept. Giving the shorthand a logo path of
+its own would have been two more operations than the milestone asked for.
+
+It also reads consistently with D133: `/qr/codes/{slug}` is the canonical form
+and `/qr` is the shorthand kept for callers written before codes existed. A
+surface added now has no compatibility burden and lands on the canonical path
+only.
+
+**The gap is real and is recorded rather than hidden**, in
+`internal/httpx/api_qr.go`, in the API document's `has_logo` description, in
+`docs/usage.md` and in the CHANGELOG: a workspace that has never added a second
+code cannot put a logo on the one it has. Whether that is the right product
+answer is the owner's, and it is a question this entry exists to make visible
+rather than one the worker answered.
+
+### D137 — what the orphan sweep collects, under a column
+
+m50.5.md requires an orphan sweep in the hourly `housekeeping` pass, and gives
+its reason as *every one of the paths above can fail between the row and the
+bytes*. **Under D134 that reason does not apply**: the bytes *are* the row, so
+setting, replacing and clearing are each one statement and there is no gap for a
+failure to land in. Removing a code, a workspace or an organization is a cascade
+on foreign keys 00600 already declared.
+
+**One path is left, and it is the one m50.5.md names first: deleting the link.**
+A link is soft-deleted with a purge deadline so its alias stays reserved and it
+can be brought back by hand. Its `qr_codes` rows survive that whole window
+holding up to a megabyte each, unreachable through every read in
+`query/campaigns.sql` — they all filter `l.deleted_at IS NULL` — and therefore
+unclearable through the endpoint that would clear them, which answers 404 for a
+deleted link. The purge that finally removes them is bounded at `purgeBatch` an
+hour, so a large deletion leaves them for days.
+
+So `ClearOrphanedQRCodeLogos` nulls the column where the owning link is
+soft-deleted, bounded and `SKIP LOCKED` like every other statement in that pass,
+and idempotent because its predicate is `logo IS NOT NULL`. **The row is left
+alone**: the trash window exists so the *link* can come back, and the artefact is
+the thing deletion was asked to remove. That is what makes m50.5.md's *deleting
+the link removes its artefacts* true rather than merely intended, and
+`TestTheOrphanSweepClearsLogosFromDeletedLinks` asserts both halves — that the
+deleted link's bytes go and that a live link's do not.
+
+### D138 — uploads get a bucket of their own
+
+**`UPLOAD_RATE_PER_MIN`, default thirty, shared through Redis, on top of
+`API_RATE_PER_MIN` rather than instead of it.** m50.5.md required the milestone
+to name a bucket, and the reason it is not the API's is that the two limits bound
+different things. Every other request under `/api/v1` is a JSON body this product
+caps at 256 KiB and hands to `encoding/json`; an upload is up to a megabyte
+handed to an image decoder, so what a request costs is set by its content rather
+than by its shape. `API_RATE_PER_MIN`'s 600 was chosen about the first kind, and
+600 megabyte uploads a minute is a bandwidth and decoder budget nobody set by
+tuning a number about JSON.
+
+Shared rather than per-instance, on the reasoning `login` and `link_password`
+already carry: the resource is bandwidth into the deployment, and a per-replica
+budget on four replicas is four times the number an operator configured. The
+**clear** carries no second limit — it accepts no body and decodes nothing, and
+throttling it would only make it harder to remove a logo somebody regrets.
+
+Thirty a minute is what somebody restyling a poster does, with room to spare. It
+charges the address rather than the workspace, like every other limit in
+`internal/httpx/limits.go`.
+
+
+## 2026-08-07 — M50.5, the owner overrules D136: the default code gets a logo too
+
+Owner-set, 2026-08-07, at [M50.5](phase-details/m50.5.md)'s acceptance. Written
+down before it is acted on.
+
+**The question.** The milestone built the logo only on named codes —
+`PUT`/`DELETE /links/{id}/qr/codes/{slug}/logo` — and **D136** reasoned that the
+default code has no slug because *not having one is its identity* ([D130](../../Plan.md#phase-3-decisions)),
+so there is nothing to address it by. The bullet asks for *"one upload operation
+against a QR code, and one to clear it"*, and two operations is what was built.
+The worker raised it as the item worth the owner's attention rather than leaving
+it to be found.
+
+It is a real gap and the common case is the broken one: a link where nobody added
+a second code — which is nearly every link — could not carry a logo at all, and
+[M50.6](phase-details/m50.6.md) would have shipped into that.
+
+**The answer: add the shorthand pair, `PUT`/`DELETE /links/{id}/qr/logo`.**
+
+That is the shape [D133](../../Plan.md#phase-3-decisions) already ships five
+times. `/links/{id}/qr.svg` and `/qr.png` *are* the default code addressed
+without a slug, and they were kept that way one milestone ago precisely so the
+default code stays reachable while named codes get a collection of their own. A
+sixth and seventh member of that family invents nothing.
+
+**Why not the third option — give the default code a reserved slug.** It would
+make one shape where there are two, and it reopens D130 to do it. D130 exists so
+that nothing already printed changes what it counts as: the default code's
+payload carries no code parameter because that is what every picture this product
+drew before M50 carries. A reserved slug means either those payloads change,
+which is the one thing M50 spent a milestone avoiding, or the payload and the
+address disagree, which is a seam somebody will fall into later. The two-shape
+cost is smaller and it is already paid.
+
+**What the bullet was read to mean, stated because it is the arguable part.**
+*One upload operation and one to clear* is read as **two capabilities, not two
+routes** — the same operation reachable at the shorthand and at the collection,
+exactly as `GET …/qr.png` and `GET …/qr/codes/{slug}/image.png` are one
+capability today. D136 read it as a count and was not wrong to; the owner chose
+the other reading. Recording both is what makes it a decision rather than a
+correction.
+
+**A second amendment to the same citation, at [step 3.4](phase-loop.md#3-land).**
+m50.5.md's reference for D75 went `:18-20` → `:20-22` at step 1 and `:20-22` →
+`:24-26` here, both times because a worker added imports above it. And
+`link.QRContent`, amended twice inside M50, has moved again — it is at
+`internal/link/qr.go:963` now. **m50.md is not amended for it and that is
+deliberate**: M50 is shipped, its claim is about behaviour rather than about where
+a function lives, and chasing a line number through every later milestone is the
+churn [the M50 entry](#2026-08-07--m50-two-line-numbers-and-the-references-that-held)
+argued against. What that entry recommended is what saves it — m50.md names
+`link.QRContent` beside the number, so a reader finds it after the number is
+wrong. **Amend the milestone being built; leave the ones that shipped.**
+
+**D136 stands as the reasoning it was**, marked overruled rather than deleted,
+for the same reason [D124](#2026-08-07--m48-the-owner-overrules-d124-the-picture-goes-up-and-the-guard-narrows)
+is. Two overruled worker decisions in one phase, both escalated rather than
+buried, is the two-actor split doing the job it costs a rejection to have.
+
+
+## 2026-08-07 — M50.5, the shorthand that carries a logo, and the row it has to write
+
+What the owner's ruling above became, built after it and against it. One
+decision, and two things that are consequences rather than choices — recorded
+because each is a place a later reader would otherwise assume the opposite.
+
+### D139 — the default code's logo is the shorthand, and it writes a row
+
+**`PUT`/`DELETE /links/{id}/qr/logo`, beside the slug form, and no reserved
+slug.** The owner's ruling names the shape; what this entry adds is what
+building it cost, because one part of it was not visible from the decision.
+
+**The invisible part: a `bytea` column needs a row, and the default code may not
+have one.** A link's default code exists whether or not `qr_codes` holds it —
+that is what makes *a QR endpoint returns a code for any link* true, and why
+twenty untouched links carry no rows at all. A named code is the opposite: it
+exists *because* somebody created it, so by the time anything can be uploaded to
+it the row is already there. The logo is the first per-code fact that cannot be
+synthesised on read, so an upload against an unstyled default code has to
+materialise the row before it can write the column.
+
+`materializeDefaultQRCode` is that write, and two things about it are
+deliberate. It writes **the style the code was already being drawn at** —
+`decodeQRStyle(nil)`, which is precisely what every read of an unstored code has
+been answering with — so creating the row changes no picture and no download. And
+it goes through `UpsertQRCode` rather than a plain insert, for the reason
+`SetQRStyleBySlug` does: two concurrent uploads to one untouched code are two
+inserts racing for one `(link, slug)`, and 03700's unique index would fail the
+loser rather than let it proceed.
+
+The one visible consequence is `stored` turning true, and it is honest rather
+than a side effect worth hiding: there *is* a row now.
+`TestTheDefaultCodeCarriesALogoToo` compares the style of the row an upload
+created against a genuinely untouched link's code rather than against a literal,
+so the claim is *the picture did not change* and not *the picture is this*.
+
+**The clear is idempotent one step further than the named-code clear.** A named
+code with no row does not exist and is a 404 — which is what stops removal being
+a way to ask whether a slug was ever issued. A *default* code with no row has no
+logo, which is what the caller asked for, so it answers 204 and writes nothing.
+The trade is `ResetQRStyle`'s, made once more: an operation that reported 404
+would be one that cares whether a preference had ever been expressed.
+
+**Two response shapes, because there are two families and not two operations.**
+The shorthand answers `{"qr": …}` like every other `/links/{id}/qr` operation and
+the collection answers `{"code": …}` like every other `/qr/codes/{slug}` one. A
+single shape would have made one of the two families inconsistent with itself,
+which is a worse trade than the one paid here. The multipart request body is a
+`components/requestBodies` entry both paths `$ref`, so the shape a client is
+validated against is one definition rather than two that can drift.
+
+### The dashboard needed a second route, and the reason is the body
+
+**A file cannot travel in the form the panel already had.** Every other write in
+the QR panel posts `application/x-www-form-urlencoded` to
+`POST /links/{id}/qr`, which `LinkQRStyle` reads with `parseForm`; a file needs
+`multipart/form-data`, and a handler that branched on the content type would be
+two handlers wearing one name. So the upload posts to `POST /links/{id}/qr/logo`
+and **the removal stays on the existing form** under its own button name, the way
+`reset`, `remove` and `rename` already do — which also keeps removal available
+when no file is selected.
+
+That forced the one change to a shipped helper. `readUploadedFile` now returns
+the short text parts it walked past as well as the file, because `next` and
+`code` are ordinary hidden inputs and the multipart body is the only body this
+form has. **Every part is walked rather than stopping at the file**: a browser
+sends parts in markup order, and a reader that returned early would make the two
+values depend on where a template happens to put the file input.
+`TestTheFieldsBesideAnUploadAreReadWhereverTheySit` sends them before it, after
+it, and on both sides. Text parts are read one byte past `maxUploadFieldBytes`
+and refused rather than truncated — a return path cut in half is a redirect
+somewhere nobody asked for, reported as success.
+
+The dashboard route shares the **same limiter object** as the API's, not a second
+one configured to the same number. That is the reasoning `guard` has carried
+since the login form: a budget an attacker doubles by alternating between two
+surfaces is not the budget an operator configured. What differs is the refusal —
+a page rather than a problem document, because a browser is what posts here.
+
+### What the panel says, and why it says it
+
+The notice after an upload states in as many words that **nothing draws the logo
+yet**. The picture beside it is unchanged, and a reader who was not told would
+reasonably conclude the upload failed. M50.6 is what removes the sentence. The
+list of codes gains *has a logo* on the rows that carry one, so which of a link's
+codes have images is answerable without opening each in turn.
+
+### Sabotage
+
+Four new claims, four counter-edits, each confirmed red and restored:
+
+- `SetQRCodeLogo` refusing the empty slug the way it did before the ruling →
+  `TestTheDefaultCodeCarriesALogoToo` fails on the 404.
+- The panel's form action moved by one path segment →
+  `TestTheDashboardReachesTheLogoOnTheDefaultCode` fails on the missing form.
+- `readUploadedFile` returning at the file part →
+  `TestTheFieldsBesideAnUploadAreReadWhereverTheySit` fails for *after the file*
+  and *either side*, and passes for *before* — which is the ordering dependence
+  it exists to refuse.
+- The shorthand answering under the `code` key → `TestAPIMatchesItsContract`
+  fails on both the response validation and the field it reads.
+
+## 2026-08-07 — M50.6, the logo in the picture: a cap that is arithmetic, a level that is not a preference, and the ring a measurement bought
+
+M50.5 stored a file. This draws it, and the three things it had to decide are
+below. What is not below, because m50.6.md decided it before any of this was
+built, is the **decoder question**: there is no QR decoder in this tree, adding
+one is a module in a require block one milestone after M49 asserted the QR path
+adds none, and the shipping assertion is therefore geometric. The decode check
+is run by hand against real readers and written into
+[m50.6.md](phase-details/m50.6.md) as a measurement. **It is not a gate**, and
+`make check` cannot tell you a logo'd code scans.
+
+### D140 — the occluded area, and where the number comes from
+
+**A centred square one fifth of the symbol's width — 4% of its area — rounded
+down to an odd number of modules so it centres on the grid.**
+
+m50.6.md required *the derivation from H's correction budget written down*,
+because any fraction satisfies a bullet that says "capped as a fraction". The
+derivation has three parts and all three are in
+`internal/qr/composite.go`'s package comment:
+
+1. **What H recovers.** ⌊0.30·C(v)⌋ codewords, where C(v) is the symbol's total.
+   The 30% is ISO/IEC 18004's own figure and it is the *error-correction
+   capacity*, not the EC-codeword share — version 1-H corrects 8 of 26, version
+   4-H 32 of 100, version 10-H 112 of 346. C(v) is arithmetic rather than a
+   forty-row table: the symbol's modules less the finder patterns, the timing
+   patterns, the alignment grid and the format and version information, over
+   eight. `TestTheCodewordCountIsTheStandardsOwn` holds it to the standard's
+   table at ten versions.
+2. **What an occlusion destroys.** ⌈(k+1)/2⌉·⌈(k+3)/4⌉ codewords for a centred
+   k×k region — an upper bound read off the layout, because codeword modules sit
+   in two-module-wide strips filled four rows at a time. This is where *occlusion
+   is spatially correlated* becomes a number: a 5-module box is 25 modules,
+   three codewords' worth, and can destroy six.
+3. **How much of the budget it may have: half.** The other half is claimed by
+   three things that error correction also pays for — the 30% is a total and
+   Reed-Solomon corrects per block, so an uneven spread fails a symbol whose
+   total is fine; print, paper, lighting, angle and blur; and the logo's own
+   edge, which can corrupt the ring of modules just outside the box.
+
+A fifth of the width clears that rule for every version this product produces,
+with the tightest — version 4 — spending 24 of a 30-codeword budget's half.
+`LogoBoxModules` applies the budget check *as well as* the fifth and takes the
+smaller, so the claim is true by construction for all forty versions rather than
+only for the ones a short URL reaches; a test asserts the fifth is what binds
+everywhere the product goes, because a cap the code silently reduced would stop
+being the number the milestone and the dashboard both state.
+
+**Rejected: a bigger logo.** The industry's rule of thumb is 20–30% of area at
+level H, which is four to seven times this. It is a rule of thumb about codes
+scanned from a phone held still in good light; this cap is what the arithmetic
+supports for a code printed on a poster, and the honest place to put the
+difference is in a cap rather than in a hope.
+
+**Rejected: arbitrary placement.** The derivation is about a centred region —
+centring is what keeps the three finder patterns, the format rings and the
+timing patterns clear, none of which error correction protects. A placement
+control would need its own derivation, and not offering it is how the milestone
+avoids having one it cannot write.
+
+**What centring does not keep clear, stated rather than engineered away:** a
+central alignment pattern. Versions whose alignment grid has an odd row count
+put one dead centre — version 7 at (22,22) of 45 — and the box covers it. A
+decoder that cannot find it falls back to a transform from the three finders,
+which is fine flat and worse photographed off a curve. It is part of why the cap
+is half a budget.
+
+### D141 — a code with a logo is at level H, and a request naming another one is accepted and overridden
+
+m50.6.md required the choice be made and recorded: **refuse, or
+accept-and-override**. It is **accept and override**, and the reason is the
+shape of the request rather than politeness.
+
+`PUT /links/{id}/qr` replaces the style whole and an omitted `level` means its
+default — so under *refuse*, a client changing a colour on a code whose logo it
+never mentioned gets a `422` for a field it did not send. Worse, refusing makes
+the invariant true only at the entry points that refuse: overriding makes *a
+code with a logo is at H* true by construction, which is what the occlusion cap
+above is measured against.
+
+**The forcing is in two places and they cannot disagree.** `internal/link`
+writes H into `qr_codes.style` — on upload, and on any style write to a code
+that has a logo — so the row holds what will be drawn. `internal/qr` forces it
+again at the renderer, so a row written before this milestone, or by hand, still
+draws at H rather than occluding modules against a budget a quarter the size.
+The second is what makes the geometric claim unconditional; the first is what
+makes a `GET` honest.
+
+Silence is what the bullet forbids and there is none: the `PUT`'s own answer
+reports H, every later `GET` reports H, and the row holds H. The contract test
+reads the **column** rather than the service, because `qrCodeFrom` reports the
+level a code is *drawn* at and would be green for a row that still said `L`.
+
+**Clearing a logo leaves the level at H.** Lowering it would redraw a picture
+that may already be printed, for a code whose owner asked only to remove an
+image; H is the safer of the two to be left at, and the panel's notice says so.
+
+**A consequence, recorded rather than fixed:** H grows the symbol, and a code
+already near the 2000px raster bound is pushed past it, so its PNG download
+starts answering `422`. Measured, filed as [F171](deferred-findings.md#open),
+and not taken here — the two available fixes are re-fitting the size (which
+restyles a code that may be printed) and refusing the upload (which refuses a
+picture the SVG can still draw), and choosing between them is a decision rather
+than a patch.
+
+**This narrows an M50.5 assertion and does not falsify an M50.5 bullet.** D139
+says an upload against an unstyled default code writes its row *at the style the
+code was already drawn at*, and that is still exactly what
+`materializeDefaultQRCode` does. What changed is that an upload now does a second
+thing afterwards — raises the level — and it does that for a code that already
+had a row just as much as for one that did not. M50.5's integration test compared
+the whole style against an untouched code; it now compares five fields and names
+the sixth. m50.5.md carries no bullet this makes false.
+
+### D142 — the logo travels inside the SVG as a data URI, and `img-src` is pinned because of it
+
+**Embedded, not referenced.** The alternative is an endpoint that serves the
+stored bytes and an `<image href="/api/…">` pointing at it, and it costs three
+things: a route M50.5 deliberately does not have (*there is no operation
+anywhere in this document that returns the bytes*), an authenticated second
+request for a picture the process already has in hand, and a downloaded `.svg`
+that is no longer a picture — it becomes a document that fetches from an origin
+the reader may not be signed into.
+
+**Base64 is what keeps the package's promise true.** `internal/qr` promises the
+bytes of an SVG it emits cannot hold a `<` it did not write, and until now that
+was easy: integers and colours parsed as `#rrggbb`. A logo is workspace bytes.
+The base64 alphabet is `A-Za-z0-9+/=` and cannot express a quote or an angle
+bracket whatever the image holds, so the promise survives the third
+caller-controlled input this package has acquired —
+`TestTheEmbeddedLogoCannotCarryMarkup` puts markup in a real PNG and asserts
+none of it reaches the document.
+
+**And it is what makes `img-src` load-bearing.** `img-src 'self' data:` already
+permitted the embedded form, and nothing pinned it: the existing CSP tests check
+`script-src` and the absence of an `unsafe-` waiver, so a quiet widening to
+`blob:` or a host would have passed every assertion this product had. A page now
+*depends* on the directive, which is the moment to stop taking it on trust.
+
+**The rasteriser's allocation changes with it, and the number changes with it.**
+A QR code has two colours and a logo has whatever it has, so a composited PNG is
+`image.NRGBA` at four bytes a pixel rather than the two-colour paletted form:
+2000 × 2000 × 4 = **16,000,000 bytes**, four times D127's 4,000,000, and that is
+the figure whenever a code carries a logo. The resampled logo is bounded
+separately at 512² × 4 = 1,048,576 — which is `MaxLogoPixels` × 4, so it reuses
+D135's arithmetic instead of inventing a second bound. The 512 is ⌊√262,144⌋ and
+nothing else.
+
+**The scaler is written here rather than imported.** `golang.org/x/image/draw`
+has one; adding it would put a module in the require block one milestone after
+M49 asserted the QR path adds none, and `image/draw` in the standard library
+composites but does not scale. It is an area average, which is the filter the
+case that matters wants — a 512-pixel logo into a 60-pixel box, where dropping
+pixels produces the aliasing a scanner reads as noise.
+
+### The ring, and why a hand check is worth running rather than performing
+
+m50.6.md's decode bullet is a measurement, not a gate, and the temptation with
+one of those is to run it, write *it worked*, and move on. This one changed the
+build.
+
+Composited with the logo filling the whole occluded box, `zbarimg` 0.23.93
+failed **three symbol versions of thirty-four** for a fully opaque logo — 7, 8
+and 32. A box-size sweep said the failures were **not monotonic in the box's
+size**: version 10 failed at three modules and read cleanly at eleven. That
+shape is a detector losing its sampling grid, not error correction running out,
+so shrinking the cap would have been superstition dressed as caution.
+
+Holding the logo back by **one module of the code's own background inside the
+box** took it to thirty-four of thirty-four. That is `logoInsetModules`, and it
+is the one number in the file a measurement chose rather than a derivation — the
+comment says so. It costs the cap nothing: the ring is painted background, so
+the modules under it are destroyed exactly as the ones under the image are, and
+every number in D140 is measured against the box rather than against the image
+inside it.
+
+The full corpus and its results are in
+[m50.6.md](phase-details/m50.6.md#the-decode-check-as-run--2026-08-07): 816
+images from the shipping render path, 34 versions × 6 logo shapes × 4 styles,
+**816 of 816** decoding to the exact payload. **The phone-camera half of the
+bullet is outstanding and is the owner's** — nobody else here has a camera
+pointed at this, and a hand check somebody else reports having run is not a
+measurement.
+
+### Sabotage
+
+Eleven new claims, eleven counter-edits, each confirmed red and restored:
+
+- `raw -= 36` dropped from the codeword arithmetic → the ISO table test fails at
+  every version from 7 up.
+- `LogoBoxDivisor` 5 → 3 → the budget assertion fails: a third of the width
+  spends more than half of H's budget.
+- `ForLogo` made a no-op → the code asked for at L with a logo draws L's
+  symbol.
+- The box's origin moved one module → the two outputs draw different rectangles.
+- The data URI emitting raw bytes instead of base64 → `<script` reaches the
+  document.
+- `prepareLogo`'s error swallowed at both render entry points → three unusable
+  stored logos are composited into pictures this product serves.
+- `fitInside` returning a square → the 4:1 wordmark is squashed.
+- `blob:` added to `img-src` → the directive test fails on the exact-match.
+- `MinProductContent` moved to 26 → internal/link's floor guard fails against
+  the alias and hostname bounds it is derived from.
+- The upload's style write dropped → the `qr_codes` row holds `L` after an
+  upload, while the API still reports `H`, which is the drift the column read
+  exists to catch.
+- The accept-and-override arm disabled → a `PUT` naming `L` on a logo'd code
+  answers `L` and stores `L`.
+
+
+## 2026-08-07 — M50.6, the logo reference that is still not a reference
+
+An amendment under [phase-loop.md](phase-loop.md#amending-a-bullet), taken at
+[step 3.4](phase-loop.md#3-land) and flagged by the worker, which cannot amend.
+A fact, not an assertion.
+
+Two places claimed [M50.6](phase-details/m50.6.md) fills the *logo reference*
+that `00600_phase2_dormant.sql:59` has promised since Phase 1 — m50.6.md's
+*Discharges* line, and the *Dormant structure is jsonb* row in
+[phase-details/README.md](phase-details/README.md). Both are now amended to say
+it does not.
+
+The tree fact: `00600_phase2_dormant.sql:59` describes the **style blob** as
+holding *"colours, logo reference, error-correction level, margin, shape"*. Under
+[D134](../../Plan.md#phase-3-decisions) the logo is a `bytea` column on
+`qr_codes`, added by migration `03800`. So a logo is stored and drawn, and the
+blob holds no reference to it — the same blob, the same comment, and the promise
+still unkept.
+
+**What made it false is the interesting part.** Not this milestone's work: the
+owner's storage answer, given at M50.5's validation, one milestone earlier.
+m50.6.md was written on 2026-08-06 when the question was still open and a `bytea`
+column was one of three candidates — under either of the other two the sentence
+would have been true, because a filesystem path and an object key are both
+*references* and both would have lived in the blob. Answering the question
+decided a fact in a file nobody was looking at.
+
+That is a shape worth naming beside the six citation amendments this phase has
+logged. Those were **references into code an earlier milestone moved**, and the
+defence is to cite a symbol name beside the number. This is a **claim a later
+decision falsified**, and the defence is different: when a filed question is
+answered, the answer's blast radius includes every milestone file written while
+it was open. D134 was checked against M50.5 and M57 when it was given, because
+those are the milestones the entry itself named. It was not checked against
+M50.6, and M50.6 is where it landed.
+
+**What remains true.** Of the comment's five words, **shape** is now the only one
+nothing builds — m50.6.md's *Deliberately not done* already says so and points at
+[M58](phase-details/m58.md)'s documentation sweep, which is where the comment
+gets trued up rather than here. `docs/data-model.md` was corrected by the worker
+under the standing documentation approval and already reads this way.
+
+
+## 2026-08-07 — M51, the migration number this run used up
+
+Amendments under [phase-loop.md](phase-loop.md#amending-a-bullet). Three facts,
+no assertions.
+
+**One, and it is a kind this phase has not seen before.** m51.md reserved *"the
+next free `037xx` migration"* and argued the number in a note of its own — that
+`00200` is an area marker rather than a free band, so the right move is to take
+the next number. It was right when written. Then [M50](phase-details/m50.md) took
+`03700` and [M50.5](phase-details/m50.5.md) took `03800`, both earlier in the same
+unattended run, and the number m51.md reserved was gone before m51.md was read.
+Amended to `03900`. **The reasoning is untouched**, which is the test of an
+amendment: *take the next number* is exactly as true at 03900 as at 03700, and it
+is what the note was written to assert.
+
+This is the third distinct kind of drift this phase has produced, and naming the
+three together is worth more than the individual corrections:
+
+| Kind | Cause | Defence |
+| --- | --- | --- |
+| A citation into Go | a later milestone moved the code | cite the symbol name beside the number |
+| A claim a decision falsified | an answered question reached a file written while it was open — [D134](#2026-08-07--m506-the-logo-reference-that-is-still-not-a-reference) | when answering a filed question, check every milestone file written while it was open, not only the ones the entry names |
+| **A reserved resource** | an earlier milestone consumed it | **do not reserve; say *the next free one* and resolve it at [step 1](phase-loop.md#1-validate)** |
+
+The third is the cheapest to avoid and the easiest to get wrong, because
+reserving a number reads like precision. It is a claim about what other
+milestones will not do.
+
+**Two.** `internal/httpx/router.go:472-512` for the public route block became
+`:532-572`, and the login limiter it names — the `guard(...)` on `POST /login` —
+moved from `:497` to `:535`. Four milestones added routes to that file this run.
+
+**Three.** *"`mail.Enqueuer` is nil when `SMTP_HOST` is unset
+(`internal/config/config.go:344`)"* pointed at `SMTP_USERNAME`'s field tag. The
+declaration is at `:340`, and the place the nil is actually produced is
+`cmd/linkctrl/main.go:368` — *"no sender, no job, and a nil Enqueuer at every
+consumer"*. The citation now names both, because the bullet's claim is about the
+nil rather than about the variable.
+
+**What held.** `01400_signup.sql:26`, `internal/auth/session.go:113` and `:124`,
+`internal/httpx/web_keys.go:272`, `internal/auth/service.go:374` and `:378-379`,
+`internal/signup/signup.go:99`, `internal/ui/mail.go:49` and `:77`,
+`03200_mail_body_scrub.sql:47`, and `cmd/linkctrl/jobs.go:743` — ten references,
+all exact. Both migration citations held, as every migration citation in this
+phase has.
+
+
+## 2026-08-07 — M51, the mail-free instance, and the one rule this product breaks on purpose
+
+D143. **A reset request on an instance with no `SMTP_HOST` refuses, out loud,
+and writes nothing.** Both surfaces: `503 no-mailer` from the API, and a page
+that replaces the form with the reason from the dashboard. The link on the
+sign-in page is not drawn at all.
+
+This is the one place in the product that does not degrade mail-free, and it is
+worth saying why the pattern D1 established does not reach here. Everywhere else
+the mailer is an *addition*: an invitation still has a copyable link, a
+notification is still in the inbox, an audit-growth warning still reaches the
+owner. Recovery has no other channel — the mail **is** the mechanism — so
+"degrading" would mean answering *check your inbox* to somebody whose instance
+can send nothing. That is worse than the lockout [F141](deferred-findings.md)
+describes, because it replaces a knowable absence with a person waiting for a
+message that was never queued.
+
+**What was considered and refused.** Answering `202` and queueing a row for a
+relay that may arrive later: the row would sit pending until the abandon sweep
+took it, and the person would have gone to the operator a week too late. And
+leaving the routes unregistered on a mail-free instance, so the paths 404: that
+makes *this instance cannot send mail* indistinguishable from *there is no such
+page*, which is exactly the distinction the signup pages are registered on a
+closed instance to preserve.
+
+**The cost is stated rather than hidden, and it is the milestone's real risk.**
+`SMTP_HOST` unset is the shipped default, so a default instance ships a route
+that refuses. m51.md names this and says what to do if it turns out to be the
+common case rather than the edge: a documentation change, not a second
+mechanism. The demo seeder configures a mailer, so the demo shows the working
+path. `cmd/linkctrl/main.go` warns once at boot, beside the signup warning and
+for the same reason — the page that says so is one nobody is watching.
+
+**Two smaller things follow from it.** `Reset` re-checks the mailer as well as
+`Request`, so an instance whose relay was removed after a link went out is not
+still completing resets from mail it can no longer send — the shape
+`signup.Verify` has for the effective mode, and D7's reasoning that a bound is a
+state the instance is in rather than a moment a request passed through. And the
+refusal *names its reason*, unlike `writeSignupClosed`, which deliberately does
+not: there is nothing to protect, since an instance with no relay already says
+so at the sign-up form, and "ask the operator" without the sentence explaining
+why is advice nobody can act on.
+
+
+## 2026-08-07 — M51, what the mailbox is told, and how long the link lives
+
+D144. Two answers, and they are here rather than in the code because both are
+choices somebody could have made differently.
+
+**One template for every address that gets no link, not two.** An address with
+no account and an account this mechanism refuses — suspended, or with no
+password to replace — receive the same `password-reset-unavailable` message,
+which says no link was created, names both possibilities, and says the operator
+is the only person who can tell them which.
+
+The stance it inherits is signup's, settled at F13 and shipped as
+`account-exists.txt`: the channel that proves an address exists is the mailbox,
+and the person holding the mailbox is entitled to know somebody tried. What is
+new is the *merging*, and the argument for it is that splitting would put the
+distinction back into the one channel allowed to carry it while also telling a
+suspended account's owner their status because a stranger filled in a form. The
+cost is real and is accepted: a person whose account is genuinely suspended gets
+a vaguer message than they could have. They also get a working answer — *ask the
+operator* — which is the only action available in either case.
+
+**The same stated cost signup accepted comes with it.** This sends mail to
+addresses that never registered, which is what an attacker gets for free. It is
+bounded by the login limiter and by nothing else, and the limiter is shared with
+`POST /login` on purpose: a per-route bucket would let an attacker burn one
+without touching the other. Named here so a later finding is a known cost rather
+than a surprise.
+
+**One hour, against signup's day.** `recovery.TTL` is deliberately shorter than
+`signup.VerificationTTL`, and the reason is what the two tokens buy. A
+verification link creates an account whose password its holder does not know; a
+reset link **sets a password on an account that already exists**. Nobody is ever
+stuck waiting for it, because asking again supersedes the outstanding link —
+which is also why superseding is a `consumed_at` write rather than a delete:
+a registration nobody completed is a waiting-room row and no record of anything,
+where a second reset request is evidence somebody asked to recover this account
+twice.
+
+**And the response carries no timestamp at all.** `signup.Registered` returns an
+`ExpiresAt` and had to truncate it to microseconds so Go's nanosecond clock did
+not answer, in three fractional digits, the question the status code no longer
+did. `recovery.Requested` holds the normalized address and nothing else, so
+there is no second value to keep identical. The mail says when the link lapses,
+and the mail only reaches somebody who has an account.
+
+
+## 2026-08-07 — M51, what a completed reset ends, what it starts, and where the record goes
+
+D145. The blast radius, and the two things outside it.
+
+**Every session on the account, with none kept.** `ChangePassword` keeps the
+browser the change was made in; there is no session here to keep, and the whole
+premise of a recovery is that somebody else may be holding one. Every
+outstanding reset token goes with them — the one presented and its siblings —
+because a recovery that leaves a second live token behind has recovered nothing.
+
+**It starts no session either**, and that is a choice rather than a limitation.
+The reset has just revoked every session on the account; answering with a new
+one would put back, in the same breath, the kind of credential the recovery
+exists to displace. Typing the password at the sign-in form is also the proof it
+is known. The setup and invitation forms do sign somebody straight in, and both
+of them had the password in hand from a form they had just authenticated.
+
+**API keys are untouched**, and the omission is a decision. A key is a separate
+credential with its own rotation story (D9, D87); revoking them on a password
+reset would turn a recovery into an outage for whatever CI job the account's key
+was minted for. Stated in the mail, on the page and in the API document, so it is
+a property somebody can rely on rather than a gap they discover.
+
+**One password-writing path, and it is now a function rather than an
+agreement.** m51.md asked for the new hash to go through the same argon2 path
+`POST /account/password` uses. Two call sites doing the same two steps would
+satisfy that sentence and not its point, so `auth.WritePassword` was extracted
+and `ChangePassword` calls it too. It takes the `*dbgen.Queries` rather than
+reading the service's own, which is what lets recovery pass its transactional
+handle: spending the token and setting the password must not be separable. It
+also carries a thing neither call site should have to remember — the write
+clears `failed_login_count` and `locked_until`, so an account recovered while
+locked out by the guessing that made its owner reset it does not then refuse the
+new password.
+
+**The audit entry has no organization, and that is the correct row rather than a
+missing field.** `password.reset` is the first action in `audit.AllActions()`
+written by somebody holding no credential, so there is no workspace they were
+standing in and no honest way to choose among the organizations their account may
+belong to — stamping one is the misattribution [F36](deferred-findings.md)
+named. The record lands with
+a NULL `organization_id` and is read through `audit.read.instance`, held by the
+principal, which is the right audience for *an account on this box was
+recovered*. The actor is the account itself, matching `invitation.redeemed`:
+nobody else was present, and `system` would lose the one fact worth recording.
+Metadata is empty and the network fact is the request's IP prefix, which
+`audit.Record` takes from the context and reduces there.
+
+**An ordinary password change is still not audited**, and its absence has
+minting a key's reason: the person held a session, so the session is the record.
+A reset is the case where they did not.
+
+## 2026-08-08 — M51.9, the mid-phase review: what it checked, what it found, and the one bullet it could not run
+
+The first of Phase 3's two reviews, over [M46](phase-details/m46.md)–[M51](phase-details/m51.md),
+run to [M32.9](phase-details/m32.9.md)'s method. Recorded here rather than
+summarised in a commit message because M32.9 requires the review's own output to
+be written down — *"what was checked, what was found, what was refuted — so a
+later reader can tell coverage from luck"* — and because two of its outcomes are
+decisions rather than findings.
+
+### What was checked, and how
+
+Both gates green on the tree as reviewed: `make check`, and
+`make test-integration` forced with `GOFLAGS=-count=1`. `make check-links` ok.
+
+The eight definitions of done were re-read against the tree rather than against
+the code's intent, and the by-use half of [m51.9.md](phase-details/m51.9.md) was
+run in a browser — Playwright out of `tools/render-verify/node_modules`, against
+a test instance rebuilt from nothing and then seeded with `lctl demo --reset`.
+That rebuild is why the recorded test credential in
+[instances.md](../dev-notes/instances.md) changed, and it cost
+[M50](phase-details/m50.md)'s 100k-link SLO dataset, which is regenerable and
+whose measurement [docs/slo.md](../slo.md) already holds.
+
+**Verified by use, each against the bullet that asked for it:**
+
+| Claim | What was done |
+| --- | --- |
+| M46 — the header names where you are *at every membership count, including one* | A fresh instance claimed through `/setup`: header reads *"Current workspace: Whippy Review · Default"* and draws no `<select>` at all. M25's *"a control that cannot do anything"* is honoured and the label is the thing that closed the gap |
+| M46 — nothing scrolls sideways at 360px | Signed in, all seventeen dashboard routes, `document.documentElement.scrollWidth - window.innerWidth` on every one. **Zero on all seventeen** |
+| M47 — the destination and the alias without scrolling at 1280×800 | Both above the fold, with the QR thumbnail in the heading row where D126 put it |
+| M49 — the SVG and the PNG are the same picture at the same size | Rendered side by side, plain and logo'd. They are |
+| M49 — the snap reports what it produced beside what was asked for | Asking for 400px answered `?got=399&want=400` and said so in a sentence |
+| M51 — recovery **without** a mailer | No link on the sign-in page; `/forgot` states the instance cannot send mail and names the operator's route |
+| M51 — recovery **with** one | *Forgot your password?* appears. The response to a real address and to an address with no account are **byte-identical**. Both receive mail; the non-account's says no link was made. The reset consumed, every session revoked, the new password signed in. A replayed `POST` answered `404` — the same `404` a token that never existed gets. Three requests left **one** live row, so *asking again replaces it* is true. `password_resets` holds only the hash; the audit row is `password.reset` carrying an `ip_prefix` and no address |
+
+### What was found — four rows, F172 to F175
+
+All confirmed against the tree before filing, and all triaged with the owner on
+2026-08-08 before anything was acted on.
+
+- **[F172]** — M46 asserts an overflow guard it does not have. **In spec**, so
+  **M46 reopens** rather than acquiring a successor.
+- **[F173]** — a configured but unreachable SMTP relay blocks the listener for
+  the whole SMTP timeout, measured at **10.05 seconds**. It is
+  [M26](phase-details/m26.md)'s code and out of this review's range; the owner
+  scheduled it into **[M56](phase-details/m56.md)** rather than M58, because it
+  is a failover defect and M56 is the failover contract.
+- **[F174]** — every QR code on the demo hangs off an expired link, so all of
+  them answer `410`. Worked immediately.
+- **[F175]** — the mailer-free `/forgot` page promises the mail it refuses.
+  Carried to [M58](phase-details/m58.md).
+
+**F173 is the one worth naming as a method result.** No test in this repository
+could have found it and no reading of M46–M51 would have: it needed an
+instance configured the way M51 now gives operators a reason to configure one,
+and then a clock. The review found it because the milestone told it to try the
+thing with a mailer and the thing without.
+
+### What was refuted, so it is not re-found
+
+`GET /reset/<token>` answers **200** and renders the password form for a consumed
+token, an expired one, and one that never existed alike. That reads as a missing
+check and is not one: validating on `GET` is precisely what would tell an
+enumerator that a token is live, and the `POST` answers `404` **with** the
+sentence *"This link is no longer valid. It may have been used already, or it may
+have expired. Ask for a new one from the sign-in page."* M51's bullet is met and
+the design is coherent. Not filed.
+
+A second candidate died the same way: the QR panel appeared to offer no way to
+edit a link's non-default codes, which would have made M50's several-codes
+surface half-built. `partials/link_qr.html:122-125` renders each code's name as a
+link to the panel's own route with `?code=`, which is the mechanism M48 asked for
+rather than a second one. The first pass missed it because the extraction that
+listed the panel's controls was read from its tail.
+
+**And one measurement was thrown away rather than reported.** The first
+360px sweep ran signed *out* — every route was the login page, and every one of
+them reported zero overflow truthfully and uselessly. It was re-run signed in
+before F172 was allowed to cite it. A number taken against the wrong page is the
+failure mode this repository's *verify, do not assume* rule exists for, and it
+happened inside the review that exists to catch it.
+
+### D146 — the eighteen blind tasks cannot be re-run, and the bullet is struck
+
+[m51.9.md](phase-details/m51.9.md)'s first by-use bullet asked for the eighteen
+blind tasks to be re-run against the built tree by somebody given the task and no
+instructions. **They are not written down anywhere in this repository.**
+
+- **The bullet as it stood:** *"the **eighteen** blind tasks that produced the
+  redesign's definition of done are re-run against the built tree, by somebody
+  given the task and no instructions — the same exercise that specified B, now
+  used to check it."*
+- **The bullet as amended:** struck, with the reason and the cost stated in its
+  place, and the by-use record above standing as what the review actually ran.
+- **The tree fact that forced it:** a search over `docs/` for the tasks finds
+  their *numbers* and their *notes* — tasks 1, 2, 4, 6, 7 and 9 are each cited by
+  what they found, in
+  [D114](#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word),
+  four milestone files and six deferred rows — and not one of the eighteen
+  prompts. D114 records the *method* and the *verdicts* and never the tasks.
+
+The owner was offered three ways out on 2026-08-08 — re-run them personally on
+the demo, hand the texts over for this actor to run, or amend — and chose to
+amend. **The stated cost, because it is a real one:** D121's ordering of the link
+page's eight sections and D124/D126's QR placement were both recorded as
+*"re-measured at M51.9"*, and they are not. Nothing in this phase re-checks them.
+[M57.9](phase-details/m57.9.md) inherits no obligation here either, because it
+cannot run them any more than this review could.
+
+**The process lesson, which is the part that generalises:** an exercise whose
+output is a decision must record its *inputs*, or the decision cannot be
+re-derived and a milestone written to re-run it is written against nothing. D114
+was careful about everything except the eighteen sentences it was made of.
+
+### D147 — the doc-cost judgement: the growth is real, and half of it is paid back
+
+`make doc-cost`, then the judgement [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+requires — defend the growth, or trim to pay for it. Regenerating and moving on
+is neither, and was the gap that rule was written to close.
+
+**The number.** The `/work phase` resume charge went **58214 → 64623 bytes**
+across M46–M51, +11%. **93% of that is one file**:
+`phase-details/README.md` at 8838 → 14821. `phase-loop.md` did not move;
+`workflow.md` grew 417 bytes; Plan.md's longest row grew 9.
+
+**The evidence that the growth was not being read.** That file's *realized* read
+ratio fell from **1.03 to 0.71** over the same span. It is read at every resume,
+so a ratio below one says a part of it is charged and skipped — and the part is
+identifiable: *Phase 3 inherits all fourteen, confirmed 2026-08-07* is planning
+evidence produced once, while the *What every milestone inherits* table above it
+is what step 1 actually reads.
+
+**The judgement: trim.** The confirmation section moved to
+[phase-3-candidates.md](phase-3-candidates.md#phase-3-inherits-all-fourteen-confirmed-2026-08-07),
+which is read three times at a 0.57 ratio rather than at every resume, with a
+pointer left in its place. Nothing was dropped, which is what
+*nothing leaves a tracker silently* requires of a move.
+
+**What it bought, measured rather than promised: 64623 → 61693 bytes.** 2930 of
+the 6409-byte growth, or 46% — not the 3554 the section weighs, because the
+pointer that re-homes it costs about 600 bytes and that is the price of the move
+being legible. The remaining 3479 bytes are defended rather than trimmed: they
+are the Phase 3 preamble, which explains a seventeen-row table against a
+fifteen-milestone target, and amendments inside the inherits table itself. A
+resuming session that does not read the first files the row count as an ordering
+bug.
+
+## 2026-08-08 — M46, the overflow bullet narrowed on the milestone's own instruction
+
+[M46](phase-details/m46.md) reopened for one sentence.
+[F172](deferred-findings.md), found by [M51.9](phase-details/m51.9.md): the
+milestone asserted a guard that does not exist, and had done since the day it
+shipped.
+
+- **The bullet as it stood:** *"Enforced by a template scan in M24.5's idiom
+  rather than by looking: any element that can exceed the viewport — tables
+  first — is inside a container that scrolls on its own, asserted across every
+  page template so a page added later cannot reintroduce it."*
+- **The bullet as amended:** every `<table>` and every `<pre>`, over every
+  rendered page, with the remainder — the header bar, and everything that can
+  exceed the viewport without saying so in markup — named as unenforced.
+- **The tree fact that forced it:** `internal/ui/overflow_test.go` checks
+  `wideElements = {table, pre}` (`:49`) over rendered pages rather than template
+  sources (`:30-34`). Its own comment at `:21-28` quotes the bullet, states that
+  the set it names *"cannot be enumerated from markup"*, and cites this
+  milestone's Risks section as licensing a narrowing — *"narrow the bullet to
+  what the scan checks and say what is left over, never the other way round."*
+
+**Reopened rather than corrected in place, and that is the whole point of the
+distinction.** Nothing about the product changed: all seventeen dashboard routes
+were measured at 360px on 2026-08-08 and not one scrolls sideways. What was wrong
+was a `done` row asserting a mechanism nobody had, and workflow.md sends that
+back to the milestone that made the claim rather than forward to a successor,
+because a successor would leave M46's row reading `done` over something untrue.
+
+**The failure mode is worth naming because it is not carelessness.** M46
+anticipated this exactly — its Risks section is where the narrowing was licensed
+in advance — and the milestone then wrote the narrowing into the *test file*,
+where it is true, complete, and read by nobody validating a later milestone
+against M46's definition of done. Writing an amendment next to the code is
+writing it in the one place the contract does not look. **A licence to narrow a
+bullet is discharged by narrowing the bullet.**
+
+## 2026-08-08 — F174, the demo's QR codes were pictures of a link that answers Gone
+
+Closed out of [M51.9](phase-details/m51.9.md)'s triage, owner-approved to be
+worked immediately rather than carried to [M58](phase-details/m58.md), because
+the demo is the instance the owner evaluates from and it was showing three
+milestones of QR work through codes nobody could scan.
+
+**What it was.** `demoQRStyled` named `summer-sale`, and `summer-sale` is in the
+catalogue precisely to demonstrate expiry — its own description says *"Expired
+campaign: answers 410 Gone, not 404."* Every QR code the demo has ever carried
+hung off it: the styled code [M49](phase-details/m49.md) sizes, the second code
+[M50](phase-details/m50.md) adds, and the logo'd one
+[M50.6](phase-details/m50.6.md) exists for. The pictures rendered correctly on
+the dashboard and the per-code scan counts were real. Pointing a phone at any of
+them got `410`.
+
+**Why nothing caught it, which is the part worth keeping.** Four
+`demoCoverage()` rows count `qr_codes`, and all four passed. They pass because
+they count *what was seeded*, and what was seeded was correct — two codes, two
+labels, one logo, click history against both. The link those codes point at is
+not in any of their queries. That is
+[F160](deferred-findings.md)'s lesson arriving a second time: **the coverage test
+measures the seed, not the instance**, and a whole class of demo defect is
+structurally invisible to it.
+
+**The fix is the guard, not the constant.** Moving the codes to `launch` takes
+about a line. What stops it recurring is a new row — *No QR code points at a link
+that refuses* — which counts codes whose link is expired, exhausted by its click
+budget, gated by a password or deleted, and requires none. It does not drive a
+redirect, because `newDemoDB` seeds into a throwaway database with no server in
+front of it; it counts **the reachability the existing rows already imply**. A
+code is a picture of its link's short URL, so a code on a link that refuses is a
+picture of a refusal, and that is expressible in SQL where *does it actually
+resolve* is not.
+
+**A custom hostname is deliberately outside the query**, and the omission is
+stated rather than left: the demo's one custom domain is an RFC 2606 name that
+can never resolve, so a code seeded on it would be unscannable for a reason this
+query cannot see. `demoQRStyled`'s own comment carries that requirement instead,
+which is the weaker mechanism and is labelled as one.
+
+**The stated cost of `launch`.** `attributeQRScans` rewrites `referrer_host` on
+21% of a link's non-bot clicks, so that reattribution now lands on the demo's
+busiest link. The proportion is unchanged; what changes is that the referrer
+breakdown an evaluator opens first reads a fifth QR. For a link with a printed
+code, that is what the truth would look like.
+
+Two comments naming a link `/qr-styled` were corrected in the same commit. That
+link has never existed in this demo — the constant is named instead now, so the
+citation cannot go stale the next time the codes move.
+
+## 2026-08-08 — M52: the residue column nobody counted, and a comment that moved
+
+**An amendment, not a decision.** Two facts in
+[m52.md](phase-details/m52.md) stopped describing the tree, found at
+[step 1](phase-loop.md#1-validate) while reading the bullets against it. Both
+are corrected in place; neither changes what the milestone asserts, which is why
+this is an amendment rather than a prompt.
+
+### The actor snapshot label moved fourteen lines down
+
+**As it stood**, twice — once in *What survives, and is erased in place
+instead*, once in *Documentation this milestone must true up*:
+
+> The identifying residue is the actor snapshot label
+> (`internal/audit/audit.go:517-528`), which holds an address.
+
+**As amended:** `internal/audit/audit.go:532-556`.
+
+**The tree fact.** `actorLabel`'s comment begins at 532 and the function at 546,
+ending at 556. The range in the bullet holds `RecordAPIKeyRevocation`, which is
+a different thing entirely. M45 rewrote that comment — it is where *"after the
+account is deleted"* became *"if"* — and the rewrite made it longer, which is
+what pushed the function down. The fifth line-number drift this phase, and the
+first where the drift was caused by the very finding the milestone discharges.
+
+### `destination_disputes` holds two addresses, and the bullet named one
+
+**As it stood:**
+
+> `created_by` has no FK and the table's own comment says the row must stay
+> readable after the account is gone (`01600_destination_disputes.sql:53-60`).
+> It also holds addresses, and F44 names it as the second table with **no
+> deletion path of any kind**. Erasure scrubs the address; the dispute and its
+> outcome stay.
+
+**As amended:** the bullet now names both columns, both id columns to find them
+by, and scrubs both — the text is in [m52.md](phase-details/m52.md).
+
+**The tree fact.** `01600_destination_disputes.sql` declares `created_by` (`:60`)
+with `created_by_label` (`:64`), and then `decided_by` (`:67`) with
+`decided_by_label` (`:68`). The second pair is the moderator who resolved the
+dispute, and the label is a snapshot of the same shape holding the same kind of
+value. An erasure pass reasoning from the bullet as written would scrub the
+filer's address and leave the decider's, on a table whose whole design note is
+that its rows outlive the accounts in them.
+
+The plural in *"it also holds addresses"* is what makes this a fact and not an
+assertion: the bullet already knew there was more than one and then wrote a
+singular instruction. Nothing is being decided here that the bullet had not
+already decided — only counted, which is what *counted, not recalled* two
+paragraphs later in the same file asks for and did not get. Both id columns
+exist, so both are findable; had `decided_by` been absent this would have been a
+prompt instead, because scrubbing a column you can only locate by matching the
+address you are removing is a different design.
+
+## 2026-08-08 — M52: three answers at step 1, and the conflict resolved by the command that meets it
+
+Owner-set, all three, in one prompt at [step 1](phase-loop.md#1-validate) of
+M52. Two are `D` numbers; the third is how this loop runs in a harness that
+forbids spawning. The entry carries M52's number because M52 was under way when
+it was appended, which is the rule even for the answer that belongs to
+[M55](phase-details/m55.md).
+
+### D148 — the erased actor's tombstone is a constant, and the ids stay
+
+**`actor_label` becomes a fixed string; `actor_user_id`, `created_by` and
+`decided_by` survive erasure.** Of the three options put, this is the one that
+builds no new mechanism: correlation across an erased actor's entries is the id
+that is already there, on the index already built for it —
+`audit_logs_actor_idx (actor_user_id, occurred_at DESC)`
+(`00600_phase2_dormant.sql:162`) — and the tombstone is therefore not derived
+from anything, so there is nothing for anybody to reverse. The id points at a
+`users` row that survives erasure with its identifying fields scrubbed, which is
+what `anonymized_at` has always meant and what separates it from `deleted_at`.
+
+**What it costs, recorded because the recommendation was made against itself.**
+The surviving uuid is pseudonymous personal data, not nothing. Somebody holding
+an *external* id-to-person mapping — an old backup, an exported audit CSV, a
+webhook payload — re-identifies the actor. So `docs/SECURITY.md` claims **the
+residue identifies nobody from inside this instance**, and not *the residue is
+anonymous*; a compliance reader is entitled to that distinction, and writing the
+weaker sentence is part of the milestone rather than a caveat about it.
+
+Two erased actors also render identically. Telling them apart is the audit
+surface's problem and is display rather than storage — the id is in the row —
+but M52 has no bullet for it, and the milestone owes one.
+
+**Why not the alternatives.** A random stored token with the ids nulled is the
+stronger claim and the only one that survives an external mapping; it costs a
+column on `users`, a migration, the retirement of the actor index for exactly
+the rows that need it, and an idempotence argument the constant gets for free.
+It stays available: **A migrates to B later** by nulling ids and assigning
+tokens to rows already erased, where B cannot migrate to A at all, because A's
+correlator would have been thrown away. A keyed hash was refused in every
+combination — m52.md's own *Risks* section argues against deriving from the id,
+the id stays in the row under this decision so a guess is confirmable, and the
+only instance-wide secret is `LINKCTRL_API_KEY_PEPPER`, documented as not
+rotatable in place.
+
+### D149 — the update checker is on by default, and asks at first run
+
+**The owner overruled the recommendation**, which was *off by default* and was
+argued from `docs/SECURITY.md:73` staying true unedited. On by default with a
+first-run prompt was the third option, and the reasoning it was chosen against
+is what the row now owes: **there is no first-run prompt surface for
+instance-level settings.** The setup form claims the instance; it does not
+configure it. [M55](phase-details/m55.md) therefore builds one, inside a
+milestone that is otherwise a daily HTTP GET, and that is a real widening of it
+rather than a footnote.
+
+The claim at `SECURITY.md:73` — *"No telemetry, no phone-home, no third-party
+calls in the default configuration"* — is edited rather than extended, and the
+edit is on behalf of every operator who read it. What makes the prompt the
+answer rather than a compromise is that the operator decides knowingly: the
+default is whatever they chose, so the sentence describes a choice that was put
+to them instead of a connection they were not told about. Recorded here on the
+date it was **given**; it is used when M55 lands.
+
+### The hosting conflict: `/work phase` is the request
+
+[W37](workflow-changes.md#proposed) is the row; it is still *Proposed* and this
+does not approve it. What was settled is narrower and immediate: **invoking
+`/work phase` is the owner requesting the worker that phase-loop.md mandates**,
+so a session carrying a standing instruction not to spawn subagents may spawn
+one for step 2 and the loop runs as written.
+
+This reverses the 2026-08-08 ruling from the previous run — *hand it to a
+session launched without the instruction, and not spawn anyway* — on evidence
+that ruling did not have: the next session was launched the same way, because
+the instruction is not something the owner sets per run. A resolution that
+depends on a session being launched differently is not a resolution when every
+session is launched identically.
+
+The two-actor split is untouched. The orchestrator still edits no code, no tests
+and no SQL, a rejected milestone still gets a fresh worker, and the reason the
+split exists — that the second attempt must not inherit the first's reasoning —
+is exactly what this preserves by spawning rather than by the orchestrator
+building.
+
+
+## 2026-08-08 — M52: a soft delete fires no cascade, and two comments that said it would
+
+Three things this milestone had to settle that its own file does not, each
+recorded because the next reader would otherwise re-derive it differently.
+
+### The four tables do not go by cascade, and cannot
+
+m52.md's *What is removed* says `memberships`, `sessions`, `api_keys` and
+`notifications` go **"by foreign-key cascade, already in the schema"**. Every
+other bullet in the same file requires the `users` row to *survive*:
+`deleted_at` and `status = 'deleted'` are written by the deletion path,
+`anonymized_at` is written later and *"marks the row whose residue has been
+scrubbed"*, and `users_email_key` being partial on `deleted_at IS NULL` only
+matters at all under a kept row — under a hard delete the address would be free
+without an index shaped for it.
+
+`ON DELETE CASCADE` fires on `DELETE` and not on `UPDATE`, so under the soft
+delete every other bullet mandates, **no cascade fires**. The two readings cannot
+both hold.
+
+Built against the assertion rather than the mechanism: the deletion path removes
+those rows with statements of its own, in the same transaction, and the test
+counts each table before and after exactly as the bullet asks. Nobody could have
+decided that an UPDATE fires a delete trigger, so this is a fact the bullet is
+wrong about rather than a choice it makes — which is why it is written here for
+the orchestrator to amend rather than answered as a prompt.
+
+**Two tables joined the four**, and they are here because M52's own mechanism
+would otherwise make a schema comment false:
+
+- `password_resets` (`03900:27-29`) says *"there is no route by which a reset for
+  a deleted account could still be consumed, because the row is gone with the
+  account"*. Under a soft delete the row is not gone, and it is the one
+  credential in this schema that sets a password.
+- `instance_grants` (`03400:44-47`) says a grant naming a user who does not exist
+  *"is not a record worth keeping, it is a permission nobody can hold"*. The
+  principal cannot reach the deletion path at all, but a delegated dispute
+  reviewer can.
+
+Both comments are corrected in place as well, because the cascade they name is
+no longer what enforces them. Counted rather than recalled: ten foreign keys
+reference `users` — six `ON DELETE CASCADE` and four `ON DELETE SET NULL`. The
+four SET NULL ones (`links.created_by`, `invitations.invited_by`,
+`invitations.redeemed_by`, `instance_grants.granted_by`) are deliberately left
+pointing at the erased row, because D148 keeps the ids and nulling them would
+destroy the correlation the decision chose to preserve.
+
+### The audit record goes inside the transaction, which no other one does
+
+`account.deleted` is the first action in this vocabulary whose **actor is the
+subject**. Every other service in this tree records after it commits, on Record's
+own stated reasoning — losing the change is worse than losing the record of it —
+and that ordering is wrong exactly once: the erasure sweep decides what to scrub
+by reading `users.anonymized_at`, so a record inserted after the commit can
+arrive after the sweep has already been past, and its `actor_label` then holds
+the address forever.
+
+The window is microseconds against an hourly sweep and would never be
+reproduced. It is closed by construction anyway, because the alternative is a
+correctness claim that rests on a race nobody can lose deliberately.
+`audit.Service.RecordTx` takes the caller's `*dbgen.Queries`; `Record` is now
+that function called with the service's own. One writer of `audit_logs`, two
+entry points, and the cost Record's documentation already named — inside a
+transaction a failed audit write fails the operation — accepted here and nowhere
+else.
+
+The action is **instance-wide**, and that is F36's reasoning rather than a new
+one. An account may belong to several organizations and is *about* none of them,
+so filing the record under whichever one the person happened to be standing in
+would be visible to one tenant with no claim to it and invisible to the others it
+changed. `password.reset` is the precedent, one milestone earlier and for the
+adjacent reason.
+
+### What erasure reaches, and the limb it does not
+
+The sweep scrubs the actor snapshot: `audit_logs.actor_label` and **both** of
+`destination_disputes`'s label columns. It does not reach an address held in an
+audit record's `metadata`, and six sites write one — the invitation and
+membership vocabularies, keyed `"email"`, counted rather than recalled.
+
+Out of spec, and deliberately not decided inside the milestone. m52.md identifies
+the residue as the actor snapshot with a file:line, and D148 settles only what
+the tombstone is. Closing it is a design question in both directions: the address
+usually sits inside a record of what somebody *else* did, so removing it edits a
+live actor's audit entry, and the only mechanism that finds it — matching
+`metadata->>'email'` against the erased address — is a sequential scan of the
+largest partitioned table in this schema after analytics. Filed as
+[F177](deferred-findings.md), stated in `docs/SECURITY.md`'s *What is not
+defended*, and pointed at from the Plan.md row this milestone discharges. The
+milestone ships a true claim about a bounded feature rather than a broad claim
+with an undocumented hole in it.
+
+## 2026-08-08 — M52: the cascade the bullet promised, amended at acceptance
+
+**An amendment, not a decision**, made by the orchestrator at
+[step 3.4](phase-loop.md#3-land) rather than at step 1 — which is why the rule
+puts amendment at both. Reading the tree against the bullets is what surfaced
+it, and the worker was right to build against the assertion and report rather
+than amend: a worker never amends.
+
+The *why* is not repeated here. It is the entry above,
+[*a soft delete fires no cascade*](#2026-08-08--m52-a-soft-delete-fires-no-cascade-and-two-comments-that-said-it-would),
+written by the actor that met the problem. This entry is the amendment record
+the loop requires, and it exists to hold the three things that one does not: the
+bullet as it stood, the bullet as amended, and the tree fact.
+
+**As it stood**, under *What is removed*:
+
+> By foreign-key cascade, already in the schema and asserted here rather than
+> assumed: `memberships` (`00200:141`), `sessions` (`00200:162`), `api_keys`
+> (`00500:5`), `notifications` (`00600:118`). A test counts rows before and
+> after for an account holding at least one of each.
+
+**As amended:** *by statements in the deleting transaction, one per table* —
+and six tables, `password_resets` (`03900:44`) and `instance_grants`
+(`03400:31`) joining the four, with the parenthesis in
+[m52.md](phase-details/m52.md) carrying the reason.
+
+**The tree fact.** `ON DELETE CASCADE` fires on `DELETE`. This milestone's
+deletion is an `UPDATE`, and it has to be: `anonymized_at` is defined in the
+same file as marking *"the row whose residue has been scrubbed"*, and
+`users_email_key` is partial on `deleted_at IS NULL` (`00200:57`) precisely so a
+surviving row stops holding its address. Both require the row to stay. So the
+four cascade clauses exist, are correct, and never run.
+
+**Why this is a fact and not an assertion**, which is the whole test: nobody
+could have decided otherwise. The alternative mechanism — hard-delete the row
+and let the cascades fire — contradicts three other bullets in the same file,
+so the bullet was not offering a choice between two designs. It named the wrong
+mechanism for the only design available. What it *asserted* — those tables are
+emptied, counted before and after — is met exactly as written, which is why the
+milestone was accepted rather than rejected.
+
+The two additional tables are the same fact one step on. Each has a schema
+comment asserting the row cannot outlive the account, each was true while the
+only deletion was hypothetical, and this milestone's soft delete is what would
+have falsified them — a defect introduced by the work in flight is in that
+work's spec, not a finding to defer. Both comments are corrected in place.
+
+## 2026-08-08 — M53: the two facts the milestone before it moved
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). Both
+were true when written and both were falsified by [M52](phase-details/m52.md),
+which landed an hour earlier in the same run — the first time in this phase that
+a milestone's validation has had to correct facts broken by its immediate
+predecessor rather than by something months old.
+
+### The session mint moved, and the line it moved to is blank
+
+**As it stood**, under *The login flow*:
+
+> The interposition is between `RecordSuccessfulLogin`
+> (`internal/auth/service.go:412`) and the session mint (`:430`).
+
+**As amended:** the mint is `:449`, and the symbol is named — `s.q.CreateSession`
+— so the next reader can find it if it moves again.
+
+**The tree fact.** `internal/auth/service.go:430` is now an empty line;
+`CreateSessionParams` is assembled at `:438` and `CreateSession` called at
+`:449`. M52 extracted `auth.Service.VerifyPassword` so that account deletion and
+`ChangePassword` confirm through one function rather than two that agree, and
+that extraction pushed everything below it down. `RecordSuccessfulLogin` at
+`:412` is above the insertion and did not move, which is why one half of the
+range is still right — the failure mode a bullet naming two line numbers has.
+
+### `mfa_secret` acquired a writer, and it is the one that takes MFA away
+
+**As it stood**, under *Discharges*:
+
+> It also gives `users.mfa_secret` and `users.mfa_enabled_at`
+> (`00200_identity.sql:31-33`, marked `-- Phase 3.` since the first migration)
+> their first writer.
+
+**As amended:** their first writer that **sets** them.
+
+**The tree fact.** `EraseDeletedAccounts`
+(`internal/store/query/accounts.sql:209-210`) clears both columns to `NULL` as
+part of scrubbing an erased account's row. It is a writer, it landed today, and
+it is the opposite of enrolment. The distinction is worth keeping rather than
+smoothing over: after M52 the columns are no longer dormant, so the *"nothing
+writes this"* argument that made them safe to build on has one exception, and
+M53's own disabling path has a precedent in the tree it can read.
+
+Both are facts. Nobody could have decided that M52's `UPDATE` does not exist, or
+that a blank line is a function call, so neither is a prompt.
+
+
+## 2026-08-08 — M53: five choices a second factor forced
+
+Written while [M53](phase-details/m53.md) was being built. Each is a choice the
+milestone file left to the work rather than one it made, and each would have been
+re-derived differently by the next reader.
+
+### D150 — `MFA_SECRET_KEY` is its own variable, and it is optional
+
+m53.md settles the first half by name: the key comes from **its own configuration
+variable**, not from `LINKCTRL_API_KEY_PEPPER`, because the pepper is bound to
+retained API-key rows and rotating it silently invalidates every issued key.
+Sharing one value would give two credential lifecycles one lifetime.
+
+What it does not settle is whether the new variable is **required**. It is not,
+and the reason is an upgrade rather than a preference: making it required would
+refuse to boot every existing instance until its operator generated a secret, to
+buy a feature nobody had asked for yet. Unset is therefore a supported state and
+is exactly the instance every deployment already was — the enrolment offer is
+replaced by a sentence naming the variable, in the shape `/forgot` uses for a
+mail-free instance.
+
+**Losing it after accounts have enrolled is the interesting case**, and it is the
+one the milestone bounds: *every enrolled account loses the second factor and no
+further*. The chain that makes that true, and that is now documented in
+`docs/configuration.md` beside the variable:
+
+1. The stored secret will not decrypt, so no authenticator code can be verified
+   and the account stops at the prompt. It does **not** silently sign in on the
+   password alone — that would turn losing a key into quietly removing everybody's
+   second factor, which is the worse of the two failures.
+2. A **recovery code** still works, because those are SHA-256 hashes and this key
+   is not involved in them.
+3. The account disables the factor with a second recovery code and enrols again.
+4. An account with neither is the operator's, which is the same last resort a
+   forgotten password has had since M51.
+
+The refusal is deliberately indistinguishable from a wrong code at the prompt.
+Telling whoever is standing there that the *server* cannot read the secret hands a
+stranger a way to probe which accounts are enrolled and what state the instance's
+configuration is in; the operator's copy of that fact is a log line that names it
+plainly.
+
+### D151 — the second factor lives in `internal/auth`
+
+`internal/recovery` and `internal/account` are each their own package, and both
+give the same reason: `internal/audit` imports `internal/auth`, so a service that
+writes an audit record cannot live inside `internal/auth`. Following that
+precedent would have put this in `internal/mfa`.
+
+It does not apply here, and the difference is the interposition. m53.md puts the
+second factor *inside* `auth.Service.Login`, between the password and the session
+mint. A package outside `internal/auth` cannot be there, so the mint would have to
+be exported — and a second factor is worth exactly as much as the guarantee that
+there is one place a session token comes into existence.
+
+So this follows the other precedent already in the package: `APIKeyService`
+declares the narrow interface it needs (`APIKeyAuditor`) and `internal/audit`
+implements it on the other side of the seam. `MFAAuditor` and `MFANotifier` are
+that seam again, in the same shape, and `internal/notify` grows the matching
+method.
+
+`mintSession` was extracted from `Login` as part of this, and the extraction is
+the mechanism rather than a tidy-up: `Login` reaches it when the account has no
+second factor and `CompleteSecondFactor` reaches it when one has been verified.
+Two call sites that agree today are how a third gets added without the factor.
+
+### D152 — the enrolment offer travels in the form, because the milestone forbids the alternative
+
+A secret is minted on the enrolment page and confirmed by a code computed from it
+on the next request. Something has to hold it in between, and there are two
+places: the account row, or the form.
+
+m53.md decides it without appearing to. *An enrolment that is started and
+abandoned leaves the account exactly as it was, asserted by test. Half-enrolled is
+not a state this product has.* Parking a candidate secret on `users.mfa_secret`
+with `mfa_enabled_at` still null **is** the half-enrolled state, so the form is
+what is left.
+
+The cost is stated rather than hidden: the confirm step trusts the browser to
+return the secret it was handed, so a third party who could post that form could
+enrol a factor of their own. Origin-checked CSRF is what stops it, and it is the
+same protection every other state-changing form in this product rests on. The
+secret is shown in plain text on the page beside the QR code anyway, because a
+person enrolling from the device they are reading cannot photograph their own
+screen — so the form field discloses nothing the page does not.
+
+### D153 — `RecordSuccessfulLogin` is guarded, not moved
+
+Two bullets in m53.md's *login flow* section pull against each other, and the
+resolution is worth recording because the obvious readings of either one break the
+other.
+
+- *The interposition is between `RecordSuccessfulLogin` and the session mint.*
+- *Failed second-factor attempts count against the **same** lockout policy as
+  failed passwords. A separate counter would give an attacker a fresh budget for
+  having got the password right, which is backwards.*
+
+`RecordSuccessfulLogin` sets `failed_login_count = 0` and `locked_until = NULL`.
+Call it before the second factor and every password post clears the budget: an
+attacker holding the password posts it, fails a code, posts it again, and the
+counter never reaches the threshold. The lockout the second bullet demands would
+never fire — the *fresh budget* it names, arrived at from the other direction.
+
+Moving the call after the factor satisfies the second bullet and falsifies the
+first. So neither was moved. The call stays exactly where it is and is wrapped in
+`if user.MfaEnabledAt == nil`; the second-factor branch sits immediately below it
+and above the mint, which is literally between the two, and
+`CompleteSecondFactor` records the successful login at the point the sign-in
+actually succeeds.
+
+That is not a reinterpretation of either bullet — both hold as written — and it is
+also the honest reading of what `RecordSuccessfulLogin` means. An account with a
+second factor has not finished signing in when its password is verified.
+
+### D154 — four audit actions, one notification kind
+
+The same four events reach two surfaces, and they are shaped differently on each
+because the surfaces answer different questions.
+
+**The audit log gets four**: `mfa.enabled`, `mfa.disabled`,
+`mfa.recovery_code_used`, `mfa.recovery_codes_regenerated`. m53.md names two of
+them — a recovery code being spent, and disabling — and the other two are here for
+the same reason those are. Enabling is the moment an account stops being reachable
+by password alone; regenerating voids ten standing credentials at once. A
+vocabulary recording the removal of a factor but not its arrival would answer half
+of the only question this surface is read for. All four are **instance-wide**, on
+the reasoning `password.reset` and `account.deleted` already established: a second
+factor is a property of a person, and an account may belong to several
+organizations or to none.
+
+**The inbox gets one**, `mfa.changed`, carrying which of the four happened in its
+`data`. The recipient is the same person every time and what they do about any of
+them is the same thing — open `/account` and look. Four kinds would be four
+entries in `internal/httpx`'s `notificationTargets` all returning `/account`,
+which is a vocabulary describing the sender rather than the reader.
+
+No mail, on the baseline this product has always taken: in-app is the delivery and
+mail is the addition. Three of the four are things the person has just done on a
+page they are looking at, and the fourth reaches them as they sign in.
+
+### The bug this milestone found in itself
+
+Not a decision, and recorded because it cost the test suite seven minutes and
+would have cost a reader longer.
+
+The first version announced a spent recovery code from inside `consumeFactor`,
+which runs inside the caller's transaction. The notification inserts into
+`notifications`, which carries a foreign key to `users`, and an insert against a
+foreign key takes a `KEY SHARE` lock on the referenced row — which
+`auth.MFAService.Disable` was holding `FOR UPDATE` at that moment, on a different
+connection. It deadlocked until the test timeout killed it.
+
+`consumeFactor` now returns *which* credential it accepted and announces nothing;
+`CompleteSecondFactor` announces after its commit. The same rule caught a second
+instance: charging a failed code to the lockout counter is a write to `users` from
+the pool, so the transaction is rolled back explicitly before it rather than by
+the deferred call. **The rule, stated so it is not rediscovered: nothing that
+writes a row referencing `users` may run while this package holds a transaction
+open against that account.**
+
+## 2026-08-08 — M54: the second milestone file to reserve a migration number it did not get
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). The
+same drift [M51's entry](#2026-08-07--m51-the-migration-number-this-run-used-up)
+recorded, one phase later and with four milestones between the reservation and
+the build instead of two.
+
+**As it stood**, under *The model*:
+
+> `api_keys.organization_id` becomes **nullable** in migration `037xx`.
+
+**As amended:** `04200`.
+
+**The tree fact.** `internal/store/migrations/` runs to `04100_mfa.sql`, which
+[M53](phase-details/m53.md) added an hour ago. `037xx` was written when the
+phase was planned and the highest number was `03600`; `03700`, `03800`, `03900`,
+`04000` and `04100` were taken by M50, M50.6, M51, M52 and M53 in the order they
+were built. The reserved number is not merely wrong, it is **occupied** —
+`03700_qr_codes_per_link.sql` exists — so a worker following the bullet
+literally would collide rather than fail.
+
+Nobody could have decided otherwise: the next free number is arithmetic. What
+this keeps proving is that a migration number written into a milestone file at
+planning time is a prediction about build order, and this project reorders
+build order routinely.
+
+
+## 2026-08-08 — M54: a key belongs to an account, and the four decisions that had to be re-derived to say so
+
+The owner directed on 2026-08-05 that F75's asymmetry is the wrong thing to fix:
+a key should be minted by an *account* and reach the organizations that account
+belongs to, the way a personal access token does. That dissolves the finding
+instead of patching it, and it reverses four things this project had already
+decided. Each is re-derived below rather than inherited, because the milestone
+file said not one of them may be.
+
+### D155 — reach is a second column, and account-wide is the default an unpinned key gets
+
+`api_keys.organization_id` is nullable from `04200`. NULL is account-wide;
+non-NULL is pinned. It sits **beside** `workspace_id` rather than replacing it,
+so a key now answers two questions: which workspaces (M44's axis) and which
+tenants (this one).
+
+Two axes rather than one enumerated column, because they are independent and a
+single `reach` enum would have had to spell out the combinations — including the
+one that cannot exist, a workspace-bound key with no organization. A check
+constraint refuses that row instead, which is the same information in the place
+that can enforce it.
+
+**Account-wide is what an unpinned key created from now on is**, and that is a
+widening by default. Stated plainly because it is the sort of thing a later
+reader will assume was an accident: a caller sending `org_wide: true` and nothing
+else got an organization-scoped key in 0.2.0 and gets an account-wide one in
+0.3.0. The alternative — account-wide only on request — was rejected because it
+makes the *new* model the exception and leaves the product's answer to "what is
+an API key" being "a tenant credential", which is precisely the answer the owner
+overruled.
+
+The safety this rests on is that widening is the reversible direction and pinning
+is not. A key that reaches too far can be pinned by rotation or revoked; a key
+pinned to one tenant can never widen, because a rotation may not reach more
+organizations than its predecessor (D87, below). So the default is the one a
+mistake can be walked back from, and the field somebody fills in is the one that
+cannot.
+
+**No issued key changed reach.** Dropping NOT NULL writes no rows, so every key
+that existed before the migration carries its organization and stays pinned to
+it. `TestAPinnedKeyDoesNotFollowItsOwnerIntoASecondOrganization` is that
+assertion as well as the model's, because "minted before the migration" and
+"pinned" are the same row.
+
+### D156 — an account-wide key needs an organization-wide membership wherever it lands
+
+Not merely *a* membership. An unpinned key has always required an
+organization-wide one — `GetAPIKeyByPrefix`'s predicate refuses a workspace-NULL
+key covered only by a workspace-scoped row, and `MayCreateOrgWide` refuses to
+mint one without it — and the question this milestone had to answer is whether
+that bar travels with the key into a second organization.
+
+It does. The alternative is a key minted under organization-wide authority in one
+tenant acquiring, by its owner joining a second at a narrower scope, reach its
+owner could not have granted it there. That is a widening nobody authorized, and
+it would arrive silently: the owner joining an organization is somebody else's
+act.
+
+The cost, accepted: an account-wide key is invisible in organizations where its
+owner is scoped to a single workspace, and there is no message saying so. The
+credential simply resolves elsewhere. A per-organization reach list on the key
+would say it, and is not built — see the deferred row.
+
+### D157 — the organization is resolved one tier above the workspace
+
+`ResolveWorkspaceForUser` keeps M44's `organization_id` parameter, and for an
+account-wide key it is fed the organization the request resolved into. That
+resolution is a new statement, `ResolveOrganizationForAPIKey`, and it is
+deliberately not a second copy of the workspace precedence.
+
+The two answer different questions. That one is "which workspace, given a person
+and optionally a bound"; this one is "which tenant". Its rungs are the person's,
+for the reason D90 gives — what an unpinned key follows is the person, and where
+the person is acting is part of that — expressed over organizations: the
+organization of their pinned default, then of the one they last used, then the
+oldest they belong to. No session rung, because there is no session.
+
+Deleting M44's parameter was the other option and was rejected on what it would
+cost: a pinned key would then have no bound at all, and the parameter is the only
+thing standing between such a key and a tenant it was never issued for. Keeping
+it with a computed value is the change that leaves the *pinned* case byte for
+byte what M44 built.
+
+### D158 — an administrator narrows somebody else's account-wide key rather than destroying it
+
+`revokeInOrganization` stays organization-scoped, and what it does now depends on
+the key rather than on the request. A pinned key is revoked outright, unchanged:
+the actor's organization is that key's entire reach, so cutting the reach and
+destroying the credential are the same act. An account-wide key gets a row in
+`api_key_org_revocations` — the actor's organization removed from its reach — and
+keeps working everywhere else.
+
+Revoking it outright was rejected because it is authority over an account nobody
+granted: the key's owner acts in tenants this administrator has none over.
+Refusing entirely was rejected because it would make an account-wide key the one
+credential an incident cannot stop.
+
+**The two are distinguishable**, which the milestone file made the requirement
+rather than the mechanism. `apikey.reach_revoked` is a separate audit action from
+`apikey.revoked`, because "was that key stopped" now has two answers and an
+operator reading the log must not have to open the metadata to tell which. The
+caller does not choose between them: offering the choice would be offering an
+administrator the outright revoke they may not have.
+
+The owner cannot see a reach revocation on their key list. That is a real gap and
+it is a deferred row rather than scope.
+
+### The four re-derivations
+
+**[F103](deferred-findings.md)'s bound — amended, not deleted.** A key's reads
+were bounded to the organization it was issued for *because* a key is issued for
+one and the switcher exists to cross organizations. The premise is what M54
+changes, and only for one kind of key: the bound stands unaltered for a pinned
+key, whose reads are still about tenants it cannot touch, and lapses for an
+account-wide one, whose reads are about the tenants it works in. `Identity`
+carries `APIKeyOrgID` so the site can tell them apart, and F103's row records the
+amendment rather than closing.
+
+**M44's `organization_id` parameter — kept.** D157 above.
+
+**[D43](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)'s
+role cap — per organization, and it always was.** The cap is read from
+`LoadMembershipAuthority(actor.UserID, actor.OrgID, …)`, and `actor.OrgID` is
+where *this request* landed. Nothing in the invitation path changed. What changed
+is that one credential can now produce two different values there, so a check
+that was already per-organization has a second organization to be wrong in — and
+that is exactly the class of thing no test could have caught while there was only
+one. `TestAKeyIssuedInvitationIsCappedWhereTheRequestLanded` is the test that
+could not have existed before.
+
+**[D87](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)'s
+rotation rule — a second axis.** Rotation is authorized by the key's own token
+and nothing else, which is safe only while a successor is identical or narrower.
+Tenancy is now part of narrower: an account-wide key may rotate into a pinned
+one, and a pinned key may not rotate into an account-wide one. The organization a
+rotation may pin to is the one the request resolved into and is not a parameter,
+because pinning to some other tenant would be choosing a reach on the strength of
+a token that happens to be valid elsewhere.
+
+`reach: account` exists on the request so that the refusal can be *said*. Leaving
+it out would make widening unaskable rather than refused, and an automated
+rotation that asked for something it may not have should be told so rather than
+quietly given something else.
+
+### What the intersection is, and what it is not
+
+m54.md says a key's effective permissions are its stored scopes intersected with
+the owner's authority in the resolved organization, "evaluated at request time
+through `LoadMembershipAuthority`". The tree does it through `identityFor` —
+`GetUserPermissions` for the resolved workspace, which is the union of the
+memberships covering it (D31) and therefore the role that applies in the resolved
+organization — followed by `restrictTo`. Both halves are read on every request.
+
+`LoadMembershipAuthority` answers per *permission*, so intersecting a key's whole
+scope set through it would be one query per scope on the authentication path. It
+is used where the question genuinely is about authority in an organization the
+caller is not acting in: `LoadMemberships`/`Reaches`, new in `authority.go`,
+which is how D158's reach revoke establishes that the key reaches the
+administrator's tenant at all. The behaviour the bullet asserts holds; the
+mechanism named in it is the one that answers the authority half.
+
+### No new permission, and that is the answer the inherited rule wants
+
+M54 adds nothing to `permissions`, nothing to `NonDelegableScopes` and no seed
+migration. The inherited *Permissions* rule asks which limb of D18 a new
+permission matches; there is none to match one, and saying so is what stops the
+next reader assuming the question was skipped.
+
+Two of the three narrower mechanisms beside the map moved, and neither moved by
+gaining a branch on credential type. D43's cap is evaluated against
+`actor.OrgID`, which is where the request landed and was already the right
+question — the only change is that one credential can now produce two answers.
+F103's bound is read from `Identity.APIKeyOrgID`, which is nil for a session and
+for an account-wide key, so `Service.Workspaces` is still one branch and F104's
+count of sites that legitimately branch on credential type is what it was.
+
+## 2026-08-08 — M54: the function the authority bullet named answers one permission
+
+**An amendment, not a decision**, at [step 3.4](phase-loop.md#3-land). The
+worker met the bullet as written, could not satisfy the clause without a cost
+the milestone would not have accepted, built the assertion, and reported —
+which is exactly what a worker does with a bullet it may not amend.
+
+**As it stood**, under *Authority, resolved per request*:
+
+> A key's effective permissions in an organization are its stored scopes
+> **intersected with the owner's authority in that organization**, evaluated at
+> request time through `LoadMembershipAuthority`.
+
+**As amended:** the trailing clause is struck, and a parenthesis in
+[m54.md](phase-details/m54.md) says what the tree does instead.
+
+**The tree fact.** `LoadMembershipAuthority`
+(`internal/auth/authority.go:66-68`) takes a single `permission string` and
+returns the memberships carrying it. It is shaped for *may this actor do this
+one thing here* — the question a write asks under its own lock, which is why the
+queries handle is a parameter. A scope set is not one permission, so taking the
+intersection through it is one round trip per scope, on the authentication path,
+for every key-authenticated request.
+
+**Why a fact and not an assertion.** What the bullet asserts is the
+intersection: stored scopes against the owner's authority in the organization
+the request resolved to, evaluated per request rather than frozen at mint time.
+That is what the tree does and what
+`TestAnAccountWideKeyIsWeakerWhereItsOwnerIsWeaker` holds it to. The struck
+clause named a function that structurally cannot answer the question the
+sentence asks, and nobody could have decided that it takes a set — the signature
+is the whole of the argument.
+
+The distinction matters here more than usual, because this is the milestone
+whose risk section says the failure mode is a key resolving into an organization
+it should not reach. An amendment that quietly widened *what is intersected*
+would be that failure wearing a correction's clothes. This one narrows nothing
+and changes no behaviour; it removes a citation that was wrong about a signature.
+
+
+## 2026-08-08 — M55: four line references, and the one that pointed at the wrong claim
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). Four
+references in [m55.md](phase-details/m55.md) named lines the tree no longer has.
+Three are ordinary drift. The fourth is worth separating out, because a stale
+reference that still lands on *something* is the kind that gets copied forward.
+
+| As it stood | As amended | The tree fact |
+| --- | --- | --- |
+| `cmd/linkctrl/jobs.go:210`'s `families()` | `:231` | `func (j *jobRunner) families()` is at 231; 210 is inside the comment block above it |
+| the advisory key block at `:128-142` | `:145-155` | The `const` block runs 145–155, ending at `advisoryLockKeyMaintenance`. 128–142 is the prose explaining generation 0 |
+| `internal/build.Get().Version` at `build.go:17-21` | `:40` | 17–21 is the `var (version, commit, date)` block the linker stamps. `func Get()` is at 40. The `"dev"` fallback at `:52-75` was right and is unchanged |
+| `docs/SECURITY.md:73`, twice | `:78`, twice | 78 is the Egress row. **73 is the QR-codes row** |
+
+**The fourth is the one that mattered.** A reference to a line that has moved
+fails loudly the moment somebody opens it. A reference to a line that now holds
+a *different table row* reads as correct: `SECURITY.md:73` is a real row making
+a real claim about what a QR code does not carry, and a worker checking the
+citation would have found prose about metadata and destinations rather than the
+egress enumeration this milestone has to re-count from four to five. The
+milestone's own instruction is *the count is written by counting the
+enumeration, not by adding one to the previous sentence* — and the pointer to
+the enumeration was aimed at the wrong sentence.
+
+Both mentions were amended, including the one written into this file's header
+earlier the same day when [D149](../../Plan.md#phase-3-decisions) was recorded.
+That one was copied from the bullet below it, which is exactly how a wrong
+citation propagates: it was already stale when it was reused, and reusing it is
+what made it two.
+
+All four are facts. A line number is not a choice.
+
+
+## 2026-08-08 — M55: an update checker, and the five choices a daily GET turned out to need
+
+[D149](../../Plan.md#phase-3-decisions) settled the only question m55.md said
+the milestone needed answered: the checker is on by default and asks at first
+run. Building it raised five more, each with a real alternative, and each
+recorded here because the next reader would otherwise re-derive it differently.
+
+### D159 — an instance upgrading into 0.3.0 gets the default, which is on
+
+**On, with the CHANGELOG and `docs/SECURITY.md` saying so plainly and naming the
+variable that turns it off.**
+
+D149 bought the default with a prompt: *what makes the prompt the answer rather
+than a compromise is that the operator decides knowingly*. An instance that
+already exists has no first run left, so there is nobody to ask, and the
+knowingly is exactly what it does not get. That is a real gap in the argument
+and it deserved a decision of its own rather than falling out of the
+implementation.
+
+Three options, and the one taken is the middle of them:
+
+| | Buys | Costs |
+| --- | --- | --- |
+| **On** (taken) | *On by default* means what it says on every instance, and the fleet answer is one sentence rather than two | An existing operator's box starts making a request they were not asked about, and learns of it from a release note they may not read |
+| Off for upgrades only | Nobody is surprised | The default is then off for every instance that exists today, which is the recommendation D149 overruled, arrived at through the back door |
+| Prompt the principal at next sign-in | Everybody is asked | A second prompt surface, in a milestone that already grew one; and the check would be off for however long nobody signs in, which on an unattended instance is forever |
+
+What tipped it is that the second option is not a smaller version of the first —
+it is the overruled answer wearing an upgrade path. An owner who chose *on* over
+*off* did not choose *on for new instances and off for the ones that exist*, and
+inferring that would be the loop editing the decision it was given.
+
+The cost is paid where an upgrade is read rather than where the code is: the
+`[Unreleased]` entry leads with it, `docs/SECURITY.md`'s egress row says the
+sentence about phone-home is edited rather than qualified, and
+`docs/configuration.md` states the upgrade case in its own paragraph. That is
+the whole mitigation, it is not much, and saying so is better than implying the
+prompt covers everybody.
+
+### D160 — two switches, ANDed, and the variable only ever says no
+
+**`LINKCTRL_UPDATE_CHECK` is the deployment's answer and
+`instance_settings.update_check_enabled` is the operator's, and the check runs
+only when both allow it.**
+
+Two controls are unavoidable once D149 exists: an operator cannot set an
+environment variable from a browser, and an air-gapped deployment cannot depend
+on whoever claims the instance knowing why the box has no egress. So the
+question is not whether there are two but which wins.
+
+The variable wins, and only downwards. `false` there means the instance never
+asks whatever a browser said; `true` there is permission rather than
+instruction, and the stored answer decides. That asymmetry is what makes the
+variable usable as a hard bound by somebody who does not control the dashboard —
+which is the actual deployment shape it is for.
+
+Where each is enforced is deliberate too. The variable is read once, at boot, in
+`main`: an instance with it off builds no client and registers nothing with the
+job family, so the socket cannot be opened by any path. The row is read on every
+pass, inside the statement that claims the day, because it can change after boot
+and a value cached at startup would keep a *no* from taking effect until the
+next restart.
+
+Rejected: a single tri-state variable (`on`/`off`/`ask`). It reads as three
+behaviours when there are two, and it puts the operator's answer somewhere they
+cannot write it.
+
+### D161 — a singleton settings table, and a control on the setup form
+
+**`instance_settings` with `id boolean PRIMARY KEY DEFAULT true CHECK (id)`, one
+row inserted by migration 04300, and the prompt is a checkbox on the existing
+setup form rather than a page of its own.**
+
+D149 named the cost as *there is no first-run prompt surface for instance-level
+settings*, which invites building one. The narrow reading is the right one, for
+the reason `internal/notify`'s package comment gives about itself: the risk in a
+milestone like this is building the general thing nobody asked for. One setting
+exists. A key/value table cannot be typed, defaulted or constrained, and a
+settings *page* would need a permission, a route, a nav entry and a second way
+to change something the first-run prompt already answered — none of which any
+scope row asks for.
+
+The singleton is enforced by the primary key rather than by convention, so a
+second row is a conflict rather than a state where "the settings" means
+whichever row was read first. DDL stays additive, so the next instance-level
+setting is a column here.
+
+The row is inserted by the migration rather than created lazily, because a
+lazily-created settings row gives "nobody has changed anything" two
+representations and the defaults then have to live in Go as well as in the DDL.
+
+The write is guarded by the service rather than by its caller.
+`SetUpdateCheckAtSetup` counts the users itself and refuses once the instance is
+claimed — unlike `MovePrincipal` one screen down, which takes no actor because
+nothing routes to it. This one is reached by two HTTP handlers, so an unchecked
+version would be one route registration away from being a public endpoint for
+changing what an instance connects to.
+
+And the write happens **before** the account is created, on both surfaces. The
+ordering is forced by the refusal above, and it is also the safe direction: a
+`Register` that fails afterwards leaves the answer standing and the operator's
+retry rewrites it, where the other order would claim the instance and lose a
+*no* to any error after it.
+
+### D162 — the comparison reads `vX.Y.Z` and drops everything after it
+
+**A leading `v` is optional, the three numbers are the version, and any `-…` or
+`+…` suffix is discarded rather than ordered.**
+
+This looks like a parsing detail and is a correctness one. The Makefile stamps
+`git describe`, so a build 39 commits past the v0.2.0 tag reports
+`v0.2.0-39-g888dbcd` — which is what the demo instance runs today. Read as
+semver, a pre-release suffix sorts *below* its release, so `0.2.0-39-g888dbcd`
+is older than `0.2.0` and an instance running code newer than the tag would be
+told to upgrade to the tag it is already past. Read the way the string is
+actually produced, the suffix means *past this tag*, and comparing the tag
+itself with a strict `>` on the remote side is the honest answer.
+
+The same rule is what makes **a build reporting `dev` never notify**, without a
+special case on the word: `dev` and `dev-dirty` have no leading numbers, so they
+do not parse, so there is nothing for a release to be newer than. m55.md asks
+for that behaviour and this is where it is enforced — one predicate rather than
+a name check that the next fallback string would slip past.
+
+An unparseable *remote* tag takes the same path and is a no-op, which is the
+milestone's other bullet, so three of its four version rules are one function.
+The fourth — drafts and pre-releases — is checked where the response is read,
+because it is a fact about the release rather than about its number.
+
+### D163 — the guard is the notification, keyed on the version
+
+**`update.available` is not repeated for a version already notified, and what
+records that is the notification row itself, read by
+`CountNotificationsAboutVersion` on `data->>'version'`.**
+
+`WarnAuditGrowth` suppresses on a clock, because the condition it reports stays
+true and gets worse while it is ignored — a week of silence is a week of
+somebody planning the work. A release is the opposite shape: it does not get
+worse, and re-raising it would be the product nagging about a decision the
+operator has already made. So the key is the version and there is no window at
+all.
+
+Two alternatives were available and both put the fact in a second place. A
+`notified_version` column on the settings row would disagree with the inbox the
+first time one write succeeded and the other did not, and it cannot express *this
+principal was told and that one was not* — which matters, because appointing a
+second principal after a release should tell the new one without re-telling the
+first. Reusing `CountRecentNotificationsOfKind` with a long window would answer
+the wrong question: it suppresses 0.5.0 because 0.4.0 was announced last month.
+
+The consequence is that `instance_settings` stores the *time* of the check and
+not the version it found, which is a narrower reading of m55.md's *nothing from
+it is stored beyond the version string and the time of the check* than the
+sentence permits. The version is stored — in the notification that carries it —
+and nowhere twice.
+
+## 2026-08-08 — M55: D159 corrected — an upgraded instance is asked, not assumed
+
+**Owner-set, 2026-08-08, at [step 3.4](phase-loop.md#3-land)**, on the question
+the worker raised rather than answered. **D164**, and it corrects
+[D159](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need) in the direction
+this log corrects things: the earlier entry stands as written and this one is
+what is true.
+
+**An instance upgrading into 0.3.0 is asked at the first administrative sign-in
+after the upgrade.** Until it answers, the check is **off**.
+
+**What D159 got wrong, and it was not the reasoning.** D159 argued that an
+upgrading instance has no first run, that the CHANGELOG leads on the change, and
+that the default should therefore apply. Every clause of that is true. What it
+missed is that [D149](../../Plan.md#phase-3-decisions) did not buy *on* — it
+bought *the operator decides knowingly*, and paid for it with a prompt surface
+this milestone had to build. Applying the default to the population the prompt
+cannot reach spends the guarantee on the smaller half: a fresh instance is asked,
+and every instance that has been running long enough to need an update checker
+is not.
+
+**So the setting has three states, not two.** Unanswered is a state, and it is
+what an upgraded instance is in. `update_check_enabled` cannot be a
+`boolean NOT NULL DEFAULT true` that already holds an answer nobody gave; the
+absence of an answer has to be representable, and *off while unanswered* is the
+only coherent behaviour in the window between the upgrade and somebody signing
+in.
+
+**The cost, stated rather than discovered.** This is the *off for upgrading
+instances* option wearing a friendlier name for as long as nobody signs in, and
+it inherits that option's weakness — an instance nobody administers stays quiet
+forever, which is the case the feature exists for. The prompt is what buys it
+back, and it buys it back only for instances somebody still logs into. That is
+the honest bound and it belongs in `docs/deployment.md` beside the air-gapped
+note, not in a footnote here.
+
+`LINKCTRL_UPDATE_CHECK=false` is unchanged and still only ever says no, so an
+air-gapped deployment is unaffected by any of this — it never reaches the
+question.
+
+
+
+## 2026-08-09 — M55: where an upgraded instance is asked, and what the third state costs
+
+[D164](../../Plan.md#phase-3-decisions) settled *when* an upgraded instance is
+asked — the first administrative sign-in — and that the check is off until it
+answers. Building that raised the questions an owner-set decision does not
+reach: which surface, how many times, and what the third state does to the two
+callers that already existed. **D165**, and it is one number because every part
+of it follows from *unanswered is a state a human closes, once*.
+
+### The surface is the dashboard, and the prompt persists until it is answered
+
+`Root` sends a signed-in visitor to `/dashboard`, so *at the first
+administrative sign-in* is a description of where the dashboard already is
+rather than of a route that had to be invented. The prompt is drawn for a reader
+holding `instance.admin`, on that page, and it stays there until somebody
+answers — an administrator who signed in with a `?next=` and went straight to
+the dispute queue meets it the next time they are on the page, which is what
+makes *first sign-in* a promise about the earliest opportunity rather than about
+the only one.
+
+Two alternatives, both rejected for reasons about cost rather than taste:
+
+| | Buys | Costs |
+| --- | --- | --- |
+| **Dashboard, persistent** (taken) | One query, on one page, for one kind of reader, and only while the question is open | An administrator who never opens the dashboard is never asked |
+| An interstitial after sign-in | Cannot be missed | It hijacks the sign-in for a question about a checkbox, and it has to decide what to do with `?next=` — either dropping where somebody was going or letting them past the question, which is the dashboard's behaviour with extra machinery |
+| A banner in the shell, on every page | Cannot be missed either | A query on **every** page render for a principal, forever — not only while unanswered, because *is it answered* is the query. The badge and the workspace switcher already cost two, and this would be the first one paid on behalf of a question that has been settled |
+
+The read that draws it is the last of four conditions and the only one that
+touches the database, so an ordinary member costs nothing and an answered
+instance costs one query on one page. A failed read draws no prompt, which is
+the trade `shell` already makes for the notification badge: a page somebody
+asked for must not fail because a control could not be decided.
+
+### It is asked once, in one statement
+
+`AnswerUpdateCheck` writes `WHERE id AND update_check_enabled IS NULL`, so the
+guard and the write are the same statement. Two tabs, a double click, or a
+second principal who was also looking at the prompt produce one answer and one
+no-op rather than last-write-wins, with no read-then-write window between them.
+
+The second submission answers `ErrAlreadyAnswered` and the handler treats it as a
+success — a 303 back to the dashboard, where the prompt is now gone. The reader
+wanted the question settled and it is; an error page would be reporting the state
+they asked for as a failure.
+
+**This is what keeps [D161](#2026-08-08--m55-an-update-checker-and-the-five-choices-a-daily-get-turned-out-to-need)
+standing.** D161 declined to build a settings page on the grounds that one
+setting does not need a permission, a route, a nav entry and a second way to
+change what the prompt already answered. A route that accepted a *second* answer
+would be that page, arrived at sideways: it would be the only way in the product
+to change an instance-level setting from a browser, and the next one would land
+beside it. There is exactly one answer to give, and afterwards the control is
+`LINKCTRL_UPDATE_CHECK`, where a deployment's decisions belong and where somebody
+with shell access can always find it.
+
+The write is therefore *not* the same statement as the setup form's.
+`SetUpdateCheckEnabled` stays unconditional, because the instance is unclaimed
+when it runs and an operator whose `Register` failed on a short password has to
+be able to retry with the box unticked — a conditional write there would make
+their first attempt's answer permanent, which is the failure the ordering in D161
+exists to prevent, reintroduced one layer down.
+
+### `update_check` omitted at `POST /api/v1/auth/setup` now means unanswered
+
+The field was a pointer so that *omitted* and *false* could differ, and under
+D159 omitted meant "keep the default, which is on". There is no default to keep
+any more, and the change is an improvement rather than a consequence to be
+absorbed: a client written before the field existed claims an instance exactly as
+it always did **and** cannot agree to an outbound connection on its operator's
+behalf by saying nothing. Such an instance is then in the same state an upgraded
+one is in, and is asked at the same prompt — one state, one surface, rather than
+a fourth case documented in a footnote.
+
+### No audit row, and the omission is the decision
+
+The three actions in `internal/instance` record changes to *who may act on every
+organization's disputes*. This is an operator answering a question about their
+own box, once, with no subject, no counterparty, and nobody to be accountable to
+but themselves. There is no surface that would read the row and no dispute it
+could settle. Writing one would be the appearance of rigour, and the reason not
+to is worth recording precisely because adding it later is cheap while removing
+it would not be.
+
+### The route cost one line in the reserved list
+
+`POST /instance/update-check`, which made `instance` a reserved alias.
+`/dashboard/…` would have named the setting after the page that happens to draw
+the prompt, and `/settings/…` would have registered the prefix D161 refused,
+inviting a `GET` beside it. The reserved-list guard failing on the new segment is
+that test doing its job; routing around it by picking an already-reserved prefix
+would have been choosing the name for the test's convenience.
+
+## 2026-08-08 — M56: nine references that moved, and one job on the wrong side of a distinction
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate). The
+heaviest drift any milestone file in this phase has carried, which is what a
+milestone written at planning time and built last looks like.
+
+Nine line references were corrected and none of them changes what
+[m56.md](phase-details/m56.md) asks for: `health.go`'s liveness handler,
+its readiness cache and degraded arm; `jobs.go`'s advisory-lock acquisition, its
+release-on-death comment, `runHostReload` and `reportJobStaleness`;
+`server.go`'s drain sequence; `main.go`'s SMTP probe comment; and
+`docs/deployment.md`'s *Scaling, honestly*, which had moved **sixty lines**.
+`jobs.go` moved again the same day, when [M55](phase-details/m55.md) added an
+eighth job family. `README.md:117` and `Plan.md:374-375` were checked and still
+resolve.
+
+**One of the nine is not a line number, and it is the one worth the entry.**
+
+**As it stood**, under *Failover of scheduled work*:
+
+> The three jobs that deliberately run on **every** replica — `runHostReload`
+> (`jobs.go:585`), `reportJobStaleness` (`:451`) and the audit-size gauge
+> (`:690`) — are documented as such with the reason.
+
+**As amended:** **two** jobs, `runHostReload` and `reportJobStaleness`.
+
+**The tree fact.** Neither of those two calls `withLeadership` — counted by
+reading each function body. The audit-size gauge does: it is inside
+`runMaintenance`, wrapped in
+`j.withLeadership(runCtx, advisoryLockKeyMaintenance, "audit-growth-warning", …)`
+at `jobs.go:792-794`. It is leader-only, and it is on the opposite side of the
+exact distinction the bullet exists to document.
+
+**Why a fact rather than an assertion.** The bullet's job is to write down what
+the tree already does so an operator does not have to reverse-engineer it. It
+counted wrong. Nobody could have decided that a function wrapped in
+`withLeadership` runs on every replica — the wrapper is the whole of the
+argument. What would have made this a prompt is the opposite direction: a
+proposal that the gauge *should* run per-replica is a change to behaviour, and
+this milestone is not making one.
+
+It is also the enumeration rule earning its place again. *Three* was written at
+planning time and was wrong about a tree that existed when it was written; the
+correction came from counting `withLeadership` calls rather than from re-reading
+the sentence.
+
+
+## 2026-08-09 — M56: the failover contract, and the probe that was holding the door open
+
+Most of this milestone wrote down what the tree already did. Three things needed
+deciding, and one of them is a behaviour change rather than a sentence.
+
+### D166 — the relay probe moves into a goroutine, not to after the listener
+
+[F173](deferred-findings.md), scheduled here by [M51.9](phase-details/m51.9.md)'s
+triage. A configured but unreachable `LINKCTRL_SMTP_HOST` held `run` for the
+whole of `LINKCTRL_SMTP_TIMEOUT` before `ListenAndServe` was reached — measured
+at **10.05 seconds** on the shipped default, and at a raised timeout the
+container never became healthy at all.
+
+[m56.md](phase-details/m56.md) left the placement open in as many words:
+*"whether it moves after it or into a goroutine is this milestone's to decide
+and to record"*. **A goroutine**, at the point the sender is constructed.
+
+*After the listener* is the option that sounds tidier and is not available at
+the cost it implies. `srv.Run(ctx)` blocks until shutdown, and it is the last
+statement of `run`; putting the probe after it means either probing during
+shutdown — useless — or restructuring the boot sequence so the listener starts
+on a goroutine of its own and `run` waits on something else. That is a change to
+how this program starts, made to relocate a diagnostic, and it would put the
+listener's own failure to bind (the port is taken) into a channel nobody was
+reading before. The goroutine changes one line and moves nothing.
+
+**What makes it safe is that nothing was ever waiting for the answer.** Between
+the probe and the listener there is no reader of its result: the mailer is
+constructed either way, the outbox drains on its own schedule and retries
+regardless of what the probe found, and a *configuration* mistake — an
+unparseable sender, credentials that would cross the wire in clear — is still
+fatal and is caught by `config.Validate` long before this. So the only thing
+sequencing bought was that `smtp relay reachable` printed before
+`http server listening`. That ordering is what was being paid for with ten
+seconds of dead server at every boot.
+
+`SMTPSender` is immutable and `Verify` opens a connection of its own, so there
+is nothing to race. The goroutine is bounded twice — by `SMTP_TIMEOUT` and by
+`ctx` — so a shutdown during startup cancels it instead of outliving it.
+
+Guarded by `TestTheSMTPProbeDoesNotGateTheListener`, which parses `main.go` and
+fails if the `Verify` call is not lexically inside a `go` statement. Its limit is
+written into the test: a probe moved into a helper that `run` then calls
+synchronously would pass. What it catches is the change that would actually
+happen — somebody deleting the `go` because the sequential form reads better.
+
+### D167 — the readiness contract is a rule about status codes, not about words
+
+`/readyz` answers `ok`, `degraded` or `unavailable`, and the temptation when
+writing this down was to give an operator a three-way table. It gives a two-way
+one instead: **503 → remove from rotation, 200 → keep, and `degraded` is a
+200.**
+
+The word is diagnostic and the code is the instruction, because the failure this
+contract exists to prevent is an operator reading `degraded` as *bad* and wiring
+it to *remove*. Redis down is `degraded` on **every** replica at once, so that
+wiring takes the whole deployment out over a cache problem — while every replica
+is still resolving every link from Postgres. A three-way table invites exactly
+that reading by presenting three things to act on. Two states, stated as codes,
+cannot be wired that way by accident.
+
+The same reasoning is why there is no startup probe and why saying so is part of
+the contract: migrations run before the listener binds, so *not yet ready* and
+*not yet listening* are one observable state, and a probe for it would be a
+second name for a connection refused.
+
+### The kill-a-leader test stayed an assertion, and did not become M57's problem
+
+[m56.md](phase-details/m56.md)'s Risks section named this as the milestone's
+genuine unknown — *"a flaky-test shape, and the bound has to be loose enough to
+survive CI while still meaning something"* — and required the swap to M57 be
+recorded rather than made quietly. **No swap.** It is an assertion, here.
+
+What made it tractable is that the kill did not have to be a process. Postgres
+releases a session-level advisory lock when the *session* ends, so
+`pg_terminate_backend` on the leader's own backend is exactly what a killed
+container looks like from the database's side: the connection goes away and no
+unlock is ever sent. That is deterministic — there is no scheduling to lose a
+race with — and it is the real mechanism rather than a stand-in for it.
+`TestLeadershipMovesToAFollowerWhenTheLeaderDies` measured the follower taking
+over **39ms** after the terminate, against a 5-second bound.
+
+The honest limit is written into the test: a Go test cannot kill the leader's
+*goroutine* with its connection, so the pass is abandoned by hand at the same
+moment. A leader that keeps working after its lock is gone is the two-leaders
+window D107 already documents, and it is a different claim from this one.
+
+### The per-replica job list is now enforced rather than described
+
+The amendment logged at step 1 corrected *three* per-replica jobs to *two* by
+counting `withLeadership` calls. A count that drifted once will drift again, so
+`TestOnlyTheDocumentedJobsRunOnEveryReplica` parses `jobs.go` and fails when the
+set of passes taking no advisory lock stops matching the documented pair. The
+failure message names the new pass and points at the paragraph in
+`docs/operations.md` that has to change with it.
+
+This is the enumeration rule — *counted rather than trusted* — moved from a
+habit into the build. The alternative was writing the number down more carefully,
+which is what was done last time.
+
+## 2026-08-08 — M56: a milestone file that had not heard about D104
+
+**An amendment, not a decision**, at [step 3.4](phase-loop.md#3-land), on a
+conflict the worker reported verbatim and refused to resolve. It was right to
+refuse: [phase-loop.md](phase-loop.md) says a conflict between the contract's
+files is a bug to report rather than a choice to make. This entry is the report,
+and the resolution is that there was no live choice in it.
+
+**As it stood**, in m56.md's *Documentation* section:
+
+> `README.md:117` and `Plan.md:374-375` follow. Every one of these is part of
+> the milestone.
+
+**As amended:** `Plan.md:374-375` were read and are unchanged deliberately;
+`README.md` does not follow here, and the file now says why.
+
+**The conflict, stated.** [workflow.md](workflow.md)'s *Before completing a
+commit* table carries D104 — *"`README.md` is not in this gate. It describes the
+released product, so a mid-phase commit does not touch it."* m56.md said the
+opposite about the same file in the same commit.
+
+**Why this resolves rather than prompts.** D104 is **owner-set and already
+recorded**, and it predates m56.md: it landed at
+[M45](phase-details/m45.md)'s close on 2026-08-05, and this file was written at
+Phase 3's planning on 2026-08-06. So the milestone file is not offering a second
+answer to a live question — it is stale with respect to a decision taken before
+it was written and never propagated into it. Applying an existing decision is
+not picking between two.
+
+The substance never conflicted either, which is what makes the amendment safe.
+`README.md:117` is the *Operations* feature row, and nothing M56 built makes it
+false. Multi-replica support is an **addition** to that row, and an addition is
+precisely the case D104 defers to the close — where `CHANGELOG.md`'s
+`[Unreleased]` section is what carries it until the tag. Had M56 falsified a
+claim README makes, D104's own reasoning would not have covered it and this
+would have been a prompt.
+
+**What is worth keeping is that the file said it at all.** A milestone file can
+carry an instruction that a later — or in this case *earlier* — rule forbids,
+and nothing checks for it: `make check-links` resolves every anchor in the
+sentence. It was found because a worker read both documents and would not choose
+between them. That is the split working, and it is cheaper than the alternative,
+which is a README edit landing mid-phase and nobody noticing for a phase.
+
+
+## 2026-08-08 — M57: the proof got a job bigger while the phase was running
+
+**An amendment, not a decision**, at [step 1](phase-loop.md#1-validate).
+
+**As it stood**, twice in [m57.md](phase-details/m57.md) — in *The two-leader
+window* and again in *Risks*:
+
+> …what each of the seven families actually does when it opens.
+
+> Establishing that all seven job families are safe under two leaders is a proof
+> about seven different pieces of code, and the honest answer may be *six are
+> and one is not*.
+
+**As amended:** **eight**, at both, and *seven are and one is not*.
+
+**The tree fact.** `families()` returns eight entries, and
+`cmd/linkctrl/jobs_test.go` asserts the number — it moved from 7 to 8 earlier
+the same day when [M55](phase-details/m55.md) added `update-check`, with its own
+advisory key `0x6c63_6a6f_6273_0108`. The two-leader comment moved with it, from
+`jobs.go:117-127` to `:145-155`.
+
+**Why this one is worth an entry rather than a silent fix.** The number is not
+decoration in this file: M57's obligation is *a proof about N different pieces
+of code*, so N is the size of the work. The new family is also the only one in
+the product that opens a socket outwards, which makes it the least obviously
+safe under two leaders — and it is bounded by a database row rather than by a
+ticker precisely so a second leader cannot double the request. That is a claim
+M57 now has to check rather than inherit, and it would not have been on the list
+at seven.
+
+A count written at planning time and read at build time is a prediction about
+what the phase will add to the thing being counted. This phase added to it.
+
+
+
+## 2026-08-09 — M57: a rolling deploy that cost nothing, and the window that turned out to be closed
+
+Four decisions, and the first is the one the milestone existed to force: *close
+the two-leader window, or measure it, and record which.* It is closed, and the
+argument is not the one that was expected.
+
+This closes the third clause of the
+[2026-08-06 negative](#2026-08-06--two-queue-rows-closed-as-already-built-and-where-the-behaviour-lives) —
+*"no measurement of behaviour during a rolling deploy beyond the two-leaders
+window D107 states"* — and the owner's constraint of the same date, that high
+availability must not come at the cost of single-instance installs. The first
+two clauses were M56's.
+
+### D168 — the deploy-shaped two-leader window is closed by construction, and the crash-shaped one is not closable
+
+`jobs.go` has said since D107 that during a rolling deploy each job family can
+have two leaders, one old and one new, for the length of the deploy — because
+the generation-0 binary holds `advisoryLockKeyRetiredV1` for everything and
+none of the per-family keys contend with it. m57.md's instruction was to close
+that or bound it, and *"what is not acceptable is carrying the sentence forward
+unchanged for a third phase"*.
+
+**It is closed, and the mechanism was already in the tree.** Generation 1 —
+seven per-family keys — shipped whole in **0.2.0**; the count checks out against
+`git show v0.2.0:cmd/linkctrl/jobs.go`. Running more than one replica became a
+supported configuration in **0.3.0**, which is what M56 wrote and what
+`docs/deployment.md` now says. So the only binary that takes the retired key is
+0.1.x, and there is no upgrade path a deployment is allowed to perform that puts
+a 0.1.x replica beside a 0.3.0 one in a rolling deploy — because running several
+0.1.x replicas was never a thing anybody was told they could do. Both binaries
+in any supported deploy ask for the same keys, and `pg_try_advisory_lock` is
+mutually exclusive. That is the whole of it.
+
+**Which means the way to re-open it is a rename or a renumber, and nothing
+else.** A family that has shipped and is then given a different key gives the
+two binaries one lock each, neither excluding the other — generation 0's failure
+reproduced one family at a time, with no generation bump to make it visible. So
+the released assignments are frozen in
+`TestAReleasedFamilyKeepsItsAdvisoryKey`, read out of the 0.2.0 tree rather than
+copied from the constant block, which would agree with itself. Adding a family
+is free and stays free: `update-check` (0x0108, M55) arrived mid-phase and could
+not have contended with anything, because no older binary asks for it.
+
+**What is left is not deploy-shaped and cannot be closed the same way.**
+`withLeadership` holds the lock on a connection of its own while `fn` works on
+another, so a leader whose *lock* connection dies — a terminated backend, a
+dropped network, a pause long enough to break keepalives — releases the lock
+while its pass keeps running. Nothing detects that, which is the same absence
+that makes failover need no coordinator, so it is a window with no bound on it.
+The defences stay second-layer and stay necessary: `FOR UPDATE SKIP LOCKED` on
+both drains, idempotent whole-day rollups, `IF NOT EXISTS` partitions, the
+compare-and-set automation watermark, and `ClaimUpdateCheck`'s single matching
+`UPDATE`.
+
+**All eight, one at a time, because m57.md asks what each family actually does
+when the window opens and eight is the size of the obligation:**
+
+| Family | Under two leaders | What holds it |
+| --- | --- | --- |
+| `rollup` | Both recompute the same whole days and upsert the same values. No difference. | Idempotent by design — an incremental "add what arrived since the watermark" design was declined precisely because it double-counts on retry |
+| `dimension-rollup` | The same, on the same statement shape | The same |
+| `mail` | Each claims a disjoint set of rows; nobody's message is sent twice | `ClaimDueMail`'s `FOR UPDATE SKIP LOCKED` under a 60s lease, asserted by `TestAKilledReplicaSMailClaimReturnsAndIsSentOnce` |
+| `webhooks` | The same, and the residual duplicate is the one the contract already admits to | `ClaimDueWebhookDeliveries`, same shape, same test beside it; `X-LinkCtrl-Delivery` is where the receiver closes the rest |
+| `maintenance` | Partition creation is `IF NOT EXISTS`; the purges and the retention drop are deletes whose second run finds nothing; the audit-size gauge is a measurement and already runs on every replica on purpose | Each statement, not the lock. **One read-then-write guard here** — `WarnAuditGrowth` reads `NotifiedSince` and then inserts — and it was probed and did not reproduce; see F180's evidence |
+| `domains` | **Records one verification twice.** The audit record is written on `full.VerifiedAt == nil`, read a DNS round trip before the write it is predicating | Nothing. `MarkDomainVerified` is idempotent and `UnverifyDomain` is properly compare-and-set, but the *record* is decided from the stale read |
+| `automation` | The second replica loses rather than duplicates | The compare-and-set watermark, which D77 chose knowing leadership was a window and not a fence |
+| `update-check` | One request a day, not two | `ClaimUpdateCheck` — only one `UPDATE` can match a row whose timestamp the first one moved |
+
+**So seven are and one is not, which is exactly what m57.md's Risks section
+predicted.** The domains pass is filed as [F180](deferred-findings.md#open)
+rather than fixed, because m57.md says in as many words that the unsafe one is a
+finding. It is also the family most exposed to the window it fails under, being
+the longest pass in the product — a batch of DNS lookups bounded at ten minutes,
+against a rollup measured in seconds.
+
+The pattern worth carrying out of the table is not the count. **Every family
+that survives two leaders does so because a single statement decides the
+outcome; the one that does not is the one where a Go `if` decides it.** That is
+the thing to check when a ninth family arrives.
+
+**D107 is not wrong and is not being corrected.** Every sentence it wrote about
+generation 0 is still true of generation 0. What this adds is the bound it could
+not have: that generation 0 cannot be in the room.
+
+### D169 — the single-instance guarantee is a behavioural check against the release image, not a list of required dependencies
+
+The owner's constraint of 2026-08-06 is that high availability must not cost
+single-instance installs, and m57.md asks for it as a test rather than an
+intention. Two shapes were available.
+
+A **structural** one: enumerate the required dependencies somewhere and assert
+the list has not grown. Cheap, runs in milliseconds, and worthless — it is a
+list somebody updates, and the failure worth catching is not a configuration
+change but some code path that starts assuming a client is non-nil.
+
+A **behavioural** one, which is what was built. `scripts/single-instance-check.sh`
+starts the release image on a Docker network carrying **only Postgres** — the
+name `redis` does not resolve, and the script asserts that before it asserts
+anything else — and then drives the whole surface over HTTP: `/healthz` and
+`/readyz`, claiming the instance, minting a key with the image's own `lctl`,
+creating a link, redirecting twice, editing it and confirming the redirect moved,
+the login form and a session and the dashboard, the scheduler having reported a
+success, and eleven wrong passwords drawing a 429. Then a second limb with Redis
+**configured and unreachable**, which is a different branch — a client is built
+and every call through it fails — asserting `degraded`, 200, and a working
+redirect.
+
+It costs about ninety seconds and two container images. That is the price of the
+guarantee being a fact rather than a promise, and both sabotages confirmed it
+bites: making a nil Redis fatal in `Health.check` failed it at the readiness
+assertion, and moving `mem.delete` below the `redis == nil` return in
+`InvalidateAlias` failed it at the invalidation one, with the message naming the
+new required dependency in both cases.
+
+**It rides `make ci-image-smoke` rather than becoming a workflow step.** That is
+the one CI job holding a Docker daemon and no service containers, which is
+exactly what a one-container run needs; and the standing rule is that what a CI
+step *does* lives in a make target and reaches CI on the next push, while what CI
+*is* needs the owner to apply a proposal. The target's help text changed with it,
+because a target that now does two things and describes one is the drift this
+repository keeps finding.
+
+### D170 — the rolling deploy is measured through a load balancer that satisfies the contract, in two columns
+
+Measuring a rolling deploy without a load balancer measures **DNS caching**. The
+generator would resolve the service name once, keep dialling a replica that no
+longer exists, and produce a failure count that says nothing about this product.
+M56's contract is *stated* in load-balancer terms — 503 removes, 200 keeps,
+`degraded` is a 200, and the drain delay must outlast interval × threshold — so
+the honest instrument is a balancer that obeys it. `test/ha/haproxy.cfg` is that
+contract in one vendor's syntax, and it is in the repository rather than in
+`slo.md` because it is the measurement's most load-bearing input: change `inter`
+or `fall` and the deploy column means something else.
+
+It also supplies a number m57.md asks for and nothing else could. **Requests
+retried** is only a quantity if something retries; HAProxy's `wretr`/`wredis`
+counters are that number, read from the balancer rather than inferred from the
+generator's view.
+
+**Two columns, because one would be a number with nothing to compare it to.**
+The graceful column — SIGTERM, drain, replace — read **zero failed and zero
+retried** across 240,002 requests while every replica was destroyed and rebuilt.
+On its own that reads as *rolling deploys are fine*, which is not the finding.
+The killed column is the same replacement with the drain removed: 905 retried,
+four response errors, a worst case of a full second, and a generator that went
+from three concurrent connections to 212 to hold the rate. **The difference
+between the columns is the drain delay**, and it is the first time that number
+has been priced rather than argued.
+
+One thing the pair establishes that is worth saying against this product's own
+interest: **nothing failed in the killed column either, and the credit belongs
+to the balancer.** `retries 3` with `option redispatch` turned all 905 into
+latency. A balancer configured without them answers 503 to every one of them, and
+`operations.md` now says so.
+
+### D171 — the server-side histogram is summed per replica, because a rolling deploy destroys the counters a delta would need
+
+Every other section of `slo.md` reads the server histogram as a
+before-and-after delta, which works because one process holds it for the whole
+window. A rolling deploy replaces all three processes: two thirds of the
+counters are destroyed mid-run and the survivors are new ones starting at zero.
+
+So each replica is scraped when the window opens **and again immediately before
+it is replaced**, and its replacement is scraped at the end from a counter that
+began at zero; the three contributions are summed. That is why
+`scripts/rolling-deploy.sh` snapshots a replica before stopping it rather than
+only at the two ends, and it is the only structural difference from
+`scripts/load-test.sh`, whose bucket reader it otherwise shares deliberately —
+two readers of one histogram is two things that can disagree about what the SLO
+is.
+
+**The sum undercounts and the size of the undercount is itself a reading.**
+236,575 against the generator's 240,002 in the graceful column; 239,470 against
+239,833 in the killed one. The gap is what a replica served between its final
+scrape and actually stopping — so the graceful gap is nearly ten times the
+killed one, and *that difference is the drain, measured by accident*. The
+direction is always the same, which is what makes the figure safe to quote: the
+server-side percentages are computed over requests that were certainly served
+inside the window.
+
+The advisory-lock poll is recorded on the same terms. It samples `pg_locks`
+every 100ms and found no key held by two sessions in 1,482 samples per run — but
+it cannot see a window shorter than its own interval, and most families hold
+their key for a single indexed query, which is why only the four with real work
+were ever observed holding one. It is corroboration for D168 and is written down
+as corroboration, not as the proof.
+
+## 2026-08-09 — M57.9, the pre-release review: what it checked, what it found, and what it refuted
+
+The second of Phase 3's reviews, over [M46](phase-details/m46.md)–[M57](phase-details/m57.md),
+run to [M32.9](phase-details/m32.9.md)'s method. Recorded here because M32.9
+requires the review's own output to be written down — *"what was checked, what
+was found, what was refuted — so a later reader can tell coverage from luck"* —
+and because one of its outcomes is a decision rather than a finding.
+
+### What was checked, and how
+
+Gates on the tree as reviewed, forced with `GOFLAGS=-count=1` because a cached
+result is not a measurement: `make check`, `make test-integration` (173s in
+`test/integration`), `make check-links` (2559 links resolve).
+
+The twelve definitions of done were re-read against the tree, and the by-use
+half of [m57.9.md](phase-details/m57.9.md) was run against a test instance
+rebuilt from nothing — Playwright out of `tools/render-verify/node_modules`, and
+`curl` where a browser bought nothing. The instance was pointed at a **relay
+that cannot be reached** (`192.0.2.1:2525`) rather than at no relay, because
+that is the configuration in which invitation and verification mail lands in
+`mail_outbox` where a reviewer can read the token out of it.
+
+**Verified by use, each against the bullet that asked for it:**
+
+| Claim | What was done |
+| --- | --- |
+| M57.9 — a fresh instance, end to end | `/setup` claimed, a second workspace created, a second organization created and switched into, an invitation sent and redeemed into a **new** account, and open signup taken through the emailed confirmation. No 5xx and no page error on any step |
+| M57.9 — **an upgrade from 0.2.0** | A database created and migrated by the **v0.2.0 image**, claimed under it, and two keys minted by 0.2.0's `lctl` — one workspace-pinned, one organization-wide. Then this build on the same volume. It migrated 03700–04300 on boot; both keys keep their `organization_id`, the pinned one lands on the **same user and the same workspace** it did before, and the schema diff is **249 lines added against three removals**, each intended and each named by the milestone that made it: `api_keys.organization_id` losing `NOT NULL` (M54), `api_keys_org_idx` rebuilt for it (M54), and `qr_codes_link_key` dropped (M50) |
+| M57.9 — no configuration became silently required | The compose file demands the same three variables it did at 0.2.0, and `MFA_SECRET_KEY` is optional by construction (`cmd/linkctrl/main.go:1138`). Checked by running this build with the variable **deleted from the env file**: it boots, warns once, and `/account/mfa` says *"Not available on this instance"* and names the variable. `POST /account/mfa` answers **503** with the same sentence rather than a nil dereference |
+| M57.9 — the second factor, on a real authenticator | TOTP implemented from RFC 6238 in the harness rather than borrowed from the product. Enrolled with a code that implementation produced; a code from the enrolment window was then **refused on replay**; a fresh code signed in; a recovery code signed in and the count moved 10 → 9; the same recovery code was refused on replay; disabling took a password and a code, and left `mfa_recovery_codes`, `mfa_pending_logins` and `users.mfa_secret` at **zero rows** with `mfa.enabled`, `mfa.recovery_code_used` and `mfa.disabled` in the audit log |
+| M57.9 — an account deleted, and its residue read back | The instance principal and the sole owner of a surviving organization are both refused **409**, each naming its remedy. An ordinary member's deletion went through; the erasure pass (`onStart` on the maintenance family, so a restart runs it) then set `anonymized_at`, emptied the address and replaced the actor snapshot with `deleted account` on both entries. The audit API still returns `actor_id`, so the entries still correlate — and `metadata` still carries the address, which is [F177](deferred-findings.md) reproduced rather than a new row |
+| M57.9 — the SLO on the final build | `make seed-slo` then `make load`: **240,001 cached redirects, 100% under 0.5ms** against a 20ms target. `make load-uncached` drove 24,536 database reads in the same shape |
+| M57.9 — the conformance test constrains something | `scripts/single-instance-check.sh` passes on `linkctrl:test`. The nil-Redis guard at `internal/redirect/resolver.go:258` was then deleted, the image rebuilt, and the check **failed at the redirect step, exit 52** — *"Empty reply from server"*, the process down. Restored by counter-edit, never `git checkout`; `git status` clean afterwards |
+| M51.9's findings, confirmed rather than assumed | **F173** — a configured but unreachable relay measured at **10.05s** before M56 now costs **0.10s**, and `GET /login` answered in 0.8ms while its retries were in flight. **F174** — both demo QR codes now hang off `launch`, which answers **302**. **F172** — closed by narrowing M46's bullet, and the narrowing is what F184 below now exercises. **F175** stands, carried to M58 |
+| M55's outbound connection | One `GET`, two headers, no query string and no identifier (`internal/update/update.go:179-187`) — the enumeration in [m55.md](phase-details/m55.md) is exact |
+| M57's *runs in CI* | `.github/workflows/ci.yml:173` runs `make ci-image-smoke`, and `single-instance` is its prerequisite |
+| The demo shows the phase | One erased user and eight tombstoned audit rows, one enrolled account with ten recovery codes, one account-wide key beside four pinned ones — read from `linkctrl-demo-postgres-1` |
+
+### What was found — four rows, F181 to F184
+
+All four confirmed against the tree before filing, all four **out of spec**: not
+one of them makes a shipped milestone's own claim false, so none was fixed here.
+They are [M58](phase-details/m58.md)'s to triage.
+
+- **[F181]** — a deleted **and erased** account's address is still rendered on
+  `/invites`, because nothing purges invitations. The residue `docs/SECURITY.md`
+  names is the audit metadata; this is a second one, and unlike that one it is
+  bounded by nothing.
+- **[F182]** — the invitation form and the members grant form both default to
+  the **most privileged role the actor can assign**, because neither marks an
+  option `selected` and the options are in rank order. The per-member *change*
+  form, ten lines away, gets it right.
+- **[F183]** — an administrator who cuts their organization out of an
+  account-wide key's reach stops it **acting** there and not **reading** about
+  it: `Service.Workspaces` filters on `APIKeyOrgID != nil`, which is exactly the
+  half a revoked account-wide key is not.
+- **[F184]** — `/account/mfa` overflows sideways by **174px at 360px**, and the
+  offender is the enrolment QR: a 488px `<svg>` on a 360px viewport.
+
+**F184 is the one worth naming as a method result.** M46's bullet was narrowed
+at its reopening to the two tags the scan checks, and the amendment named what
+that leaves unenforced — *"a flex row of six controls, an unbroken URL in a
+table cell, **a fixed-width SVG**"*. Two milestones later M53 added a page with
+a fixed-width SVG on it. The narrowing was correct and the prediction inside it
+came true inside the same phase, which is the argument for the scan being
+extended rather than for the bullet being widened again.
+
+### What was refuted, so it is not re-found
+
+Four candidates died before they could be filed.
+
+- **A TOTP code refused seconds after enrolment** read as a broken verifier. It
+  is the product refusing a code already spent: enrolment consumed that window,
+  and a code from the next one signed in.
+- **`POST /account/mfa` answering without a CSRF token** read as a missing
+  check. There are no CSRF tokens anywhere in this product: protection is
+  `http.NewCrossOriginProtection` (`internal/httpx/router.go:976`), which reads
+  `Sec-Fetch-Site` and `Origin`, and a client sending neither is a non-browser
+  client by design. `curl` is that client.
+- **`account.Delete` open-coding its API-key refusal** rather than calling
+  `requireSessionActor` read as the credential-type branching the inherited
+  Permissions rule forbids. It is D87's limb, correctly applied, with the reason
+  quoted at `internal/account/account.go:218-221`; the helper is unexported in
+  `internal/auth`.
+- **Three removals in the 0.2.0 → this-build schema diff** read as DDL that is
+  not additive. All three ship in a **minor** version bump, which is the bound
+  the inherited rule states, and each is named by the milestone that made it.
+
+### D172 — the doc-cost judgement: the growth is one amendment, and it is defended
+
+`make doc-cost`, then the judgement
+[phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+requires.
+
+**The number.** The `/work phase` resume charge went **61693 → 62297 bytes**
+across M52–M57, **+1.0%** for six milestones. All of it is one file —
+`phase-details/README.md`, 11884 → 12495 — and inside that file it is one line:
+the *Permissions* row of *What every milestone inherits*, amended a third time
+by M54. Measured, not attributed: `git diff 4167735 HEAD` over that file adds
+3295 bytes and removes the status words it replaces.
+
+**The judgement: defend.** The comparison is M51.9's, which trimmed: there the
+growth was +11% into a file whose realized read ratio had fallen to **0.71**,
+which is what *charged and skipped* looks like. This file's ratio is **0.88**,
+second only to workflow.md's 0.91, so the bytes added are bytes being read — and
+the line they were added to is the one [step 1](phase-loop.md#1-validate)
+consults before every milestone. The amendment is also not optional: the
+amending rule requires the bullet as it stood, the bullet as amended, and the
+tree fact that forced it, and M54 moved which credentials the *see* limb reaches.
+
+**What is not defended is a fourth amendment.** That row is now roughly a fifth
+of the file it sits in, and it carries three amendment notes that decisions.md
+already holds in full. If M58 or a later phase amends it again, the M51.9 move
+is the right one: leave the rule and the pointers, and let the history live where
+history lives. Said here so the next reader inherits the threshold rather than
+re-deriving it.
+
+## 2026-08-09 — M57.9's triage: four rows approved, and the one the owner widened
+
+[M57.9](phase-details/m57.9.md)'s findings put to the owner on the day they were
+filed, per [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others) —
+*their product is findings, and findings are the owner's to schedule*. Recorded
+here rather than left in the conversation because a decision made in prose
+evaporates, and because one of the four answers is not the option that was
+recommended.
+
+### D173 — all four are work, and they are M58's
+
+**[F181]** — the erased address on `/invites` is **scrubbed in the erasure
+pass**, over documenting it as a second residue beside [F177](deferred-findings.md).
+The cost was stated when the choice was offered and is not discovered later: the
+scrub edits an organization's record of whom *they* invited, which is the exact
+objection that keeps F177 a design question, and it has to read the address
+before the same pass clears it, so the statements inside one pass acquire an
+order. What the organization keeps is the row, the role, the state and who
+invited; what goes is the address of somebody who asked to be forgotten.
+
+**[F182]** — both creation forms **default to the lowest role**, over requiring a
+deliberate choice. The narrower fix — the invitation form alone — was declined,
+so the members grant form moves with it and the three role controls on those two
+pages finally agree.
+
+**[F183]** — the read half of a reach revocation is **closed**, over being stated
+as a bound. It costs a clause on `internal/auth/workspace.go:131` and, unless it
+rides the resolution that already happened, a query per listing.
+
+**[F184]** — the SVG is constrained **and the test is made able to see it**. This
+is the answer that widened: the recommendation was the one-attribute fix, with
+extending the scan named as a separate and larger decision about false positives.
+The owner took both. That is the right call on this row's own evidence — M46's
+amendment predicted a fixed-width SVG would be what the scan missed, and a fix no
+test can see is a fix that regresses the same silent way — and it means M58 owes
+a measurement of rendered width rather than a check of two tag names.
+
+**None of the four was in spec**, so none was fixed inside the review; approving
+them is what makes them work, and M58 is where the work happens. The other twenty
+open rows are untouched by this and still owe the owner the same review, one at a
+time, which is M58's first act rather than this entry's.
+
+## 2026-08-09 — M58's triage: sixteen rows, and the conflict that decided seven of them
+
+[M58](phase-details/m58.md)'s first bullet is that every row in
+[deferred-findings.md](deferred-findings.md) has been owner-reviewed. The phase
+loop stopped on it twice — at the end of the [M57.9](phase-details/m57.9.md) run
+and again on the next `/work phase`, because M58 is the only un-`done` row and
+[step 1](phase-loop.md#1-validate)'s fallback has nowhere to fall. This entry is
+what unblocks it, and it is written before any of the work it approves, for the
+reason the entry above it was.
+
+### The count was twenty, and it is sixteen
+
+The entry above ends *"the other twenty open rows"*, and the run's note said
+twenty too. It is **sixteen**, counted mechanically rather than recalled: 22
+rows in the *Open* table, minus [F90](deferred-findings.md) — reviewed and
+deliberately carried at M45's third triage — minus the five already approved
+into M58, being F175 from M51.9's triage and F181–F184 from D173. Nothing moved
+to produce the difference. The number was simply wrong, in two files, and
+survived a review whose whole subject was that file. Counting a tracker rather
+than quoting it is the correction, and it is the same lesson F69 and the
+demoCoverage row count taught.
+
+### The conflict, and why seven rows were not approved a second time
+
+Three places in this repository schedule F160–F166 as M58's work:
+[phase-3-candidates.md](phase-3-candidates.md) at its Phase 3 section,
+[phase-details/README.md](phase-details/README.md)'s Phase 3 preamble, and
+**D114** itself — *"a defect does not need a milestone: it is a row in
+deferred-findings.md and it is fixed at M58 alongside the rest. Seven were
+filed, F160–F166."* All seven rows nevertheless read `Unreviewed`, against
+[workflow.md](workflow.md)'s *approval is per item, not per batch — an
+unreviewed row is not scheduled work*.
+
+That is two records disagreeing, which the loop reports rather than resolves.
+Put to the owner as its own question, ahead of the dispositions, because it
+decides seven of the sixteen on its own.
+
+**The owner held that D114 stands.** The seven were approved at planning on
+2026-08-07; the *Reviewed* columns are stale rather than open, and they are
+corrected to say so rather than being stamped with today's date. The date on an
+approval is evidence about when somebody looked, so back-filling it with the day
+the omission was noticed would destroy the only fact the column carries.
+
+What the conflict cost is worth naming, since it will recur: a batch decision
+recorded in decisions.md and in two planning files did not reach the tracker the
+rule is enforced from, and nothing noticed for two days. The rule is not wrong —
+per-item approval is what keeps *I noticed something* from becoming scope — but
+it is enforced by a column that a batch approval has no path to write.
+
+### D174 — the dispositions
+
+**Fourteen of the sixteen are work, and they are M58's.**
+
+**F160–F166**, the seven from the Phase 3 walkthrough: approved as of D114, per
+above. Four of them are the demo failing to demonstrate — the choropleth and
+country list suppressed on a GeoIP *configuration* check the demo does not
+satisfy (F160), the demo's only verified hostname unverifying 24 hours after
+every reseed (F162), five zero-click links on the dashboard's front page (F165),
+and one link reporting two different click totals (F166). Three are the product:
+a *Check DNS* that flashes *not verified* above a *Verified* badge (F161), a role
+grant that reports success and changes nothing (F163), and every bar chart in
+the product labelling its axis ceiling as the peak (F164).
+
+**F167, F169, F170, F177, F178, F180**: all six approved, over a recommendation
+that carried F178. Two of them are siblings of rows D173 already approved, and
+that is why they were put as a group rather than one at a time:
+
+- **F177** is F181 with the address in an audit record's `metadata` instead of
+  on `/invites`. D173 opens the erasure pass for F181; doing F177 anywhere else
+  would open it twice. The design objection that kept F177 unscheduled — that
+  removing the address edits somebody *else's* audit entry — is unchanged and is
+  now accepted rather than answered.
+- **F178** is F183's other half. D173 closes the read a reach revocation missed;
+  F178 is that same revocation being invisible on the key list. **The owner took
+  it against the recommendation**, so M54's story closes on the seeing side as
+  well as the acting side. The cost is what the row already priced: a query, a
+  response field, an OpenAPI change and two surfaces, inside the phase's largest
+  milestone.
+
+**F171** is approved **and its design question answered in the same breath**,
+which is why it was asked separately: the row says in as many words that the fix
+is a decision rather than a patch. Uploading a logo forces error correction to
+level H, the symbol grows, and a code already near the 2000px raster bound stops
+downloading as a PNG. The owner chose **re-fit the size at H on upload,
+silently** — the payload is unchanged, so a code already printed still scans,
+and refusing the upload would say no to a picture the SVG draws correctly. **The
+recommendation was to re-fit *and say so*, and the owner took less**: no message.
+Recorded because the loop proposed the larger behaviour and did not get it, which
+is the shape of answer most likely to be re-derived differently later. What it
+means for M58 is one behaviour and no copy.
+
+**F176 and F179's reorder are not decisions at all.** Both are corrections to a
+record — Plan.md's Phase 3 decisions table is short by twelve D-numbers
+(D146, D147, D150–D154, D166, D167, D169–D171, counted 2026-08-09 against the
+file rather than against the row's own headline of two), and decisions.md's index
+is out of file order at five rows. workflow.md's standing approval covers a
+documentation change in advance, so M58's documentation pass makes both and no
+prompt was owed. Saying so is the point: two of the sixteen never needed the
+owner at all, and treating them as though they did would have been the loop
+spending attention it had been told not to spend.
+
+**F179's second half is a decision, and it is approved.** The index has now
+drifted out of order twice — F143 was closed by fixing it, and nothing was added
+that would notice a third — and `make check-links` is structurally unable to see
+it, because every one of those anchors resolves and resolving is all it checks.
+A ten-line test comparing index anchor order to heading order is approved as
+work. It needs sabotage-verifying like any other test, and this entry's own index
+row is the first thing it will be run against.
+
+### What M58 now carries, and the honest reading of it
+
+Nineteen fixes — the five D173 and M51.9 approved, plus the fourteen here — on
+top of the comment-truth sweep, the candidates-file update, the full
+documentation pass over every documentation file, the doc-cost judgement and the
+0.3.0 release. [m58.md](phase-details/m58.md)'s own *Risks* section says the
+phase's budget is the risk and that a milestone turning out to be two is a
+phase-boundary conversation rather than an insertion. That prediction now has a
+number against it, and it was stated to the owner as the cost of the option they
+took rather than discovered during the build.
+
+The scope gate permits it: *no more than one milestone per commit* forbids
+bundling two, and splitting one across several commits is explicitly fine. So M58
+being large is a question about how much one worker can hold, not about whether
+the tree can represent it.
+
+## 2026-08-09 — M58, amendment: the SSO comment is not where the bullet says
+
+Found at [step 1](phase-loop.md#1-validate), reading M58's comment-truth bullets
+against the tree before spawning a worker. Seven of the eight sites the sweep
+enumerates are exactly where it says they are. One is not.
+
+**The bullet as it stood**, in `phase-details/m58.md`:
+
+> - `internal/store/migrations/00200_identity.sql:20` and
+>   `internal/auth/service.go:379` — both mention SSO-only accounts. SSO is
+>   **not** built this phase; M53 discharges only the MFA limb of that scope
+>   row. Those comments describe a still-unscheduled thing and must say so.
+
+**The bullet as amended:**
+
+> - `internal/store/migrations/00200_identity.sql:20` and
+>   `internal/auth/service.go:690` — both mention SSO-only accounts **and both
+>   carry a `(Phase 3)` marker**. SSO is **not** built this phase; M53
+>   discharges only the MFA limb of that scope row. Those comments describe a
+>   still-unscheduled thing and must say so. A third mention at
+>   `internal/auth/service.go:410` — *"SSO-only or erased account."* — carries
+>   no phase number and needs nothing; it is named so the sweep does not
+>   re-find it and wonder.
+
+**The tree fact.** `grep -n -i sso internal/auth/service.go` returns exactly two
+hits, at `:410` and `:690`, counted 2026-08-09. Line `:379` sits inside the
+comment above `Login` explaining why the registration oracle is refused before
+any lookup, and mentions neither SSO nor a phase. Of the two real hits, only
+`:690` carries the promise the bullet is about — *"the column is nullable for an
+SSO-only account (Phase 3)"* — and `:410` is a bare classification with no phase
+number, which is why the amendment names it rather than adding it to the work.
+
+**Why this is an amendment and not a prompt.** Which line a comment is on is not
+something anyone could have decided differently, and prompting about it would
+spend the owner's attention on `grep`. What the bullet *asserts* — that comments
+promising SSO in Phase 3 must stop promising it — is untouched, and the site
+count it implies goes from two to two, not from two to three: `:410` is named as
+needing nothing. Had the assertion moved, this would have been a prompt and M58
+would still be waiting.
+
+The bullet was written 2026-08-06, before M51–M54 added roughly nine hundred
+lines to that file. It is the ordinary way a definition of done written ahead of
+the code goes stale, which is the case
+[the amending rule](phase-loop.md#amending-a-bullet) exists for, and it is worth
+noting that the sweep's own list is headed *counted rather than recalled* — it
+was counted, and then the tree moved under it. Counting at planning time buys
+correctness at planning time and nothing after, so step 1 recounting is the part
+that actually holds.
+
+## 2026-08-09 — M58: the phase close, and the seven counts that were wrong
+
+The close itself decided nothing. [D173](../../Plan.md#phase-3-decisions) and
+[D174](../../Plan.md#phase-3-decisions) had already dispositioned every open row,
+and this milestone is the work those two authorised. What is worth recording is
+what carrying it out found, because it is the same thing seven times and the
+milestone's own definition of done had predicted it in four words: *counted
+rather than recalled*.
+
+**Every enumeration this close checked had drifted. Every single one.** Not one
+of the seven was wrong because somebody was careless; each was true when it was
+written and stopped being true when the tree moved underneath it. The pattern is
+worth more than any individual correction, and it is why this entry leads with it
+rather than with the fixes.
+
+| What claimed a number | Said | Is | How it drifted |
+| --- | --- | --- | --- |
+| [F176](deferred-findings.md)'s own row, on Plan.md's decision table | fifteen missing | **thirteen** | D114 and D172 landed in the table between the count and the fix |
+| [M58's triage](#2026-08-09--m58s-triage-sixteen-rows-and-the-conflict-that-decided-seven-of-them), recounting the same gap | twelve | **thirteen** | it missed D168 — a count taken to correct a count, itself one short |
+| [m58.md](phase-details/m58.md)'s comment-truth sweep | eight `Phase 3` sites | **eleven** | three sites the list never held, two of them created by the fix to a third |
+| `docs/deployment.md`'s `_FILE` secret list | two | **five** | [F45](deferred-findings.md)'s exact class, on a list that had already done it once |
+| `README.md`'s audit vocabulary | thirty-two actions | **thirty-nine** | true at 0.2.0; Phase 3 added the account lifecycle's own |
+| `docs/data-model.md`'s migration count | 35 | **43** | already one short when 0.2.0 shipped with 36 |
+| [F177](deferred-findings.md)'s row, on who writes an address into audit metadata | six writers | **seven** | `instance.go` writes two, and the row counted the file once |
+
+Three more had no number to be wrong about and were wrong anyway.
+`docs/data-model.md`'s per-table status table was **missing `api_keys`,
+`api_key_org_revocations` and `instance_settings` entirely** — `api_keys` appears
+in that document's own entity diagram nine lines above the table that omits it —
+and carried `automation_rules` at 11 columns against 12 in the schema. Every one
+of the 43 tables now matches a count read out of the migrated database, which is
+what that file says it was derived from.
+
+`internal/store/migrations/04000_account_erasure.sql` named
+`TestSuspendedStatusHasNoWriter` as the test holding a stated absence in place.
+No such test exists; it is `TestNothingWritesTheSuspendedStatus`, in
+`internal/account/status_test.go`, and `docs/data-model.md` had the name right
+all along. A comment naming a guard that cannot be found reads, to the next
+person, as a guard that was removed.
+
+`cmd/lctl/demo_phase2.go` said **four** places deliberately go around a service
+and *"there is no fifth in this file"*, while the statements themselves each said
+*"one of the three"*. The two had drifted apart from each other, inside one file,
+with no third party needed. Both counts are now gone and the rule is stated as a
+property — *the places that go around a service each say so at the statement* —
+which is [F69](deferred-findings.md)'s remedy applied a second time, and the
+second time is the argument: this project has now twice fixed a drifted count by
+deleting the count.
+
+**What this says about the mechanism.** The inherited rule for `demoCoverage()`
+already refuses to write its own number down, and the reasoning there was that
+*"saying four was a fact nothing kept true; saying its trailing rows is a fact
+that stays true however many there are"*. That reasoning generalises and had not
+been generalised. It is not being turned into a rule here, because a rule saying
+*never write a count* would forbid the counting that found all seven of these —
+the count in a **milestone file** is doing work, since it is what a sweep is
+checked against. The distinction the evidence supports is narrower: **a count in
+a definition of done is an instruction and earns its place; a count in a
+comment or a reference document is a claim, and a claim nothing re-derives is a
+claim that rots.** Whether that becomes a workflow rule is the owner's, and it is
+not proposed here — a phase close is the wrong place to take it, for the reason
+[F90](deferred-findings.md) is not repaired at one.
+
+**Two rows were filed rather than fixed**, which is the trigger working rather
+than scope being dodged. [F185](deferred-findings.md) is
+[F180](deferred-findings.md)'s defect at the second of two sites twelve lines
+away — the manual *Verify* button, where F180's row scopes itself to the job
+family — and fixing it would have been the loop widening its own scope on a
+defect nobody approved. [F186](deferred-findings.md) is a demo coverage row that
+failed once in eight runs and has not been reproduced; a race nobody has shown is
+a report and not a finding. Both are named in the worker's report so the
+orchestrator can overrule, which is the part that keeps *file it* from meaning
+*bury it*.
+
+**[F162](deferred-findings.md)'s fix does not reach the running demo, and cannot
+from here.** `LINKCTRL_DOMAIN_VERIFY_INTERVAL=0` is written into a freshly
+generated `.env.demo` by `scripts/instance.sh`, which is the tracked file and the
+only one a commit can carry. `instance.sh init` refuses to touch an env file that
+already exists, `.env.demo` is untracked, and a worker may not touch the demo
+instance at all — the demo is step 3's and nowhere else's. So the tracked fix is
+complete and the live instance needs one line added by hand before
+`make demo-update`. Saying so here rather than only in a report, because the
+report is gone by the next session and the demo will still be wrong.
+
+**The doc-cost judgement: the contract grew by 358 bytes, and they are defended
+rather than claimed to be zero.** *(Rewritten 2026-08-10 on the reviewer's
+finding. The first version of this paragraph said the growth was zero and quoted
+a report generated before `2f8fe6c`, which had moved both of the files it called
+unchanged. Every figure below is measured against the tree as it stands, and the
+report was regenerated after the last documentation edit in this milestone rather
+than before it — which is the mistake, not the numbers.)*
+
+Measured with `wc -c`, this milestone against `2f8fe6c`:
+
+| | HEAD | now | |
+| --- | ---: | ---: | --- |
+| Any task — CLAUDE.md + [workflow.md](workflow.md) | 21400 | 21400 | unchanged |
+| `/work phase` adds [phase-loop.md](phase-loop.md) | 30899 | 30899 | unchanged |
+| …and [phase-details/README.md](phase-details/README.md) | 12488 | 12846 | **+358** |
+| …and Plan.md's longest ordering row | 194 | 194 | unchanged |
+| **Resume floor** | **64981** | **65339** | **+358** |
+
+**All 358 bytes are one amendment note**, on the inherited *Permissions* rule,
+and the defence is what it buys. That row's *see* limb has now been amended twice
+for the same drift — M54 removed the premise that a key is issued for one
+organization, and F183's fix inside this milestone made *an account-wide key is
+not bounded* false — and each note is the reason the next reader can tell a
+correction from a rewrite. A rule that silently acquires a fourth meaning is a
+rule nobody can be held to.
+
+**Part of it was paid rather than argued.** Written as a fourth separate note the
+amendment cost 806 bytes; M54's note and this one are about one limb and one
+drift, so they are merged into a single note and the growth is 358. That is
+[the trimming half](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+of the obligation, applied where it belongs — a merge, not a deletion, and it
+keeps both dates and both facts.
+
+What grew and is **not** charged against a resume is reference: since `2f8fe6c`,
+[decisions.md](decisions.md) by 34,254 bytes and
+[deferred-findings.md](deferred-findings.md) by 48,000. The findings file moved
+because
+**twenty-one rows crossed from *Open* to *Closed* and acquired a *Closed by* cell
+written to the standard this file uses, seven more were filed already closed and
+carry one from birth — twenty-eight cells — and nine new rows were filed,
+F185–F193.** Their realized read ratios are **0.00** and **0.04**: both are read
+by anchor and by range, never whole, and the ratio is the evidence rather than the
+intention.
+
+The thing worth watching is not the total. It is that `deferred-findings.md` has
+passed half a megabyte while its *Open* section holds **three** rows — F90, F187
+and F193. Almost all of that file is closed history, and the day somebody wants it
+smaller the answer is a split by state rather than a deletion — recorded here so
+that when it is proposed, it is proposed as a move and not as a tidy-up.
+
+## 2026-08-09 — A third actor, for the claim nobody was checking
+
+Owner-set at [M58](phase-details/m58.md)'s acceptance, in these words: *add an
+additional independent sub-agent review to each work milestone before moving off
+of it to catch these mistakes that keep making us re-open closed milestones.*
+Not a milestone's decision — a change to the loop — so it carries no milestone
+number, and this line is what prompted it. [W38](workflow-changes.md#made).
+
+### What the two-actor split cannot see
+
+Both existing actors read the same document. The worker builds `mN.md`'s
+bullets; the orchestrator, at acceptance, checks the tree against those same
+bullets. The split is real and it works — a builder is the worst judge of its
+own work — but both judgements are bounded by *this milestone's* definition of
+done, and **nothing in the loop reads the diff against what the rest of the
+repository already promises**.
+
+That is the gap the reopenings come through. A reopening happens when a shipped
+milestone's claim turns out false, and by construction the loop never looked:
+the milestone that shipped it was accepted long ago against bullets that were
+satisfied at the time, and the milestone in flight is checked against bullets
+that say nothing about it.
+
+The evidence was in the room when the owner asked. M58's own worker filed
+[F187](deferred-findings.md) — a two-CTE erasure hazard that has been in the
+pass since M52 wrote it, that `TestErasureScrubsBothDisputeLabels` cannot see
+because it erases its accounts on separate passes, and that falsifies what M52
+says about itself. It was found by an agent building something else and noticing
+the same hazard twice. Nothing in the loop would have caught it, and the reason
+is structural rather than a lapse: no step was looking.
+
+### Why the reviewer gets the milestone file and not the report
+
+Same reason a worker does. A reviewer handed the worker's account of what it
+built reviews the account — it inherits the framing, the vocabulary and the
+blind spot in one read, and the finding it is most likely to miss is the one the
+report does not mention. It gets the milestone number, the branch, and
+phase-loop.md, and it reads the tree.
+
+### Why it edits nothing at all
+
+Not the code, not the records, not even a deferred row for what it finds. Two
+reasons, and the second is the load-bearing one.
+
+A reviewer that can act is a second builder, and the loop already has one
+builder too many for its own comfort. But more than that: **its findings have
+dispositions that are not its to make.** A finding in spec for this milestone is
+the worker's next attempt; a finding out of spec is a deferred row; a finding
+that falsifies a *shipped* milestone's claim is a **reopening**, and reopening is
+scheduling, which is the owner's. A reviewer writing rows would be pre-empting
+all three from the position with the least context.
+
+### Why silence had to be forbidden
+
+A reviewer that found nothing must say so in as many words. An empty report and
+a reviewer that did not look produce the same string, and the whole value of the
+step is that somebody looked — so the one thing it must never return is nothing.
+
+### What it costs, stated
+
+One agent per milestone, run synchronously, because acceptance waits on it. On a
+seventeen-milestone phase that is seventeen more agents and a longer wall clock
+on every iteration. The cost is accepted rather than argued away: this phase has
+reopened milestones repeatedly, each reopening costs more than a review does,
+and the reopenings arrive later — after a `done` row has been asserting
+something untrue for a while.
+
+**What it does not fix.** A reviewer reads one diff. A claim falsified by the
+*accumulation* of several milestones is still nobody's job, and the `X.9`
+adversarial reviews remain the only thing looking at that. This step narrows the
+gap; it does not close it.
+
+## 2026-08-09 — M58: the eight rows its own work filed, and the bullet that could not be true
+
+Two things, both from the same prompt at [M58](phase-details/m58.md)'s
+acceptance, and the amendment comes first because the disposition depends on it.
+
+### The amendment: a bullet no commit could satisfy
+
+**The bullet as it stood**, in `phase-details/m58.md`:
+
+> - Every row in [deferred-findings.md](deferred-findings.md) has been
+>   owner-reviewed. Each approved row is fixed to the milestone-claim standard
+>   and sabotage-verified where it adds tests. Unapproved rows are explicitly
+>   carried or closed by the owner, and the file reflects that.
+
+**The bullet as amended:**
+
+> - Every row **open in deferred-findings.md when this milestone's findings step
+>   ran** has been owner-reviewed. […] Rows **this milestone's own work files**
+>   are dispositioned on their own and do not re-open the sweep.
+
+**The tree fact.** M58's build filed eight rows — F185 through F192 — every one
+of them by the deferral trigger working exactly as written: something noticed
+out of spec, recorded rather than fixed. So at the moment M58 would land, the
+file held eight unreviewed rows and the bullet was false. It would have been
+false again after any round of fixing them, because fixing findings is how
+findings get found. The bullet described a state the loop cannot reach, and
+the only question was which weaker true thing it should say instead.
+
+**Why this was a prompt and not an amendment made in passing.** The
+[amending rule](phase-loop.md#amending-a-bullet) turns on whether the bullet is
+wrong about a *fact* or about what it *asserts*. A count or a filename is
+arithmetic; this is the scope of a definition of done, and a loop that quietly
+narrowed its own completion criterion would be doing the one thing the rule
+exists to prevent. The owner chose the narrowed reading knowing the alternative:
+hold M58 until the file is quiet, with no bound on how many rounds that takes.
+
+### D175 — all eight are work, and one of them reopens a shipped milestone
+
+**All eight approved**, over a recommendation that took only the erasure cluster
+and carried the other five. F185 is [F180](deferred-findings.md)'s twin twelve
+lines away in the same function; F186 is a coverage row that saw a real
+divergence once and has not since; F188 and F189 are two more address-bearing
+sites the erasure scrub does not reach; F190 is the QR size control fitting
+against a stored level rather than the drawn one; F191 and F192 are fixtures
+unfaithful to production in the way [F167](deferred-findings.md) was, found by
+the fix for F167.
+
+The recommendation to carry five rested on their severity, and severity is not
+what the owner weighed. Three of the five are the *same class of defect as
+something already being fixed in this milestone*, twelve lines or one fixture
+away, and a milestone that fixes one instance of a defect and files its twin is
+how a repository accumulates rows that all read *see the one above*.
+
+**F187 reopens [M52](phase-details/m52.md).** Its row says so in its own
+evidence — *this is a defect of M52, not of the M58 work that found it: the
+two-CTE shape has been there since the erasure pass was written* — and
+[workflow.md](workflow.md) is unambiguous about what follows: a defect that makes
+a shipped milestone's claim false reopens that milestone rather than arriving as
+a successor, because a successor leaves a `done` row asserting something untrue.
+
+The rule is applied rather than waived, and what it costs is real and was stated
+before the choice: M58's work is already built and green in the tree, so M52's
+fix cannot ride in the same commit without bundling two milestones. M58 commits
+first, M52's row goes back to `in progress (reopened)`, and its correction is
+written into `m52.md` under M52's own number. The phase does not close with an
+un-`done` row, so the reopening is ahead of the phase PR rather than after it.
+
+**What M52 owes**, so the reopening is not re-derived: erasing two accounts in
+one batch, where one filed a dispute the other decided, leaves one of
+`destination_disputes`' two label columns unscrubbed. Postgres applies one of two
+data-modifying CTEs writing the same row and silently drops the other.
+`TestErasureScrubsBothDisputeLabels` cannot see it, because it erases its two
+accounts on separate passes and the CTEs never contend. The merge that fixes it
+is the one M58 already applied to the audit pair — one `UPDATE`, two `CASE`s,
+joined against the `batch` CTE.
+
+## 2026-08-10 — M58: the second pass, and the three fixes that went wider than their notes
+
+D175 sent seven rows back into M58 — F185, F186, F188, F189, F190, F191, F192 —
+on the ground that each is the same defect as something the milestone was already
+fixing. Five of them were the one-line repairs the rows described. Three were not,
+and this entry is the three, because in each case the row's *fix note* turned out
+to be narrower than the row's own claim, and taking the note literally would have
+closed a row that was still true.
+
+### D176 — a scrub reaches the sentence, not only the key
+
+[F188](deferred-findings.md#closed) named `notifications.data`'s `"email"` key and
+offered two answers: scrub it, or decide a notification is the reader's record
+rather than the subject's. Neither is the whole question. `invite.go:973` writes
+the departing account's address into the jsonb detail **and** into the title —
+`"<address> accepted your invitation"` — and the title is what `/notifications`
+renders. A scrub reaching the key alone would have left the finding's headline
+sentence, *an erased account's address survives in the notification sent to
+whoever invited them*, exactly as true as it was before.
+
+**So the rule is the sentence, not the column**: where an erasure scrub reaches a
+record, it reaches every field of that record a reader is shown, and the jsonb
+detail is not privileged over the prose beside it merely because it is the field
+with a name that looks like an address. This is the same reasoning F177 already
+carried one table over — an erasure that reaches the label and stops at the
+detail one column over has not erased the person — and this is that argument
+applied to the next column along.
+
+The mechanism keeps the statement out of the business of knowing how the sentence
+is worded: the title is rewritten with `replace(n.title, n.data->>'email', …)`
+rather than against the batch, because the two strings came from one value at one
+call site, and both CASEs read the pre-update row so the address is still there to
+match. A wording change to the notification cannot break it and cannot silently
+stop it working.
+
+The cost is named rather than waived: this edits the title of a record belonging
+to somebody who is still here, which is a stronger act than editing a detail
+nobody reads. It is taken for the reason the metadata scrub was taken — the
+alternative is a product whose erasure claim is specific enough to check and
+wrong when checked — and the **outstanding invitation** stays the other answer,
+untouched, because that one is an offer to an address rather than a record of a
+person.
+
+Verified rather than reasoned: leaving `title` alone while scrubbing `data` fails
+`TestErasureReachesTheAddressInAnArrayAndInSomebodyElsesNotification` with
+*member@example.com accepted your invitation* still on the page.
+
+### F186 was not a flake, and the reproduction says so
+
+The row recorded a coverage assertion that failed on three seeds in one process
+and on a second test beside it, then passed fifteen times, and named two
+candidates it could not distinguish: a visibility problem between the erasure
+write and the assertion's read, or an intermittent failure of the write.
+
+**Neither.** While [F177](deferred-findings.md#closed)'s fix was being built, the
+`audit_logs` scrub was briefly two data-modifying CTEs, and Postgres applies one
+of two CTEs writing the same row and drops the other — which is
+[F187](deferred-findings.md#open)'s hazard, and which F177's own evidence records
+being corrected on `audit_logs` at the time. The one row the M52 coverage query
+counts is the departed account's `invitation.redeemed`, and it satisfies **both**
+predicates at once: the actor is the erased account, and the metadata carries that
+account's address. The metadata write won, the label write was dropped, the label
+stayed an address, and the count was zero — deterministically, for that build,
+while the seeder's `erased (1)` came from a different UPDATE in the same
+statement.
+
+Reproduced 2026-08-10 by splitting the CTEs again: the failure returned on all
+three seeds and on the pin test, which is the observation entire. The merged shape
+was restored byte-for-byte and the generated code diffed to prove it.
+
+**No code changed, and that is the decision.** The cause was repaired before the
+row existed, and the regression is already caught — on the split shape,
+`TestErasureTombstonesTheActorAndKeepsTheEntriesCorrelated` fails at
+`account_test.go:461` and `:466`. Adding a third assertion for the same shape
+would be a test that duplicates one that works. What the row bought instead is a
+note on `scrubbed_audit` saying the single statement is a correctness requirement
+and naming what forgetting it cost, so the next person who finds that UPDATE
+unwieldy meets the reason before the temptation.
+
+The general lesson is worth more than the row: **fifteen green runs did not
+disprove anything.** The tree had changed under the observation, so re-running was
+measuring a different program. A finding raised against an uncommitted tree needs
+the tree's state recorded with it, and this one did not have it.
+
+### Two fixtures needed more than their notes said
+
+[F191](deferred-findings.md#closed)'s note said to give the two QR fixtures the
+attributes `qr.Render` emits. Done literally, that would have written `width="296"`
+— what the fixture's stated style comes to — and the overflow scan compares
+against a 360px viewport, so the assertion the row exists to reach would still not
+have fired. The fixture's style moves to scale 20 and every number in it moves
+together, so the stub states 740 and the scan has something to act on. Proved the
+only way a coverage claim can be: the panel's wrapper was stripped of
+`max-w-full overflow-x-auto` and the scan fired on **both** pages, where before it
+could fire on neither.
+
+[F192](deferred-findings.md#closed)'s geo half surfaced a second borrower.
+Dropping `GeoUnavailable` from a fixture that also sets `GeoAvailable` — a pair
+F160 made unbuildable — broke `TestWithNoGeoIPTheMapSaysSoAndDrawsNothing`, which
+had been *inheriting* the contradiction rather than building the state it is
+about. It now sets both halves itself. A fixture that asserts an impossible state
+is not only untested markup; it is a state other tests quietly borrow, and
+correcting it is how you find out which ones.
+
+Its folder half got an assertion it was not asked for, for the same reason F167
+got one: a fixture change with nothing reading it regresses the way it arrived.
+`TestTheFolderSelectDrawsAndSaysWhereTheLinkIsFiled` renders three states — filed,
+unfiled, and a workspace with no folders at all — and each of the template's three
+branches was sabotaged in turn to confirm it fails.
+
+## 2026-08-10 — M58: the third pass, and the documents a diff falsified on its way past
+
+Twelve findings and five minors, from [W38](workflow-changes.md#made)'s first
+run as a third actor, on the milestone whose acceptance asked for it. Gates were
+green on the rejected tree and gates were never the question: eight of the twelve
+are documents this diff either wrote or walked past, asserting something the same
+diff had made false. That is the half the reviewer exists for, and it found it
+on its first outing.
+
+The individual fixes are in the tree and in the commit. What is worth recording
+is the shape, the three amendments, and one judgement that changed.
+
+### The shape: a fix's blast radius is documents, not callers
+
+Six of the eight documentation findings are one mechanism. A change lands, its
+own record is written carefully, and the *other* places that described the old
+behaviour are never enumerated — because nothing enumerates them. F160 moved the
+choropleth from a configuration test to a data test and left
+[D65](../../Plan.md#phase-3-decisions), [m37.md](phase-details/m37.md) and
+`docs/usage.md` all saying the map is not drawn without a GeoIP database, the
+last of those being a page a user reads. F183 bounded an account-wide key's reads
+and left `docs/SECURITY.md` contradicting itself **inside one table cell** and
+the inherited *Permissions* rule saying the opposite. The scrub widened past *no
+foreign key to `users`* and left `internal/account/account.go` — the doc comment
+that owns the feature — describing two tables, three tombstone sites of seven,
+and a re-entrancy argument that covers three scrubs of five.
+
+The mechanism that would catch this is not a habit, it is a question asked at a
+fixed point: *what did this change make false somewhere else*. That is exactly
+W38, and it is why the row above records it as a loop change rather than as
+advice.
+
+### Three amendments, and why none of them was a prompt
+
+Each is a fact the tree settles, so each is corrected and logged rather than
+asked about — [the amending rule](phase-loop.md#amending-a-bullet)'s first row.
+
+**[m37.md](phase-details/m37.md)'s choropleth bullet.** It stood as *"With no
+GeoIP database configured the map states data is unavailable, exactly as the
+ranked list already does — tested."* It now carries a narrowing note: the
+sentence is reached when there is no country in the history **and** no database.
+The tree fact is `internal/httpx/web_links.go:1148` — `geoShowable :=
+data.GeoAvailable || hasResolvedCountries(...)` — which is F160's approved fix,
+already closed against this milestone. What the bullet asserted about *that*
+state is unchanged and still tested; what moved is which instances are in it.
+
+**[D65](../../Plan.md#phase-3-decisions).** It stood as *"no map at all when
+there is no GeoIP database"* and *"the map is **not rendered**"*. It now reads
+*no map at all when there is nothing to draw*, with the superseded clause named
+in the cell in [D11](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised)'s
+idiom. The refusal is untouched — a world uniformly in the no-data colour is
+still never drawn — and only its test moved. The tree fact is the same line.
+
+**The inherited *Permissions* rule.** It stood as *"an *account-wide* key is not
+bounded, because M54 removed the premise rather than the rule"*, and named
+`Identity.APIKeyOrgID` as how the site tells the two kinds apart. It now reads
+*bounded only by the organizations it has been cut out of*. The tree fact is
+`internal/auth/workspace.go:145`, which calls `Identity.keyReaches`
+(`service.go:105-110`): one predicate, `APIKeyOrgID` inside it rather than at the
+call site, and `APIKeyBarredOrgIDs` excluded for an account-wide key. This is the
+row's second amendment on the same limb, which is why the two notes are merged
+into one rather than stacked — see the doc-cost judgement above for what that
+cost and what it paid for.
+
+### F187 is not documented away, it is documented
+
+`docs/SECURITY.md` gained a sentence in this milestone's documentation pass
+claiming the sweep scrubs both `destination_disputes` label columns, which
+[F187](deferred-findings.md#open) — filed by this milestone, open, and
+[D175](../../Plan.md#phase-3-decisions)'s reopening of M52 — proves it does not.
+A documentation pass that adds a fresh assertion a known-open row disproves is
+worse than the stale text it replaced, because the stale text was at least not
+written by somebody holding the finding.
+
+So the claim is now stated with its exception, in three places and at three
+depths: a named subsection in `docs/SECURITY.md` for the compliance reader, a
+clause in the erasure table cell beside the columns it is about, and a sentence
+on Plan.md's M52 discharge bullet. [m52.md](phase-details/m52.md) is deliberately
+**not** touched — D175 puts that correction under M52's own number when the
+reopening lands, and writing it here would take the trail out of the one place
+the reopening exists to keep it in.
+
+### Four defects, and the one that is a lesson
+
+`internal/link/verification.go` branched on `row.VerifiedAt`, read before the DNS
+lookup, while `failed` — the row the write returned — was already in hand and
+used on the next line. The hourly pass can unverify inside that gap, so F161's
+fix could answer *"Links on it are still served"* above a badge saying otherwise:
+F161, inverted, by its own repair. It is F180's defect at a third site, and the
+file's own comment twelve lines down states the rule it broke. One token, and a
+test that holds the gap open with the fixture built for exactly that.
+
+`internal/httpx/web_invitations.go` echoed a posted role back when it was
+non-empty rather than when the form was drawing it, so a slug the issuer may not
+offer marks no `<option>` and the browser falls to the first — which is F182
+itself, on the arm F182's fix did not reach. The members page had it right
+already, through `pickRole`.
+
+`internal/ui/funcs.go` labelled the middle gridline `fmtInt(top/2)`, integer
+division: `top=1` gave two gridlines reading "0" and `top=5` labelled a 2.5 line
+"2". Same class as [F164](deferred-findings.md#closed), inside the chart work
+F164 caused. The middle line is now drawn only when halving the axis is exact,
+and the test states the property — label × PlotH = top × (PlotH − Y) — rather
+than the two cases, because a third arrives whenever `niceCeil`'s candidates
+change.
+
+`qr.Render` defaults to `qr.FluidClass`, and `POST /api/v1/auth/mfa/enrol`
+returned the result as `qr_svg` — two Tailwind utilities, in a JSON body, to a
+client that has never seen this product's stylesheet. The principle was written
+in this milestone at `internal/link/qr.go:488`, applied to the downloaded file
+and not to the JSON one, because both consumers share one function and a default
+is a claim about every call site that has not overridden it. The class is now the
+caller's, and a source scan pins each call site to the one its consumer needs —
+the same shape as the QR thumbnail's guard, and for the same reason.
+
+### Named so the next sweep does not re-find them
+
+`internal/store/migrations/02500_domain_ownership.sql:10,14` still speak of Phase
+3 as future. They are rationale for a shape the migration chose, not promises of
+unscheduled work, so they are outside the comment-truth bullet and are left
+alone. Written down because the sweep that reads this file next will meet them
+and wonder, which is the same service `internal/auth/service.go:410` was given.
+
+## 2026-08-10 — M58: the fourth pass, and counting a class instead of patching a list
+
+Eleven findings from the reviewer's second run, and the rejection led with the
+thing the eleven were evidence *of* rather than with the eleven: **a worker
+handed file:line pairs fixes those pairs, and the next review finds more of the
+same shape further out.** Three of run 2's findings were second sites of
+enumerations run 1 had already named. Handing over eleven more pairs would have
+produced a third round of the same, and *the same gap surviving two workers* is
+a stop condition, so this pass was told to enumerate each class, state the
+count, and explain any site it found and did not change.
+
+That instruction is what this entry records. The individual edits are in the
+diff; the counts are the thing that cannot be recovered from it, because a
+number nobody wrote down is a number the next pass has to re-derive and will
+re-derive differently.
+
+### How the counting was done
+
+`git grep` over **tracked files of every kind** — Go, SQL, templates, YAML,
+markdown, tests — with the pattern aimed at the *claim* rather than at the
+wording any one site used, then every hit read. Prose and generated surface were
+searched together, which is how `api/openapi.yaml` kept turning up: it is a
+document that reads like configuration, so a sweep filtered to `docs/` misses it
+and a sweep filtered to code misses it too.
+
+Three of the four classes had a site in a **test's failure message**, in a
+**shipped milestone's own file**, or in both. Neither is where a documentation
+pass looks, and both are read by somebody eventually.
+
+### The four classes, counted
+
+**What suppresses the choropleth** (F160 made it data-gated, not
+config-gated) — **fourteen** sites state the rule; **five** changed here,
+**eight** were already correct, **one** is history and stays.
+
+**That verdict was wrong, corrected at the fifth pass on the same day**, and the
+correction is left in place beside it because the shape of the error is the point
+of this whole section. The class was counted, and every member was then checked
+against the *previous sentence about the fix* rather than against the predicate:
+`geoShowable` is evaluated over one link's `LinkStats` for the 7, 30 or 90 days on
+screen, and thirteen of the fourteen — including all five called already correct
+below — described it as a fact about the **instance** or about the **history**.
+Re-derived by reading every statement rather than the files they sit in:
+**twenty-nine** statements of the rule, **twenty-two** changed, **seven** checked
+and left. See
+[the fifth-pass entry](#2026-08-10--m58-the-fifth-pass-a-scope-a-scan-and-two-counts-that-missed-a-member).
+
+Changed: `Plan.md:110`, `docs/deployment.md`'s *Optional: geographic analytics*,
+`docs/configuration.md`'s `LINKCTRL_GEOIP_MMDB_PATH` row,
+`internal/ui/templates/partials/worldmap.html`'s branch comment, and a `Fixed`
+entry in `CHANGELOG.md`'s 0.3.0 — the release had no operator-facing record of
+the change at all, while 0.2.0 carried *"with no GeoIP database configured the
+map is not drawn at all"* with nothing correcting it. Already correct: D65,
+`m37.md`, `docs/usage.md`, `internal/ui/choropleth.go`'s three — the
+`Unavailable` field, the `GeoUnavailable` constant and `Choropleth`'s own
+doc — and `internal/httpx/web_links.go`'s two. **Of those eight only D65 was**:
+it says *a resolved country in the breakdown*, which is the predicate. The other
+seven said *instance* or *history* and were rewritten at the fifth pass. Left: the 0.2.0 entry, which was true of
+0.2.0 — a changelog is not amended, it is superseded, which is why the fix is a
+new entry rather than an edit to the old one.
+
+Verified in the class and deliberately unchanged: `api/openapi.yaml`'s
+`country`, `region` and `city` **rule conditions** and its click-record `country`
+field, which are genuinely gated on the database and are what
+`TestOnlyTheRuleFormAsksWhetherGeoIPIsConfigured` pins; and
+`TestWithNoGeoIPTheMapSaysSoAndDrawsNothing`, whose name describes a state it
+does build, whose body was corrected at the third pass, and which
+[the M58 third-pass entry](#2026-08-10--m58-the-third-pass-and-the-documents-a-diff-falsified-on-its-way-past)
+names — renaming it would falsify an append-only reference to buy nothing.
+
+**What the erasure sweep reaches** — **sixteen** sites; **eight** changed,
+**eight** were already correct, and the `dbgen` layer regenerated from the two
+SQL comments among them.
+
+The two miscounts the review named were both inside comments *rewritten this
+milestone to fix a miscount*, which is the whole argument for counting against
+the statement rather than against the previous sentence:
+`internal/account/account.go` said **three** scrubs keyed on an id and there are
+**four** — `scrubbed_invitations` is keyed on `i.redeemed_by = p.id` and guards
+with `i.email <> ''`, so it fit neither branch of a dichotomy drawn between
+tombstone guards and no guard at all — and `accounts.sql`'s re-entrancy note said
+**two** value-matched scrubs where there are **three**, the notification scrub
+having joined them without being counted in.
+
+Also changed: `cmd/linkctrl/jobs.go`, which still carried verbatim the *two
+tables … deliberately have no foreign key to `users`* wording that
+`account.go` was rewritten to disown — in the file that **calls** the sweep;
+`accounts.sql`'s own file header, which stated the retired criterion in its
+fifth line; `api/openapi.yaml`'s `DELETE /account` description, the surface an
+integrator reads; and `CHANGELOG.md`'s 0.3.0 entry, which contradicted itself
+across 340 lines — *"an address held inside an audit record's detail … is not
+reached by the sweep"* against *"it now also removes the address from the
+**detail** of audit records"*, in one release. The code settles it: it is
+reached. That paragraph also under-counted what is deliberately **left** as one
+address where `docs/SECURITY.md` states two, so the corrected sentence names
+both.
+
+`Plan.md`'s erasure limitation row gains F187's exception, which
+[the third pass](#2026-08-10--m58-the-third-pass-and-the-documents-a-diff-falsified-on-its-way-past)
+put in three places and this row was the fourth site of the same claim.
+
+**One judgement against a recorded one, and it is narrower than it looks.**
+That third-pass entry rules `m52.md` **not** touched, because D175's reopening
+owns the F187 correction and writing it early takes the trail out of the place
+the reopening exists to keep it. This pass adds a note to `m52.md` anyway — for
+the **criterion**, not for F187. *The rows with no foreign key to `users`* is
+still what M52 built and is no longer what the sweep runs on, and the note says
+exactly that, marked M58, pointing at `EraseDeletedAccounts` for the
+enumeration. It leaves F187 untouched and unmentioned there, so the reopening
+finds its file as it expects it.
+
+**An API key's reach after M54** — **fourteen** sites; **two** changed,
+**twelve** already correct.
+
+`api/openapi.yaml:4219` said *"An API key sees only the organization it was
+issued for"* — false for an account-wide key since M54, in the diff that
+rewrote the same claim correctly at `docs/SECURITY.md` and at
+`phase-details/README.md` and that edits `openapi.yaml` for other reasons. The
+second is the `CHANGELOG.md` half of the same thing: 0.2.0 *narrowed*
+`GET /api/v1/workspaces` to one organization and told integrators to *"issue a
+key in each organization you need to reach"*, and 0.3.0 reverses that for an
+account key and said nothing. Reversing a documented instruction silently is
+worse than never having documented it.
+
+Verified and unchanged: `test/integration/workspace_test.go`'s
+`TestAKeyIsToldOnlyAboutItsOwnOrganization`, which reads as a pre-M54 claim and
+is not one — the key it mints is workspace-bound, therefore pinned by
+construction, and the bound it asserts is the one that still holds.
+
+**Bot-bypass "Phase 3" promises** — **eight** sites owe the truth; **four**
+changed, four were already correct. Two further mentions are in this log and
+stay.
+
+**Eight is seven plus one, and the one is a different kind of site**, which is
+what left three counts of this set in the tree at once. **Seven** places promise
+a human blocked as a bot recourse in Phase 3; the eighth is
+`phase-3-candidates.md`'s own *count* of them, which was wrong and is fixed in
+the same breath. So `m58.md` and the candidates file saying **seven** and this
+entry saying **eight** are the same tally counted to different edges, not a
+disagreement — stated here 2026-08-10 rather than left for a fourth count to
+find.
+
+m58.md's own bullet asserts four, D108 falsified five, and
+`phase-3-candidates.md` said *"the three sites"* while listing four — three
+different counts of one set, in the section whose stated method is counting.
+The four already correct are `01800_bot_blocking.sql`,
+`internal/link/domain_settings.go`, Plan.md's *Known limitations* row and
+`docs/SECURITY.md`. The four changed are `test/integration/bots_test.go`'s
+failure message, **both** of `m32.5.md`'s — its *Deliberately not in this
+milestone* bullet and its *Risks* paragraph — and the candidates file's count,
+which now names all seven promise sites rather than a number.
+
+`m32.5.md`'s bullet also pointed at *Plan.md's Not in Phase 2* for the deferral,
+and that list no longer carries the row: the pointer named a place the promise
+had already left, which is the same defect one level of indirection out.
+
+The two left are `decisions.md:60` and `:4033` — *why the bypass is Phase 3, and
+what that costs*. The log is append-only and that heading is a true record of a
+decision taken when it was true. A history that edits itself to stay current is
+not a history.
+
+### A fifth class the review named as one finding, counted the same way
+
+`refitForLogo` holds the drawn size stable, and **six** sites describe what a
+logo does to size; **two** were wrong and are changed. `README.md` was corrected at the third pass and
+`CHANGELOG.md`'s 0.3.0 `Fixed` entry was right from the start; `web_qr.go`'s
+flash and `link_qr.html`'s help text say *denser*, which is what actually
+changed. The two that said the code can **grow** are the two an integrator and a
+user read — `api/openapi.yaml`'s logo description and `docs/usage.md` — and both
+now say the size is held and re-fitted, with the one honest caveat: whole
+modules are the unit, so the result is the nearest achievable size rather than
+always the identical integer.
+
+### The contrast figures, recomputed rather than repeated
+
+`internal/ui/funcs.go` and `partials/series_chart.html` carried 1.82, 3.15, 6.84
+and 12.0. Computed from `input.css`'s own hex values — WCAG 2.x relative
+luminance, `#64748b` and `#94a3b8` on `#4338ca`, `#475569` on `#f1f5f9`,
+`#cbd5e1` on `#0b1220` — they are **1.66, 3.08, 6.92 and 12.61**. Every
+conclusion drawn from them is unchanged: the two on `accent-hover` are still far
+under 4.5:1, which is why the chip exists, and the two on `sunken` still clear
+it comfortably. The numbers were wrong and the argument was not, which is the
+easiest kind of comment to leave uncorrected and the reason to correct it.
+
+### F193, closed by the two-character fix its own row specified
+
+The stray cell is gone from the F28 and F5 rows and the scan that found them
+reports zero mismatches across 192 rows. Nothing checks this automatically, as
+that row's severity cell says; the scan remains something a reader runs.
+
+## 2026-08-10 — M58, amendment: the four bot-bypass sites were seven
+
+Found by the fourth build pass, sweeping the class rather than the sites a
+review had named — which is what the second rejection asked for and is the only
+reason this surfaced.
+
+**The bullet as it stood**, in `phase-details/m58.md`:
+
+> - **The bot-bypass promises, which D108 falsified by declining area D.** Four
+>   sites say a human blocked as a bot gets recourse in Phase 3 […]
+
+**The bullet as amended:** *Seven sites*, adding the assertion message in
+`test/integration/bots_test.go` and **both** of [M32.5](phase-details/m32.5.md)'s
+— its *deliberately not in this milestone* bullet and its *Risks* paragraph —
+and naming the two mentions in this file that stay, because the log is
+append-only and *why the bypass was Phase 3* is a true statement about a
+decision that was taken.
+
+**The tree fact.** `git grep "Phase 3"` over the whole tracked tree, every hit
+read rather than counted by pattern: seven promise sites and two append-only
+mentions. Verified by the orchestrator before amending, not taken from the
+worker's report.
+
+**Why this is an amendment and not a prompt.** It is a count. What the bullet
+asserts — that a promise about a phase that is now ending must lose its number
+or move — is untouched, and fixing more sites than a bullet lists cannot violate
+it.
+
+### The part worth keeping
+
+That bullet already carried a note admitting the list had been miscounted once:
+*this list was headed "counted rather than recalled" and had not counted these*.
+The correction was itself miscounted, and stayed wrong through a documentation
+pass, two rejections and three builds. The three missed sites say why: one is a
+**test's failure message**, and two are in a **shipped milestone's own file**.
+Neither is anywhere a documentation pass looks — one is read only when a test
+breaks, the others only by somebody reading a milestone that closed months ago —
+and both are read eventually.
+
+A count is not made durable by being written down next to an apology for the
+last one. It is made durable by being taken against the tree, with the command
+that took it recorded so the next reader can run it rather than trust it.
+
+## 2026-08-10 — The 2,691 bytes W38 added to every resume, defended
+
+Owed and unmade until the third reviewer run pointed at it, which is worth
+recording on its own: [M58](phase-details/m58.md)'s doc-cost judgement declared
+[workflow.md](workflow.md) and [phase-loop.md](phase-loop.md) unchanged, and that
+was **true against HEAD**. It was silent about the growth that had landed *in*
+HEAD one commit earlier. A judgement anchored to HEAD cannot see the commit it is
+standing on, and [D172](#2026-08-09--m579-the-pre-release-review-what-it-checked-what-it-found-and-what-it-refuted)
+had judged only as far as 62297.
+
+Measured, not estimated — `git show 2f8fe6c~1:` against `git show 2f8fe6c:`:
+
+| File | Before | After | Delta | Realized read ratio |
+| --- | ---: | ---: | ---: | ---: |
+| phase-loop.md | 28436 | 30899 | **+2463** | 0.40 |
+| workflow.md | 19434 | 19662 | **+228** | 0.91 |
+
+The `/work phase` resume floor is **65339** bytes, and 2,691 of them are W38's.
+
+**Defended, not trimmed.** What the bytes bought is measurable and was measured
+on the milestone that paid for them: three reviewer runs on M58 returned twelve,
+eleven and seven findings. Several were documents *that same diff wrote* while
+the same diff falsified them — a release entry contradicting itself on erasure
+reach, a security document contradicting itself inside one table cell, a fix
+inverting the finding it repaired. None of it was caught by four build passes,
+by an orchestrator's acceptance read, or by any gate; every gate was green
+throughout. The step's cost is 2,691 bytes a resume and one agent a milestone.
+The alternative was priced by this phase in reopenings.
+
+**The 0.40 is the interesting number, and it is not an argument against W38.**
+phase-loop.md is read end to end at 0.40 where workflow.md is at 0.91, so more
+than half of phase-loop.md is charged to every resume and skipped. That gap is
+about the file's *shape* — it carries the stop tables, the note format and the
+resume bar, which a mid-run resume needs and a fresh one does not — and W38's
+2463 bytes went into [step 3](phase-loop.md#3-land), which is on the path every
+milestone walks. Splitting phase-loop.md by what a resume actually reads is a
+real question and it is **not raised here**, because deciding a file's shape
+during the milestone that closes a phase is how a documentation pass becomes a
+refactor.
+
+**The rule this exposes**, and the only part likely to matter later: a doc-cost
+judgement anchored to HEAD is blind to HEAD's own commit. The pass should measure
+against the last *judged* number — which is written in the previous judgement —
+rather than against whatever the working tree's parent happens to be. That is
+what D172's 62297 was for, and reading it would have caught this.
+
+## 2026-08-10 — M58: the fifth pass, a scope, a scan, and two counts that missed a member
+
+Scope set by the owner and bounded to four findings from the third reviewer run,
+plus the secondaries beneath them. Findings 3, 5 and 7 were already dispositioned
+— F194 with a process question at W39, the doc-cost judgement made above, M52's
+reopening under D175 — and were not touched.
+
+Two standing instructions carried from the two rejections, and both are why the
+work below is stated as counts rather than as fixes.
+
+### F160's fix is per link and per window; the claims written for it were not
+
+`geoShowable` is `data.GeoAvailable || hasResolvedCountries(stats.Dimensions["country"])`,
+and `stats` is **one link over the window on screen** — `loadLinkDetail` reads 7,
+30 or 90 days and defaults to 30. `GeoAvailable` is instance-level. So the
+predicate answers *did a country resolve for this link in this window*, and the
+sentence around it was written as a fact about the instance: `choropleth.go`
+promised that *"an instance with country history and no database gets the
+history, not this sentence"*, and `m37.md`'s own M58 amendment said the sentence
+is reached only when there is no country **in the history**. On a GeoIP-less
+instance holding country history, a link with no country inside the window meets
+the sentence while the link beside it draws a full choropleth.
+
+**Twenty-nine statements of the rule; twenty-two changed, seven checked and
+left.** Counted by reading every hit of
+
+```sh
+git grep -inE "geographic data is unavailable|GeoUnavailable|hasResolvedCountries|geoShowable|no GeoIP database|country history"
+```
+
+rather than by trusting the previous count, which is the fourth pass's own method
+applied to the fourth pass's own result — it called fourteen sites and said eight
+were already correct, and only one of those eight was. That paragraph is
+corrected in place beside its original claim, because the error is the section's
+subject.
+
+Changed: `Plan.md`, `docs/usage.md`, `docs/deployment.md`, `docs/configuration.md`,
+`CHANGELOG.md`'s 0.3.0 entry, `m37.md`'s amendment, four in
+`internal/ui/choropleth.go`, three in `internal/httpx/web_links.go`,
+`worldmap.html`'s branch comment, four in `choropleth_test.go`, one in
+`ui_test.go`, two failure messages in `web_links_test.go`, and F160's own
+*Closed by*. Checked and deliberately unchanged: D65, which says *a resolved
+country in the breakdown* and is the only statement that was already exact;
+`linkDetailPageData.GeoAvailable`'s doc, which is about **routing** and correctly
+says so; `worldmap.html`'s *"No clicks resolved to a country in this window"*
+empty state, which was scoped right all along; `link_rule_form.html`'s branch;
+`api/openapi.yaml`'s geo rule conditions; `CHANGELOG.md`'s 0.2.0 entry and the
+2026-08-03 M37 entry in this log, both history.
+
+**The behaviour is not changed, and that is a decision.** Making the predicate
+match the sentence needs to know whether this link ever resolved a country, which
+is a query, and `fillLinkAnalytics` is defined by performing none — *"every figure
+here is already in `data.Stats`, so this half of the page performs no I/O and
+cannot fail"*. There is also a cheaper shape that needs no query, gating the
+sentence on the window holding clicks at all. Choosing between them changes what
+the product does, which workflow.md's documentation bound makes a prompt, so the
+residue is [F195](deferred-findings.md#open) with both shapes and their costs
+written down.
+
+One thing fell out of rewriting that comment: `GeoUnavailable`'s doc named
+`TestCountryViewsAgreeWhenGeoIPIsAbsent` as the test that pins it, and no test by
+that name exists anywhere in the tree. It is `TestTheMapAndTheRankedListUseOneSentence`.
+
+### The scan that closed F193 could only see the malformation it had already seen
+
+F193 was closed against a count of *192 rows, two mismatches, now zero*. The file
+had three malformed rows and the third is [F103](deferred-findings.md#closed) —
+nine cells against an eight-column header, the surplus holding the **entire M54
+amendment** that says the bound lapses for an account-wide key. So `m58.md`'s
+bullet requiring F103's row to have been *amended rather than deleted* held in the
+source and failed on the page, which is the one place a reader would look.
+
+The mechanism is one line of arithmetic. The old scan took `split(line, "|") - 2`,
+charging an empty field to each end of the row. GFM makes the leading and trailing
+pipes optional **independently**, so that is right for `| a | b |` and one short
+for `| a | b`. F28 and F5 ended with a trailing pipe and a surplus *empty* cell and
+were found; F103 ends with no trailing pipe and was counted as conforming.
+
+**The scan is the fix, not the three rows**, and it is now a gate rather than a
+thing somebody runs. `scripts/check-links.sh` gained a second pass over every
+tracked markdown file, counting cells GFM's way, and `make check-links` fails on a
+mismatch. Proven in that order and deliberately: the gate was written first and run
+red — `deferred-findings.md:157 has 9 cells against the 8-column header at :56` —
+while F103 was still malformed, and only then was F103 folded back into its
+*Closed by* cell. Re-derived against the tree: **2,100 table rows in 40 files, one
+mismatch**, and green after — the tree as it stood at the scan, before this pass
+filed F195 and F196; the gate prints the live figure, which is why it is a gate
+and not a number written down. The script now checks two things, so its header and
+the Makefile line say so.
+
+F193's row is corrected rather than left standing — it is uncommitted, and the
+standing ruling on editing an uncommitted entry in place applies. Its *Finding*
+reads three rather than two, its evidence carries both the wrong count and the
+re-derivation, and its severity cell no longer says nothing checks this, because
+something does.
+
+### Area G counted one anchor and there are two
+
+`phase-3-candidates.md`'s close-out said *"its one anchor in the tree lost its
+date"*. `orgs.create` names itself the call site an entitlement check would hang
+on in **two** places: `CreateOrganization`'s doc in `internal/team/organization.go`,
+which this milestone had already rewritten, and [M28](phase-details/m28.md)'s own
+bullet, which still read *"(Phase 3+, see Plan.md)"*. Two sites, one already
+changed, one changed here, and the close-out now says two.
+
+A third mention — `Plan.md`'s D16 row — carries no phase number and needs nothing.
+It is named in the close-out so the next sweep does not re-find it and wonder,
+which is the treatment `internal/auth/service.go:410` already gets in the
+bot-bypass list for the same reason.
+
+The missed one being in a **shipped milestone's file** is the third time in two
+days: it is where two of the bot-bypass promises were hiding, and it is what the
+amendment recording that predicted. A documentation pass reads documentation; a
+shipped milestone's file is read by somebody looking up a milestone that closed
+months ago, and by nobody else.
+
+### The release-notes extraction, run and recorded
+
+`m58.md` requires the `awk` be checked against the changelog **as it will be at
+0.3.0** before anything is tagged, per the trap M45 documented: the extraction
+only runs after a tag exists, so a fix confirmed by releasing is confirmed once
+the notes are already public. It had not been recorded. Run read-only against
+`.github/workflows/release.yml`'s own program, with `ver="## [0.3.0]"`:
+
+**815 lines, exactly `CHANGELOG.md:33-847`** — the whole 0.3.0 body and nothing
+else. No second version heading, no `[Unreleased]: https://…` reference
+definitions, and the only *0.2.0* strings in the output are prose inside 0.3.0's
+own entries. Clean. It is a check against the file at this commit, so anything
+that edits `CHANGELOG.md` before the tag re-owes it.
+
+Which exit fires is worth stating, because the comment above the program gets it
+backwards. `release.yml:258` says *"the newest version is always the last section
+in CHANGELOG.md"*. It is the **first** — Keep a Changelog orders newest first, and
+0.3.0 sits above 0.2.0 above 0.1.0. The comment was true at 0.1.0, when there was
+one released section and it was both. The consequence is only that the reasoning
+misleads: the F1 link-reference exit it presents as this extraction's protection
+protects the **oldest** section, and 0.3.0 is guarded by the ordinary next-heading
+exit. `.github/workflows/` cannot be committed to, so this is
+[F196](deferred-findings.md#open) rather than an edit, carrying the proposal route.
+
+### The five secondaries
+
+**`LINKCTRL_DOMAIN_VERIFY_INTERVAL=0` turns off two jobs and the justification
+named one.** `jobRunner.runHostReload` returns immediately on a non-positive
+interval, so the per-replica reload of the verified-hostname set stops with the
+verification pass. That reload is F73's backstop and has no leadership by design.
+The demo can afford to lose it — one replica, and `make demo-update`
+force-recreates the container with the set loaded at boot — and a real deployment
+cannot, which is precisely the reason the line is marked as one not to copy. The
+comment now says so.
+
+**A pinned default workspace is cleared, and D61 says it cannot be repointed.**
+Both are true of different halves. `demoActor` refuses when the pin resolves the
+account *elsewhere*, which is the state that makes `demoReset` destructive; a pin
+naming the demo's own oldest workspace passes that check and `demoSeeder.actAs`
+then clears it. Recorded at both ends rather than reworded — D61's row is
+annotated the way D65's is, and `actAs`'s doc names D61 and says which case it
+does not reach. Clearing stays: leaving the pin is F169 exactly.
+
+**`docs/deployment.md` pinned `LINKCTRL_TAG=0.1.0`** in the upgrade section, two
+releases stale, inside the pass whose job is that file. Now 0.3.0.
+
+**F176's *Closed by* froze the decisions table at D108–D174** and D175/D176
+landed in the same milestone. Re-derived: D108–D176, 69 rows, no holes, ascending,
+unique. The cell now asserts the *property* and offers the range as evidence,
+because a cell naming the last row is wrong the moment the table grows — the same
+staleness one iteration smaller.
+
+**Three counts of the bot-bypass set were in the tree**: seven in `m58.md` and the
+candidates file, eight in this log's fourth-pass entry. They are the same tally
+counted to different edges — seven places promise the bypass, and the eighth is
+the candidates file's own *count* of them, which was itself wrong and was fixed in
+the same breath. Stated in the entry rather than left for a fourth count to find.
+
+## 2026-08-10 — M58, amendment: the third move of one number, so the number goes
+
+**The bullet as it stood** carried a parenthesis reading *"M58's own work filed
+eight — F185–F192 […] and is **nine**, F185–F193"*.
+
+**As amended:** the number is deleted. The bullet now says the rows this
+milestone files run from F185 and are counted by
+`grep -c '^| F' deferred-findings.md` against its own commit.
+
+**The tree fact.** Twelve at the time of writing — F185 through F196 — where the
+sentence said nine and, one amendment earlier, eight. F194 came from the third
+reviewer run, F195 and F196 from the fifth build pass.
+
+### Why the count is deleted rather than corrected
+
+This is the third amendment to one parenthesis and all three moved the same
+number. That is not three mistakes; it is one sentence trying to hold a quantity
+that the milestone it describes is actively changing. The bullet's *argument* —
+fixing findings files findings, so a sweep cannot be scoped to "every row" —
+never needed a count to make it. The count was decoration, and every pass paid
+to update it.
+
+[F69](deferred-findings.md) settled this exact question at
+[phase-details/README.md](phase-details/README.md)'s demo-coverage rule, which
+said *four* rows, was true when written, was wrong within one milestone, and was
+replaced by *its trailing rows*. The remedy there was: **say the property, not
+the quantity, and name the command that counts it.** Applied here a second time,
+at a cost of three amendments to learn the same thing twice.
+
+Worth stating plainly because the milestone this sits inside spent four build
+passes on drifted enumerations and wrote its own comment-truth bullet under the
+heading *counted rather than recalled*. Counting is the right instinct and it is
+not sufficient: a count written into prose is recalled by every subsequent
+reader, whatever the heading above it says. Only a count somebody can re-take
+survives, and the difference is whether the command is in the sentence.
+
+## 2026-08-10 — M58: the sixth pass, the response that disagreed with its own transaction, and the demo that would not have resolved
+
+The sixth reviewer run returned fourteen findings. The owner's disposition was
+standing and short: **fix the ones that would ship something wrong, defer the
+rest, commit.** Six were fixed — two release blockers, and four sentences that
+are false on a surface the 0.3.0 tag publishes. Seven became rows, F197–F203.
+The fourteenth was `doc-cost.md` being stale, regenerated last so that it is true
+of the tree being handed over, without re-judging: the resume floor did not move
+and [the W38 judgement](#2026-08-10--the-2691-bytes-w38-added-to-every-resume-defended)
+stands.
+
+### The rotation response contradicted the statement three lines above it
+
+`POST /api/v1/api-keys/rotate` answered `revoked_organizations: []` for every
+successor, on a comment that read *"nothing can have barred an id that did not
+exist when the bar would have been written"*. That was true when it was written
+and this milestone is what made it false: `CarryAPIKeyReachRevocations` copies
+the predecessor's bars onto the successor **inside the rotation transaction**,
+before the response is built, precisely so an administrator's reach revocation is
+not escapable by the credential it was aimed at. So the caller most likely to be
+told something wrong — the holder of a barred key, rotating — was told its
+successor was unrestricted by the same call that had just recorded otherwise.
+
+Both halves are this milestone's own work, which is the part worth naming. The
+carry landed in this diff; the empty array predates it and was correct until it
+did. A fix that lands beside a comment does not make the comment false by
+accident — it makes it false on purpose, and nothing in the loop reads a comment
+as a claim to re-check.
+
+Three edits, and the shape of them is the argument:
+
+- **`keyInfo` takes the bars as a parameter.** It used to hardcode the empty
+  slice for both its callers, which meant one caller inherited an answer that was
+  right for the other. Creation passes `nil` and says why at the call site — the
+  id was allocated a statement ago. Rotation passes what it read.
+- **The bars are read back rather than assembled** from what was just copied.
+  `CarryAPIKeyReachRevocations`'s own comment argues that the two pinned
+  directions copy nothing *by data rather than by a branch*, so a response
+  assembled in Go would be a second implementation of a rule the statement holds.
+  `ListAPIKeyOrgRevocations` runs on the transactional handle, so what comes back
+  is what committed.
+- **`barsByKey` is shared** by the owner's key list and the rotation response, so
+  the two readers of those rows cannot spell one differently.
+
+`api/openapi.yaml` published the same false reason as contract text and now says
+what actually happens, including the two directions that are empty and why they
+are empty. The integration test asserted the carried bar through the list
+endpoint one query later and asserted nothing about the rotation's own answer;
+it now asserts the response — id and the administrator's own timestamp — and the
+pinned test asserts the empty case, because an empty array that is right by
+accident is exactly what the hardcoded one was.
+
+### The demo would have published a hostname that did not resolve
+
+`.env.demo` carries `LINKCTRL_DOMAIN_VERIFY_INTERVAL=0`, and `scripts/instance.sh`
+justified it with a sentence about ordering that had the ordering backwards:
+*"make demo-update recreates the app container … with the host set loaded at
+boot — so nothing here delays a reseeded domain being served either."*
+
+`Makefile`'s recipe recreated and waited, and *then* ran `lctl demo --reset`. The
+app therefore loaded its verified-hostname set from before the reseed wrote the
+row. Nothing else would have put the new set in front of it: `lctl` runs on the
+host with no Redis, so it publishes no invalidation; `internal/redirect/hosts.go`
+holds the whole set in memory precisely so that an unknown `Host` costs no query,
+so there is no lazy reload; and the zero interval stops `runHostReload` along
+with the verification pass. A fresh demo would have served nothing on
+`go.linkctrl.example`, and a repeat would have served a cached entry naming a
+domain id the reseed had deleted.
+
+**The honest answer is that the setting is fine and the recipe was not.** The
+alternative — drop `DOMAIN_VERIFY_INTERVAL=0` — puts back the defect it was added
+for: an RFC 2606 `.example` hostname the real resolver cannot satisfy, unverified
+24 hours after every reseed, silently. So the fix is one line in the recipe:
+`make demo-update` recreates the app container **again, after the reseed**, with
+`--wait`, so the set it holds is the set the reseed wrote. That ordering is now
+what the justification in `scripts/instance.sh` claims, and
+`docs/dev-notes/instances.md` says the same thing and names the second job the
+zero switches off, which it had not.
+
+`.env.demo` itself is untouched. It is the demo instance's, no worker may write
+it, and the line it still needs is the orchestrator's to add before 3.7.
+
+### Four sentences the tag would have published
+
+Each is one surface, and none of them is a judgement call:
+
+- **`Plan.md`'s D141** recorded as unfixed a consequence this same diff fixed —
+  *"Consequence recorded rather than fixed: H grows the symbol, so a code near
+  the 2000px raster bound loses its PNG download to a `422`"*. `refitForLogo` is
+  wired at `internal/link/qr.go:830` and F171 is closed. The decision table is
+  headed authoritative and `docs/usage.md` and `api/openapi.yaml` were both
+  amended for the change; D141 was the row the diff walked past.
+- **`README.md`** described erasure as scrubbing the identifying fields with no
+  mention of the exception `docs/SECURITY.md` and `Plan.md` both state — a
+  self-filed, self-decided dispute keeping one of its two address labels (F187).
+  D104 makes this pass the only place README changes, so the omission would have
+  shipped for the phase.
+- **`docs/SECURITY.md`'s hardening checklist** said `DOMAIN_VERIFY_INTERVAL=0`
+  *"switches re-verification off entirely"* while `docs/configuration.md:246`
+  says it switches **both** jobs off. The checklist is where an operator looks,
+  and the half it omitted is the one that keeps a replica from serving a
+  hostname whose verification is already gone.
+- **`docs/deployment.md`** told somebody installing 0.3.0 to unpack
+  `linkctrl_0.1.0_linux_amd64.tar.gz`. The `LINKCTRL_TAG` pin thirty-six lines
+  above it had been updated in this diff and the tarball had not.
+
+One stale cross-reference was fixed with them and only one: `docs/operations.md`
+said F180 was *"open and unscheduled"* about a defect this diff closed, which is
+an assertion rather than a link that lands in the wrong section. Its paragraph
+now reads as history — the exception existed until 0.3.0 — and names F185, the
+same defect at the manual button, which closed with it.
+
+### Why the other sixty-four stale links are a row and not an edit
+
+Sixty-four `F<n>` cross-references still point at the `#open` anchor for findings
+that are now closed, and a blanket rewrite is the wrong instinct twice over. Four
+of them are in this file, which is append-only: an entry saying a row was open is
+a true statement about the day it was written, and correcting it would be editing
+the log to match the present. And the remaining sixty would restale themselves
+the next time anything closes. What would hold is a gate that flags an `#open`
+link naming a closed id, or dropping the section anchor from cross-references
+inside `deferred-findings.md` — a choice about that file's conventions, and
+therefore [F203](deferred-findings.md#open) rather than an edit at the end of a
+pass.
+
+### The seven rows
+
+F197 (D65's cell contradicting itself, and this milestone's audit recording it as
+untouched), F198 (the new table-column gate missing the delimiter mismatch, and
+no CI target running it), F199 (a test whose load-bearing half is guarded on a
+condition its fixture cannot satisfy), F200 and F201 (three `internal/ui`
+fixtures unfaithful to production, both classes already filed once), F202
+(`m54.md` unannotated while six sibling milestone files carry M58 notes), F203
+(above). Every one carries `file:line` evidence and is marked unreviewed.
+
+Two of them are recurrences rather than new defects — F200 is F191's class on the
+next attribute, F201 is F167's exact mechanism on the two forms it did not
+reach — and that is the argument for filing rather than fixing at this hour: a
+class that has recurred once is a class somebody should decide about, not one a
+sixth pass should patch a third site of.
+
+## 2026-08-10 — M52, reopened: both dispute labels in one statement
+
+[D175](../../Plan.md#phase-3-decisions) sent
+[F187](deferred-findings.md#closed) here rather than to M58, and this is the
+whole of the reopening. Scope was one finding, and nothing else in `m52.md` was
+reopened with it.
+
+### The defect, and why six months of green runs did not show it
+
+`EraseDeletedAccounts` scrubbed `destination_disputes` with two data-modifying
+CTEs — `scrubbed_filed` on `created_by_label`, `scrubbed_decided` on
+`decided_by_label`. Two such CTEs may not both write one row: Postgres applies
+one and drops the other, silently, with no defined winner. The note on the
+`batch` CTE twelve lines above them had said exactly that since M58 corrected
+the audit pair, and the two statements it describes were still sitting under it.
+
+A single dispute row is in both halves of one batch in two ordinary situations,
+and neither is a corner:
+
+- somebody files a dispute and then rules on it — one account, one deletion, no
+  second party needed at all;
+- two accounts are deleted within the same hour and one had decided the other's
+  dispute, which is what a review queue and a sweep that takes everything since
+  the last pass produce between them.
+
+Either way one address survived in a record about the person who asked to be
+erased, and no later pass came back for it: both accounts leave the sweep
+stamped `anonymized_at`, so neither is ever pending again.
+
+**What hid it was the test.** `TestErasureScrubsBothDisputeLabels` asserts both
+columns and asserts each against a live counterpart, which is the right shape for
+the claim it makes — and it erases its two accounts on **separate passes**, so
+the two statements never contend for one row. It passes on the broken shape. It
+passed on the broken shape throughout the sabotage run below.
+
+### The fix, which already existed in this file once
+
+One `UPDATE`, a `CASE` per column, joined against `batch` rather than `pending`
+— the shape `scrubbed_audit` was corrected into when the same hazard cost
+[F186](deferred-findings.md#closed) a deterministic zero in the demo coverage
+test. `batch` rather than `pending` is the load-bearing half: `batch` aggregates
+the pending ids into arrays and is therefore one row, so the join is
+single-valued and a dispute is matched once however many of the batch's accounts
+name it. Joining `pending` twice inside one `UPDATE` would have traded one limb
+of the hazard for the other one that note describes.
+
+An undecided dispute keeps its empty `decided_by_label` through the `ELSE` arm,
+because `NULL = ANY (...)` is never true. The `<>` guards survive unchanged and
+still make a second pass over a tombstoned row a no-op.
+
+### Sabotage, because the test had to be shown to test something
+
+The split shape was restored, `sqlc generate` re-run, and the new test failed on
+both contended rows at once:
+
+```
+pair.example: created_by_label reads "filer@example.com", want "deleted account"
+self.example: created_by_label reads "both@example.com",  want "deleted account"
+```
+
+The `decided` write won and the `created` write was dropped, deterministically,
+on both — while `survivor.example`, whose decider is still here and whose only
+erased party is its filer, passed throughout, and
+`TestErasureScrubsBothDisputeLabels` passed beside it. That is the defect
+verbatim and the reason it was invisible. The merged shape was then restored by
+counter-edit, never `git checkout`, and both the query and the generated file
+checksummed against the pre-sabotage state to prove the restore was
+byte-for-byte.
+
+`survivor.example` is in the test for the direction the *fix* could fail in,
+which nothing else asserts: the merged statement selects rows by a disjunction,
+so one taken because its filer was erased must still leave a live decider's
+label alone. A statement setting both columns unconditionally would satisfy the
+two assertions above and destroy a surviving person's record.
+
+### Six sites in three documents, counted rather than recalled
+
+The exception was written down in more places than the finding named, because
+M58 deliberately stated it wherever a reader would meet the erasure claim:
+`README.md` once, `docs/SECURITY.md` three times — the *Account deletion and
+subject erasure* row, the *six things, not two* paragraph, and an entry of its
+own in *What is not defended* — and `Plan.md` twice, in M52's discharge row and
+in the *Erasure leaves a queued message and an outstanding offer* limitation
+row. Each now states the requirement instead of the exception, and each says the
+defect reached no release, because it did not: 0.3.0 is untagged.
+
+`README.md` is touched despite [D104](../../Plan.md#phase-2-decisions-taken-after-the-plan-was-finalised) confining
+it to the documentation pass. The premise D104 rests on — *there is no mid-phase
+README to drift* — does not hold here: the pass has already run, so the sentence
+exists and this commit is what makes it false. Correcting a document that a diff
+falsifies is the standing pre-approved change, and leaving it would ship a
+release note describing a defect the release does not have.
+
+`CHANGELOG.md` needed nothing, which was checked rather than assumed. Its 0.3.0
+entry describes the pass as replacing the name and address in both tables and
+never carved out the exception, so the fix makes it true rather than stale.
+
+### Two stale links fixed, two knowingly left, and the class grows by both
+
+Closing the row staled **four** cross-references that reached F187 through the
+`#open` anchor. Two were fixed because this commit is what made them wrong:
+F186's own *Closed by* prose in `deferred-findings.md`, and `Plan.md`'s D175
+row.
+
+Two are left, and they are *this file's* — the entries at `decisions.md:24540`
+and `:24661`, which describe F187 as open because it was open when they were
+written. decisions.md is append-only and a past entry saying a row was open is a
+true statement about its own date, so rewriting them would be editing history to
+flatter a link checker.
+
+**The count moves as a direct result**, and is stated rather than left for the
+next reader to discover: [F203](deferred-findings.md#open) goes from sixty-four
+to **sixty-six** — 59 in deferred-findings.md, 6 in this file, 1 at `Plan.md`.
+An earlier draft of this paragraph said *two* staled and named *"the four in
+decisions.md"*, which were F68, F169, F171 and F180 — F203's four, not F187's
+two. Corrected before the commit rather than after, which is the only reason the
+correction is an edit and not a fifth entry.
+
+That is the class [F203](deferred-findings.md#open) tracks, and F203 is open and
+unreviewed, so the sixty-four it counts are untouched: its own severity cell says
+a blanket rewrite is the wrong fix and would restale itself the next time a row
+closes. The distinction taken here is authorship rather than convenience — these
+two were correct until this diff, and a diff that falsifies a link and walks past
+it is the failure the third actor exists to catch. Two links this commit broke
+are not a sweep of a class somebody else has to decide about. The four in
+`decisions.md` stay for the reason F203 gives: it is append-only, and an entry
+saying a row was open is a true statement about the moment it was written.
+
+## 2026-08-10 — A queue row typed `issue` against a design that was deliberate
+
+Prompted by draining `.queue.md` after Phase 3 closed. One row, typed `issue` by
+the owner: *the text displaying the current workspace should be what shows on the
+workspace switcher, not be displayed next to it.*
+
+The tree says that arrangement is deliberate.
+[`partials/nav.html:41-56`](../../internal/ui/templates/partials/nav.html) spends
+twenty lines explaining that M46 removed the current workspace from the switcher
+because the owner asked for it on blind task 9, that it could not be done until a
+label existed elsewhere, and that the label is what made it possible. Three
+assertions in `internal/ui/workspace_test.go` hold the result.
+
+### Why the type stands
+
+[`/process-queue`](../../.claude/commands/process-queue.md)'s dispute table has a
+row for *typed `issue`, is neither* — **the behaviour is as designed and the note
+is a preference** — and on a fast reading this is it. It is not, and the
+distinction is worth writing down because it will recur.
+
+That dispute is for a note **reporting a defect** that turns out to be intended:
+somebody says *this is broken*, the tree says *this is what we chose*, and the
+disagreement is about a fact. This note reports nothing. It states what the design
+should be, from the person whose design it is. [workflow.md](workflow.md) defines
+an issue as *a change to existing function or design*, and a change to existing
+design is precisely what it asks for.
+
+Reclassifying it would have been the loop telling the owner their note was really
+a preference, on the strength of a comment recording an earlier answer from the
+same owner. **An owner is allowed to change their mind, and the mechanism for
+that is a row, not a prompt asking whether they meant it.**
+
+### Why it carries three fix shapes and no prompt
+
+The substance is real and it is not the classification. `workspace_switch` is
+gated at more than one membership and `workspace_label` is not, so on the
+one-membership account every instance actually has today, moving the text into the
+switcher names the workspace **nowhere** — reopening the exact defect M46 added
+the label to close, while M25 refuses a control that can do nothing.
+
+That belongs in the row's evidence rather than in a prompt, because approving a
+deferred row **is** the conversation. Prompting now would ask the owner to decide
+the shape of a fix before they have decided whether to schedule it at all, which
+inverts the order the deferral system exists to hold. F204 states three shapes and
+what each costs; whichever is chosen is chosen when the row is approved.
+
+## 2026-08-11 — The target was aimed at the plan, not at the build
+
+Owner-set while triaging the ten findings Phase 3's close left open, and prompted
+by a question about where a fix milestone for six of them could live. The words
+were: *the initial milestone limit in a phase is in place to restrict initial
+planning, adding a few needed milestones during production is acceptable.*
+[W40](workflow-changes.md#made).
+
+### What the rule said, and what it cost
+
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
+made **any** insertion past fifteen a phase-boundary conversation. That is a
+strong rule and it was doing real work at planning time. At build time it was
+doing something else: charging an owner decision for the act of *discovering*
+that a phase needed one more milestone.
+
+The cost showed up immediately at the moment the clarification was asked for.
+Six findings needed a home, M58 had shipped, and the options were an eighteenth
+milestone in a phase whose status table reads complete — presented as a
+boundary conversation because the rule said it was one — or pushing correct
+work into Phase 4 to protect a number. The number was not the thing anybody
+wanted to protect.
+
+### What it says now
+
+A phase is **planned** at fifteen, and that is a real ceiling on the plan. A
+milestone the build turns out to need is added when it is needed.
+
+*Needed* and *a few* are both kept in the rule's own wording rather than smoothed
+out, because they are the whole bound. This is not a licence for a phase to grow
+indefinitely; it is a statement about which failure the ceiling was aimed at.
+Optimistic planning is the failure — a plan that fits because nobody counted.
+Honest discovery is not, and taxing it makes a build under-report what it found,
+which is the more expensive of the two.
+
+### Where the old protection went
+
+The sentence worth keeping was *what the target removes is the case where a phase
+grows by one insertion at a time and nobody is ever the person who decided it was
+large.* That protection now sits at planning time, where the count is a
+**prediction somebody is making** and is therefore theirs to defend. At build
+time the count is an **observation somebody is reporting**, and a rule that makes
+an observation expensive gets fewer observations rather than fewer milestones.
+
+Phase 3's two recorded exceptions — QR logos taking it to sixteen, and the review
+that found one milestone was two, taking it to seventeen — stay recorded exactly
+as they happened. Under this reading neither would have been a boundary
+conversation, and neither is reinterpreted: the point of that section is that
+somebody decided, and somebody did.
+
+**What is unchanged**: the trap. A count is a number people plan to, so the
+cheapest way to satisfy it is fatter milestones — the same scope in fewer files,
+each less reviewable. If the target and a milestone's reviewability disagree, the
+target still gives. That paragraph is untouched and it is the reason the target
+survives at all.
+
+## 2026-08-11 — A gate nobody runs
+
+[W41](workflow-changes.md#made), and the wiring half of
+[F198](deferred-findings.md#open). Split at the owner's direction while triaging
+the ten rows Phase 3's close left open.
+
+### The finding
+
+`scripts/check-links.sh` was reachable two ways: `make check-links`, typed by a
+person, and `scripts/release-check.sh`, which runs when a release is being cut.
+Neither `make check` nor `make ci-build` called it, and CI calls those.
+
+So the link gate had no automated enforcement, and the **table-column gate M58
+added to the same script** — the one written *because* a malformed row had hidden
+F103's whole M54 amendment from every renderer — was unenforced from the moment
+it landed. It was written as a gate and lived as a habit.
+
+The file already knew. `release-check.sh`'s own comment above the call reads
+*"workflow.md makes this a commit gate. It went unenforced for all of Phase 1,
+which is what happens to a gate that needs someone to remember it."* That
+sentence was written about a previous instance of exactly this, and it sat four
+lines above the only automated caller.
+
+### Why the row was split
+
+F198 has two halves and they are different kinds of thing. **Which gates run** is
+a process question — it is about how this project is built, it touches no
+product behaviour, and workflow.md's own gate table is where the answer lives.
+**What a gate can see** is a defect in a script: the checker compares each body
+row against the header and never against the delimiter, so a three-column header
+over a two-column delimiter passes, and that is precisely the case GFM answers by
+dropping the entire table.
+
+Taking them together would have put a real change to a checker's semantics into a
+commit with no milestone and no review behind it. Taking neither would have left
+the gate unenforced while its own finding waited. So the wiring is made here and
+the delimiter half stays a finding, with both halves naming where the other went
+— which is workflow.md's no-silent-removal rule applied to a row that was split
+rather than closed.
+
+### What was verified rather than assumed
+
+`make check` was sabotaged: a broken relative link appended to a tracked file
+took it to rc=2 naming the file and the target, and it returned green after the
+line was removed by counter-edit. A gate wired in and never seen to fail is the
+same thing this entry is about.
+
+`check`'s description — *everything CI runs, short of integration tests* — was
+false while the omission stood, and is true again. `release-check.sh`'s label
+said *every relative link and anchor resolves*, describing half the script it
+invokes, and now names both halves.
+
+## 2026-08-11 — M57.5: six repairs a phase close could not have contained
+
+Owner-added scope, taken while triaging the ten findings Phase 3's close left
+open. [M57.5](phase-details/m57.5.md) is the five artifacts;
+this is the fourth of them.
+
+### Why a milestone at all, and why now rather than Phase 4
+
+Six of the ten rows are repairs with no choice in them, and two of those — F197
+and F202 — are records that **the 0.3.0 tag publishes**. Plan.md's D65 cell
+states two contradictory scopes three clauses apart, and `m54.md` describes a
+bound the tree replaced. Tagging over both was available and was the option the
+owner declined.
+
+They could not ride the standing documentation approval, which is what made a
+milestone necessary rather than convenient. F197's second half is that
+`decisions.md` claims the D65 cell was *checked and deliberately unchanged*
+while `git diff` shows it rewritten in the same commit — and that file is
+append-only, so the correction is a new entry naming the old line rather than an
+edit. Deciding that is a judgement about the log's own rules, not a typo fix.
+F198 changes a gate's semantics. F199, F200 and F201 add or repair tests.
+None of that is *correcting a document*.
+
+### Why `.5` and not `M59`
+
+[planning.md](planning.md#4-numbering) reserves integers for **the work the phase
+planned**. This was not planned; it is an insertion, and insertions take
+`X.1`–`X.8` with the mid-band preferred so later ones can fall on either side.
+So `M57.5`, sorting after the close it follows from.
+
+It reads oddly — a milestone numbered after the phase close, doing more of what
+the close did — and that is the honest reading rather than a defect in the
+numbering. The close needed a follow-on. Calling it `M59` would have said the
+phase planned it.
+
+### Why this was not a phase-boundary conversation
+
+Under the rule as written until this morning it would have been: any insertion
+past fifteen was one, and Phase 3 was already at seventeen.
+[W40](workflow-changes.md#made) settled that the target binds initial planning
+rather than the build, which is exactly the case this milestone is. The
+count moved to eighteen without a conversation about the count, and that is the
+new rule working rather than being bent.
+
+### The four that are excluded, and the test
+
+Not severity — **whether a decision is owed before the work starts**.
+
+- **F195** (F160's suppression is per link and per window while its sentence
+  reads as an instance fact) — the cheap fix is free of I/O, the correct one is a
+  query, and choosing is a design decision.
+- **F203** (sixty-six `#open` references naming closed rows) — a blanket rewrite
+  falsifies the append-only log and restales itself at the next closure. It needs
+  a convention decision about this file's own anchors.
+- **F204** (the workspace switcher) — three fix shapes, each reversing a recorded
+  answer of the owner's.
+- **F196** (release.yml's extraction comment) — written at
+  [`ci/proposed/release.yml`](../../ci/proposed/README.md) and waiting on the
+  owner, because nothing here can push `.github/workflows/`.
+
+Six repairs and four decisions is a cleaner seam than any severity line, and it
+is the reason this milestone can be built unattended while the other four cannot.
+
+### The bullet written as a constraint rather than an outcome
+
+F200's says the fixture must be **derived from `qr.FluidClass`**, not that it
+must carry the class. That is deliberate and it is the only place this
+milestone specifies a *how*.
+
+[F191](deferred-findings.md) filed these same two fixtures for a different
+missing attribute. They were corrected by hand, the correction was right, and the
+next attribute went missing the same way — which is F200. A third hand-written
+copy is a fourth recurrence waiting, so the row is only repaired if the copy
+stops existing. The justification previously given against importing the emitter
+— that `internal/ui` is stdlib-only — does not hold: that rule is about Node,
+CDNs and CSP, and `internal/qr` does not import `internal/ui`, so no cycle
+exists.
+
+Stating a mechanism inside a definition of done is normally the wrong altitude.
+Here the mechanism **is** the finding.
+
+### What is deliberately not enforced
+
+F197 and F202 have no mechanical guard and their bullets say so. Nothing can test
+that a prose cell states one scope, or that a milestone file describes the
+current tree. The milestone buys the correction and the record of how each was
+missed; it does not buy a guard, and claiming otherwise would be the kind of
+sentence this phase has spent four build passes deleting.
+## 2026-08-11 — A review that is not final is not a review
+
+Owner-set, and it is a fourth option against three that were offered.
+[W43](workflow-changes.md#made).
+
+M57.5 was first numbered **M58.5**, above [M57.9](phase-details/m57.9.md). The
+plan review required by [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+caught it: a review covers everything numerically below it, planning.md says
+*work numbered after the last `X.9` ships unreviewed, so nothing is placed
+there*, and M58.5 edited `scripts/check-links.sh`, `internal/link/qr_test.go`
+and `internal/ui/ui_test.go` — every one inside what M57.9 claims to have passed.
+
+Three options went to the owner. **Exempt it**, on the argument that
+[W38](workflow-changes.md#made) now puts an independent reviewer on every
+milestone, so *ships unreviewed* is no longer true. **Add an M58.9**, restoring
+the rule literally at the cost of a nineteenth milestone. **Accept it and say
+so**, changing nothing but the honesty of the file.
+
+The owner took none of them: *add it below M57.9 and re-open M57.9. X.9
+milestones should still be final. Leave room between this and 57.9 in case
+another milestone needs to be added.*
+
+### Why that is better than the option that was recommended
+
+The recommendation was the exemption, and its case was that W38 changed the
+premise. That case is true and it is not sufficient. **A W38 reviewer reads one
+diff; an `X.9` reads a phase.** The defects an `X.9` exists to find are the ones
+`M51.9`'s own entry describes — *no single milestone's definition of done can
+catch, because each milestone was internally consistent* — and a per-milestone
+reviewer is by construction unable to see them. Trading the phase-spanning read
+for the per-diff one because the per-diff one is newer would have been swapping
+two different instruments and calling it a saving.
+
+The added milestone is also not incidental to that: it repairs six findings from
+four reviewer runs, which is precisely the accumulation an `X.9` is pointed at.
+
+### The cost, which is real
+
+**A number and a dependency edge now point opposite ways.** M57.5 depends on
+M58, and sits above it in neither table. planning.md says insertions are *placed
+in dependency order*, and this one is not.
+
+That is accepted rather than papered over, and the milestone file says it in its
+own opening. The `Depends on` column carries the real edge, the phase loop reads
+that column before it reads the number, and the number is doing a different job —
+declaring which review owns this work. When those two jobs conflict, the review's
+claim is the one that has to stay true, because it is the claim somebody will
+rely on years later without being able to re-derive it.
+
+**Leaving room is part of the rule.** `.5` rather than `.8`, so a later
+insertion still has 57.6 through 57.8 to land in. A rule that fills the band
+forces the next insertion straight back into the problem this one solved.
+## 2026-08-11 — How an agent drives this product's UI, and where that check runs
+
+Owner-set, from research commissioned after M47 was reopened. Two questions were
+put and both answers matter more than the tool.
+
+### The tool: `@playwright/cli`, not an MCP server
+
+The constraint was token efficiency. **Microsoft's own Playwright MCP README
+argues against Playwright MCP for it**: coding agents *"increasingly favor
+CLI-based workflows exposed as SKILLs over MCP because CLI invocations are more
+token-efficient: they avoid loading large tool schemas and verbose accessibility
+trees into the model context."* It scopes MCP to workflows where *"maintaining
+continuous browser context outweighs token cost concerns"* — conceding the cost
+rather than denying it.
+
+`playwright-cli` returns a **file path** per step instead of the page. Measured
+here, against this product: a step's payload is ten lines and a few hundred
+bytes; the snapshot it withheld was 850–1101 bytes on disk. Published
+comparison of a full run: **~27K tokens against ~114K** for the MCP equivalent.
+
+**Both MCP options are specifically bad for this product**, which is
+server-rendered Go plus htmx:
+
+- Playwright MCP appends a snapshot to every action with no per-call opt-out,
+  and `microsoft/playwright#39955` (open) confirms it is the **whole DOM, not the
+  viewport**. An htmx app keeps swapped-out fragments and out-of-band targets in
+  the DOM and pays for all of them on every click.
+- Chrome DevTools MCP is silent by default — a fix earned the hard way, one
+  `click` having once cost a reporter **+211K tokens** — but that means every
+  htmx swap needs an explicit snapshot round-trip, which is most interactions
+  here. Its `ignored`-node bloat, 278 of 543 nodes, was closed *not planned*.
+
+Ruled out with evidence: Puppeteer MCP is **archived** (May 2025, screenshot-only,
+carries its own security warning); Stagehand's MCP server is **archived**;
+BuilderIO's `visual-edit` sends the model no page representation at all and
+hides the edit capability from it deliberately — it renders a canvas for a human.
+browser-use defaults `use_vision` to `"auto"`, so it ships images unless told not
+to.
+
+### Where it runs: the `X.9` reviews, which is not one of the options offered
+
+Four CI shapes were put to the owner — nightly workflow, every push, opt-in only,
+release-check — and the answer was none of them: **gate it at the `X.9`
+milestones, so it can happen more often if needed and arrives before the release
+milestone.**
+
+That is better than all four and the reason is structural. A review is a
+**milestone the orchestrator runs**, not a CI step, so it needs nothing from
+`.github/workflows/` — which this repository cannot push, the token lacking
+`Workflows`. It sidesteps the whole `ci/proposed/` round trip. It recurs more
+often than a release and lands before the close. And it fixes the thing that has
+defeated this five times: browser harnesses were written at M46, M47, M53,
+M51.9 and M57.9 and **thrown away every time**, on a reason recorded twice in
+identical words — *"a pixel assertion living there would protect nothing between
+the two occasions somebody ran it."* An `X.9` obligation is scheduled, recurring,
+and its range covers everything numerically below it, so the check has an owner
+and a cadence rather than a directory.
+
+The exploration must **terminate in a kept spec**. That is the half that never
+happened: five explorations, zero retained tests. The CLI is for judging; an
+ordinary Playwright spec read through `--reporter=json` filtered to failures is
+what runs afterwards at near-zero token cost.
+
+### Costs, measured rather than estimated
+
+- `playwright-cli` bundles `playwright-core` **1.63.0-alpha**, which wants
+  engine builds this tree does not have — it asked for `firefox-1539` against
+  the `firefox-1538` that `tools/render-verify`'s pinned Playwright **1.62.1**
+  installed. One build apart.
+- Installing its chromium added a **second** engine pair beside the existing one
+  and took the cache from **1.2G to 1.9G**. That is the price of the skew, and
+  aligning the two pins is the way to avoid paying it twice.
+- It defaults to **branded Google Chrome** at `/opt/google/chrome/chrome`, which
+  is not here and is not what `--browser` offers a plain `chromium` value for.
+  The working incantation is a config file: `{"browser":{"browserName":"chromium"}}`
+  passed to `open --config=`, after which the session persists and later commands
+  take no flag.
+
+### The trap that did not bite, and the one that did
+
+**Origin CSRF did not bite.** `http.NewCrossOriginProtection` refuses a form POST
+without a matching `Origin`, and curl passes only by not being a browser. The
+browser's sign-in POST was **evaluated** — it came back `401`, not `403` — so
+same-origin navigation satisfies it and no exemption is needed.
+
+**Stale refs did bite, exactly as predicted.** After the failed sign-in swapped
+the page, `e11` became `f1e12`; a fill against the old ref silently went nowhere.
+Any spec written here re-snapshots after a swap or targets by role and name
+rather than by ref.
+
+### What ten minutes of it found
+
+[F206](deferred-findings.md): htmx violates the CSP on every page load. htmx
+2.0.9 injects a `.htmx-indicator` stylesheet at load and `style-src 'self'`
+blocks it. Nothing is visibly broken — this product uses no `hx-indicator` — but
+the next template that does gets a loading state that silently does nothing, and
+a permanent console error makes *zero console errors* unusable as an assertion.
+Neither the template scans nor the integration suite can see it: one reads
+markup, the other reads HTTP.
+
+That is the argument for the whole decision, made by accident. The check was not
+looking for it.
+## 2026-08-11 — Which review owns a reopening
+
+[W44](workflow-changes.md#made), owner-set, and it extends
+[W43](workflow-changes.md#made) rather than qualifying it.
+
+W43 settled that scope **added** after an `X.9` has run is numbered below it and
+reopens it, so the range that review claims stays true. A **reopening** is
+different in one way that matters: it keeps its milestone's existing number, and
+that number can sit inside more than one review's range at once.
+
+[M47](phase-details/m47.md)'s reopening is the first case.
+[M51.9](phase-details/m51.9.md) claims M46–M51 and
+[M57.9](phase-details/m57.9.md) claims M46–M57; new work under M47 is inside
+both.
+
+**Only the later reopens.** M57.9's range wholly contains M51.9's, so re-running
+it covers everything the earlier review claimed. M51.9's status row gains a note
+— *range re-covered by M57.9* — rather than a second run.
+
+Two alternatives were declined. **Reopening both** is strictly correct under the
+rule as written and produces two adversarial reviews at the end of a closing
+phase, the earlier duplicating the later's coverage. **Exempting reopenings from
+review entirely**, on the argument that W38's per-milestone reviewer suffices, is
+the argument that was offered and declined at W43; accepting it here would make
+that rule mean two different things four days apart.
+
+**The cost, stated rather than buried:** a `done` mid-phase review now carries a
+range containing work it never saw, and the note on its row is the only thing
+that says so. That is a real weakening, and it is affordable only because
+containment is checkable — the rule holds exactly while a later review's range is
+a superset. A reopening below a review whose range is *not* contained by a later
+one reopens that review, with no exemption available.
+
+## 2026-08-11 — The link page becomes tabs, and what each tab says about itself
+
+Settled with the owner over five rounds of wireframes, after
+[F205](deferred-findings.md) established that [M47](phase-details/m47.md)'s
+reorder moved the complaint rather than answering it. The definition of done is
+in m47.md; this is why.
+
+### Tabs, and state on the tabs
+
+Four structures were drawn — tabs, a two-column rail, a summary with drill-in,
+and sub-routes. The owner took **tabs** for the layout and the **rail's state
+feedback**, which is one question rather than two: where does state live once the
+tabs are the navigation.
+
+Four answers to that were drawn in turn — badges on the tabs, a state line under
+the strip, an Overview first tab, and a rail beside the panel. **Badges won
+because the state and the way to act on it become the same object**: you read
+`Routing 2` and click `Routing 2`. The others separate them, or — in the Overview
+case — hide five of six the moment you navigate.
+
+It is also the only one that keeps the reason tabs beat the rail in the first
+place. A horizontally scrolling strip behaves identically at 360px and at full
+width; the state line wraps, the rail cannot survive one column and degrades into
+the state line, and Overview adds a screen before the common task.
+
+### The vocabulary, and why `0` rather than nothing
+
+**Every tab holds the same width whether set or empty.** A missing badge and a
+badge reading zero are different claims and a reader cannot tell them apart, so
+empty counts read `0` in a muted badge. The strip then does not reflow as a link
+is configured, and two links compare position by position.
+
+The cross means **the section is empty**, not *no* — written that way because it
+serves both Split and Signed, and a third tab giving it a subtler meaning would
+make it lie. It is deliberately **neutral rather than red**: *off* is a normal
+state for a split test, and red should mean something is wrong. The check is the
+only badge carrying colour, because signed access is a security property worth
+reading at a glance and it is the strip's one true binary.
+
+**Edit carries a count of active protections**, chosen over leaving it unbadged
+and over splitting a Protection tab out of the form. The five booleans live
+inside the edit form and no single badge can name them; a count says *something
+is configured here*, which is what the strip is for, and the tab itself says
+which. The objection is recorded: password and forward-query are not obviously
+comparable things to total.
+
+### Two glyphs, after four failed
+
+The Split tab is not binary — `SplitKinds` (`internal/domain/routing.go:646`) is
+exactly `weighted` and `sequential`, with `Kind == ""` for none — so it needed a
+mark rather than a check. The owner asked for icons over words, over an arm
+count, over letters and over abbreviations.
+
+**Four rotation marks were drawn and all four failed at badge size.** A single
+arc read as *refresh*. Stops in a row read as the `…` more-options icon. A ring
+with four stops and a ring with three were not recognisable. The cause is not the
+drawing: a 9px glyph carries three or four distinguishable features, and *a
+cycle, through discrete stops, in order* needs more than that. The check and the
+cross survive at that size because they are symbols everybody already learned,
+which a new mark cannot borrow.
+
+**So the pair stopped drawing rotation and drew the difference instead.**
+Weighted is two shares of unequal height; sequential is three shares of equal
+height, on the same baseline. That is the actual user-visible distinction — 
+visiting each arm once in turn produces equal shares — and it is legible at 9px
+for the reason the weighted glyph already was: **it is a size comparison, not a
+symbol.** The difference is carried twice, by equality and by count, so losing
+one signal small leaves the other.
+
+The four rejected marks are kept in the record rather than deleted, so the next
+reader does not redraw them.
+
+### What the drawing process itself demonstrated
+
+The outlined share hung 1.4 units below the filled one in **two consecutive
+drafts**, because SVG centres a stroke on its path and the inset was missing. Two
+readers missed it; the owner caught it both times. It is now checked
+arithmetically — both bottoms at 20.5 — rather than by eye.
+
+That is a defect in a glyph whose entire meaning is a size comparison, invisible
+to every test this repository has, found by looking. It is the argument for
+[M46.5](phase-details/m46.5.md) stated more precisely than M46.5 states it: the
+question *do these four glyphs render correctly at 9px in three engines* is
+measurable, and nothing in the tree can currently answer it.
+## 2026-08-11 — Seven tabs, and M47 split along the seam the design was drawn on
+
+Two owner answers, taken after [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)'s
+review of the M46.5 and M47 plans.
+
+### Seven tabs
+
+The design settled six *badged* tabs and never said how many tabs there were —
+a definition of done whose central claim is what the strip contains, not saying.
+The review caught it.
+
+**Activity folds into Analytics.** It is the same data one row at a time: the
+rollup and the rows are one subject, so one tab holds both and the badge stays
+the click count. **Danger keeps its own tab**, unbadged, over moving deletion out
+of the strip into a header control — that would have been a structural change
+beyond the redesign as agreed.
+
+Eight section partials become seven tabs. The ninth item in the page's own list
+is the inline identity header, which is the page rather than a section — an error
+that was in F205, in the first draft of this plan, and in the sentence that
+described the page as having nine partials.
+
+### The split
+
+M47 becomes **M47, the layout** and **[M47.5](phase-details/m47.5.md), the state
+feedback**, and that is the seam the design was drawn on rather than an arbitrary
+halving. The owner combined one wireframe option's tabs with another's badges;
+separating them back means the shell is reviewed as navigation and the badges as
+information design, which is what each is.
+
+M47 therefore ships a **bare strip**, and that is stated as a deliberate
+intermediate rather than an oversight: a tab strip with no badges is exactly the
+option that was drawn, considered, and found insufficient alone. It is shippable
+and it is not the finished design.
+
+[W40](workflow-changes.md#made) is what made this cheap — a milestone the build
+turns out to need is added when it is needed, with no phase-boundary
+conversation. Under the older reading this would have been the fifth such
+conversation in one phase.
+
+### What the plan review caught, and it is the reason both plans changed
+
+Nine findings, every one verified against the tree before being acted on. The
+four that would have cost the build:
+
+- **The strip runs into four shipped, enforced gates that neither plan named.**
+  `linkDetailLineCap = 60` against a 57-line page — three lines of headroom, and
+  the test's own message says raising it *"is a decision about the page's
+  structure and belongs in decisions.md, not in this constant"*. The first two
+  form controls must be `url` then `alias`. `<ul>`/`<ol>` is refused before
+  `id="url"`. And a 160px prefix pixel budget with the QR thumbnail already
+  spending 96, which is what forces the glyph size onto `h-2.5` or `h-3` rather
+  than the 9px and 11px the wireframes drew.
+- **An ordering inversion.** F206 was approved into M47, on the owner's ground
+  that the console must be clean before anything asserts against it — and M46.5,
+  which runs first, names a clean console as one of the two things its kept spec
+  may assert. The fix moved to M46.5 to satisfy the reason it was approved for.
+- **`test/integration/web_test.go:540` was cited for the opposite of what it
+  asserts**, in two places. It asserts the `/docs` policy *does* carry
+  `unsafe-inline`; the main-policy assertion is `:593-594`.
+- **M48's panels were cited as an htmx precedent** and `panel.html:26-30` says
+  htmx *"is not used here"* — they are the Popover API. Only the workspace
+  switcher is the precedent.
+
+And the one that is about this project rather than this plan: **M46.5 claimed
+five discarded harnesses and named M53.** The record has three explicit discards
+— M46, M47 and **M48** — plus two ad-hoc runs at M51.9's and M57.9's acceptances
+with no discard note, and the reason is recorded three times rather than twice,
+differing by a word. Counted, corrected, and worth noting that the milestone
+whose subject is *make the check keepable* opened by miscounting how often it had
+not been kept.
+
+## 2026-08-11 — Reviews carry a browser check
+
+A contract change, not any milestone's decision, so it carries no number:
+prompted by the owner's direction of 2026-08-11, given while M46.5 was planned
+and written into [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+when it was built. [W45](workflow-changes.md#made) is the row.
+
+**The obligation.** Every `X.9` review drives the pages its range touched in a
+real browser and its findings say what was seen: do those pages render and
+behave as their milestones claim, and is the console clean on them? A review
+that did not answer it is not finished.
+
+**Why it is worded as a question rather than a command.** The five-harness
+record is the argument: three browser harnesses discarded deliberately
+(M46, M47, M48), two more ad-hoc runs without a discard note — every one an
+answer produced and thrown away because the *practice* had no owner. Naming
+commands would tie the obligation to `@playwright/cli` 0.1.18 and die with it;
+naming the question survives the tool being replaced. What the check must
+answer is fixed; `make verify-ui` green against a running instance, plus
+driving what the range changed, is merely today's cheapest yes.
+
+**Why a review, and not CI.** Four shapes were offered and each declined:
+nightly, every push, opt-in per PR, and inside `release-check`. All four fail
+on the same two facts — the runners have no Node and no browser engines
+(several hundred megabytes), and this repository cannot push
+`.github/workflows/` to give them either; a `ci/proposed/` entry would wait on
+the owner applying it by hand. A review is a milestone the orchestrator runs
+itself, so the obligation binds an actor that already exists and needs nothing
+from CI. The cost is stated in the milestone and repeated here because it is
+real: the check runs at most as often as reviews do, a genuine reduction in
+coverage against every-push, chosen knowingly.
+
+**The named risk.** An obligation whose tooling is awkward gets satisfied by
+hand once and then dropped — the five-harness story with an extra step. The
+mitigation is that the suite already exists and is green: a review that runs
+an existing suite has a far lower bar than one that must build a harness
+first, which is exactly the difference M46.5 was bought for.
+
+## 2026-08-11 — M46.5, a browser an agent can drive
+
+Owner-added tooling, admissible under [D25](../../Plan.md#phase-2-decisions):
+Node for verification only, nothing shipped. Four decisions were made building
+it; the contract change it also landed is
+[the entry above](#2026-08-11--reviews-carry-a-browser-check) and carries no
+number.
+
+**Two Playwright versions in one tree, recorded rather than aligned.** Checked
+against the registry on 2026-08-11: stable `playwright` is **1.62.1** — no
+stable 1.63 exists — and **every** published `@playwright/cli` version bundles
+an alpha core (0.1.11 → 1.60.0-alpha, 0.1.18 → 1.63.0-alpha-2026-08-05), so
+there is no CLI pin that aligns with any stable pin. Alignment therefore means
+moving `tools/render-verify` off 1.62.1 — the pin three milestones' geometry
+evidence was measured against — onto an alpha that changes under the same
+name. Declined. The kept spec's runner is pinned to `@playwright/test`
+**1.62.1** instead, so the spec shares render-verify's pin and engines
+(chromium-1234, firefox-1538, webkit-2336) and the tree holds two stacks, not
+three. The cost, stated: the CLI's chromium-1237 duplicates ~700MB (the engine
+cache measured 1.2G → 1.9G when it was installed), and there are two versions
+to reason about. Revisit when a stable 1.63 ships. One consequence is tracked
+deliberately: `package-lock.json` pins the hoisting — the alpha `playwright`
+lands at the top of `node_modules` and the runner resolves its own nested
+1.62.1 — so the layout reproduces.
+
+**The kept spec asserts a clean console on `/login`, and that htmx ran.**
+`/login` because the layout, the stylesheet, the CSP and htmx are all live
+there with no session: a committed spec must not carry credentials, and a
+failed sign-in charges a real lockout counter. The htmx-liveness assertion
+(`window.htmx` present, `includeIndicatorStyles` read back `false`) exists so
+green means *htmx ran, configured not to inject* and never *nothing happened* —
+a page that failed to load htmx at all would also report a clean console. The
+spec was **born red**, which is the sabotage evidence at no extra cost: run
+before the fix was deployed it failed on the config assertion, and — with that
+assertion inverted once as sabotage, restored by counter-edit — on the console
+assertion, printing the exact CSP refusal F206 quotes. Fix deployed, green.
+
+**Green costs one line; nothing-ran is red.** `make verify-ui` reads the
+runner through `--reporter=json` and `report-failures.mjs` prints failures
+only — the reader is an agent whose context window is the budget, and a green
+run's full report is spend with no information in it. A run in which no test
+ran at all exits red, because *nothing failed* and *nothing was checked* must
+not share an exit code. A runner that dies before producing JSON has its raw
+output passed through and fails: its own words are the diagnosis.
+
+**The CLI is wrapped because its default browser is not on this machine.**
+`@playwright/cli` launches branded Chrome at `/opt/google/chrome/chrome` by
+default, and chromium is not among `--browser`'s values — it is reachable only
+through a config file, so `cli-config.json` names the bundled chromium and
+`make browse` passes it to `open`; the session persists and later commands
+take no flag. Engines are never downloaded silently, verified the same way
+render-verify's refusal is: with an empty engine cache the run fails red
+naming `npx playwright install`, downloading nothing.
+
+**F206 is fixed here and its row closed pointing at M46.5** — owner-approved
+work, moved from M47 because this milestone runs first and its spec is what
+needed the console clean. The fix is one meta tag in the layout
+(`includeIndicatorStyles:false`); the CSP is untouched, and the next template
+to use `hx-indicator` ships the rules in `app.css`.
+
+## 2026-08-11 — M57.5, built: six repairs, and the audit line one of them answers
+
+Six rows, all filed at M58 or by the reviewer runs over it, all repairs with no
+choice in them. Nothing here changes what a user or an operator observes — the
+release notes, the schema, the API and every page are untouched, which is what
+made landing this before the tag cheap. The scoping argument is
+[the planning entry](#2026-08-11--m575-six-repairs-a-phase-close-could-not-have-contained);
+this one records what landed and the judgements inside it.
+
+### F197 — the D65 cell, and the false audit line
+
+The M58 geo-suppression entry in this log records: *"Checked and deliberately
+unchanged: D65, which says 'a resolved country in the breakdown' and is the only
+statement that was already exact."* `git diff -U0 -- Plan.md` for that same run
+returns one `-| D65` and one `+| D65`. Both halves of that contradiction are
+individually true-sounding, which is how it survived: the audit was right that
+the original 2026-08-03 sentence was exact, and wrong that nothing edited the
+row — the same pass rewrote the cell's refusal clause and left the sentence it
+replaced standing three clauses from its replacement, so the cell stated both
+scopes. This entry is the answer the append-only rule allows; the original line
+stands untouched.
+
+The cell now states the data-driven scope once. The stale sentence — *"The list
+is now given nothing to rank when the instance cannot resolve a country"*, false
+at `internal/httpx/web_links.go`, whose `fillLinkAnalytics` fills
+`data.Countries` whenever `geoShowable` is true, one resolved country in the
+window being enough with no database configured — is deleted, and in its place a
+pointer at the one statement: the list stands or falls with the map. Verified by
+reading the cell end to end against the predicate, because adjacency is the only
+thing that makes this class visible. **No mechanical enforcement**, stated
+rather than papered over: nothing can test that a prose cell states one scope.
+What this bought is the correction and the record of how it was missed.
+
+### F198 — the delimiter half of the table gate
+
+`scripts/check-links.sh` now compares each table's **delimiter row** against its
+header and fails when the two disagree. That is the malformation GFM answers by
+dropping the whole table — the dropped-cell class one size up — and the check as
+built for F193 could not see it, because `want` was read off the header alone
+and the delimiter's count was validated for shape and discarded. Fenced blocks
+are skipped throughout, so a document demonstrating a malformed row does not
+fail the gate that documents it. This block is that fixture, and it stays here:
+
+```
+| a | b | c |
+| --- | --- |
+| 1 | 2 | 3 |
+```
+
+A three-column header over a two-column delimiter. Unfenced, that exact table
+appended to a tracked file turned the gate red naming the file and both rows —
+`docs/dev-notes/instances.md:387 is a 2-cell delimiter under the 3-column header
+at :386` — and was removed by counter-edit; fenced here, the gate is green over
+it, so one fixture asserts both halves for as long as it stands. The whole
+tracked tree passes the tightened check: 3056 links, 2151 table rows. The fence
+toggle matches what this tree writes — ``` at up to three spaces of indent;
+tilde and four-backtick fences exist nowhere in tracked markdown and would be
+content to it, which the script's own header states. Wiring is
+[W41](workflow-changes.md#made)'s and was not this milestone's work; the point
+of landing the two halves days apart is that a stricter check matters exactly
+because something now runs it.
+
+### F199 — the assertion its own comment called load-bearing
+
+Owner-answered 2026-08-11, turning the bullet from *reach the branch* into
+*remove it*: equal module counts at M and H hold only inside version 1 — 7
+bytes, 10 alphanumeric, 17 numeric — and `QRContent` unconditionally appends
+`?src=qr`, seven lowercase bytes that force byte mode, so no payload this
+product produces can satisfy the guard. Measured, not reasoned: the fixture's
+own content encodes to 29 modules (version 3) at M and 37 (version 5) at H. The
+`symbol.Size == base.Size` guard and the comment calling it load-bearing are
+gone, and the test says in one line why the no-growth-at-M case has no coverage
+— it would assert a property of `internal/qr` on input this product never makes.
+
+What D174 bought the re-fit with is now asserted on payloads the product does
+make: when the symbol grew, margin and scale move only far enough to keep the
+drawn size, within the one-module snap; when it did not — a style already at
+level H — the style comes back byte for byte. Sabotage: `refitForLogo` made to
+move the fit unconditionally turned both halves red (296px drawn as 305px on the
+grown case; margin 4 became 5 on the no-growth case), restored by counter-edit.
+Under the test as it stood, that sabotage was invisible — which was the finding.
+
+### F200 and F201 — two fixtures, one class, two different rules
+
+The two `internal/ui` QR stubs now carry `class="` + `qr.FluidClass` + `"` —
+derived, never retyped, exactly as the `mfa` fixture in the same file already
+did. The two hand-typed copies of this stub have now each lost an attribute,
+F191 the width and F200 the class, which is the whole case for deriving. The
+*stdlib-only* rule is not in the way: it is about Node, CDNs and the CSP, the
+import is a test file's, and `internal/qr` does not import `internal/ui`.
+
+The team and invitation fixtures now pass `Form` as the anonymous struct the
+handlers declare (`internal/httpx/web_team.go`, `internal/httpx/web_invitations.go`)
+rather than as a `map[string]string`. Hand-typed, and that is not F200's mistake
+repeated: `internal/httpx` imports `internal/ui`, so there is no name a test in
+this package can reach — F200's rule is *do not copy what can be named*, and
+here there is none. The struct is F167's guard on the two forms F182 is about,
+and it is one-directional — it catches a field the handler gains, not one it
+loses. Sabotage: `invites.html` pointed at a `Form` field no handler supplies
+failed the render (*can't evaluate field Ghost*) where the map had rendered it
+as empty string, restored by counter-edit.
+
+### F202 — m54.md describes the tree that exists
+
+`m54.md`'s F103-reversal bullet said the bound no longer applies to an
+account-wide key at all. Since M58 such a key's reads are bounded by the
+organizations it has been cut out of, resolved through `Identity.keyReaches`,
+and F178 put those bars on the owner's own key list. The file now carries that
+in the amendment idiom the six other milestone files M58 touched already use —
+what it said, what is true now, and the rows that changed it — so a reopening
+reading m54.md reads the tree rather than the plan it was written from.
+
+### The rows, and what this milestone makes slightly worse
+
+All six rows are closed pointing at M57.5. **F198 closes only its delimiter
+half** — the wiring half was W41's, and both ends say so. And F194 is named
+rather than hidden: F197 and F202 insert lines into `Plan.md` and `m54.md`, so
+this milestone is an instance of the citation-drift row it deliberately
+excludes. Repairing citations by hand is the treadmill
+[W39](workflow-changes.md#proposed) exists to decide about.
+
+## 2026-08-11 — M47, the split repaired in the files that recorded it
+
+**Marked M47** — a reopened milestone keeps its number, and this is its plan
+being repaired before its build starts.
+
+Commit `bb76018` was meant to record the M47/M47.5 split and mangled it.
+`m47.md` carried **two** `# Reopened — 2026-08-11` blocks: the first was the
+post-split layout contract — strip ships bare, badges are M47.5's — but its
+tail sections (deliberately-not-done, demo, risks) were copied from the
+original shipped milestone, and it lacked the four shipped gates, the
+measured-claim section, and the reopened exclusions and risks. The second was
+the fuller **pre-split** draft, with the badges, the glyphs and the size
+measurement inside M47's scope, contradicting the split the same commit
+recorded in Plan.md and in `m47.5.md`'s own preamble. And `m47.5.md` — titled
+*What every tab says about itself* — had **no badge section at all**: its
+*Done means* held only the glyphs and the size, with a double blank line where
+a section had evidently dropped out.
+
+Found at step 1 validating M47 on 2026-08-11. Which sections constitute each
+file's definition of done is an assertion, not a fact, so amendment was not
+available; the question was parked, put to the owner with three options, and
+**the owner approved the reconstruction the same day**, with the blind-task
+re-run staying in M47.
+
+What was done, all of it from text that already existed in one of the two
+blocks:
+
+- `m47.md` keeps **one** reopened section: the shared intro, the tabs section,
+  block 1's *The badges are M47.5's* section, and block 2's four shipped
+  gates, measured claim, behaviour-unchanged, demo, F206-not-here, reopened
+  exclusions and reopened risks. Block 1's copied tail and the rest of block 2
+  are deleted.
+- `m47.5.md` gains *Every tab carries its state* verbatim from the pre-split
+  draft, in the gap its own layout left for it.
+- Five deviations from verbatim, each a fact the split itself forced. The kept
+  spec's bullet read "the strip does not wrap at 360px, and the badge glyphs
+  render at the chosen size"; the glyph clause moved to M47.5 with the glyphs,
+  and the bullet says so. The reopened exclusion read "All nine survive",
+  which the tabs bullet's own correction had already counted as eight partials
+  plus the header; it now says that. The reopened risks led with "a badge
+  vocabulary, four glyphs, an icon home, a CSP fix" in M47's scope — the first
+  three are M47.5's and the CSP fix landed at M46.5, so the paragraph names
+  the split instead. The *Depends on M46.5* line read "the glyph and viewport
+  claims below"; the glyph claims are no longer below. And block 1's copy of
+  *The one label that changes* was **not** carried into the reopened section,
+  because that label shipped with original M47 — `link_edit.html:176` and the
+  twenty-line comment above it are the tree saying so — and a reopened
+  contract re-asserting shipped work would fail validation's *not already
+  built* check on its first read.
+
+The badge section's `link_edit.html:107,120,146,188,197` and
+`link_signed.html:12` citations were carried as written; they are true at this
+commit, and keeping them current is the rot W39's answer accepts and states.
+
+## 2026-08-11 — Citations are true as of their own commit
+
+No milestone number — this is a process answer, prompted by
+[W39](workflow-changes.md#made), which F194 raised at M58: a `file:line`
+citation stops
+being a pointer the moment anybody inserts a line above it, roughly forty of
+them moved in one commit, and `make check-links` cannot see any of it because
+a `file:line` is not a link.
+
+Three shapes were offered and the owner chose the third, with an addition.
+**A milestone file's citations claim the tree at that milestone's own commit
+and nothing later.** That is what a historical record already meant; now it is
+stated — in `phase-details/_template.md`, where milestone files start — instead
+of being a courtesy the reader must infer. The addition is the owner's:
+**a citation written after its milestone landed carries a commit identifier**
+(`gates.go:167` at `abc1234`), so finding the referenced line is a checkout
+rather than a guess about which tree the writer meant. Symbol names remain the
+better pointer where one exists, and nothing forbids them.
+
+The enforcing test was declined: resolving every citation against HEAD on
+every build makes each future line insertion anywhere in the tree a build
+break somebody repairs by hand — the treadmill F194's own row warned about,
+mechanized. The blanket rewrite to symbol names was declined as a large edit
+to shipped milestone files that restales on the next refactor.
+
+F194 closes on this answer, unrepaired, which is the point: under the
+convention its ~47 citations were never false. They were read against a later
+tree than the one they claim.
+
+## 2026-08-11 — M46.6, the workspace pair reads as one control
+
+Scope addition, prompted by [F204](deferred-findings.md#open)'s approval — no
+milestone was under way; the phase loop was stopped between M57.5 and M47 when
+the owner answered the four standing prompts.
+
+**The approval and its ground.** F204 — the shell names the current workspace
+beside the switcher rather than in it — was the one open row with no
+disposition. The owner placed it in **Phase 3**: *"Phase 3 has had a lot of
+UI/UX changes so I'd like to keep it here"*, over the recommended Phase 4
+deferral. And with a condition that shaped everything after: **wireframes for
+approval before the changes**.
+
+**The shape was chosen from pictures, not prose.** Four shapes drawn in the
+product's own theme tokens, each in both membership states, because the
+single-membership account — every real instance today — is where shape (a)
+fails: with the label dropped and the switcher not rendering, nothing names
+the workspace, which is the defect M46's label closed. The owner chose **B1**
+— label and select sharing one bordered container, structure unchanged — and
+**amended it: the switch segment is the chevron alone**, no "Switch" text.
+Confirmed against the updated wireframe the same day. Shapes (a) and (c) are
+recorded as declined in the milestone file with their reasons; B2 — the same
+control keeping *Switch workspace…* in full — is the drawn fallback if the
+chevron-only face proves too implicit at M57.9's blind-task re-run.
+
+**Placement.** M46.6: the fix depends on [M46](phase-details/m46.md) alone and
+touches only the nav partial and its tests, so it sits beside its dependency
+and shares no files with M47's link-page work — the loop can build them in
+either order. Below M57.9 per [W43](workflow-changes.md#made); the review's
+range rows gain the number. `.7` and `.8` stay free.
+
+The answer was given 2026-08-11, ahead of the milestone that uses it; per the
+upcoming-decisions convention its `D` number is assigned when M46.6 lands. The
+wireframe artifact is private to the owner's account; this entry and
+`m46.6.md` carry the decisions in words, and the words win.
+
+**Independently reviewed per planning.md §7 before anything builds against
+it** — a different model, given the plan and the standards and none of the
+author's conclusions. Ten findings, every one verified against the tree and
+folded in before this entry was committed. The ones that changed the plan:
+the confinement claim was false — the pair's shared container needs the
+invocation site in `layout.html:60-62`, so "nav.html alone" came out; the
+chevron-only face and the 360px bound are browser claims, so M46.5 became a
+hard edge and a kept browser assertion became a bullet; the zero-membership
+state was unspecified and an unconditional wrapper would have rendered an
+empty bordered box on `organization_new`; two milestone counts and m57.9.md's
+own grew-after-it-ran list were left stale (M47.5 was already missing from it
+— an existing gap the review caught while widening it); the M24.5 scan cannot
+see a hex inside a chevron data URI, so the colour must come from
+`currentColor` or a token; the pass-unmodified escape hatch became *changing
+a recorded-answer assertion is a prompt*; and F204's own Where citation was
+wrong at the commit it claimed — corrected in place, in the open row, with
+the correction dated.
+
+## 2026-08-11 — M46.6 built: the boundary, the chevron, and D177
+
+**D177 — the workspace pair shares one bordered container, and the switch
+affordance is the chevron alone.** The answer was given 2026-08-11, ahead of
+this milestone, when the owner chose B1 from four drawn shapes and amended it;
+[the planning entry above](#2026-08-11--m466-the-workspace-pair-reads-as-one-control)
+carries the choosing. Per the upcoming-decisions convention the `D` number is
+assigned now, on the date the answer is used.
+
+**The boundary is a define, not a wrapper.** m46.6.md left one structural
+choice open — a wrapper div in `layout.html`, or a boundary built across the
+two defines — and required the milestone to record which. It is a new define,
+`workspace_control` in `partials/nav.html`, invoked from `layout.html` where
+the two siblings stood, wrapping the surviving `workspace_label` and
+`workspace_switch` invocations. The conditions that decide the three membership
+states belong beside the twenty-line comments that explain them, and
+`layout.html` stays what it was: an invocation site. The container's predicate
+is *some workspace is current* rather than a length check, because the label's
+own condition is `.Current` and the container must not outlive its content —
+`organization_new` renders with no `Workspaces` at all, and a length check
+would have drawn an empty bordered box there the day a fixture changed.
+
+**The chevron-only face is an empty-labelled placeholder, and a probe chose
+it.** m46.6.md named two candidate mechanisms — text clipped or transparent,
+or an empty-labelled placeholder — and warned about a third (a data-URI
+chevron on an `appearance-none` select, whose hex the M24.5 scan cannot see).
+Probed 2026-08-11 with render-verify's three pinned engines before any
+template was edited: `color: transparent` on a select **erases the native
+arrow in Chromium and in Firefox**, because both draw the arrow in the text
+colour; only WebKit keeps it. The empty-labelled placeholder renders as a bare
+chevron in all three. So the select keeps its native appearance — the chevron
+is genuinely the select's own affordance, no icon drawn, nothing for the scan
+to be blind to — and the placeholder is `<option value="" selected disabled>`
+with no text. The recorded assertion holding the placeholder
+(`workspace_test.go`, the selected-disabled check) passes unchanged.
+
+**The one place the letter of a bullet gave way, named rather than absorbed:**
+the *Done means* bullet says the opened list is unchanged, and the opened
+list's first row is now blank where it said *Switch workspace…* — an
+empty-labelled placeholder cannot label its own row. The milestone file itself
+names that mechanism as acceptable in its Risks section, and the two clauses
+cannot both hold in any engine; the specific clause won over the general one.
+The accessible name is untouched — `aria-label="Switch workspace"` — so what a
+screen reader hears is what it heard.
+
+**One test amended, called out as m46.6.md requires:** the select's clauses in
+`TestTheHeaderCannotPushThePageSideways` asserted `min-w-0` and `truncate`,
+written when the select held an unbounded string. Its face is fixed-width now
+and holds no text, so the guard became the property that actually protects
+360px: `w-8` and `shrink-0` — it can neither grow with an option's text nor
+collapse out of the boundary. The label's clauses are untouched, and none of
+the four recorded-answer assertions changed.
+
+**The kept browser spec gains a session, and `instances.md` becomes
+load-bearing.** The closed face and the 360px bound are rendered-appearance
+claims on the signed-in shell, so `workspace-control.spec.mjs` cannot stay on
+`/login` the way M46.5's spec deliberately did. Credentials still do not live
+in the spec: it reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falling
+back to parsing the account table in `docs/dev-notes/instances.md` — the one
+place a rebuild is already obliged to record the new credential, so there is
+no second copy to drift. It makes exactly one sign-in attempt (retries are 0);
+a stale table costs one charge against the lockout counter and a red run
+pointing at the file. Both halves were sabotaged against the running product —
+placeholder text restored, then the select forced to `w-96` — and each turned
+the spec red at its own assertion before the counter-edit restored green. The
+test instance itself was rebuilt this milestone: the credential recorded from
+M51.9's rebuild no longer signed in, which is the case instances.md already
+prescribes a rebuild for, and the rebuilt instance carries `lctl demo`'s data
+so the account has the two memberships the switcher needs to render at all.
+
+## 2026-08-11 — M46.6, one bullet amended at acceptance
+
+**Marked M46.6.** The amendment rule requires three things quoted, so:
+
+**As it stood:** *"the opened list is unchanged: disabled placeholder first,
+then every workspace that is not current."*
+
+**As amended:** *"the opened list keeps its order — disabled placeholder
+first, then every workspace that is not current — with the placeholder's
+label empty, because the chevron-only face forbids it text."*
+
+**The tree fact that forced it:** the worker's three-engine probe, 2026-08-11,
+against the pinned engines: `color: transparent` on a `<select>` erases the
+native chevron in Chromium and Firefox, which draw the arrow in the text
+colour; WebKit alone keeps it. Of the two mechanisms the milestone's own
+Risks section named for the chevron-only face, only the empty-labelled
+placeholder shows the chevron alone in all three engines — so "the opened
+list is unchanged" and "the closed face is the chevron alone" cannot both
+hold, in any engine, and the second is the owner's amendment (D177) while
+the first was drafting. The bullet's letter and the file's sanctioned
+mechanism contradicted inside one file; that is a fact-level wrongness, not
+a choice anyone could take differently, which is what makes this an
+amendment rather than a prompt. The opened list's first row is now blank;
+the accessible name is untouched and the options below it are unchanged.
+
+## 2026-08-11 — M47, a citation amended at validation
+
+**Marked M47.** Step 1's fact amendment, all three parts quoted per the rule.
+
+**As it stood:** *"Switching a tab is an htmx swap, in the pattern the
+workspace switcher uses (`nav.html:88`)."*
+
+**As amended:** the same sentence citing *`nav.html:130` at `55dbbc8`*, with a
+parenthetical naming why it moved.
+
+**The tree fact:** M46.6 restyled the workspace pair after M47's plan was
+written; the select's `hx-post="/workspace/switch" hx-trigger="change"` now
+sits at `nav.html:130`, verified by grep, and its mechanics are unchanged —
+which is the property the bullet actually leans on. A line number is not a
+choice, so this is arithmetic, not a prompt.
+
+## 2026-08-11 — M47 built: the stack becomes tabs, and D178
+
+**Marked M47.** The reopened contract's owner-set answers — seven tabs, their
+names, the fold, the bare strip — are in
+[the wireframe entry](#2026-08-11--the-link-page-becomes-tabs-and-what-each-tab-says-about-itself)
+and [the split entry](#2026-08-11--seven-tabs-and-m47-split-along-the-seam-the-design-was-drawn-on);
+this entry records what the build itself had to decide.
+
+### D178 — tab state is a query parameter, and every write re-derives its own tab
+
+One URL now serves seven views, and two things had to know which one the
+reader is looking at: the page, and every redirect or 422 re-render a section's
+form produces.
+
+**The page:** `?tab=` on `/links/{id}`, validated against a strip built from
+the same permission gates that guarded the sections when they were a stack
+(`linkTabs` / `activeLinkTab`, `internal/httpx/web_links.go`). Unknown or
+unpermitted values fall back to the strip's first entry — the edit form, the
+landing the design chose — rather than 404ing: the tab is presentation state
+over one resource, not an object with an existence to dispute. Each strip
+anchor is a real link carrying that URL; the click is an htmx swap in the
+workspace switcher's pattern, with `hx-select` trimming the full response to
+the `#link-tabs` container, so there is no fragment handler and no second
+render path to keep honest.
+
+**The writes:** re-derivation, not a new field. Every section-owned handler
+knows which section it serves, so it appends that tab itself — rules to
+`tab=routing`, split arms to `tab=split`, the QR panel's writes to `tab=qr`
+(in `qrReturn` and in `finishQRAction`'s 422 branch), and a signed-link mint
+renders `Tab = "signed"` because its product is drawn in that section's box.
+M48's `next` field is untouched: it stays exactly the two-value choice it
+shipped as, matched and never followed, which is why re-derivation was chosen
+over widening it — a `next` that carried a tab would be a third value to
+validate on every form the panel has.
+
+**The exception, taken knowingly:** archive and restore redirect to
+`?archived=1` / `?restored=1` with no tab, landing on the edit tab rather than
+on Danger. Their Locations are pinned byte-for-byte by
+`TestWebLinkLifecycle` (`test/integration/web_test.go:313`), the outcome is
+named by the status badge in the identity header on every tab, and a reader
+who archived a link is done with the danger zone in a way a reader who added a
+routing rule is not done with their list. Consistency was weighed and this
+trade preferred; if the blind-task re-run says otherwise, this is the sentence
+to reopen.
+
+### The strip is a partial, so the cap did not move
+
+The gate bullet offered two branches — strip as partial, or move
+`linkDetailLineCap` with a written decision. The first was taken:
+`pages/link_detail.html` is 37 lines against the cap's 60, because the
+nine-line section stack became one `{{template "link_tabs" .}}` and the strip,
+the dispatch and their reasoning live in `partials/link_tabs.html`. The cap
+constant, its comment and its message are untouched.
+
+### The QR panel outlives its tab
+
+The thumbnail in the heading row is a `popovertarget` invoker on every tab,
+and an invoker whose panel is not in the document opens nothing. So the panel
+moved out of the `link_qr` section into `link_qr_panel`, rendered once at page
+level under the section's own `links.read` guard — a popover is display-none
+until invoked, so it adds nothing to any tab's flow. `id="qr"` travels with
+it, which is what keeps `qrReturn`'s `#qr` anchor and
+`TestTheDashboardShowsTheCodeInline`'s assertions true on every tab.
+
+### What the behaviour-unchanged claim cost, exactly
+
+Two integration tests were amended, both because the page draws one panel at a
+time now, and both named here as m47.md requires:
+
+- `test/integration/routing_test.go` — the created rule is asserted on
+  `?tab=routing`, the URL the rule form's own redirect carries, rather than on
+  the landing tab.
+- `test/integration/web_test.go` (`TestWebLinkLifecycle`) — the archived
+  status stays asserted on the page as it lands; the Restore control is
+  asserted on `?tab=danger`, the tab it lives on. The archive redirect
+  assertion is byte-identical.
+
+Everything else passes unmodified, `?saved=1` and `?created=1` and the QR
+panel-page branch included. One integration test was added
+(`TestAQRWriteReturnsToTheQRTab`), driving a save and a refusal from the panel
+back to the QR tab — the test the reopened contract demands.
+
+**The whole-page scans render once per tab.** `TestEveryPageRenders` and
+`TestWideElementsScrollInsideTheirOwnContainer` read rendered markup, and a
+page that draws one section at a time shows a single render only one section —
+five sections would have silently left every rendered-markup claim, which is
+F167's failure at page scale. `renderingsOf` (`internal/ui/ui_test.go`) is the
+mechanism; `choropleth_test.go` renders the analytics tab it reads.
+
+### Verified, not assumed
+
+`make check` and `make test-integration` green. `make verify-ui` green — three
+kept specs, the new `link-tabs.spec.mjs` among them, against the rebuilt test
+instance. Both new tests were sabotage-verified and restored by counter-edit:
+the dispatch rendering a second section turned the one-panel test red on six
+tabs; `flex-wrap` in place of the strip's overflow turned the kept spec red at
+exactly the wrap assertion (tops 338 vs 376). The htmx swap was driven in a
+real browser by the spec's tab click, which waits on `?tab=qr` reaching the
+URL bar via `hx-push-url`.
+
+**The blind-task re-run, and its number: 19.7 seconds** — link page rendered
+to save confirmed, against the cited ~35. The first attempt shipped its
+discharge without re-taking the measurement and that is the failure the
+reopened contract names; a measurement taken by the actor who built the page
+is not blind, so at acceptance the owner directed it be run by an
+**independent subagent** — a fresh agent given the running instance, the
+credentials and the task, and told nothing about the layout or that anything
+had changed. Method stated with the number, because the two are not the same
+instrument: the original ~35 was the owner's hands, this is an agent driving
+the pinned chromium, and the comparison is indicative rather than exact. What
+the run reported is the sharper evidence: the destination field was the first
+field on the landing tab — *"no hunting, no scrolling needed to find it"* —
+and the one friction named was scrolling past ~10 unrelated fields to reach
+the single Save button at the bottom, which is a different complaint than
+F205's and is filed as its own row rather than lost in this paragraph.
+
+## 2026-08-11 — M47.5 built: the badges, the glyph size, and the lie a browser caught
+
+**Marked M47.5.** The vocabulary — `0` over nothing, the cross as *empty*, the
+check as the one colour, two glyphs that draw the difference — was owner-set
+over five rounds of wireframes and is recorded in
+[the wireframe entry](#2026-08-11--the-link-page-becomes-tabs-and-what-each-tab-says-about-itself);
+this entry records what the build had to decide and what it measured. No new
+`D` number: every choice here either was already the owner's or is a reading
+of the contract, stated below so it can be objected to.
+
+### The size is h-3 — 12px — and 10px failed in all three engines
+
+The prefix pixel budget forces the choice onto `h-2.5` (10px) or `h-3` (12px);
+m47.5.md hands the answer to M46.5's browser check. Method, since the number
+means nothing without it: a fixture page assembled at run time from the
+repository's own files — the icon defines read out of `partials/icons.html`,
+the chip markup as `link_tab_badge` writes it, the stylesheet from `make css`
+— served over `127.0.0.1` and rendered by the three engines render-verify
+pins (playwright 1.62.1: chromium-1234, firefox-1538, webkit-2336) at
+deviceScaleFactor 1. The 1x rasters were magnified nearest-neighbour — the
+same pixels, larger — and judged per glyph, per size, per engine.
+
+What was seen, identically in Blink, Gecko and WebKit: at 10px the weighted
+glyph's **outlined share collapses into a smear** — its 1.2px stroke and
+sub-pixel interior cannot both survive the raster, and the mark that is half
+the pair's meaning stops being a bar at all. At 12px the outline closes into
+a legible hollow bar, sequential's three bars separate cleanly, and the check
+and cross are unambiguous. So the wireframes' lean toward small (9px and
+11px, drawn) did not survive measurement, which is the reason m47.5.md calls
+the size measured rather than chosen. `linkTabBadgeSize` in
+`internal/ui/link_detail_test.go` ties the recorded answer to the class in
+icons.html — proven incidentally when the two disagreed for one commit-less
+minute and the suite went red — and the kept spec asserts the rendered 12px
+against the running product.
+
+### Two readings of the contract, stated rather than absorbed
+
+**The Signed badge reads the stored `RequireSignature`, not the transient
+`SignedURL`.** m47.5.md's bullet cites `link_signed.html:12`'s
+`{{if .SignedURL}}` as its evidence, and that citation is read here as
+evidence of *binariness* — no third state — rather than as the badge's
+source: `SignedURL` is a capability shown once and never stored, so a badge
+on it would be a check for exactly one render after a mint and a cross for
+the rest of the link's life, and every rationale clause the design recorded —
+*"signed access is a security property worth reading at a glance"*, *"the
+strip's one true binary"* — describes the stored boolean. The badge therefore
+reads what the edit form's *Require a signed link* gate stores. If that
+reading is wrong it is one line in `attachTabBadges` and one fixture.
+
+**The QR count is the codes the panel lists, default included.** A link
+nobody has touched reads `QR 1`, because opening the tab shows one code —
+ListQRCodes synthesises the default, and a count of stored rows would read
+`0` over a section visibly holding a code, which is the lying badge the
+milestone's risk section names. `0` is reachable — it is what the failed-soft
+codes read leaves, and the section then shows nothing too.
+
+### The glyphs, and the arithmetic the record demanded
+
+`partials/icons.html` is the icon home: four defines — `icon_cross`,
+`icon_check`, `icon_weighted`, `icon_sequential` — inline SVG on a 24-unit
+canvas, `currentColor`, each define's dot its accessible name carried as
+`aria-label` and `<title>`. Template defines rather than a sprite or Go
+funcs, because a define is this codebase's unit of markup reuse, the CSP
+rules out external assets, and the caller owns colour by wrapping the glyph
+in a text-colour token. The drafting defect the wireframe rounds recorded is
+prevented the way the record demands: the outlined share's stroke is 2.8,
+inset by half of it, and every bottom computes to the one baseline —
+`3.5+17`, `8.5+12`, and `11.1+8+1.4` are all 20.5.
+
+The chips share one box — `h-4 min-w-4 px-1` — and a position's two states
+always draw the same kind, digit or glyph, which is the mechanism behind
+*every tab holds the same width whether set or empty*. Muted is a text token
+(`text-subtle` on `bg-sunken`); the check alone carries the ok pair.
+
+### The badge that lied for an hour, and what caught it
+
+`attachTabBadges` first tested `data.Split != nil` for the split badge, and
+`GetSplit` answers a link with no split with an **empty Split, not a nil
+one** — so every unconfigured link drew five badges where the strip claims
+six. Every template-level test was green, because the ui fixtures hand the
+template already-assembled badges; the kept spec against the running product
+went red within the hour, at exactly its badge-count assertion. That is the
+milestone's own risk — six values assembled wrongly make the strip
+confidently misleading — caught by the instrument M46.5 was bought for. The
+fix tests `Kind != ""`, the case is pinned by name in
+`TestAttachTabBadgesReadsWhatTheSectionsShow` (internal/httpx), and the
+assembly now has a test on the handler's side of the seam as well as the
+template's.
+
+### Verified, not assumed
+
+`make check`, `make test-integration`, `make verify-ui` green. Sabotage, each
+restored by counter-edit: the template refusing the zero chip and the cross
+retitled *No* turned the ui test red at both claims; the split nil-test
+reintroduced turned the assembly test red at exactly the pinned case; the
+kept spec's size assertion inverted went red against the running product
+naming 12 where it demanded 10, after its badge-count half had already been
+born red on the real defect above. Nothing to seed: every badge reads state
+the demo already has, as M47's file stated for both halves of the split.
+
+## 2026-08-11 — M47.5, one bullet amended at acceptance
+
+**Marked M47.5.** The amendment rule's three parts:
+
+**As it stood:** *"Six positions, and every tab holds the same width whether
+set or empty, so the strip does not reflow as a link is configured and two
+links compare position by position."*
+
+**As amended:** *"Six positions, and every position draws its chip in both
+states — the same kind, set or empty — so configuring a value never adds or
+removes a chip, the strip does not reflow as a link is configured, and two
+links compare position by position. Width moves only as a count gains
+digits."*
+
+**The tree fact:** the chip is `min-w-4 px-1` (`partials/link_tabs.html:76`
+in this diff), so a two-digit count — the fixture's own Analytics `40` —
+renders wider than the empty `0`. Literal same-width would need a two-digit
+reserve on every chip, which nobody chose, the wireframes never drew (they
+drew single digits), and which would spend the prefix budget on air. The
+mechanism actually built — a chip always present, the same kind per
+position — is what the sentence was buying: no appear/disappear reflow
+between set and empty. A sentence overstating its own mechanism is a fact
+wrongness; the design is unchanged, so nobody could have decided
+differently, and it is amended rather than prompted. Found by M47.5's
+reviewer measuring the claim against the chip's own classes.
+
+## 2026-08-11 — M46.6 reopened: the popup the wireframes could not draw
+
+**Marked M46.6** — a reopening keeps its milestone's number.
+
+The owner looked at the shipped switcher and named four things in one
+message: the popup is not aligned with the control, it opens on a blank
+unselectable row, selecting paints text left of the chevron until the
+redirect lands, and the popup matches nothing — *"looks like a bolted on
+after thought."* [F209](deferred-findings.md#open) carries the four with
+their shared cause: every one lives in the native `<select>`'s popup or
+closed-face painting, which no CSS in this product can reach. The blank row
+was the cost the acceptance amendment recorded; the owner has now seen the
+cost and rejected it, which is information the amendment could not have had.
+The wireframes could not have caught any of this — a native popup cannot be
+wireframed, only shipped and looked at.
+
+Symptom 3 transiently falsifies the shipped claim that *the closed face is
+the chevron alone*, and a defect that makes a shipped milestone's claim
+false reopens that milestone. The owner approved the reopening over Phase 4
+deferral, same day.
+
+The reopened contract rebuilds the opened state on the Popover API pattern
+both header menus already use (D24) — the panel becomes the product's to
+style and align, there is no placeholder row to draw, and the invoker is a
+button with no text to flash. The one recorded-answer assertion that
+retires — the disabled placeholder — retires because its premise (a select
+must display something) dissolves with the select; the owner's approval of
+this reopening is the sign-off F209's row records. A11y moves from combobox
+to button-and-group, the trade D24 already recorded for the other two menus.
+
+## 2026-08-11 — M46.6 rebuilt: the panel, the anchor, and the width from two insets
+
+**Marked M46.6** — the reopening's build, under the milestone's own number.
+
+The opened state is the Popover API pattern both header menus use (D24): the
+chevron is a `button popovertarget` invoker inside the fused control, and the
+panel is `popover="auto"`, each workspace a submit button in the existing
+form with `workspace_id` on its value. One POST to `/workspace/switch`, the
+hidden `next` untouched, the handler untouched. The htmx change-handler left
+with the select — a select needed something to fire on change, a real button
+submits a form scriptless — so the control now needs no JavaScript at all,
+with D103's stance unchanged. No placeholder row exists to draw, and the
+invoker's face is the identity menu's own chevron glyph: nothing to paint
+before, during, or after a switch, which is symptom 3 closed by
+construction rather than by styling.
+
+**Right alignment is CSS anchor positioning**, the fallback the reopened
+Risks section sanctioned when the literals could not express it — and they
+could not: the control sits mid-bar, and the width to its right (the bell,
+the identity button, an email of any length) is not a constant any literal
+can carry. The fused container carries `anchor-name: --linkctrl-workspace`;
+the panel sets `position-anchor` and `right: anchor(right)` behind
+`@supports (anchor-name: …)`, keeping the menus' shared-edge literal as the
+below-floor fallback. Probed 2026-08-11 in all three pinned engines
+(chromium-1234, firefox-1538, webkit-2336), including the exact nesting the
+template uses — the panel a descendant of its own anchor, popover shown:
+all three support it and land the panel's right edge exactly on the
+container's. The pattern's viewport-literal idiom stays for `top`, where
+the header heights are real constants.
+
+**The panel's width comes from its two insets, and that was learned red.**
+The spec's first run against the running product failed exactly where it
+should: a 16rem panel anchored to a control whose right edge sits ~212px
+from the left at 360px overflows the viewport's left edge by 44px. The fix
+is `left: max(1rem, calc(anchor(right) - 16rem))` — 16rem wide everywhere
+it fits, left edge pinned at 1rem where it does not, right edge on the
+control either way. `w-auto` beside it is load-bearing: the UA stylesheet
+gives `[popover]` `width: fit-content` and `margin: auto`, and with left,
+right and a non-auto width the box is over-constrained — the auto margins
+absorb the slack and drift the panel off its anchor, which the second
+three-engine probe showed before the template was written.
+
+**What retired, and what did not.** The disabled-placeholder assertions —
+`workspace_test.go`'s and the integration switcher test's, with that test's
+hx-* mechanics assertions — retired with their premises, per the reopened
+contract and the owner's approval on F209. Their replacements assert the
+absence the design now guarantees: no `<select>` in the header, no blank
+row, no control posting an empty `workspace_id`, exactly one workspace
+button above two memberships. Every recorded answer is still asserted:
+never the current workspace (blind task 9, D117 — the integration check
+modernised from `" selected` to the button's `value=`), only above one
+membership (M25), the label whenever a workspace is current, three
+container states (D36). The kept spec extends to the opened state — panel
+right edge measured against the control's, no blank row, a driven switch
+proving the invoker's face carries no text — and switches back by the home
+workspace's own `title`, so a green run leaves the instance in the
+workspace it found it in and the other signed-in specs keep their data.
+
+## 2026-08-11 — Three reopenings from one look at the running product
+
+No milestone was under way; the owner used the demo through the tunnel and
+reported four things, and the fourth — absolute URLs saying `localhost` —
+was an environment fact fixed in place: `.env.demo`'s `LINKCTRL_BASE_URL`
+now carries the tunnel hostname, and `instances.md`'s passage that called
+the old value *a property rather than a defect* was updated the same hour.
+
+The other three were verified before they were filed, and each falsifies or
+reverses something shipped, so each is a reopening, owner-approved the same
+day over deferral past M57.9:
+
+**[F210](deferred-findings.md#open) reopens [M37](phase-details/m37.md).**
+The bands across the map are Fiji and Russia: both cross the antimeridian,
+`mapgen` never splits a ring at ±180, and the wrapped path fills the full
+1000-unit viewBox width — measured on the rendered SVG, exactly two paths
+wider than 900 units. Invisible-ish at 1280px, plain at 1920, which is how
+it shipped and survived.
+
+**[F211](deferred-findings.md#open) reopens [M47.5](phase-details/m47.5.md).**
+The Edit protections badge goes. This reverses the owner's own
+wireframe-round answer — *Edit carries a count of protections, over leaving
+it unbadged* — and the owner may do that; this entry is the supersession
+the recorded answer points to rather than an edit of it.
+
+**[F212](deferred-findings.md#open) reopens [M48](phase-details/m48.md).**
+The link page's QR popup folds into the QR tab and the heading thumbnail
+opens the tab. M48 built that panel because the stack buried the section;
+M47's tabs un-buried it, so the panel's reason ended on that page. M48's
+other panels stand.
+
+**One coverage decision, deliberately outside W44's letter.** The latest
+review whose range contains M37 is Phase 2's M44.9 — `done`, in a released
+phase. Reopening it to read one diff would cross a phase boundary for a
+review whose phase has shipped; instead **M57.9's re-run owes M37's
+reopening diff**, its owed-list says so, and M44.9's row carries the note —
+the same shape M51.9's row already carries for range re-coverage. If W44
+should say this generally, that is the review session's to propose; the
+choice here is recorded, not silent.
+
+## 2026-08-11 — M37 rebuilt: the antimeridian split, and the ring as the unit of the claim
+
+Work under [M37](phase-details/m37.md)'s reopening, closing
+[F210](deferred-findings.md#closed).
+
+**The defect was in the generator's own reasoning, not only its output.**
+mapgen's package comment asserted the antimeridian needed no handling because
+"Natural Earth cuts its geometry at ±180 already, so no ring wraps", backed by
+a bounds check on decoded coordinates. Both halves were wrong the same way: a
+crossing ring keeps every coordinate inside [-180, 180] — it *jumps* ~360°
+between consecutive points rather than leaving the range — so the check could
+never fire, and world-atlas 110m does not cut. The comment now states what the
+data does, and the bounds check's comment claims only what it can catch.
+
+**The split is unwrap-then-clip, chosen for having no tunable parts.** A ring
+whose consecutive longitudes jump more than 180° is rewritten into continuous
+longitude (each step takes the short way round), shifted by a whole turn so
+its minimum sits in [-180, 180), and clipped against the 180° meridian —
+Sutherland–Hodgman against a single half-plane, crossing points interpolated
+onto ±180 exactly so both halves end flush on the frame edge. The part beyond
+180 is shifted -360° to the frame's left edge. Rings that do not cross pass
+through untouched, which is what held the regenerated file to a two-line diff:
+FJ and RU, nothing else — the "byte-identical or explained" bullet discharged
+by construction rather than by inspection.
+
+**The fix found a third wrapped ring.** F210 measured two paths wider than
+900 units; the width test, written first and run against the shipped file,
+failed on three rings — Fiji, Russia's mainland, and **Wrangel Island**
+(width 996.9), a second Russian ring whose band hid inside the mainland's.
+Post-split the browser confirms Wrangel as two fragments flush on each frame
+edge. A per-path probe could not have seen it; the ring-level test did, which
+is the next point.
+
+**The test's unit is the subpath, because the country cannot carry the
+assertion.** A *correctly* split Russia still touches both frame edges — the
+mainland ends at x=1000 (180°E) and Chukotka enters at x=0 (180°W) — so
+Russia's and Fiji's per-country boxes legitimately span the full width, and a
+country-level "never spans the frame" test would fail on the fix it exists to
+protect. Verified on the rendered page, not only in theory: the two path
+*elements* still measure width 1000 while the widest rendered *ring* is 424.2
+(Russia's mainland). The bound is half the frame — nothing real sits between
+424.2 and a wrapped ring's ~1000 — and the test went red on the shipped file
+before the fix and green after, which stands in for sabotage.
+
+**The ≥1920px look is a recorded look, not a kept spec.** Driven at 1920×1080
+on the rebuilt test instance: the y≈8 and y≈278 bands are gone, Russia and
+Fiji render as shapes, the console is clean (0 messages), and `make
+verify-ui` stays green at 3. A kept spec was declined because the property is
+per-ring geometry, which the browser can only re-derive by re-implementing
+the Go test's path walk in JS — the Go test owns the property; a browser spec
+would own a copy.
+
+## 2026-08-11 — M37, one bullet amended at acceptance
+
+**Marked M37.** The amendment rule's three parts:
+
+**As it stood:** *"A test asserts no country path's bounding box spans the
+full viewBox width — the property the defect broke, checked over every
+generated path, so the next antimeridian-crossing addition cannot regress
+it silently."*
+
+**As amended:** *"A test asserts no ring — no subpath of any generated
+path — has a bounding box wider than half the frame; the widest real ring
+is Russia's mainland at 424.2 units and a wrapped ring measures ~1000, so
+nothing sits between the bound and the defect."*
+
+**The tree fact that forced it:** a correctly split Russia and Fiji each
+still span x∈[0,1000] — the mainland ends flush at the right frame edge
+and the shifted fragment enters at the left — verified by both the worker
+and the reviewer on the regenerated file. So the bullet as written fails
+on exactly the output it exists to protect, and the only unit that can
+carry the claim is the ring. Geometry decided this, nobody could have
+chosen otherwise, which is what makes it an amendment rather than a
+prompt. The test bound is half the frame rather than "full width" because
+the reviewer's red-run on the shipped file measured Wrangel Island at
+996.9 — a wrapped ring need not reach 1000 exactly.
+
+## 2026-08-11 — M47.5 reopened: the Edit badge goes
+
+**Marked M47.5**, closing [F211](deferred-findings.md#closed). No new `D`
+number: the choice was the owner's, made in use — *"if the edit badge only
+counts enabled booleans, I think we can go without it"* — and its supersession
+of the wireframe-round answer is recorded in
+[the reopening entry](#2026-08-11--three-reopenings-from-one-look-at-the-running-product).
+This entry is the build record.
+
+**Removed, not hidden.** The edit case and the protections count it read leave
+`attachTabBadges` entirely; `linkTab.Badge`'s `""` now names two deliberately
+bare tabs, Danger for having no state and Edit for the owner's reversal. The
+template's badge vocabulary is untouched — Edit simply stops being handed a
+word from it — so every shipped claim about the five remaining positions
+(muted zeros, the cross as *empty* on both tabs it serves, the constant chip,
+the one colour on Signed) rides on code this diff did not reach.
+
+**The bare state is asserted where a boolean could resurrect it.** Both suites
+keep rendering the configured fixture with all five protections on, and now
+assert Edit carries no chip and no glyph in that state as well as empty — the
+regression this reopening invites is exactly someone rewiring the count from
+the form's booleans. Sabotage on both sides of the seam: the edit case
+restored in `attachTabBadges` turned the assembly test red at the edit tab in
+both states; the ui fixture handed a count turned `TestEveryTabCarriesItsState`
+red at the bare-Edit loop in both states; both restored by counter-edit.
+
+**Every six-position record carries its supersession note.** m47.5.md's three
+claims — the positions bullet (its second amendment; the first was
+acceptance's), the counts list, and the Edit bullet, each quoting itself as it
+stood — plus its risk line, m47.md's "six values" risk, the strip template's
+comment, and the assembly test's own preamble. CHANGELOG's Unreleased entry is
+rewritten rather than annotated, because it describes what 0.4 will ship and
+`F211` means nothing to an operator. The kept spec's badge count moved 6 → 5.
+
+**Verified**: `make check`, `make test-integration`, `make verify-ui` green
+against the rebuilt test instance; the spec's count asserted at 6 first, red
+against the running strip — five chips found — then 5, green.
+
+## 2026-08-11 — M48 reopened: the QR popup folds into its tab
+
+Work under [M48](phase-details/m48.md)'s reopening, closing
+[F212](deferred-findings.md#closed). The owner's sentence is the whole
+specification: *"everything from it can just go on the QR tab, clicking the QR
+code should open the tab."* M48 built the popup because the stack buried the
+section; M47's tabs un-buried it, and a popup duplicating a tab one click away
+is redundancy, not reach.
+
+**The thumbnail opens the QR tab in the strip's own mechanism.** The heading
+anchor carries the same htmx quartet as a strip entry — `hx-get` of
+`?tab=qr`, `hx-target`/`hx-select` on `#link-tabs`, `outerHTML`, URL pushed —
+because the heading row renders outside `#link-tabs` and survives every swap,
+so one invoker works from whichever tab is open. It stopped being a
+`popovertarget` button and became an `<a>`, which the fold test's control scan
+does not count; the budget guard re-ran green with it in place.
+
+**The popup's contents, enumerated against the tab's, and where each piece
+went** — the reopening's own bullet, so the diff proves nothing fell out:
+
+| The popup held | Disposition |
+| --- | --- |
+| Chrome title, "QR code" | Retired with the chrome — the tab's section heading already says it |
+| **Open as a page** link → `/links/{id}/qr` | The link retired with the chrome; the duty moved to the tab's own URL, which *is* an ordinary page (`?tab=qr`). The route keeps answering — the codes list selects a code through it (`?code=`) and it is what a bookmark reaches — and `TestEveryPanelIsAlsoACompletePage` still holds it to rendering complete |
+| Close button | Retired with the popup; a tab needs no dismissal |
+| `link_qr_body` — refusal flash, codes list with per-row downloads and remove, add-code form, the full drawing and its content string, the PNG/SVG downloads, the style form, the logo section | Folds into `link_qr` in flow, below the section prose, byte for byte the same block — one `{{template}}` invocation moved surfaces |
+| The section's worded trigger, **Settings and download** | Retired; what it opened renders directly beneath where it stood |
+| The section's own duplicate `QRError` flash | Dropped — the body's copy renders in flow now, and one refusal must not draw twice |
+| `id="qr"`, the anchor `qrReturn`'s `#qr` names | Moved from the popup wrapper to the section container, so every existing return URL still lands on the section |
+| The `next` return path | **Untouched, because the popup never owned one** — the field belongs to the surface: the link page passes `/links/{id}` and the panel page passes its own path, `qrReturn` re-derives `?tab=qr#qr` on the link-page side (D178), and `finishQRAction`'s 422 re-derivation is unchanged. The reopened bullet asked for this disposition to be stated if the popup owned one; it did not |
+
+**Two shipped claims amended where they stand** (m48.md's shipped half, each
+quoted in place with the supersession dated):
+
+- *"One mechanism, used by **at least two** surfaces in this milestone"* — the
+  mechanism keeps one popup caller, the reviewer list. The floor was shipped
+  M48's evidence it was building a pattern rather than a component;
+  what survives is *defined once*, and `panel_test.go` now asserts that over
+  however many callers exist (`TestThePanelMechanismIsDefinedOnce`, renamed
+  from `TestBothPanelsUseTheOnePanelMechanism`, whose name became false with
+  one panel). The page-form half keeps both subjects: the QR contents' route
+  outlived their popup.
+- *"opening it gives the settings and the download"* — opening it now opens
+  the QR tab, where both render in flow.
+
+**Tests followed the bullets.** The thumbnail-invokes-popup assertion —
+`panelSurfaces`' `link_detail` entry, which checked `popovertarget` chrome on
+the link page — retired with the popup; `TestTheThumbnailOpensTheQRTab`
+replaced it, asserting the anchor's htmx quartet on every tab plus that no
+popover renders inside the link page's `<main>`, and both halves were
+sabotaged red first (the `hx-target` dropped; a popover reintroduced). The
+kept link-tabs spec gained the click a template scan cannot see: from the
+Analytics tab, clicking the thumbnail swaps the QR panel in and pushes
+`?tab=qr`. Strip-order and badge assertions re-anchored on the strip's own
+`<nav>` slice, because the thumbnail now carries a `?tab=qr` URL ahead of the
+strip in document order. `TestTheDashboardShowsTheCodeInline` split its
+fetch: the landing tab pins the thumbnail, `?tab=qr` pins the body and the
+download.
+
+**What this deliberately did not touch**: the reviewer panel and every other
+M48 claim about it; `LinkQRPage`, `LinkQRStyle`, `LinkQRLogo` and their
+routes; permissions on every surface; the demo, which already seeds styled
+codes the tab renders.
+
+## 2026-08-12 — Three more reopenings, from the owner's QR-tab report
+
+No milestone was under way. The owner worked the QR tab and reported seven
+symptoms; verified against the tree, they group by owning milestone into
+three rows, each approved as a reopening the same day.
+
+**[F213](deferred-findings.md#open) reopens [M49](phase-details/m49.md)**:
+the preview grows 1:1 with the applied size instead of keeping a fixed
+footprint; the quiet zone exceeds what scanning needs and worsens at
+2000px, with `MaxMargin = 16` permitting four times the ISO floor; and the
+reset button's label becomes *Restore defaults*.
+
+**[F214](deferred-findings.md#open) reopens [M50.5](phase-details/m50.5.md)**:
+an oversized logo is downscaled with a warning instead of refused — the
+owner's 813×813 upload failed the total-pixel cap while passing the
+per-side cap, and the message named both numbers without a verdict. The
+decode bound rises to admit it and SECURITY.md's numbered allocation story
+moves with it, in the same commit, still under the 1 MiB body cap. The
+browse control acknowledges its click, and choosing a file applies it —
+the separate upload step goes.
+
+**[F215](deferred-findings.md#open) reopens [M50.6](phase-details/m50.6.md)**:
+the logo box grows from the documented fifth-of-the-symbol toward the
+largest size that still decodes. The half-budget rule was deliberate and
+its supersession is dated in the file that argued it. **The owner set the
+validation**: simulate scanning at a distance — decode the raster scaled
+down to few pixels per module — and gate the fraction on it; if no
+trustworthy decoder exists, produce a printable test sheet and wait on the
+owner's phone. Their calibration is quoted in the contract: resolution is
+not print size; it should look good and scan at a reasonable distance for
+a scaled size.
+
+The trades were named in the scheduling prompt and taken knowingly: the
+decode bound is a security number and its replacement is stated, and a
+bigger logo spends error-correction budget that today buys print-wear
+tolerance — the scan check is what keeps that honest.
+
+## 2026-08-12 — M49 rebuilt: the quiet zone stops absorbing the rounding, and D179
+
+[F213](deferred-findings.md#closed) reopened [M49](phase-details/m49.md) on
+three symptoms the owner met in the running product. Two are view-layer and one
+is arithmetic; the arithmetic one is the reason this entry is long.
+
+### D179 — the remainder lives in the drawn size
+
+**The defect, measured rather than described.** The first `qr.FitSize` searched
+two knobs — the quiet zone from `DefaultMargin` to `MaxMargin`, and the scale —
+and kept whichever pair landed nearest the requested pixel count. Nearest is not
+free: a margin one module wider is `2*scale` more pixels of reach, so the search
+bought a few pixels of exactness with dozens of pixels of white whenever it
+could. At the top of the range it could do nothing else. `MaxScale` was 32,
+capped by nothing but the `width` attribute a downloaded file carries, so a
+request for 2000px ran out of scale and the margin filled the rest. Probed
+across every module count this product encodes, old against new — *code by
+area* is `(modules / (modules + 2*margin))²`, the symbol's share of the square
+it is drawn in, written out here because the first draft of this table got six
+of its ten cells wrong and nothing in the repository could contradict them:
+
+| Symbol | Old at 2000px | Code by area | New at 2000px | Code by area |
+| --- | --- | --- | --- | --- |
+| 21 modules | 1696px, margin 16, scale 32 | 15.7% | 1972px, margin 4, scale 68 | 52.4% |
+| 25 | 1824px, margin 16, scale 32 | 19.2% | 1980px, margin 4, scale 60 | 57.4% |
+| 29 | 1952px, margin 16, scale 32 | 22.6% | 1998px, margin 4, scale 54 | 61.4% |
+| 37 | 1953px, margin 13, scale 31 | 34.5% | 1980px, margin 4, scale 44 | 67.6% |
+| 53 | 1992px, margin 15, scale 24 | 40.8% | 1952px, margin 4, scale 32 | 75.5% |
+
+The owner's sentence — *"the majority of the image should be QR code"* — was
+false at every one of those sizes, and worst exactly where they said.
+
+**The answer, and what it costs.** The quiet zone is pinned at `DefaultMargin`,
+the four modules ISO/IEC 18004 requires, and the achievable sizes then step by
+one span — symbol plus both quiet zones — per unit of scale. A requested size
+lands between two of them, so the whole remainder is a rounding of at most half
+a span, and it lives in the **drawn size**, where the form's flash message and
+the size box already report it. That is D179.
+
+**It supersedes [D128](#d128--one-number-in-the-interface-two-knobs-behind-it)'s
+quiet-zone half, and that entry is named here rather than edited** — this file
+is append-only, so a superseded entry is corrected by the one that supersedes
+it. D128 recorded the two-knob search as the decision: *"the quiet zone is
+derived, not fixed at the floor"*, with 300px on a 29-module code landing on
+301px at a seven-module zone, ties going to the smaller quiet zone, and a
+re-save of a stored row being a byte-identical no-op. Every one of those clauses
+is false as of today. `FitSize(29, 300)` returns 296px at the floor — D128's own
+worked example inverted, and the number it named as what the floor alone would
+have given; margin is not searched; `MaxScale` is 68; the quiet-zone tie-break
+is gone with the search that needed it; and a re-save is byte-identical only for
+a row whose stored margin is already 4, which
+`TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave` asserts by requiring
+the other kind to move. What survives of D128 is its other half, untouched:
+`qr.Style` still gains no field, the size is still derived from the margin and
+scale already stored, and `size` is still a read-only number on the API's
+`QRCode`. [Plan.md](../../Plan.md)'s D128 row states what is true rather than
+what was decided, so that row carries the supersession note in place.
+
+Two alternatives, both rejected, both recorded because the reopened file asked
+for the trade to be argued rather than re-hidden:
+
+- **Fractional pixels-per-module**, honouring the request exactly. It puts
+  module boundaries on fractional pixels, where the SVG's rasteriser and the
+  PNG's rounding are free to disagree — which is precisely the claim M49 exists
+  to make true. Rejected by that claim, not by preference.
+- **A wider margin**, which is what shipped and what the owner reported.
+
+**`MaxScale` 32 → 68**, which is `floor(MaxSize / (21 + 2*DefaultMargin))`: the
+smallest symbol this package encodes at the pinned quiet zone is 29 spans, and
+2000 ÷ 29 is 68. The ceiling is now *derived* from the raster bound rather than
+chosen, so every fit is a style `Normalize` accepts — with the old 32, pinning
+the margin would have made `FitSize` emit styles the API refused. `api/openapi.yaml`
+moves with it.
+
+**`MaxMargin = 16` was revisited and kept**, which the reopened bullet required
+either way. Since the fit no longer chooses a margin, 16 bounds one thing only:
+what an API caller may store. Lowering it would stop rows already written under
+the old search from rendering, and those rows are printed. It is documented as
+that and nothing more.
+
+**Stored rows: the two halves, stated separately.** Nothing on the read path
+consults `FitSize`, so a row carrying margin 14 scale 7 is drawn in the pixels
+it always was — asserted directly, on that exact shape, in
+`TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave`. Re-saving such a row
+is a new fit and *does* move it, by at most half a span, and `SizeFit.Snapped`
+is true so the panel says so. Silently widening the margin back is the reported
+defect; silently moving the size would be the same defect wearing the other
+hat, so the assertion is that it moves **and** reports. The demo is the live
+case: `/launch` at the demo host encodes to 37 modules, so its seeded 400px code
+was margin 10 scale 7 at 399px and reseeds to margin 4 scale 9 at 405px — a
+visibly denser picture at a size six pixels different, which is the trade this
+entry is about, shown rather than argued.
+
+**The pin-then-bound order the reopening asked for** was followed literally.
+`TestTheQuietZoneIsTheMinimumThatScans` was written first and run against the
+old `FitSize`, where it failed at 25 modules and 71px on a five-module quiet
+zone; `TestTheSizeSnapsToWholeModules`' new half-span bound failed the old
+arithmetic too, at 25 modules and 1856px. The old `floorSnap` yardstick — *never
+worse than holding the quiet zone at the floor* — retired, because holding the
+quiet zone at the floor is now what the function does and a yardstick sharing
+the implementation measures nothing.
+
+### The preview keeps a footprint of its own
+
+The frame was `inline-block`, so it shrink-wrapped whatever `internal/qr` had
+sized the `<svg>` to and grew with the stored size until it hit the column. Its
+own comment claimed a fixed frame; the markup did not implement one. It is
+`h-72 w-72 max-w-full` now — 18rem square whatever the code is drawn at — and
+`qr.FluidClass` on the `<svg>` shrinks a larger picture into it while leaving a
+smaller one alone, because a preview is not a reason to enlarge a code somebody
+chose to keep small.
+
+That splits two numbers that used to be one, so the page states the split: the
+served size is printed under the picture, named as the size both downloads and
+the API serve. Without it the size control reads as having no effect — type
+2000, save, and the picture is the size it was.
+
+**The caption has two branches, and the first draft of it had one.** `QRSize`
+is the served size on every link, but it is a *stored* size only where
+`QRStored` is true; elsewhere it is `QROutputSize` over the default style. One
+unguarded sentence therefore read *"The stored size is 296 pixels"* on every
+link that had never been styled — which is every link but the one
+`cmd/lctl/demo_phase2.go` seeds, so the false reading was the common one and the
+true one was the exception. Stating a distinction wrongly is not stating it, so
+the unstored branch names the number as the default and says what saving one
+would change. Both branches are asserted, in both directions, by
+`TestTheQRPreviewSaysWhichSizeIsServed`.
+
+Both surfaces are asserted, in `internal/ui/link_qr_test.go`, because
+`linkQRView` is one struct embedded in the link page and in the panel's own page
+and M48 requires them to stay the same markup. The link page draws one tab at a
+time since M47's reopening, so the test renders it at `?tab=qr` — a rendering of
+the landing tab would have passed on a page that had lost the panel entirely.
+
+### Restore defaults
+
+One label, and one label is worth a test because nothing read it. *Back to black
+on white* named the colours, which was all this form carried until M49 put a
+size on it; the button clears the size too. The flash message followed the
+button, for the same reason.
+
+**What this deliberately did not touch**: the two-encoders-agree claim and its
+test, the PNG bound and its 4,000,000-byte allocation story, the level's move to
+the API, the codes list, the logo controls, and `demoCoverage()` — the M41 row
+already requires a styled code and this milestone changes the style it requires,
+not the count.
+## 2026-08-12 — M50.5 rebuilt: an oversized logo is resized, not refused, and D180
+
+M50.5 reopened on the owner's QR-tab report ([F214](deferred-findings.md#closed)),
+which is three symptoms on one control. They are not three defects: one is a
+bound that could not explain itself, and two are a form that made the reader do
+work the form already had the answer to.
+
+### D180 — the two caps that could not both be named
+
+The shipped bound was *"a logo is at most 1024 pixels on a side and 262,144
+pixels in total"*, and the owner's upload was **813×813**. That is inside the
+first and four times past the second. Every part of the refusal is true and
+none of it is usable: the reader is given two numbers, no statement of which one
+bit, and no measurement of their own file to compare either against. There is no
+edit to that sentence that fixes it while two caps refuse, because *which one*
+is a fact the caller has to be told and the sentence would then be naming a cap
+that did not apply.
+
+So the second cap stopped refusing. **262,144 pixels is now the size a stored
+logo is fitted to**, and an image over it is resampled down keeping its aspect
+ratio. That leaves exactly one header refusal — 1024 pixels a side — and the
+side bound already implies an area of 1024², so nothing can pass one bound and
+fail another. `MaxDecodedLogoPixels` is written down as that implication rather
+than declared beside it, which is what stops a second cap growing back.
+
+**The refusal became a struct.** `qr.LogoBoundError` carries the measured width
+and height, which bound was crossed and its limit; `internal/link` writes the
+sentence from those fields. A sentinel plus a fixed string could not have said
+*this image is 2000×300 and 2000 pixels wide is past the 1024 a side*, and that
+is the whole of what was missing. It answers `errors.Is` for `ErrLogoTooLarge`,
+so every caller that switched on the sentinel goes on doing so.
+
+**The trade is memory, and D135's decode figure was load-bearing.** Accepting
+larger headers means decoding them: 1,048,576 pixels, and **eight bytes each
+rather than four**. Four is `image.NRGBA`, which is what this package
+*normalizes to*; it is not what a decoder hands it. `image/png` returns
+`image.NRGBA64` or `image.RGBA64` for any bit-depth-16 file, and such a file is
+ordinary — a 1024×1024 16-bit RGBA PNG of one flat colour is about ten
+kilobytes on the wire, so it clears the 1 MiB body cap by two orders of
+magnitude and the side cap exactly. So the decode bound is **8,388,608 bytes**,
+four times what D135's area cap admitted; the **image buffers** one upload holds
+are four terms — the upload itself, live across the decode and inside the
+1,048,576-byte body cap, plus the decoded source, the resampler's own NRGBA copy
+of it and the resampled destination — and come to **14,680,064 bytes**, 14 MiB
+exactly against 4 MiB before.
+
+**The encoder is bounded beside that figure rather than inside it**, because a
+number labelled *the peak* that omits a term is the defect this entry is
+correcting, and folding in a term nothing in this repository controls would be
+the other way of getting it wrong. The `bytes.Buffer` the PNG is written into
+grows by doubling, so at its last growth two arrays are live — under 3,145,728
+bytes; flate's window and hash tables and the per-scanline buffers are a fixed
+cost of one `png.Encode`, measured at about 850,000 bytes and unchanged by the
+image's size. Under 4 MiB together, so **under 18 MiB in flight per upload**.
+Both terms are properties of a Go release, which is why they are stated and
+measured rather than pinned by a test: the same reasoning `MaxLogoStoredBytes`
+already carries slack for. The handler's read buffer doubles the same way and
+raises nothing, since it reaches its largest size before a decode exists and
+what it hands on is the first term of the four.
+
+**Four bytes a pixel was wrong before this milestone as well as in it**, which
+is why the correction reaches D135 and `docs/SECURITY.md`'s shipped sentence and
+not only the new numbers: under the old caps the worst decode was 262,144 × 8 =
+2,097,152 and every record said 1,048,576. The gap was 1 MB and became 4 MB when
+the header bound moved, which is the only reason it surfaced now.
+
+**The choice this forced, and it was the build's to make.** Two shapes fix the
+arithmetic and they buy different things. *Refuse bit depth 16 in
+`DecodeLogoConfig`* keeps four bytes a pixel true and takes about 4 MiB off the
+peak, at the cost of a refusal — in the one milestone whose entire purpose is to
+stop refusing what it can adapt, for a property of a file no viewer shows the
+person who made it, and one no bullet asks for. *State the arithmetic at eight*
+keeps every file this product accepts today working and asks an operator to
+budget about 18 MiB for an upload in flight rather than about 14. **The second**: the
+reopened bullet asks for the allocation story restated, not for the accepted
+formats narrowed, and the honest restatement of what the tree already does is
+the smaller change as well as the truer one. If the peak is later judged too
+high, refusing bit depth 16 is still available and is a decision with a product
+cost attached, which is where it belongs.
+
+**And the figures are measured now, not multiplied.**
+`TestTheCapsAgreeWithEachOther` did not catch the four-byte error because it
+re-derived `MaxDecodedLogoPixels * 4` — the same expression as the code, so the
+two agreed with each other and with nothing else. A test that reproduces the
+code's arithmetic is not a check on the code's arithmetic.
+`TestTheDecodeBoundIsMeasuredNotAssumed` builds the widest file the caps admit,
+puts it through the body cap, `DecodeLogoConfig` and `png.Decode` in that order,
+and reads the buffer off the concrete type that came back;
+`TestNoDecoderOutputIsWiderThanTheStatedPixel` measures every concrete type
+either decoder can return, so eight is the widest rather than merely the widest
+the fixture reaches; and the peak table is now summed from buffers
+`image.NewNRGBA` allocated and a size `FitStoredLogo` chose. `MaxDecodedLogoBytes`
+and `MaxDecodedLogoBytesPerPixel` exist as constants for the same reason: an
+inlined `4` is how the wrong figure got written three times in three files.
+
+D135 is left in place in Plan.md with a supersession clause naming D180, rather
+than edited: the header half is superseded, the stored bound and the 20 MiB row
+figure are not.
+
+**What did not move.** The ordering. The side bound is still read by
+`image.DecodeConfig` from the header before any pixel buffer exists, and
+`TestABombIsRefusedBeforeAnythingIsDecoded` still measures that an 8000×8000
+declaration costs a few hundred bytes rather than 256 MB. A resize that happened
+before the bound would be the same defect the milestone was written to avoid,
+one step later.
+
+**The scaler is M50.6's, reused.** `resampleNRGBA` already existed in the
+package — area-averaging, written by hand at D142 precisely so
+`golang.org/x/image/draw` would not join the require block one milestone after
+M49 asserted the QR path adds none. Writing a second one for the upload path
+would have been the same code twice with two places for the aspect ratio to go
+wrong.
+
+**And the drawing path grew the check the upload path gave up.**
+`Code.prepareLogo` decodes a *stored* image, and D142 bounds its raster at
+`MaxLogoPixels × 4`. With `DecodeLogoConfig` no longer enforcing the area, a
+`qr_codes` row written by hand could have carried a 1024×1024 logo into that
+path and quadrupled a figure D142 states. It refuses one now. That is one line,
+and it is the reason it is here: the change was in `internal/qr`'s upload half
+and the claim it would have falsified belongs to a different milestone.
+
+### Choosing the file is the whole interaction
+
+*Upload a logo* / *Replace the logo* was a button beside a file input, and
+nobody picks a file and then declines to apply it. `hx-trigger="change"` on the
+form replaces it — htmx's own attribute, no script of this product's, so
+`script-src 'self'` is untouched — and the button is gone rather than kept
+beside the trigger, because a control implying the file has not been applied is
+the interference that was reported.
+
+**That made this the first form in the panel to post over htmx, and htmx does
+not swap a 4xx.** Its default `responseHandling` reads the response, fires an
+error event, and leaves the page exactly as it was; every other form here posts
+natively and never meets the rule. A refusal answered 422 would therefore have
+been a refusal nobody sees, which is worse than the two-step it replaced. So
+`finishQRAction` renders at **200 for an htmx request and 422 for a native
+post** — the shape `renderAutomation` and `renderDomains` have used since they
+were written, arrived at here for the same reason. The message in the page is
+what says the upload was refused; the status line was discarded by the swap
+either way.
+
+The swap needs something to select, and the panel is rendered from two routes.
+The QR tab's wrapper has carried `id="qr"` since the F212 reopening; the
+standalone page at `/links/{id}/qr` had none, so it has one now. A target the
+response does not contain swaps nothing, which is indistinguishable from the
+control being dead — the exact failure this reopening is about.
+
+Success is unchanged and needed no work: `seeOther` has answered an htmx request
+with `HX-Redirect` since it was written, which is a full page load.
+
+### The warning, and where it is spent
+
+An upload that was resized redirects with both sizes in the query and `qrNotice`
+turns them into a sentence, exactly as M49's size snap does — the page it lands
+on is a fresh request that never saw the file. Both numbers are **re-derived**
+rather than echoed, bounded by what a stored logo can actually be, because a
+sentence assembled from a query string is a sentence somebody else can write.
+And it is printed only when it happened: a line after every upload saying it
+stored what you sent is a line nobody reads by the third time.
+
+The API surface gets the same fact, as an optional `resampled` object on the
+upload response, present only when the image was shrunk. A client that sent
+artwork and got a bare `200` would have no way to know the bytes it sent are not
+the bytes now stored, and `has_logo` cannot say so. The contract test replays an
+oversized upload, so the schema is exercised rather than merely written.
+
+### The pressed state
+
+The OS file dialog takes about a second to open and the control said nothing in
+the meantime, which reads as a dead button and earns a second click. `:active`
+acknowledges the press and **`:focus` is the one that spans the wait** — a file
+input holds focus for as long as its dialog is up, which is the whole duration
+in question. `form.htmx-request` makes the control inert while the upload is in
+flight.
+
+**But focus outlives the dialog, so the selector is
+`:focus:not(:focus-visible)`.** A busy state keyed on focus alone paints a
+pressed background on anybody who merely tabs onto the control, and it never
+comes off — a permanent claim that something is happening, made to the readers
+least able to check. `:focus-visible` is the distinction the platform already
+draws between focus that arrived from a keyboard and focus that arrived from a
+pointer, so excluding it takes the false state off the keyboard path and leaves
+the pointer path exactly as designed. The keyboard path loses the
+acknowledgement during its own dialog wait, and that is the cheaper loss: the
+dead-button reading comes from a *click* that appeared to do nothing, while
+somebody who pressed Enter on a control wearing a visible focus ring already
+knows which control they addressed — and `:active` still fires on that press, so
+the keystroke is not silent either. The alternative, accepting the permanent
+state and documenting it, was rejected because there is no reading under which
+the reader is better off: they are told a dialog is opening and no dialog is.
+
+The rules are in `input.css` and therefore in the built `app.css`. F206 already
+settled where a state style ships: htmx's own indicator stylesheet is switched
+off because `style-src 'self'` refuses an injected one, and that comment says a
+template that starts to need one must bring rules with it. This is the template
+that started to.
+
+The inset it draws is `var(--t-press-shadow)`, a token added to all three theme
+blocks rather than the `rgb(0 0 0 / 0.25)` this file first carried — the same
+block's own comment promises tokens and not palette values, and nothing enforces
+that in CSS the way `TestTemplatesUseThemeTokensOnly` enforces it in templates.
+It earns the token twice over: 0.25 black over `line-strong` at `#cbd5e1` is a
+clear notch and the same value over `#475569` is nothing at all, so the depth is
+a per-theme fact and not a constant.
+
+### Driven in a browser, because that is where the claim lives
+
+The 200-for-htmx answer above rests entirely on a statement about htmx's default
+`responseHandling`, and until this reopening nothing in this repository
+exercised it: the Go tests set `HX-Request: true` by hand and assert a status,
+which is a test of the handler and not of htmx. Nor could any template test see
+htmx *binding* a `change` on a `<form>` to a multipart post — the whole
+mechanism the two-step button was traded for. So
+`tools/agent-browser/specs/qr-logo.spec.mjs` joins the kept specs and drives
+both: a file chosen in a real file chooser posts itself and the page says the
+logo was stored, and a file that is not an image comes back as a sentence inside
+the `#qr` swap with the URL unchanged.
+
+Both halves were born red rather than asserted. With `finishQRAction` returning
+422 to an htmx request the refusal never reached the page at all, which is the
+htmx rule measured rather than quoted; with `hx-trigger` changed to `submit` the
+upload never happened. Both restored by counter-edit. The spec also settles the
+`:focus-visible` question the same way — it clicks the input and asserts the
+element matches `:focus` and not `:focus-visible`, then tabs to it and asserts
+the opposite — and one thing that surfaced only there is worth keeping: Chromium
+arms the heuristic when focus *arrives*, so clicking a control that already
+holds keyboard focus leaves the flag as the keyboard set it. The spec therefore
+drives the pointer path on a page nothing has been focused on yet.
+
+### Two records the reopening had to reach, and one it deliberately did not
+
+The decode bound is stated in more places than the code that enforces it.
+`internal/store/query/campaigns.sql` and `internal/store/migrations/03800_qr_code_logo.sql`
+both said the decode is bounded by `qr.MaxLogoPixels`, which D180 made false —
+that figure now bounds the stored artefact alone and refuses nothing. Both are
+corrected, and the sqlc-generated copies in `dbgen/` regenerate from the first
+of them. Changing a comment inside an applied migration is safe here because
+goose versions files rather than checksumming them.
+
+**What was left alone is the same migration's worst-case row size**, which says
+1,049,600 bytes where `MaxLogoStoredBytes` is 1,060,000 — the first line of
+`logo.go`'s derivation table quoted as its total. That one shipped with the
+migration and predates this reopening, so it is out of spec and is
+[F219](deferred-findings.md#open) rather than an edit smuggled into a commit
+about something else.
+
+### The dashboard needs JavaScript, and two pages happen not to
+
+Not this milestone's defect, but this milestone's sentence made it visible:
+README.md's Dashboard row now says JavaScript is required, and the Folders row
+four rows above still said folders *"work with JavaScript off"*. Both were true
+— `folders.html` really does carry native fallbacks on every htmx attribute —
+and a reader takes away the contradiction rather than either fact. `docs/usage.md`
+had the same pair. Reworded so the requirement is the product's stance and the
+scriptless pages are a property of *those controls*, said in those words, with
+the note that nothing tests the scriptless path and no page is held to it. The
+distinction matters because the next htmx-carried write on one of those pages
+would silently make the weaker claim false, exactly as the logo upload did to
+the paragraph in `usage.md`.
+
+## 2026-08-12 — M50.5, the enforcement-order bullet names a cap that stopped refusing
+
+An amendment, made by the orchestrator at step 3.4 rather than by a worker, on a
+fact the tree contradicts.
+
+**As it stood** — [m50.5.md](phase-details/m50.5.md), step 2 of the enforcement
+order:
+
+> **`image.DecodeConfig`** reads the header only and yields dimensions without
+> decoding pixels. The dimension and pixel-count caps are enforced **here**.
+
+**As amended**:
+
+> **`image.DecodeConfig`** reads the header only and yields dimensions without
+> decoding pixels. The dimension cap is enforced **here** *(the pixel-count cap
+> was too, until this milestone's 2026-08-12 reopening made it the size a
+> stored logo is fitted to rather than a refusal — D180)*.
+
+**The tree fact.** `internal/qr/logo.go`'s `DecodeLogoConfig` raises
+`LogoBoundError{Bound: "side"}` and nothing else; the 262,144-pixel figure now
+reaches only `FitStoredLogo`, which resamples. An 813×813 upload passes the
+header stage and is stored at 512×512, which is the reopening's own fixture.
+
+The amendment is fact-level and therefore not a prompt: the enforcement *order*
+the bullet asserts — body, then header, then decode — is unchanged and is still
+what the bomb test measures. Only the count of caps at step 2 moved, and it
+moved because the reopening was built.
+
+## 2026-08-12 — M50.5, D178's refusal status is now conditional on the caller
+
+A second orchestrator amendment at step 3.4, fact-level, on the same milestone.
+
+**As it stood** — [Plan.md](../../Plan.md)'s D178 row:
+
+> QR onto `tab=qr` (including the 422 refusal), sign renders the signed tab.
+
+**As amended**:
+
+> QR onto `tab=qr` (including the refusal path — a 422 when the post is native,
+> and a 200 since M50.5's reopening when it is an htmx request, because htmx
+> swaps no 4xx and a refusal nobody sees is not a refusal; the re-derivation is
+> the same on both), sign renders the signed tab.
+
+**The tree fact.** `internal/httpx/web_qr.go`'s `finishQRAction` branches on
+`isHTMX` and answers 200 there, 422 otherwise; both are asserted by
+`TestARefusalReachesAnHTMXUpload`. The logo form became the panel's first htmx
+poster at this reopening, and htmx's default `responseHandling` swaps no 4xx —
+read out of the vendored `htmx.min.js`.
+
+Fact-level, so not a prompt: what D178 asserts is that a section-owned write
+**re-derives its tab from what it is** rather than reading one off the request,
+and that is unchanged on both branches. The status code was a detail inside the
+parenthesis, and it moved. The wider class — every `hx-post` control whose
+handler answers 4xx and therefore swaps nothing — is [F218](deferred-findings.md),
+filed open and deliberately out of this milestone's spec.
+
+
+## 2026-08-12 — M50.6 rebuilt: the logo grows to a measured size, and D181
+
+**M50.6.** The owner read the shipped logo and said it *"should be as big as
+possible without making the barcode unreadable"* ([F215](deferred-findings.md)).
+That reopened M50.6 with a directive rather than a target: grow the box to the
+largest size the code still reliably decodes at, and **measure it** — *"the
+rendered code, logo at the new size, is decoded programmatically after
+simulating distance"*, with the decoder in tooling and the check **kept, not run
+once**.
+
+### Why a derivation could not answer it
+
+D140 chose a fifth of the symbol's width by reserving **half** of level H's
+correction budget for three named claims: Reed-Solomon corrects per block where
+the 30% is a total, print and optics take their share, and the logo's own edge
+takes another. Every one of those is real. None of them says *how much*. Half
+was the honest thing to write when nothing had been decoded, and it stayed the
+honest thing right up until something was.
+
+So the half is superseded by **three quarters**, and the box by **three tenths
+of the symbol's width — 9% of its area, up from 4%**. The supersession is
+written into `composite.go` as its own dated section rather than edited over the
+top of the reasoning it replaces, because the reasoning still holds; what
+changed is that a measurement now stands beside it.
+
+### What was built to measure it
+
+`make verify-scan`, in two halves, because Go has no QR decoder and adding one
+to `go.mod` would break M49's assertion that the QR path adds no dependency.
+D25 permits Node for verification tooling, which is where `tools/render-verify`
+and `tools/agent-browser` already live.
+
+- `internal/qr`'s `TestWriteScanCorpus` renders the corpus **off the shipping
+  path** — `qr.RenderPNGWithLogo`, the call the download endpoint makes. Every
+  symbol version the product's content lengths reach (3 to 36), four logo
+  shapes, and the smallest, default and largest *stored* size of each; then the
+  whole version range again with no logo at all, at every level, as the control
+  that tells a decoder's limit from the logo's damage. **816 pictures, two equal
+  halves of 408**, and a manifest saying what each should decode to.
+- `tools/qr-scan/scan.mjs` shrinks each picture until 8, 6, 4, 3 and then 2
+  pixels per module are left — averaging over the source area each destination
+  pixel covers, which is what a sensor does — and decodes all of it. That is the
+  owner's own calibration made mechanical: *"as long as it looks good and scans
+  at a reasonable distance for a scaled size it should be okay."*
+
+### The decoder question, answered by trying four
+
+The milestone anticipated that no trustworthy decoder might be available and
+made that a prompt. It did not come to that, but three of the four candidates
+had to be disqualified or demoted first, and the disqualifications are the
+useful part of the record.
+
+| | Verdict |
+| --- | --- |
+| **zxing-wasm** (`zxing-cpp` as WebAssembly) | **Gates.** Reads the whole no-logo control and every fraction in the sweep at every distance |
+| **jsQR** | **Gates.** Reads the whole control, and is the one that fails at a third of the symbol's width — the failure that put the cap where it is |
+| **`@zxing/library`** (the JS port) | **Rejected.** Fails *plain, unoccluded* codes at versions 14, 16, 20 and 34. A decoder that cannot read a code with no logo in it cannot be evidence about one that has |
+| **`zbarimg`** | **Reports, never gates.** A system package: unpinnable, absent from CI, version varies per machine. `--zbar` runs it when it is there |
+
+Both gating decoders must read every picture. A fraction only one of them reads
+is a fraction that depends on a decoder, which is what measuring was for.
+
+### The sweep, and the cliff
+
+1/5, 2/9, 1/4, 3/10, 5/16, 8/25, 33/100, 1/3. Everything to **33/100 read
+clean**; **1/3 did not** — jsQR loses version 13 for every logo shape and at
+every distance, including the closest. Not marginal, and not the correction
+budget: a failure that does not improve as the camera gets closer is the
+detector losing the sampling grid. That is the same class of failure
+`logoInsetModules` was measured against at the original M50.6, and the inset was
+re-measured here at two and three modules — **no help at all**, so the box's
+size is what is binding rather than its edge.
+
+**Three tenths, not 33/100.** Both pass. 33/100 sits one hundredth from a known
+hard failure, and at version 13 it asks for the last box size below the one that
+breaks; three tenths is two module-steps below it, and the 21-module box in
+between reads clean as well. *Reliably* is the word the reopening used, and a
+value one step from a cliff nobody has explained does not earn it.
+
+### The dissent, recorded rather than resolved
+
+`zbarimg` 0.23.93 is markedly stricter than both gating decoders and gets
+stricter as the box grows. Over the same 816 pictures at the same five
+distances, one decode each:
+
+| | Logo'd | Control |
+| --- | --- | --- |
+| One fifth, as shipped before | 1484 of 1496 | 1496 of 1496 |
+| **Three tenths, as shipped now** | **1386 of 1496** | **1496 of 1496** |
+
+against **5984 of 5984** for the two gating decoders at either fraction.
+
+**The control is clean at both, and that is the whole reason those numbers can
+be read as being about the logo.** It covers the entire version range at every
+level, so 1496 of 1496 is a statement about all of it rather than about a
+sample — which matters, because ZBar's misses on logo'd codes are spread across
+versions a three-version control would not have touched. The misses concentrate
+at the aggressive end of the distance simulation and not at any one stored
+size: 84 of the 110 are read at two pixels per module, as are all twelve of the
+old fifth's.
+
+The twelve at the old fifth mean the shipped product was already not clean under
+this engine, at a distance the original hand check never simulated. Two modern
+engines read the larger box down to two pixels per module and one older one
+loses some of the densest codes when the picture is shrunk that far. **That is
+the trade the growth bought**, and it is written into `composite.go`,
+`tools/qr-scan/README.md` and the changelog rather than left in a session.
+
+### The control was a sample, and a sample could not carry the claim
+
+Worth its own heading because the defect was invisible from the sentence. Every
+document said the control was *"the whole version range again with no logo"*;
+the corpus test iterated `[]int{lowest, (lowest+highest)/2, highest}`, so it was
+**three versions of thirty-four** — v03, v19 and v36 — which is where the 444 the
+first attempt reported came from: 408 logo'd plus 36. The prose was written for
+what the control had to be and the code for what was quick, and nothing compared
+them.
+
+That is not a wording defect, because the sentence the fraction rests on is *"it
+reads every picture of the no-logo control, so this is the logo's doing rather
+than its own limit"* — and ZBar's misses fall largely outside the three versions
+the control covered, so the exculpation was resting on pictures it had not
+examined. Widened to the full range, the control is **1496 of 1496** and the
+exculpation holds; the corpus doubled to 816 and every figure above is the
+widened one. Had it not held, the fraction would have been the owner's question
+again rather than a number to restate.
+
+**The figures put to the owner were the narrow corpus's** — 444 pictures, ZBar
+missing 6 at the old fifth and 35 at three tenths — and the entry below records
+them as they were put, because rewriting what somebody was told is not a
+correction. Re-measured over the widened corpus at the same five distances they
+are 12 and 110 of 1496 logo'd decodes. The ratio, the direction and the
+conclusion are unchanged, and the control is clean at both fractions, which is
+why this is a restatement and not a second question. The owner's answer stands
+and was already recorded as revisitable.
+
+### A figure that was wrong, corrected in three places
+
+D140, `composite.go` and m50.6.md all carried *"the tightest version the product
+reaches is 4, spending 24 of a 30-codeword budget's half."* It named neither
+version's numbers: 24 is twice version **5**'s destroyed count and 30 is version
+**4**'s budget. Version 4 destroys 6 of a 30-codeword budget; the tightest under
+the half rule was version 5, at 12 of 40.
+
+Nothing computed it, which is why it survived five days in three documents. It
+is computed now — `TestTheOcclusionCapFitsHsCorrectionBudget` finds the tightest
+version itself and fails if the sentence and the arithmetic disagree — and the
+correction is in all three places rather than only where it was noticed.
+
+### One behaviour changed as a consequence, and is stated
+
+`MaxLogoRasterSide` is 512 and used to bind only on the SVG path, because a
+2000-pixel code's box was 400 pixels at a fifth. At three tenths it is 600, so
+the raster path now clamps too and `drawPNG` resamples the logo up to the
+rectangle the box needs — arithmetic that was already written for the SVG path
+and is now reached from both. The cost is that a logo filling a 2000px code is
+drawn from 512 pixels of detail rather than 600. The two outputs still draw the
+same rectangle, which is what M49's claim requires.
+
+**That branch had no unit coverage, and this milestone is what made it live.**
+`drawPNG`'s upscale arm ran only from the SVG path before, and the raster path
+reaching it is a behaviour change, not a comment change — `make verify-scan`
+walks it and nothing in `make check` did, so the sabotage rule had no purchase
+on it. `TestTheClampedLogoRasterIsUpscaledToFillItsBox` covers it now, and it
+searches the product's version range for a picture whose box is wider than
+`MaxLogoRasterSide` rather than pinning one: seven versions of thirty-four
+produce one at their largest stored size — 20, 25, 27, 29, 32, 34 and 35, the
+band where the box has grown past 512 pixels but the code is not yet dense
+enough to force the scale down again. Finding none fails the test, so a later
+fraction that put every box back under the clamp would say so instead of
+leaving a dead branch behind quietly.
+
+### The sweep for statements this change makes false, and what it returned
+
+M50.5 spent D180 on exactly this class two commits earlier, so the second
+attempt swept rather than fixing the sites somebody had already named. The
+method: enumerate every *fact* the diff changes, then grep each one across every
+tracked `.md`, `.go`, `.html`, `.yaml` and `.sql`, reading each hit rather than
+counting it. Six facts — the box fraction, the budget share, `MaxLogoRasterSide`
+binding on the raster path, the new `make verify-scan` target and its tooling
+tree, the tightest-version arithmetic, and the corpus's own composition.
+
+Four returns, and only the first was already named:
+
+- `docs/SECURITY.md`'s *Uploaded content* row stated the resampled logo bound as
+  a single 1,048,576-byte buffer. At three tenths a second one joins it — the
+  clamped 512 raster scaled **up** to a 600-pixel box — bounded by the box at
+  1,440,000. Stated, with the three buffers' total; the *QR codes* row above it
+  said *"that bound and the one on the logo itself"* and now says *the two*.
+- `Plan.md`'s **D142** carried the same single-buffer sentence and gained a
+  supersession note in its header cell, the shape D140 already uses.
+- `docs/build-notes/development.md` said *"`make verify-render` is the one
+  target here that needs Node"*. There are three; it is a table now.
+- `Taskfile.yml` carries `verify-render` and neither `verify-ui` nor
+  `verify-scan`, against development.md's claim that it mirrors the Makefile.
+  **`verify-ui` predates this milestone**, so the divergence is not this
+  change's to close — [F220](deferred-findings.md), with the reasoning that the
+  durable fix is a rule rather than two copied blocks.
+
+What the sweep did *not* return is worth recording too: the fraction itself
+reads correctly in `README.md`, `docs/usage.md`, `CHANGELOG.md`,
+`api/openapi.yaml`, `link_qr.html` and `demo_phase2.go`, and `go.mod` is
+untouched, so M49's no-new-dependency assertion is unaffected.
+
+## 2026-08-12 — M50.6, two amendments to the milestone file, and a worker that made five
+
+Two things at once: an amendment the rules require, and a process failure in who
+made it.
+
+**The process failure.** The worker edited
+[m50.6.md](phase-details/m50.6.md) in five places — 109 insertions — of which one
+recorded what was built and four altered what shipped text asserts. Only the
+orchestrator amends: *"A worker never amends: it meets the bullet as written, or
+it reports and stops."* The file was restored to its committed text by
+counter-edit (the worker's version kept aside first, never `git checkout`), and
+the two amendments below re-applied by the orchestrator. Three of the five did
+not return, and the reasons are worth keeping:
+
+- A `## Built, as reopened` section, 86 lines. No sibling reopening has one —
+  M48 touched its milestone file 13 lines, M50.5 four, M49 none — and what was
+  built belongs in this file and in the commit message rather than in the
+  definition of done.
+- A supersession block over *The decoder question, decided rather than assumed*,
+  declaring that the section's two supporting bullets were "overtaken". One of
+  them — *"if a decoder module is wanted as a permanent gate, that is a decision
+  to take, not a side effect of this milestone"* — **is still true**: `go.mod`
+  and `go.sum` are untouched and the decoders live in `tools/qr-scan` under D25.
+  Retiring an assertion that was not overtaken is assertion-level, which makes
+  it a prompt rather than an amendment, and it was neither.
+- A parenthetical spliced into the shipped `## Risks` paragraph.
+
+**Amendment one — the cap bullet's fraction.** Fact-level.
+
+As it stood: *"the rule is that it may spend **half** the budget … D140."*
+As amended: the same, plus *"**Superseded at the 2026-08-12 reopening** — three
+tenths of the width, 9% of the area, spending at most three quarters of the
+budget. D181."*
+Tree fact: `LogoBoxNumerator`/`LogoBoxDenominator` are 3 and 10, and
+`logoDamageNumerator`/`logoDamageDenominator` are 3 and 4, in
+`internal/qr/composite.go`.
+
+**Amendment two — a codeword count nothing computed.** Fact-level, and it had
+survived five days in three documents.
+
+As it stood: *"The tightest version is 4, spending 24 codewords of a
+30-codeword budget's half."*
+As amended: the sentence is marked amended and states that it named neither
+version's numbers — 24 is twice version 5's destroyed count, 30 is version 4's
+budget — with the corrected figures for both rules.
+Tree fact: version 4 under the old fifth is a 5-module box destroying 6 of a
+30-codeword budget. Version 5 is the tightest under both rules — under the old
+fifth its box is ⌊37/5⌋ = 7 modules destroying 12 of 40, and under three tenths
+it is ⌊37·3/10⌋ = 11 modules destroying 24 of 40. *(Corrected before this entry
+was committed: the first draft attached the three-tenths geometry — 11 modules,
+24 codewords — to the old fifth, which is the same class of error the amendment
+itself is about. A reviewer caught it.)* The corpus test now derives the tightest version rather than quoting
+it.
+
+**Two further amendments, 2026-08-12, same milestone, same actor.** The
+subsection *The decode check, as run — 2026-08-07* read as current while every
+figure in it was measured at the one-fifth cap, and this file now carries two
+unrelated corpora of 816 pictures; it is dated and scoped as a record rather than
+restated, because a record of a check is not a claim about the tree. And the
+bullet *"every size and level combination this product can draw passes the scan
+check"* is three scales per version — `MinScale`, `DefaultScale`, the fitted top
+— against a continuous 2-to-68 range no corpus can enumerate; the `including`
+clause's two ends are what it turns on and they are covered. Both fact-level.
+
+**The owner kept three tenths**, asked on 2026-08-12 with the zbarimg dissent
+put to them — two pinned modern decoders read all 444 rendered codes down to two
+pixels per module, while zbarimg's failures went from 6 to 35, concentrated at
+the smallest size a style can store. Owner-set, and explicitly revisitable.
+
+## 2026-08-12 — M49, the size stops snapping, and D182 reverses D179 the same day
+
+**This reverses [D179](#2026-08-12--m49-rebuilt-the-quiet-zone-stops-absorbing-the-rounding-and-d179), which landed at `ad28c5f` about four hours earlier.**
+Said plainly, because the alternative readings are both wrong: D179 was not a
+mistake, and this is not a correction. D179 answered the question it was asked —
+*where does the rounding remainder go* — and the owner approved the answer. They
+then used it, and reported the consequence as a defect ([F221](deferred-findings.md#open)):
+*"Setting the resolution of the QR code jumps to a different number after it is
+set. The number set is where it should stay, the quiet zone should be reduced to
+fit."*
+
+**D182 — the requested size is exact, and the quiet zone carries the remainder
+in pixels.** D179 considered two knobs, margin and scale, both in whole modules,
+and chose to pin the margin and put the remainder in the drawn size. It did not
+consider the third option, which is the one that makes the request exact:
+**only the symbol needs whole modules.** The quiet zone is white space and can be
+any pixel count at all. So
+
+    size = modules·scale + 2·margin_px
+
+is satisfiable at every requested size, with `scale` chosen to put `margin_px`
+nearest four modules. Measured: a 29-module code at 500px takes scale 14, a 406px
+symbol and a 47px margin — 3.36 modules, and the total is exactly 500.
+
+**The band is four modules ±25%, so 3 to 5** — owner-set, and three is *below*
+ISO/IEC 18004's floor of four. That is a scannability trade and it is measured
+rather than argued: `make verify-scan` exists from M50.6's reopening, gates a
+corpus through two pinned decoders at five simulated distances, and the band's
+low end goes through it across the version range.
+
+**Where the band cannot be held is stated, not hidden.** At the bottom of the
+range it fails: a 29-module code at `MinSize` 64px gives a 1.5-module zone, and a
+3-module zone on that code needs 70px. Either `MinSize` rises or the low end is
+documented as out of band; the milestone argues which, and whichever it is a test
+asserts it.
+
+**`MaxSize` rises 2000 → 2048**, owner-instructed, so the top slider stop is a
+round power of two. Everything derived from it moves and is restated where it is
+written: `MaxScale`, the raster bound, D142's allocation figures and the openapi
+bounds.
+
+**The size control becomes a slider with stops and an editable number** — 128,
+256, 300, 512, 600, 1024, 1200, 2048, owner-chosen as powers of two plus the
+three figures that matter at 300dpi. No new script; `script-src 'self'` and
+`style-src 'self'` are unchanged.
+
+What goes with D179: the `SizeFit.Snapped` notice has nothing left to report, and
+the paragraph on the tab explaining that the size snaps stops describing the
+product.
+
+## 2026-08-12 — M50, the default code becomes a property rather than an absence, and D183
+
+**D183 — any code can be the default, and the default is what an untagged scan
+resolves through.** The owner, on being told that the first code cannot be
+removed because the default *is* the row with the empty slug
+([F222](deferred-findings.md#open)): *"Allow setting any code as the default to
+resolve untagged links, every code should have a qrc tag on its link. When a
+default is removed promote another code."*
+
+M50 built the default as the absence of a slug, and that identity is exactly what
+made it unremovable — its payload carries no `qrc`, which is what makes every
+already-printed picture resolve to it. The identity moves onto a flag.
+
+**Nothing already printed changes meaning, and that is why this is cheap.** The
+parameter is already named `qrc` — `domain.ClickCodeParam`, since M50 — so
+nothing is renamed. A picture printed before this milestone carries no `qrc` and
+attributes to whichever code holds the flag, which starts as the code it always
+was. A picture carrying `?qrc=<slug>` attributes to that slug exactly as before.
+Both are asserted.
+
+**Today's default code gains a slug generated the same way every other code's
+is** — owner-answered, over a reserved `default` slug and one derived from the
+link's name. The reserved word was rejected for needing enforcement wherever
+codes are named; the derived slug for drifting the moment a link is renamed.
+
+**Removing the flag-holder promotes another code**, and the promotion is stated
+to the reader rather than silent, because it changes where untagged scans land.
+Which code is promoted is the milestone's to argue — oldest, first-in-list and
+the one the reader is looking at are all defensible, and it is a decision rather
+than an implementation detail.
+
+The same reopening fixes a defect found alongside it: **Restore defaults takes no
+slug**, so pressing it while a named code is selected clears the *default* code's
+style and drops the reader onto the default code.
+
+## 2026-08-12 — M50.6, the level is the highest that costs nothing, and D184
+
+**D184 — error correction is the highest level that does not grow the symbol,
+and H while a logo is drawn.** The owner asked what the detriment of forcing H
+everywhere would be. Measured against this repository's own encoder, on the URL
+shapes this product produces:
+
+| Payload | L | M | Q | H |
+| --- | --- | --- | --- | --- |
+| `https://lnk.io/ab3x9?src=qr` (27 bytes) | v2, 25 mod | v3, 29 | v3, 29 | v4, 33 |
+| with `&qrc=autumn` (38 bytes) | v3, 29 | v3, 29 | v4, 33 | v5, 37 |
+| `https://links.example.com/spring-sale?src=qr` (44 bytes) | v3, 29 | v4, 33 | v4, 33 | v5, 37 |
+| with `&qrc=autumn-poster` (62 bytes) | v4, 33 | v4, 33 | v6, 41 | v7, 45 |
+
+H is roughly **30% more modules a side and 70% more by area** than the shipped
+default of M. At a given printed size each module is ~30% smaller, so the code
+scans from proportionally less distance — and `make verify-scan` already shows
+dense codes are what fail first.
+
+So the rule takes correction wherever it is *free*: the strongest level whose
+version equals the weakest level's version. On the table above that is Q for the
+two ordinary shapes, where M was chosen by nothing, and M for the longest, where
+Q would cost two versions. Never denser than today. Often better corrected.
+
+**H stays while a logo is drawn** — that is what the logo costs and it is why
+M50.6 forced it. **When the logo goes the level is recomputed by the rule**
+rather than restored to a remembered value, and the owner's reasoning is on the
+record: *"the old QR should still resolve as long as the link stays the same, so
+a change in the new code shouldn't be an issue."* The payload is unchanged; only
+the picture differs.
+
+The defect this fixes is that removing a logo left the code at H **forever** —
+a setting the reader never chose, cannot see, and cannot unset from the tab
+([F223](deferred-findings.md#open)).
+
+## 2026-08-12 — M50.7 added: the QR tab stops costing more attention than it is worth
+
+**Placement.** After [M50](phase-details/m50.md)'s reopening and
+[M49](phase-details/m49.md)'s second, because it re-lays-out the two controls
+those reopenings reshape — the size control becomes a slider and the codes list
+becomes fully removable, and laying either out first would lay out a control
+about to change. Inside [M57.9](phase-details/m57.9.md)'s range, which is what
+the `X.1`–`X.8` reservation is for.
+
+**Why a milestone rather than four reopenings.** Every item is on a surface some
+shipped milestone claims — the tab strip is M47.5's, the panel content M48's, the
+codes list M50's, the size and download controls M49's — and **none of them is
+defective**. Each does what its milestone claims. What the owner reported is that
+the tab asks for more attention than it returns, which is a claim about the whole
+surface rather than about any milestone's promise, and reopening four milestones
+that are not wrong would be the wrong shape. Owner-chosen 2026-08-12, over
+folding it into the reopenings and over routing it through
+[planning.md](planning.md) as new scope.
+
+**Why not planning.md's route.** It discharges [F224](deferred-findings.md#open),
+an approved finding, and a finding becoming a milestone is the normal path rather
+than a scope addition needing absence established. The five artifacts are written
+regardless, because each keeps a different document true.
+
+**What deliberately stays out**: the logo controls, which show the same shapes
+and belong to [M50.5](phase-details/m50.5.md) — touching them here would put two
+milestones' work in one commit; any new capability, so the download menu that
+will hold PDF later holds PNG and SVG today; and a demo seeder row, because M50's
+and M50.5's already seed what this milestone re-lays-out.
+
+## 2026-08-12 — M49 built: the size is exact, the floor moves per code, and three modules is measured
+
+The build of [D182](#2026-08-12--m49-the-size-stops-snapping-and-d182-reverses-d179-the-same-day).
+D182 settled *what* — the requested size is exact, the quiet zone carries the
+remainder in pixels, the band is four modules ±25% — and left three things to
+the build, saying so in as many words. This is those three, with the numbers
+they rest on.
+
+**The geometry is carried as a new `qr.Style.size` in pixels, not as a margin in
+pixels.** D182's sentence is *"the quiet zone carried in pixels rather than in
+modules"*, and both readings satisfy it; they are not equally good and the
+difference is measurable. A stored pixel *margin* makes the picture
+`modules·scale + 2·margin`, which is symmetric — so it can only reach sizes with
+the same parity as `modules·scale`, and since a QR symbol is always an odd number
+of modules that is the parity of `scale`. Hitting an arbitrary size then costs a
+scale of the wrong parity, and the quiet zone lands where that scale leaves it:
+an 89-module code at 2048px comes out at **6.7 modules** of quiet zone against
+the **4.24** the parity-free answer reaches. Storing the *size* instead makes the
+quiet zone the remainder halved, with the odd pixel going to the far side, and
+the symbol is then one pixel off centre in half of all cases — invisible, and it
+buys the exactness the whole reopening is for.
+
+The cost is one edge D182 did not raise and this build had to answer: a size is
+stored against the module count the content had when it was saved, and renaming a
+link into a longer alias re-encodes to a larger symbol. A picture that can no
+longer hold its own symbol is not a picture, so `Style.margin` survives as the
+**fallback**, which is exactly the pre-reopening geometry: the code is drawn
+larger rather than clipped, which is what a pre-M49 row already does on the same
+day. `TestAStoredSizeTheSymbolOutgrowsFallsBackRatherThanBreaking` is the arm.
+
+**The size floor moves per code rather than `MinSize` rising.** D182 named the
+choice — *"either `MinSize` rises or the low end is documented as out of band"* —
+and neither is quite what shipped, because the number of pixels a symbol needs is
+a property of the symbol and no single constant can express it. `qr.MinSizeFor`
+is `MinScale × (modules + 2·MinMarginModules)`: **70** for a 29-module code,
+**190** for the 89-module one this product's longest content reaches, **366** for
+version 40. A request inside the control's range but below its own code's floor
+is refused with that number in the sentence, which is the rule margin and scale
+have had since M41 — clamping reports success for a setting nobody asked for.
+`MinSize` stays 64, because a 25-module code draws there.
+
+Raising `MinSize` to 366 was the alternative and is rejected on its cost: it
+refuses five sixths of the range the product accepts today for the sake of
+payloads no link in it produces. Raising it to 190 — enough for the product's own
+content — still refuses 64 to 189 and still fails for an API caller with a longer
+payload, so it buys a constant and not a guarantee.
+
+**What gives way is the band's upper half, and that is the half worth losing.**
+The scale is a whole number of pixels, so the quiet zones one symbol can reach
+step by `(modules+8)/2` pixels at a time; where that step is wider than the band
+there is no scale inside it. The condition is arithmetic: an admissible scale
+lands inside 3 to 5 modules whenever the request is at least
+`(modules+10)(modules+6)/4` pixels, which is 342 for a 29-module code and beyond
+`MaxSize` for an 89-module one. Below that line the fit errs **wide** — never
+narrow — and only where the next scale up would break the floor, which
+`TestTheQuietZoneLandsInTheBand` asserts case by case rather than trusting. Over
+every module count the product encodes and the whole size range: **3789 fits
+inside the band, 1083 forced wide of it, none under three modules.**
+
+Erring wide is not free and the thing it costs is named: **M49's first reopening
+required the majority of the picture to be code at every size, and that claim is
+given up here.** An 89-module code at exactly 256px has one admissible scale —
+two pixels a module — so the quiet zone is 19.5 modules and the code is 48% of
+the picture by area. The two are not simultaneously satisfiable: honouring 256px
+exactly and leaving a majority-code picture would need a scale between 2 and 3.
+D182 is the owner choosing the exact size over the tight picture, having used
+both, and this is where that shows up. Refusing the interior sizes where the
+conflict bites was considered and rejected — for an 89-module code that is a dead
+band from 252 to 284 pixels, a hole in the middle of a slider, which is worse
+than a wide margin.
+
+**Three modules of quiet zone is measured.** It is one below what ISO/IEC 18004
+specifies, so `make verify-scan` is the instrument rather than the argument: the
+corpus grew from 816 pictures to **1360**, adding the band's low end at both ends
+of the scale range across the whole version span, and every one of them is
+rendered off the shipping path. **9256 of 9256 decodes exact**, through
+zxing-wasm and jsQR at 8, 6, 4, 3 and 2 pixels per module. The narrow styles
+are built the way the size control builds one — a size in pixels that leaves
+exactly three modules — so what was decoded is what the product serves.
+
+`zbarimg` 0.23.93 ran beside it, reporting only and not gating, on the terms
+M50.6's reopening set: **4449 of 4628 exact, and the no-logo control is 2316 of
+2316.** The control is where the narrow quiet zone is unoccluded, so a
+three-module zone costs the strictest engine to hand nothing at all; the 179
+misses are all on logo'd pictures and sit at 92.3% against the 92.6% the same
+engine gave the 816-picture corpus at M50.6, which is the fraction's number
+rather than the margin's.
+
+**One test was renamed rather than edited**, because its name was a claim.
+`TestARowFromTheOldSearchKeepsRenderingAndReportsAReSave` is
+`TestARowFromTheOldSearchKeepsRenderingAndReSavesExactly`: D179's entry names the
+old one twice and this file is append-only, so a reader tracing that string finds
+it here. What it asserts is the same row — margin 14, scale 7, the shape the
+first search produced — and the half that changed is the second: it moved by up
+to half a span and reported the move, and it lands on the number now.
+
+**Two things went with the snap and are worth naming as removals.**
+`SizeFit.Snapped` and the `want`/`got` pair that travelled in the redirect query:
+there is nothing left for them to report, and a flash message saying 300px came
+out as 300px is how a message that matters stops being read. And the paragraph on
+the QR tab explaining that the size snaps to the nearest whole-module one, which
+described the behaviour the owner rejected, on the tab where they rejected it.
+
+**The drawing moved into pixel space, and that is forced rather than chosen.** A
+quiet zone measured in modules is expressible in a module-unit `viewBox` and one
+measured in pixels is not — a picture whose remainder is 47 pixels of a 14-pixel
+module has no whole-module coordinate for the symbol's corner. So the SVG's
+`viewBox` is the pixel size now and every rect is a pixel rectangle. Nothing a
+consumer can see changes: the viewBox still maps onto `width` and `height`
+exactly, so an element sized with CSS draws the same code at any size. What
+improved is the logo: it was written in module units to three decimal places,
+a rounding the PNG did not share, and both encoders now write the same integers.
+
+**The slider is two inputs and a witness, because there is no script to make it
+one.** `script-src 'self'` and no application JavaScript means nothing in the
+browser can copy a dragged slider into the box beside it, and the milestone's own
+risk names what that invites — the number becoming a second source of truth. The
+rule is on the server and testable there: `size_shown` witnesses the value the
+form was rendered with, the slider wins when it has moved off that, the number
+wins otherwise. A form with no slider at all is the number alone, which is what
+M49 shipped and what a cached page still posts. The marks are a `<datalist>`,
+HTML's own way of saying them; they are suggestions and the control is continuous
+between the ends, which is what *the range ends reachable* means. The slider's
+own appearance ships in `input.css` beside `.file-pick` and for the same reason:
+a range input is the one native control no two engines draw alike, and its
+vendor-prefixed track and thumb are not Tailwind utilities. `qr-slider`'s webkit
+and moz rules are stated separately — a selector list mixing the two prefixes is
+dropped whole by both engines.
+
+**`MinSize` is now the control's floor and `QRMinSize` is the code's**, which is
+the one place the two numbers diverge on a page. The template is handed
+`qr.MinSizeFor` over the module count the code is *drawn* at — level H when a
+logo forces it, the same defence `qrCodeFrom` and `SetQRSizeBySlug` already
+make — so the browser enforces what the server will. The slider's marks below
+that floor are dropped rather than drawn, because a mark the save would refuse is
+a mark that lies.
+
+**Everything `MaxSize` carries moved with it.** `MaxScale` 68 → **75**, which is
+`floor(2048 / (21 + 2·3))` and is pinned to that derivation by a test, because
+the ceiling has now been wrong twice and each time the symptom was a fit the API
+then refused. The raster figures in `docs/SECURITY.md` and in D127 and D142:
+4,000,000 → **4,194,304** for the paletted path, 16,000,000 → **16,777,216** for
+the logo'd one, and the logo box's own buffer 1,440,000 → **1,507,984**. The
+openapi bounds on `scale` and the new `style.size`, and the prose that named 2000
+in three places.
+
+## 2026-08-13 — M49, four amendments the second reopening forced
+
+Orchestrator amendments at step 3.4, all fact-level, all on milestone files a
+worker may not touch. Three are M49's own earlier sections describing a tree
+D182 changed; the fourth is a number M49 moved out from under M50.6.
+
+**One — the quiet-zone floor.** As it stood, in the original *Done means*:
+*"The quiet zone stays at or above the 4 modules the specification requires."*
+As amended: the same, plus a note that the floor is **three** modules since
+D182, below what the specification requires, and measured through
+`make verify-scan` rather than assumed. Tree fact: `MinMarginModules = 3` in
+`internal/qr/qr.go`, asserted across the range by `TestTheQuietZoneLandsInTheBand`.
+
+**Two — the majority-code claim, given up.** As it stood, in the *first*
+reopening: *"at every acceptable size the majority of the image is code and the
+margin does not grow past the floor by more than the remainder a module grid
+forces."* As amended: both halves given up, with the reason. Tree fact: an
+89-module code at 256px admits exactly one scale and comes out **48% code** — an
+exact size and a majority-code guarantee are not simultaneously satisfiable, and
+the only way to keep both would be refusing the interior sizes where it bites,
+which is a dead band from 252 to 284px. The margin is no longer pinned at the
+floor either.
+
+**This is the second thing the owner's first QR-tab report bought that their
+second one spends.** D179 pinned the margin so the picture would be mostly code;
+D182 makes the size exact and that guarantee is what it costs. Both were
+owner-set, four hours apart, each with the trade in front of them. The record
+says give-up rather than correction because that is what it is.
+
+**Three — the band's either/or was an incomplete enumeration.** As it stood, in
+the second reopening: *"either `MinSize` rises or the low end is documented as
+out of band."* As amended: the build took a third answer, a floor that moves per
+code — `qr.MinSizeFor` = `2×(modules+6)`, 70px at 29 modules, 366px at version
+40. Tree fact: `MinSize` is unchanged at 64 and no size is documented out of
+band, because none is admitted out of band. Judged **fact-level rather than
+assertion-level**, and the reasoning is worth keeping: what the bullet asserts is
+that the low end is handled and stated rather than silently broken, and that is
+what shipped. The either/or was the bullet listing the two answers its author
+could see, not a constraint on which answer was allowed.
+
+**Five and six, added at the second acceptance pass.** A reviewer found that
+`m49.md`'s original *The size is snapped, and the interface says so* subsection
+was still asserting the snap in six places, unmarked — and that its second
+paragraph files D182's shipped answer under *rejected*. The subsection now
+carries one supersession note at its head rather than six inline, because it is a
+record of what shipped and was then rejected, and rewriting it would destroy that.
+A second note answers the rejected-alternative paragraph directly, and it is
+worth keeping: **that paragraph was right about its own alternative and wrong
+about the space.** Fractional module boundaries would make the two encoders
+disagree — D182 does not do that; the symbol still lands on whole modules. What
+D182 changes is the **quiet zone**, which is white space and needs no grid at
+all. Neither that paragraph nor D179 considered it, which is how an option this
+simple stayed unfound through two decisions. And `m50.6.md`'s corpus figures
+moved again: 816 in two halves of 408 when written, **1360** in two halves of 680
+since this milestone added the band's low end at both ends of the scale range.
+
+**Four — a range M49 moved out from under M50.6.** `m50.6.md`'s own amendment of
+2026-08-12 said *"the continuous 2-to-68 range"*. `MaxScale` is 75 since D182
+raised `MaxSize` to 2048. Corrected in place; it is a number, not a claim.
+
+## 2026-08-13 — M49, the exact-size claim gets an enforcement on the API
+
+The second reopening's first bullet is *the requested size is the size stored and
+drawn, exactly, at every value in the range*. It shipped enforced on one of the
+two doors. This is the other one, built on the orchestrator's rejection of the
+first attempt.
+
+**What was wrong.** `qr.Style.Normalize` range-checks `size` against `MinSize`
+and `MaxSize` and can do no more — a style carries no module count, so it cannot
+know what its own symbol needs — and `SetQRStyleBySlug` called only Normalize.
+`PUT /links/{id}/qr` with `{"style":{"size":100}}` on a 45-module code was
+therefore **accepted**, `fitGeometry` fell back to the margin-and-scale
+arithmetic, and the code served a picture that was not 100px. `api/openapi.yaml`
+promised the opposite in two places, and the dashboard's size control had
+enforced it since the reopening. A stored style that draws at some other size
+falsifies the bullet whichever door it came through, so this was behaviour rather
+than a sentence to soften.
+
+**The floor that binds on the API is not the floor that binds on the form**, and
+finding that out is what the fix cost. The form's floor is `qr.MinSizeFor` =
+`2×(modules+6)`, the smallest picture over *every* module width, and it is right
+for the form because the form chooses the width itself. An API caller sets `size`
+**and** `scale`, and `fitGeometry` draws the requested size only while
+`size ≥ scale×(modules+6)`. Refusing at `MinSizeFor` would have left
+`{"style":{"size":86}}` on a 37-module code accepted at the default scale and
+drawn at 360px — measured, on the first cut of the contract test, which is how it
+was caught. So `qr.MinSizeForStyle` is the check, `MinSizeFor` is it at
+`MinScale`, and the refusal names both numbers because lowering `scale` is the
+other way to be accepted.
+
+**Rejected: re-fitting `scale` server-side** the way `SetQRSizeBySlug` does. It
+would accept every size in the range, which reads like the friendlier answer, but
+`scale` is a field this endpoint documents and a caller sets — a `PUT` that
+replaces the style whole and then silently rewrites one of its fields is the
+class of surprise D141's accept-and-override was allowed only because the level
+is *forced* by a logo rather than chosen. Nothing forces a scale.
+
+**The upload path is deliberately not covered by this.** `refitForLogo` still
+returns the style unchanged when the level-H symbol cannot be fitted into the
+picture's existing size, so that code grows — the escape M58 always had, now
+stated in `api/openapi.yaml` and `docs/usage.md` rather than only in the code
+comment. Refusing there would refuse an upload the SVG draws correctly, which is
+what D174 already declined.
+
+## 2026-08-13 — M49, what the exact size falsified where nothing was looking
+
+The third attempt at the second reopening, and every item is a sentence or an
+assertion the exact-size change reached without rewriting. Nothing here changes
+behaviour; what it changes is whether the tree says true things about the
+behaviour that shipped.
+
+**Two comments on the function the change was made in.** `QRSizeInput.Size` said
+*"the output size in pixels, before snapping"* and `SetQRSize` explained that a
+size is *"derived on read rather than written into the row"*. D182 removed the
+snap and started writing `qr.Style.Size` into the row, in `SetQRSizeBySlug`
+directly below it. The size is now kept exactly until the symbol outgrows it, and the
+margin-and-scale fallback is what takes over past that point, which is what the
+comment says instead.
+
+**The assertions are the substance, and they were measured rather than
+argued.** `test/integration/qr_logo_test.go` allowed half a span of drift in two
+places and explained it as *"qr.FitSize snaps to a whole number of modules"*,
+while every sibling in the same diff had been tightened to equality and both
+`api/openapi.yaml` and `docs/usage.md` had begun promising *the identical
+integer*. Sabotage says how much that cost: a 20px error injected into
+`refitForLogo`'s target size, and a second into what `SetQRSizeBySlug` stores,
+each passes the old assertion — the spans are 46 and 45 pixels — and fails the
+new one. A test that admits the defect its own file exists to catch is not a
+weaker test, it is not a test.
+
+**One escape is real and is checked rather than assumed.** `refitForLogo` returns
+the style unchanged when the level-H symbol will not fit into the picture's
+current size, which draws a *larger* code — the escape the entry above named.
+The equality assertion is therefore preceded by a check that the fixture clears
+`qr.MinSizeFor` at H, so a fixture that ever drifts into the escape fails loudly
+instead of quietly measuring nothing. The size control has no such escape: below
+the floor it *refuses*, so the second assertion is equality unqualified.
+
+**D181's corpus description keeps its own numbers rather than the new ones.**
+`internal/qr/composite.go`'s *Where three tenths came from* is the only place
+inside `internal/qr` that says what the occlusion cap rests on, and it described
+the corpus as three stored sizes and 816 pictures. `scanStyles` returns five
+since this milestone added the band's low end. The corpus sentence is corrected
+to 1360; **the figures below it are not**, and that is deliberate — the sweep
+that chose three tenths and the zbarimg dissent were taken on the 816, and the
+two styles that grew the corpus test the *quiet zone*, not the cap. Restating
+them against 1360 would claim a measurement nobody made. The re-run over all
+1360 is in this milestone's own entry above, which is where the comment now
+points.
+
+**Two comments in `internal/httpx/api_qr_logo_test.go` cited a deleted
+mechanism** as though it were the live comparator — the `want`/`got` redirect
+pair and `qrNotice`'s snap branch, both gone with D182. The logo resize warning
+is the only such pair now, and the reasoning it was compared to is still good:
+it is the argument that deleted the snap sentence outright, and the warning
+survives it because two dimensions can still differ where two sizes cannot.
+
+## 2026-08-13 — M50.7's plan review, and the three records it caught before anything was built
+
+[planning.md §7](planning.md)'s independent plan review ran against
+[M50.7](phase-details/m50.7.md) and returned thirteen findings. Three are about
+the tree as it stands rather than about the plan, and are fixed here at the M49
+checkpoint rather than waiting for the milestone they were found from.
+
+**One — three count sentences.** `phase-details/README.md` and `Plan.md` said
+*twenty-one milestones* and *six insertions* while the table beside them listed
+twenty-two and seven; `Plan.md`'s Phase 3 lead still named the **first** report's
+three reopenings as the open set. [planning.md §6](planning.md) puts a count an
+addition makes false inside the addition, not after it, so the commit that added
+M50.7 should have carried these and did not.
+
+**Two — [W43](workflow-changes.md#made) was breached by the same commit.** Scope
+added after a review has run is numbered below it *and reopens it*. M57.9 was
+already reopened, so the status row was right; what was missing is that its own
+*What the re-run owes* list never named the new work. It now names both QR-tab
+reports in full, and the three decisions that came with them — each of which
+reverses or supersedes something this review has already read past. **This is the
+third time that paragraph has been caught short**, by three different plan
+reviews, and the entry says so rather than quietly fixing it a third time.
+
+**Three is not fixed here** because it is a change to what M50.7 asserts rather
+than a stale fact, and it is the sharpest finding of the thirteen: M50.7 says
+*"None of them is defective. Each does what its milestone claims"* and then
+deletes the preview paragraph, which is
+[M49](phase-details/m49.md)'s shipped claim and F213(a)'s closure, asserted by
+`TestTheQRPreviewSaysWhichSizeIsServed`. Both cannot be true. It is dispositioned
+with the other ten before M50.7 is built, and it is recorded now so that the
+milestone cannot be built against the version that contradicts itself.
+
+The review is worth its cost twice over on finding two alone: the rule it caught
+is one this repository wrote for itself after being caught by it, and it was
+breached again inside the commit that quoted the rule's own numbering
+convention.
+
+## 2026-08-13 — M50 rebuilt: the default is a flag, and the untagged bucket is what makes that free
+
+The build of [D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183).
+D183 settled *what* — any code can hold the flag, an untagged scan resolves
+through it, today's default gains a generated slug, removing the holder promotes
+another — and named two things it left to the build in as many words. This is
+those two, and a third the build found underneath them.
+
+**Which code is promoted: the oldest one left.** Three candidates were
+defensible and only one is a property of the *data*. "First in list" is the same
+rule wearing a presentation's name — `ListQRCodes` orders by `created_at, id`
+once the flag-holder is out of it, so the two answers are the same row, and
+naming the presentation would tie a data decision to a template. "The one the
+reader was looking at" cannot be expressed by a caller that is not a browser, so
+`DELETE /links/{id}/qr/codes/{slug}` and the dashboard's Remove button would
+promote different codes from the same act — and a delete whose side effect
+depends on which page you were on is not reproducible from the API. Oldest is
+also the most conservative reading of what the flag is for: the longest-lived
+code is the one most likely to have pictures of it in the world, and the flag is
+what those pictures resolve through. The automatic choice only has to be
+predictable, because the reader is told which code was promoted and can set the
+default explicitly afterwards.
+
+**How a pre-migration default row gains a slug without changing what any
+already-printed picture resolves to: it gains it on the row, and the redirect
+path is not touched at all.** An untagged scan goes on recording the bare `qr` it
+has recorded since M41 — `clickSource`, `Snapshot.CodeSlug` and
+`ClickSourceCode` are byte-identical after this reopening — and the analytics
+reader folds that bucket onto whichever code holds the flag. D183's sentence is
+that an untagged picture *"attributes to whichever code holds the flag"*, and
+that fold is what it is.
+
+The alternative was resolving the flag on the redirect path and storing
+`qr:<slug>` for an untagged scan, which is coherent and was rejected. It splits
+every link's existing history at the migration — everything printed before under
+one name and everything after under another, for a code nobody touched — which
+is the exact split [D130](#2026-08-07--m50-the-empty-slug-the-parameter-that-stayed-closed-and-the-rollup-that-was-not-written)
+spent a milestone avoiding, and repairing it costs either a rewrite of
+`link_dimension_daily` or a second permanent column remembering which code used
+to be nameless. Neither buys a reader anything: the two payloads are the same
+code, and the breakdown says so with one row either way.
+
+What the fold costs is that moving the flag moves the untagged history with it.
+That is not a side effect to hide — it is what the flag *means*, and it is why
+both the promotion notice and the Make-default notice say where untagged scans
+land rather than reporting that a setting was saved.
+
+### The third thing, which the build found: a code gains a slug when it stops being alone
+
+D183 says *every code carries a `qrc` tag, the default included*. Handing one out
+the first time somebody styles a code would falsify M41's claim that **restyling
+a code never changes what it says** — a preference about two colours silently
+rewriting a printed payload is the shape this reopening exists to remove, not one
+to add. `TestAStyleChangesTheDrawingAndNeverTheContent` caught it, against a
+first draft that materialised the row inside the style write.
+
+So the slug arrives at the moment a second code appears beside the first, which
+happens in exactly two places: `04400`, for the links already carrying more than
+one, and `CreateQRCode`, which names the default before inserting the code that
+makes it one of several. A link's only code keeps the empty slug. It has nobody
+to be told apart from, it is the default by arithmetic, it cannot be removed
+while it is the only one, and its payload is the one every already-printed
+picture carries — nothing about it is decided by a slug it does not have.
+
+The empty slug therefore survives, and it means the opposite of what it meant.
+It was the default code's *identity*, load-bearing in three places and
+unremovable because of it. It is now the absence of a name on a code with nobody
+to distinguish it from, and it decides nothing.
+
+**Rejected: a `qr_codes` row for every link**, which would make the tag literally
+universal. It reverses M41's *twenty untouched links carry no rows at all*,
+[D139](#2026-08-07--m505-the-shorthand-that-carries-a-logo-and-the-row-it-has-to-write), the ceiling in
+`demoCoverage()` and the panel's *no size is stored for this code* branch — four
+shipped claims, to tag a code that has nothing to be distinguished from.
+
+### What the reopening changed that nobody asked it to
+
+**`ResetQRStyle` no longer deletes the row.** It could, while a row held nothing
+but the preference being withdrawn; the row now holds the code's identity — the
+flag, and the slug printed in its payload — and dropping those to clear two
+colours and a size would retire a printed identity to undo a styling. It writes
+the product-default style instead, which is what "restore defaults" has always
+meant for a *named* code and now means for every code. The logo stays with it:
+*Remove the logo* is its own control with its own sentence, and a button labelled
+*Restore defaults* that silently discarded an uploaded image would be doing
+something nobody could read off it.
+
+**`GetDefaultQRCode` prefers the flag and falls back to the empty slug**, which
+is the second half of what makes the migration safe. A row can still arrive
+carrying 03700's spelling and not 04400's: written by the previous release during
+a rolling deploy, when `is_default` is a column it does not know about, or
+written by hand — `TestAStyleStoredBeforeM49DrawsExactlyWhatItAlwaysDrew` inserts
+exactly such a row and was the test that found it. Reading the flag alone reports
+such a link as having no default at all, and the next style write then inserts a
+second unnamed row against `qr_codes_link_slug_key`. The fallback costs one
+`ORDER BY` and makes both spellings resolve to one row.
+
+**No `CHECK (slug <> '')` and no `DROP DEFAULT`**, for the same rolling-deploy
+reason and for the one above: the previous release writes an empty slug on
+purpose, and a link's only code still carries one by design. The invariant 04400
+does enforce is the one that has no old spelling — `qr_codes_link_default_key`,
+partial and unique on `link_id WHERE is_default`, which an instance running the
+previous release cannot collide with because it writes `false` by column default.
+
+### The redirect path is not touched at all, and that is a fact rather than a claim
+
+`git diff internal/httpx/redirect.go internal/redirect/` is **empty**, and
+`git diff internal/store/query/redirect.sql` is comments. The resolve query the
+hot path runs is byte-identical to the one that shipped, `AND q.slug <> ''`
+included.
+
+A first draft dropped that predicate, reasoning that the default code now has a
+slug and must ride home. The first half is true and the predicate was never what
+kept it out: the default's slug is not empty once it has one, so it is
+aggregated either way. What dropping the predicate actually added was the *lone*
+default's empty string — serialized out of Postgres on every cold resolve, for
+the majority of links on any instance, to be discarded by `attachCodes`, which
+refuses everything `ValidQRCodeSlug` refuses and refuses the empty string.
+
+It also moved the premise under a shipped comment. `Snapshot.Codes` closes with
+*"a link with no named codes — the default, and every link that existed before
+this milestone — carries exactly the payload it carried before"*, and that
+sentence is the stated reason `CacheKeyVersion` did not move. Leaving a
+justification resting on something that had quietly stopped being true is worse
+than the byte it saves, so the predicate stays and
+`TestALoneDefaultCodeStaysOutOfTheRedirectSnapshot` is what keeps it there.
+
+The inherited rule is *touching the redirect path re-runs the k6 measurement*.
+Its trigger is not met by a comment, and the measurement's subject — the cached
+p99, over code and SQL that have not changed by a byte — is unchanged. Reported
+to the orchestrator rather than argued away by the worker.
+
+### The rolling-deploy row: the empty slug and the flag are two spellings, so one statement writes both
+
+`GetDefaultQRCode` falls back to `slug = ''` for a row the flag never reached,
+and the fallback is what makes the deploy window safe. It also creates a shape
+nothing else in the schema does: a row that is the link's default by the *old*
+spelling and not by the new one.
+
+`NameQRCode` is the statement that takes the old spelling away — it gives the
+default a slug at the moment a second code appears — and it therefore has to
+write the new one. `UPDATE … SET slug = $3, is_default = true`. Without the
+second clause the link matches neither half of `(is_default OR slug = '')` and
+has **no default at all**, silently: `ListQRCodes` and `qrCodeSplit` synthesise a
+code the link does not have, the untagged `qr` bucket stops folding onto the code
+every printed picture resolves through and surfaces as its own unlabelled row,
+and the next style write inserts a third row because it believes it is writing
+the default's first.
+
+Nothing raises an error at any point in that, which is why
+`TestARowTheFlagNeverReachedIsStillTheLinksDefault` builds the row explicitly —
+`slug = ''`, `is_default = false` — and asserts all four consequences rather than
+the clause.
+
+### Removing a code counts codes, not rows
+
+A link's default exists whether or not `qr_codes` holds it (D139), so the number
+of codes a link **has** and the number of rows it **stores** differ by one
+whenever no row carries the default. That is not a hypothetical shape: the
+previous release wrote it every time somebody added a code, `docs/slo.md`'s k6
+fixture writes it, and 04400 repairs only the links that existed when it ran.
+
+The refusal *this is the link's only QR code* was counting rows. On such a link
+the list shows two codes, both carrying a Remove control, and both removals were
+refused — the named one with a sentence saying it was the only code while the
+reader was looking at two. So the refusal counts what the list counts, which is
+the arithmetic `CreateQRCode`'s cap check already used.
+
+The other end of the same disagreement is removing the default when no row holds
+it. There is nothing to delete, and what removing it *means* is precisely what
+the flag means: the code untagged pictures resolve through stops being that one
+and becomes the oldest code that is written down. So it promotes, through the
+same operation the delete path promotes with, rather than refusing on a row's
+absence.
+
+### A style write on the default retries once, and only once
+
+`SetQRStyleBySlug` with the empty slug reads the default, finds no row, and
+inserts one carrying the flag. A concurrent `CreateQRCode` can write and name
+that row in between, at which point the insert no longer collides on
+`(link_id, '')` — it collides on `qr_codes_link_default_key`, because two rows
+claim the flag, and a raw 23505 leaves the API answering 500 for a race about
+which code is the default.
+
+`pgerr.IsUniqueViolation` is where this repository turns that into an answer, and
+the answer here is to look again: the second attempt finds the row the winner
+wrote, keys the upsert on its slug, and lands the style on the default code — the
+same outcome a request arriving a moment later would get. Once, because a second
+violation is not a race this can reason about. It is the idiom `applyTags` uses
+for a concurrent tag create, for the same reason: re-read the winner rather than
+failing the whole write over a race nobody can see.
+
+Unasserted, and deliberately so. Producing the window needs a commit between one
+statement and the next inside a single service call, which this repository has no
+hook for; the state the retry converges on is the ordinary multi-code case and is
+covered. `CreateQRCode` handles the mirror-image collision on `NameQRCode` the
+same way and for the same reason.
+
+## 2026-08-13 — Five owner answers, taken between milestones, before anything is built against them
+
+No milestone was under way. Prompted by two reviewers' findings on M50's
+reopening and by [M50.7](phase-details/m50.7.md)'s plan review, all put to the
+owner together.
+
+**One — a stored size that stops being exact when the payload grows
+([F225](deferred-findings.md), [F226](deferred-findings.md)).** Naming a code
+appends `&qrc=<slug>`, which pushes a 29-module symbol to 33, so a code stored at
+its own floor draws 70px before it gains a sibling and 82px after. **Re-fit the
+row whenever the payload changes**, the shape `refitForLogo` already uses when a
+logo forces level H — one rule for both, which is what F226 asked for. The owner
+added the part that makes it cheap: *"Raising the lower limit would have next to
+no affect on almost any use case unless it starts to go above a 128px minimum,
+which I expect people to rarely utilize. They are more likely to start around
+256px or 512px especially with their logos added."* And the notification rule:
+*"The user doesn't need to be notified unless we need to raise the currently
+selected size."* So a re-fit that keeps the size is silent; only a re-fit that
+must push the size **up** is reported.
+
+**Two — the `N/20` counter and the QR tab badge.** They are not the same
+quantity and the duplication objection does not hold: *"The badge count should
+only be the current number. This would be a second counter that provides the
+additional information of the maximum limit of codes, which is unnecessary
+information in the badge and a waste of limited space."* Badge keeps the bare
+count; the panel carries `N/20`.
+
+**Three — M50.7 stays one milestone**, with the popover's anchor-name plumbing
+and a kept browser spec priced into the plan and its risk section before a worker
+starts, rather than split at the seam its plan review drew.
+
+**Four — QR generation stays on the server.** The owner asked for it to move to
+the client and for the code to stop being stored. It is already not stored:
+`qr_codes` holds `style` jsonb and, if one was uploaded, a `logo` bytea — every
+SVG and PNG is generated per request. Put that way, with the three shipped claims
+a client-side encoder would cost — `ui` stays stdlib-only with no CDN and
+`script-src 'self'`; M49's *one arithmetic, two encoders*; and the API still
+needing a server encoder, so there would be two implementations to hold
+identical — the owner took **no change**.
+
+**Five — the preview paragraph reopens [M49](phase-details/m49.md) a third
+time.** Removing it is the owner's item 3B and it falsifies M49's *the
+stored-vs-drawn distinction is stated where the preview renders*, which is also
+[F213](deferred-findings.md)(a)'s closure with a test behind it. Offered the
+cheaper route — M50.7 removes it and names the reversal — the owner chose the
+strict one: the milestone that made the claim is the milestone that takes it
+back.
+
+**What that reopening carries** is both this answer and answer one, because both
+falsify the same milestone's claim and splitting them across two numbers is what
+reopening exists to avoid. The owner's own reading of the paragraph is the
+argument for deleting it: *"The message specifies that the stored size is X
+pixels, which is not an amount of data or a true representation of size of the
+image"* — the word **stored** means the size field on the style row, and it was
+read as bytes by the person who commissioned the sentence.
+
+## 2026-08-13 — M49, a size is fitted against a payload and a payload can change (D185)
+
+The third reopening of [M49](phase-details/m49.md), built. The scheduling was
+[the owner's five answers](#2026-08-13--five-owner-answers-taken-between-milestones-before-anything-is-built-against-them)
+and is not re-decided here; what follows is what the build settled, and the two
+places it declined to go.
+
+**The defect in one sentence.** A size is resolved against a module count, and a
+module count is a property of what the picture encodes. `CreateQRCode` is the one
+operation that changes what an *existing* code encodes — it gives the link's
+default code a printed identity, because that is the moment there is something to
+tell it apart from — and `&qrc=` plus eight characters pushed the measured payload
+from 29 modules to 33. A row fitted at 70px then no longer held the larger symbol
+and its quiet zone, `fitGeometry` fell back to margin-and-scale, and the picture
+came out 82px against a row that said 70. That is
+[F225](deferred-findings.md#closed) on the created code and
+[F226](deferred-findings.md#closed) on the default one, and it is the second
+reopening's *the requested size is the size stored and drawn, exactly* made false
+by an operation nobody performed on the code it happened to.
+
+**The rule: re-fit the row, keep the number, raise only where the number cannot
+be kept.** `link.refitForPayload` holds it. The size the reader chose survives
+wherever the larger symbol admits any scale that draws it, which is nearly
+everywhere — 512px on the measured payload keeps 512 and moves the scale from 14
+to 12, and a scale is not a number anybody set. Where it cannot, the size rises
+to `qr.MinSizeFor` — that code's own floor, 78px on the measurement — and the
+rise is reported. Owner-set, both halves: *"Raising the lower limit would have
+next to no affect on almost any use case"*, and *"The user doesn't need to be
+notified unless we need to raise the currently selected size."*
+
+**The re-fit is asked for on every create, not only where the slug was written**,
+and the guard is what makes that free: `refitStoredQRCode` re-fits, compares, and
+runs no statement when nothing moved — which for a healthy row is always. Asking
+unconditionally is what repairs a row an *earlier* release left stale, which is
+every link that grew a second code before this rule existed, and it is what keeps
+the sentence the reader is shown true: the created code inherits the default's
+style, so a default left unrepaired would hand the new code a size the code it
+was copied from is not. `TestAStaleStoredSizeIsRepairedByTheNextCreate` is that
+case, seeded as the previous release wrote it.
+
+**One arithmetic, two callers, and the callers differ on purpose.**
+`link.fitStyleTo` is what `refitForLogo` and `refitForPayload` share, because a
+size that has stopped matching its payload is one defect with two doors — a logo
+raising the level, a slug lengthening the content — and two copies of it would be
+two answers. What is *not* shared is the arm where no scale fits. `refitForLogo`
+leaves the style alone there and draws a larger picture, which is D174's bargain:
+the number it holds is one nobody chose, and the re-fit was bought on moving the
+style no further than it must. `refitForPayload` raises and reports, because the
+number it holds is one somebody typed. **This is the reading of "one rule for
+both" the build took**, and the other reading was available: m49.md's bullet says
+*the shape `refitForLogo` already uses … and one rule for both, which is what
+F226 asked for*, and F226's own Reviewed cell says *one rule answers both* — of
+the two findings. Reading it as *one rule for the logo path and the payload path*
+would have changed M50.6's shipped upload behaviour inside M49's diff, for a
+corner neither finding is about.
+
+**A style carrying no size is left exactly as written**, which is the read-forward
+claim M49 has made since it shipped. Such a row is the pre-M49 form and the size
+it means has always been whatever its margin and scale multiply out to against
+the payload of the day: it grows with the payload by construction, so there is no
+number to keep and nothing to report. Re-fitting it would rewrite a row nobody
+asked to have rewritten into the newer form.
+
+**The notice, and where it is not.** The dashboard carries both numbers through
+the redirect and re-derives them on the far side, on `dimsParam`'s reason — a
+sentence assembled out of a query string is a sentence somebody else can write —
+and `sizeParam` refuses anything outside `[qr.MinSize, qr.MaxSize]`. The API
+answers `refit: {from, to}` on the create, present only when it happened, exactly
+as `resampled` is present only on an upload that was shrunk. It is **not** on the
+logo path, and that is the same declining as above rather than an omission.
+
+**The preview paragraph is gone, and this milestone is what took its own claim
+back.** The first reopening required *the stored-vs-drawn distinction is stated
+where the preview renders*; D182 then made the two one number, so the sentence
+had no distinction left to state, and the owner read *stored* in the sentence
+they had commissioned as an amount of data. `TestTheQRPreviewSaysWhichSizeIsServed`
+went with it and `TestThePreviewDoesNotCallASizeStored` stands in its place —
+deleting a test and asserting nothing leaves the removal indistinguishable from
+nobody having looked. The bullet in m49.md is marked reversed rather than edited,
+and [F213](deferred-findings.md#closed)'s Closed-by cell now says what limb (a)
+rests on, which is the fixed frame and its own test.
+
+**Two things this deliberately did not do**, both filed rather than taken:
+
+- **A link's alias is the other payload change**, and it is not re-fitted here.
+  Renaming a link into a longer alias grows every one of its codes' payloads by
+  the same mechanism, and `link.Service.Update` touches no `qr_codes` row. The
+  bullet's reach is *every path that lengthens a payload re-fits **the row it
+  touches***, and the reopening's own risk section names the reach as *wherever a
+  slug is written, promoted or cleared*. [F228](deferred-findings.md#open).
+- **The size number is now only in the style form**, which draws under
+  `links.update`. A reader with `links.read` alone saw it in the paragraph and
+  sees it nowhere. The owner's argument for deleting was *the slider prints it two
+  lines below*, which is true for an editor and not for a viewer — a case the
+  answer did not consider. [F229](deferred-findings.md#open).
+
+## 2026-08-13 — M50.6, the level is a rule and the tab does not print it (D186)
+
+The build of [D184](#2026-08-12--m506-the-level-is-the-highest-that-costs-nothing-and-d184),
+which settled *what* — the highest level that does not grow the symbol, H while
+a logo is drawn, recomputed when it leaves — and left three things to the build.
+Two of them the owner has since answered
+([D187](#2026-08-13--m506-the-rule-binds-a-level-somebody-named-and-d187)); this
+entry is what the build found, what it offered, and what shipped after that
+answer landed on top of it.
+
+**One — the weakest level is `M`, not `L`.** D184 states the rule twice. Its
+prose says *the strongest level whose version equals the weakest level's
+version*; its table then reports the answers, and the two do not agree. Measured
+against this repository's encoder, on `https://lnk.io/ab3x9?src=qr`: L is version
+2, M and Q are version 3, H is version 4. Read with `L` as the baseline the rule
+answers **L** — it would hand back correction to shrink a symbol — and D184's own
+sentence *"that is Q for the two ordinary shapes"* would be false of the first row
+of its own table, as would *"never denser than today, often better corrected."*
+Read with the product default `M` as the baseline it answers **Q**, which is what
+every other sentence in D184, in [F223](deferred-findings.md#closed) and in
+[m50.6.md](phase-details/m50.6.md) says. So the baseline is `M`. Recorded here
+rather than fixed in place because decisions.md is append-only and because a
+reader who finds the loose phrase should find this beside it.
+
+**Two — the build offered an unset-only rule and the owner overruled it.** This
+is the part D184 does not touch at all, and it is the one with a contract on the
+other side of it.
+
+`qr.Style.Normalize` filled an empty level in with `DefaultLevel` the way it
+fills in a margin and a scale, and the style was stored normalized — so **every
+row this product has ever written carries `"level":"M"`**, put there by a
+constant rather than by anybody. The build's recommendation was that an *unset*
+level asks for the rule and a named one is drawn exactly, on the ground
+[D185](#2026-08-13--m49-a-size-is-fitted-against-a-payload-and-a-payload-can-change-d185)
+gives for `scale` on this same endpoint: *a `PUT` that replaces the style whole
+and then silently rewrites one of its fields is the class of surprise D141's
+accept-and-override was allowed only because the level is forced by a logo
+rather than chosen.* [D129](../../Plan.md#phase-3-decisions) took the level off
+the dashboard and left it on the API precisely so a script could choose one.
+
+D187 took the other side, and the con the prompt named is why it is worth
+re-reading: the unset-only reading makes D184's owner-set sentence — *correction
+is taken wherever it is free* — narrower than its words, with an exception for
+people that nothing in it mentions. **What ships is the floor.** The drawn level
+is the stronger of what the row names and what the rule gives; the rule never
+lowers, which is what keeps `H` under a logo. One consequence follows that
+neither document names: since the free level is never below `M`, **`L` is a value
+the API accepts and nothing draws**. It is stated in `api/openapi.yaml`,
+`docs/usage.md` and `qr.DefaultLevel`'s comment rather than left for a caller to
+discover, because *the field is honoured upward and ignored downward* is not
+something an enum can say.
+
+`Normalize` still leaves the level empty, and the argument for it changed with
+the answer. Under the floor a stored `M` is **inert** — the free level is never
+below it, so a row naming `M` and a row naming nothing resolve to the same
+picture — so this is no longer about reaching those rows. It is about what a row
+*is*: a record of what a caller asked for. Every style this product ever stored
+says `M` because a constant said it, and writing one more is writing a floor
+nobody set.
+
+**Three — the migration was written and is not shipped, which is a decision
+rather than an omission.** `04500_qr_level_rule.sql` emptied the defaulted `M`
+from every stored style, and under the unset-only reading it was load-bearing:
+without it the rule would have reached no code anybody had ever styled. Under
+the floor it changes nothing observable at all — a stored `M` cannot bind,
+because `M` is where the rule starts — so what it would ship is an `UPDATE` that
+touches every styled row on an upgrading instance, bumps every `updated_at`, and
+alters no picture. It is deleted. The release's migration count is unchanged and
+`CHANGELOG.md`'s *eight additive migrations, one of them writes data* stays true
+as written.
+
+**D186 — the tab does not print the level, and names it where it changes.**
+m50.6.md's reopened risk section leaves the milestone one thing to decide: *a
+rule that picks the level makes the level invisible… stating it is cheap and the
+milestone should decide whether to.* It is not stated, and three things decide
+it. The level is not settable from the tab (D129), so a number printed there is
+one nobody can act on — which is the complaint [F224](deferred-findings.md#open)
+and [M50.7](phase-details/m50.7.md) exist to answer about this exact surface.
+The owner has taken words *off* this tab twice this week, most recently the
+preview paragraph at M49's third reopening, having commissioned it themselves.
+And the level is not silent where it moves: the logo paragraph says an upload
+raises it to H, the removal notice now says it goes back and that nothing already
+printed stops working, and `GET /api/v1/links/{id}/qr` reports the drawn level on
+every read. A reader whose own action changes the level is told; a reader who
+does nothing is not asked to carry a fact they cannot use.
+
+**What the floor costs M49's exact size, established rather than assumed.** M49's
+third reopening claims *the requested size is the size stored and drawn,
+exactly*, and a size is pixel arithmetic over a module count, so a rule that
+moves a module count is that claim's problem wherever it fires. Two halves:
+
+- **At or below the free level the module count does not move.** The level the
+  rule returns encodes to a symbol exactly as wide as `DefaultLevel`'s — that is
+  what *does not grow the symbol* means — so a floor of none, of `L` or of `M`
+  all draw the `M` symbol every stored size was fitted against.
+  `TestTheRuleNeverChangesTheModuleCount` sweeps the product's whole version
+  range at the floor the product's own rows carry, and
+  `TestTheRuleBindsALevelSomebodyNamed` asserts the same for `L` and `M` at the
+  range's ends and on D184's four measured shapes.
+- **Above it the symbol grows, and that is the case that had to be checked
+  rather than argued.** A floor of `Q` where `Q` costs a version, and every floor
+  of `H`, draw a larger symbol than `M`'s — which `H` under a logo has always
+  done. The reason M49 survives it is that **the floor lives inside
+  `qr.Encode`**, so every site in `internal/link` that fits a size already
+  measures against the symbol that will be drawn: `SetQRSizeBySlug` fits against
+  `qr.Encode(content, current.Level)` (`internal/link/qr.go`), `storeQRStyle`
+  refuses a size below `qr.MinSizeForStyle` of the same encode, and
+  `refitForPayload`, `refitForLogo` and `refitFromLogo` share `fitStyleTo` over
+  it. Checked by reading each of those four call sites against the new `encode`
+  rather than by inferring it from the tests: there is no path that fits a size
+  against a level string without encoding at it.
+
+What that leaves is a **row written before this release naming `L`** — the one
+shape whose stored size was fitted against a symbol the floor now widens, and
+which no write of ours passes through. It is filed as
+[F232](deferred-findings.md#open) rather than fixed, with the arithmetic, because
+the repair needs the encoder and so cannot be a migration.
+
+**Two defects this work made and closed inside it**, named because both were
+caught by review rather than by a test:
+
+- **`CreateQRCode` copied a logo-forced `H` onto a code with no logo.** A code
+  carrying a logo holds `H` in its row by construction — `refitForLogo` writes it
+  on upload, `storeQRStyle` writes it again on every style write — and the
+  upsert's insert branch leaves the new row's `logo` NULL, because a code that
+  has just come into being has no image. So *Add another code* on a link whose
+  default carries a logo produced a code drawn at `H` with nothing covering it,
+  permanently: `refitFromLogo` is the only door back and it fires only for a code
+  that *had* a logo. That is F223's own defect rebuilt inside the milestone that
+  closes it, two clicks from the dashboard. The copy now clears the level when
+  the source carries a logo, and the re-fit that follows measures against the
+  symbol the rule produces rather than against `H`'s.
+- **The removal wrote twice.** Clearing the bytes and re-fitting the style were
+  two statements, and the second was an upsert — so a `DeleteQRCode` landing
+  between them found nothing to conflict with and would have **inserted a fresh
+  row**, the deleted code back with its slug because a removal wrote to it. The
+  two are now one `UPDATE` on the code's id, which a row that is gone cannot
+  satisfy. It is also why `ClearQRCodeLogo` takes a style at all, and why the
+  paragraph about which order the two writes went in is gone rather than
+  reworded.
+
+**The removal path itself is the finding.** `ClearQRCodeLogo` clears the level
+with the bytes and re-fits the size against the smaller symbol the rule then
+produces — `refitFromLogo`, the mirror of `refitForLogo` and sharing `fitStyleTo`
+with it and with `refitForPayload`, which is D185's *one defect, one arithmetic*
+holding for a third door. It writes a style only for a code that **had** a logo,
+so a second clear rewrites nothing.
+
+**The one shipped sentence this reaches, named rather than left to be found.**
+[m49.md](phase-details/m49.md)'s *Stored styles read forward* says *"an existing
+style resolves to the output size its margin and scale already produce, so no
+stored code changes appearance."* Its premise is untouched for every row but the
+`L` one above — the size arithmetic is not what moved, and the module count is
+the one `M` produced — but such a row draws a **different arrangement** of the
+same number of modules, because that is what more error correction is. Nobody
+would call it a change of appearance at a glance: same pixels across, same quiet
+zone, same colours. Byte for byte it is not the same picture. It is the class of
+change the owner ruled on in the sentence that reopened this milestone — *"the
+old QR should still resolve as long as the link stays the same, so a change in
+the new code shouldn't be an issue"* — and the payload is identical, so every
+printed copy scans exactly as it did. The bullet is m49.md's and a worker does
+not amend a milestone file, so this entry is where the falsification is recorded
+and the amendment is owed at step 3.4.
+
+**What the level costs to compute, since it is now computed on every read.** A
+floor at or below `M` encodes up to three times instead of once — the baseline,
+then H, then Q, stopping at the first that matches — and `qr.Drawn` is what keeps
+`qrCodeFrom` from paying for it twice by answering the level and the size off one
+pass. A floor of `H` short-circuits to a single encode, which is the logo path
+and the one drawn most often. Measured on this VM at 1.15ms for a single encode
+of an ordinary short URL against 3.9ms for the resolved one. Nothing on the
+redirect path encodes at all; what pays is a dashboard render and a download.
+
+The **test** cost is the larger number and is worth writing down because it lands
+on `make check`: `internal/qr` under the race detector went from **25.7s to
+around a minute**, and the whole of the difference is the version sweep — four
+encodes at each of thirty-four versions, where a version-36 encode under `-race`
+is most of a second. Two things hold it down rather than three: the sweep's
+subtests run in parallel, and the version searches in `composite_test.go` are
+memoised now that four tests want the same payloads. The floor added no sweep of
+its own — asserting it over the whole range at four floors would have quadrupled
+the one test that costs anything, and the property it would re-assert is settled
+by the arithmetic and by the range's ends. What was *not* done is sampling the
+range, because the rule's answer changes exactly at the capacity-table boundaries
+the versions are, so a sweep that skipped versions would skip the only places it
+could be wrong.
+
+**`make verify-scan` needs no new pictures, and that is an argument rather than
+an omission.** Its control half draws every version at each of the four named
+levels, and the rule's answer is always one of those four. What changed is that
+the four are no longer four *distinct* pictures: the `L` slot draws the free
+level, so it repeats the `M` slot's picture at every version. The slot is kept
+rather than dropped — the corpus is 1360 pictures and 9256 decodes in three
+shipped documents, and a control half that stopped covering a version to save a
+redundant decode would be paying for tidiness with evidence. The manifest records
+the level **drawn** rather than the level asked for, which is what makes the
+duplication legible instead of a lie. The one sentence that has gone loose with
+it is filed as [F233](deferred-findings.md#open).
+
+**What this deliberately did not do**, filed rather than taken:
+
+- **A link's alias is still the other payload change**, and a rename can move
+  the rule's answer as well as the size — [F228](deferred-findings.md#open)
+  already covers the row it would have to re-fit, and this adds a second reason
+  to the same fix rather than a second row.
+- **The demo seeder still names `Level: qr.LevelQ`** on the code it styles.
+  Under the floor that is a floor of `Q` on a payload whose free level is `Q`, so
+  it changes no picture and rewrites a decision that is not this milestone's.
+  [F231](deferred-findings.md#open).
+- **`ResetQRStyleBySlug` writes a style with no `ForLogo`**, so *Restore
+  defaults* on a logo'd code leaves a row that names no floor while the picture
+  is drawn at `H`. It wrote `M` there before this release and is the same
+  distance from `H` either way, so the diff neither made it nor worsened it.
+  [F234](deferred-findings.md#open).
+
+## 2026-08-13 — M50.6, the rule binds a level somebody named, and D187
+
+**D187 — the free-level rule is a floor under every code, not a default for
+codes that named nothing.** Owner-answered 2026-08-13, at M50.6's second
+reopening, over the build's own recommendation.
+
+The build shipped the rule for an **unset** level only and honoured a named one
+exactly, argued in the entry above on D185's ground: a `PUT` that sets a field
+and reads it back changed is the surprise this product refused for `scale`.
+Put to the owner as two options with that recommendation and its own con — that
+it makes [D184](../../Plan.md#phase-3-decisions)'s owner-set sentence narrower
+than its words, and that the actor recommending it was the one that would
+otherwise redo the work — the owner took the other side: **the rule binds
+everything below it.**
+
+So the drawn level is the **stronger** of what the row names and what the rule
+gives. Three consequences, and each is a thing to build rather than a gloss:
+
+- A named `L` on a payload where `Q` is free is drawn at `Q`. Nobody can choose
+  less correction than costs nothing, which is what *correction is taken
+  wherever it is free* says when it is read without an exception for people.
+- **The rule never lowers.** A level stronger than the free one is left where it
+  is — which is what keeps `H` while a logo is drawn, the bullet this reopening
+  did not touch, and it is why *floor* is the right word for it and *rule*
+  alone is not.
+- The row and the response no longer agree for a caller who named a weak level,
+  and that is the cost the owner accepted. The response reports the **drawn**
+  level, which is what `qrCodeFrom` already does; the row keeps what was
+  written, so nothing rewrites a caller's field behind them. What the API loses
+  is the ability to *ask* for less correction than is free — the field is
+  honoured upward and ignored downward, and that has to be said where the field
+  is documented rather than left for a caller to discover.
+
+**`TestALevelSomebodyNamedIsDrawnExactly` is wrong rather than narrow**, and it
+goes with the reading it asserts.
+
+This is the second time this week an answer has come back against the cheaper
+side of a trade the build recommended — [D182](../../Plan.md#phase-3-decisions)
+was the first — and both times the recommendation was the one that would have
+cost the actor making it less work. That is worth recording as a pattern rather
+than as two coincidences.
+
+## 2026-08-13 — M50.7's plan, three answers taken before a worker exists
+
+Not a milestone's entry — nothing was under way. These are the owner's answers
+to the three things [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+makes a prompt rather than a correction: each changes a definition of done in
+[m50.7.md](phase-details/m50.7.md), which the plan review's thirteen findings
+had left the orchestrator no way to fix silently.
+
+**D188 — the QR tab's prose is bounded at 900 characters**, over 1200 and 1500.
+The measurement and its method are in the milestone file: 1906 characters today
+across seven paragraphs, counted as text inside `<p>` with template actions and
+tags removed. 900 is below the 1081 the four obvious cuts reach, so it is a
+number the build has to work at.
+
+The option was offered with its cost named — reaching it means cutting into the
+size-and-contrast paragraph, whose *contrast* half explains a refusal that still
+exists and that no control on the tab states — and the owner took it anyway.
+That is recorded here rather than left in the question, because *we were told
+what this costs and chose it* is exactly the thing this project loses. The build
+keeps the contrast sentence and finds the characters elsewhere if it can, and
+says which explanation it dropped if it cannot.
+
+**The default control becomes a filled/empty icon on every row.** Owner-set, and
+**neither of the two shapes offered** — not a labelled button beside the download
+menu, not an entry inside it: *"an icon button on every row, it becomes filled in
+when the row is the default and empty when it isn't. It should update all the
+icons when any of the icons is changed."*
+
+What that buys is a list where *which code is the default* is readable without
+reading, and it is why the answer is better than either option: both of those
+put a control on the rows that are **not** the default and nothing on the one
+that is, so the state was legible only from the sentence in the meta line. The
+cost is that the default's row gains an inert control, and that an exclusive set
+of icons is a radio group whose semantics have to be drawn — one filled icon per
+list, always exactly one, since [D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183)
+guarantees a link has a default.
+
+*Every icon updates when any one is clicked* costs nothing new: the control posts
+and the handler redirects, so the list re-renders whole. **No swap and no script
+are added**, which keeps `script-src 'self'` and the stdlib-only rule where they
+are. A build that finds it needs one has changed the bullet and owes a prompt.
+
+**Rename's server side stays** when its button goes, over deleting both. The
+branch becomes unreachable from the dashboard, so the milestone comments it as
+deliberately unreachable and names what still reaches the same write — the API's
+`PUT /links/{id}/qr/codes/{slug}`, which replaces a code's label and style whole.
+Deleting it would have been defensible; leaving it undocumented would not, and an
+unreachable branch with no comment is what the next reader removes on sight.
+
+
+## 2026-08-14 — M50.7 built: one anchor name serves twenty menus, and four explanations were spent
+
+Three things the build settled that the plan could not, and one record it
+corrected rather than broke.
+
+**D189 — the download menus take one anchor name, scoped per row, and not
+twenty.** [m50.7.md](phase-details/m50.7.md) prices the popover honestly and then
+says how: *"Twenty rows need **twenty distinct anchor names**, generated per row
+from the code's slug, or every menu anchors to the same element."* The
+requirement is right and the mechanism is not available. A CSS anchor name has to
+reach a stylesheet, and this product has exactly two routes to one — a Tailwind
+arbitrary utility, which is generated only if Tailwind *scans* the literal class
+string ([F216](deferred-findings.md#open) is that scanner's known gap), and a
+hand-written rule in `input.css`. A name built out of `{{ .Slug }}` is neither:
+the class does not exist until the template runs, and by then the stylesheet is
+built. The third route, an inline `style` attribute, is refused by
+`style-src 'self'`.
+
+So the build takes the other way to twenty anchors: **`anchor-scope`**. Each
+`<li>` scopes the name `--linkctrl-qr-menu` to its own subtree and every row's
+invoker declares that same name, so each menu resolves to its own row's button.
+It is strictly less machinery than twenty names — nothing is generated, and it
+holds for any number of rows rather than for twenty — and the bullet's actual
+assertion, *twenty distinct anchors or every menu anchors to the same element*,
+is satisfied. Verified 2026-08-13 by driving three menus in one list in
+**chromium, firefox and webkit**: without the scope all three engines resolve
+every menu to the last invoker, with it each lands on its own row.
+
+**What the fallback is, stated because the milestone names a different one.**
+m50.7.md says *"the fallback for these is the row itself"*. That is not
+reachable: an open popover is in the top layer and its containing block is the
+viewport, which is the fact nav.html's POSITIONING note already records, so
+without anchor positioning there is no way to place it against a row at all.
+Where `anchor-scope` is missing the panel therefore keeps the UA's own centred
+placement — worse than an anchored menu, better than nav.html's viewport pin,
+which is meaningful under a header and meaningless beside a row halfway down a
+list. Named here rather than discovered later.
+
+**Which explanations the 900-character bound cost.** [D188](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists)
+requires this: the owner chose 900 knowing it could not be reached by the obvious
+cuts, and required the build to say what it dropped if it could not find the
+characters elsewhere. It could not find them all elsewhere. The tab measures
+**877** by the milestone's own method, against 1906, and four explanations paid
+for it — two the derivation predicted, and two it did not. The predicted pair:
+
+- **The size half of the size-and-contrast paragraph** — *the size you set is
+  the size that is stored and served*, and the quiet zone taking the remainder.
+  This is the one D188 named in advance. What makes it the cheaper of the two is
+  that the control directly above it prints the number twice, in the box and on
+  the slider, and the quiet-zone clause is arithmetic no control on the tab
+  exposes. **The contrast sentence is kept**, as D188 asked, and trimmed rather
+  than shortened away: it explains a refusal, which is the test this milestone
+  applies to every paragraph.
+- **Why level H helps** — *the level that lets a reader recover a code with part
+  of it covered*. The logo paragraph still names H and still names the return to
+  the free level when the logo goes, which is what
+  [D186](#2026-08-13--m506-the-level-is-a-rule-and-the-tab-does-not-print-it-d186)
+  says is owed: *naming it where it changes is the whole of what is owed*. What
+  went is the gloss on what the level buys, which is a fact about QR codes rather
+  than about this product, and which no control on the tab can act on.
+
+**Two more, out of paragraphs D188's derivation never budgeted**, named here
+because the requirement is to name every explanation the bound cost and not only
+the ones that were predicted. Both were found by this milestone's reviewer, which
+is the point of the step:
+
+- **The logo paragraph's *"and you are told what it became"*** — the promise that
+  an oversized image is not merely adapted but reported. The *telling* is not
+  lost and was never this paragraph's: `internal/httpx/web_qr.go`'s
+  `logo_applied` notice prints the uploaded dimensions and the stored ones
+  whenever they differ, which is what [F214](deferred-findings.md#closed)(a) was
+  reopened to build. What went is a sentence above the control announcing that a
+  message would arrive, which costs a reader more than the message does. The
+  paragraph still says the adaptation happens; only the forward reference to the
+  notice is gone.
+- **The last-code sentence's *"— every picture of it already printed resolves
+  through it"*** — 171 characters to 102. This is the same fact
+  [D183](#2026-08-12--m50-the-default-code-becomes-a-property-rather-than-an-absence-and-d183)
+  turned into a *property*: what makes a link's last code unremovable is that a
+  link always has a code, and the clause explained why that rule exists rather
+  than what the refused control does. It survives where the reasoning is kept —
+  the template comment above the list states it in full, and the meta line on the
+  default's own row still says a scan carrying no code is counted against it, so
+  a reader is told which code an old picture lands on where that matters.
+
+Nothing that went is lost. Both are stated in `README.md`, `docs/usage.md` and
+the changelog, and the privacy claim cut with them — that a stored logo is
+re-encoded, so metadata does not survive — is in `docs/SECURITY.md`'s
+**Uploaded content** row in full.
+
+**And a proxy corrected, which is not a claim broken.** M48's F212 amendment
+claims the QR settings live in the tab's flow rather than behind a popup, and
+three tests asserted it as *no popover inside `<main>`*. That was exact while the
+panel was the only thing inside `<main>` using the API. It stopped being exact
+here: the download menus are popovers and are not panels — two links, hung off a
+row's own button, with none of the chrome `panel_open` owes its callers, and the
+mechanism the milestone itself specifies. The assertions now read *no **panel**
+inside `<main>`*, told apart by the modal sheet geometry only `panel_open`
+declares, and `TestThePanelMechanismIsDefinedOnce` asserts the real panel still
+carries that signature so the distinction cannot rot into a hole.
+`TestTheQRSettingsRenderInTheTabsFlow` is new beside it and checks the claim
+directly rather than through the proxy: the only popovers on this tab are the
+row menus, and the style form, the size control and the name field are all in
+flow. The claim is what it was; what changed is that it is now checked for what
+it says.
+
+**Loosening a proxy is not the same as dropping it, and the first attempt did
+both.** Widening *no popover* to *no panel* was right on the QR tab and was
+applied at all three sites, so every surface that has no reason to hold a
+popover of any kind lost its assertion with nothing put back — the link page's
+six other tabs, the two routes that serve panel contents as pages, and the
+disputes queue, where the count was *every popover inside `<main>`, exactly one*
+and became *one panel*. A second popup on any of them would have passed in
+silence.
+
+The absence assertions now name the exception rather than removing the rule:
+**no popover inside `<main>` except this milestone's per-row download menus, and
+those only where the codes list renders**, keyed on the `qr-download-` id the
+template writes. That is the QR tab (`link_detail_test.go`) and the `/qr` route
+which is the tab's page form (`panel_test.go`); the disputes queue and the
+reviewer route render neither the list nor a menu, and both tests in
+`panel_test.go` now say so rather than leaving it to the panel count. The bound
+runs in both directions at each site — no menus where there is no list, and at
+least one where there is — because an exception nothing exercises cannot be told
+from an assertion that has quietly stopped running. The panel check stands
+beside all of it, because a panel and a stray popover fail for different reasons
+and a reader of the failure should be told which.
+
+## 2026-08-14 — M50.7, two answers its reviewer's findings needed
+
+**D190 — the default indicator renders for a reader who cannot change it, and
+the download menu's fallback is the browser's own placement.** Owner-answered
+2026-08-14, at M50.7's step 3.4, on two findings the milestone's reviewer
+raised against the first attempt.
+
+**The icon is an indicator before it is a control.** The build rendered the
+filled/empty pair inside `{{if $.Identity.Can "links.update"}}`, which is where
+the **Make default** button it replaces lived — correct for a button and wrong
+for this, because [D188](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists)
+bought something a button does not buy: *which code is the default becomes
+readable without reading*. A `links.read` viewer saw no icon on any row and was
+back to reading the sentence in the meta line, so the bullet was false for a
+whole class of user. It now renders for them as the static pair, with no form
+around it — which is exactly what the default's own row already does for an
+editor, so the inert treatment is not a new shape.
+
+Two render paths for one thing is the cost, and it was named in the question.
+The alternative offered was to leave it gated and file a row; the owner took the
+fix. **This is the second time this week a viewer lost something the editor
+kept** — [F229](deferred-findings.md#open) is the same shape, the size number
+living only inside the `links.update` form — and the two answers now point the
+same way, which is worth more than either one on its own.
+
+**The menu's fallback is the UA's centred placement**, over a viewport pin and
+over keeping today's two-button row alive as a fallback layout.
+
+`m50.7.md` said the fallback would be *"the row itself"* and that is not
+buildable: an open popover is in the top layer and its containing block is the
+viewport, which `partials/nav.html:209` already records for the header's menus.
+So on an engine with `popover` but without `anchor-scope` the placement rules
+are skipped whole and the menu lands wherever the UA puts it — centred. The
+owner took that over reusing the header's fixed top-right pin, on the reasoning
+the plan review itself gave: a pin looks deliberate at the top of the page and
+looks like a bug halfway down a list. Rendering the old two-button row as a
+fallback was refused for the reason it is the thing this milestone exists to
+remove.
+
+The milestone file is amended to say so, and the *twenty distinct anchor names*
+it asserted is amended with it — `anchor-scope` is a third route the bullet's
+disjunction did not know about, and one shared name scoped per row is what
+shipped ([D189](#2026-08-14--m507-built-one-anchor-name-serves-twenty-menus-and-four-explanations-were-spent)).
+
+## 2026-08-14 — M50.8 added: the QR tab's third report, and the first script
+
+**D191 — the third report becomes one new milestone, [M50.8](phase-details/m50.8.md),
+built before [M57.9](phase-details/m57.9.md); and the size slider gets a script.**
+Owner-answered 2026-08-14, both.
+
+**Why a milestone and not four reopenings.** [F238](deferred-findings.md#open)'s
+ten limbs reach M50 (a, the list's sort; g, the last code's remove button),
+M50.5/M50.6 (f, the logo section) and M50.7 (d, e, h, i, j — five more).
+Reopening each was offered and refused for the reason the second report's answer
+gave: most of these are not defects, so a reopening would put a correction on a
+milestone whose claim is true. **The remaining two — (b) the live slider and (c)
+the scroll position — belong to no existing milestone at all**, since nothing
+ever claimed either, so reopening could not have housed them. *(2 + 1 + 5 + 2 =
+10. The first draft of this entry said "six more" and named the orphans as the
+slider and the contrast check, which sums to eleven and misassigns (d); the plan
+review caught both.)*
+
+**Why before the review.** M57.9's owed-list has been caught short four times
+this phase, and building after it would guarantee a fifth: the review would ship
+having never seen the tab it reviews, and 0.3.0 would be tagged over code no
+review covered. The alternative was offered in those terms and declined.
+
+**The placement costs the band.** `M50.9` is reserved for reviews
+([planning.md §4](planning.md#4-numbering)), so **M50.8 is the last slot between
+M50 and M51**. An eleventh item on this tab is a reopening or a Phase 4 row.
+That is now a fact about the numbering rather than a preference, and the
+milestone file says so where a planner will meet it.
+
+**The script.** The slider and the number are two inputs and nothing binds them,
+so the number lies until save — which is the defect shape that reopened M49
+three times: a control reporting something other than what it will do. Offered
+against dropping one of the two inputs, and against leaving it; the owner chose
+the script.
+
+It is the **first script this product's dashboard depends on** — not the first it
+writes, since `internal/ui/static/js/docs.js` already boots Swagger UI on a page
+of its own, which the plan review caught — and
+what it does not cost is worth stating precisely, because the inherited rule is
+easy to read as a ban on all script: `ui` stays stdlib-only means **no Node, no
+CDN, no build step, CSP unchanged, no `unsafe-` waivers**. A hand-written file
+served under `script-src 'self'` clears every limb — `htmx.min.js` and
+`docs.js` are already served from that directory. [D188](#2026-08-13--m507s-plan-three-answers-taken-before-a-worker-exists)'s
+*no swap and no script* was about M50.7's default icons, where the
+post-and-redirect already redrew them, and is not a standing rule.
+
+**What it is allowed to contain is bounded in the milestone**, because ten lines
+binding two inputs is easy and the precedent is not: every later control can now
+cite this file. The bound is in `m50.8.md`'s *deliberately not done*, so the
+next request argues against something written rather than against nobody.
+
+**Two limbs the milestone deliberately does not take**, both recorded rather
+than dropped:
+
+- **The contrast warning** (F238(d)). The product has no contrast metric —
+  `grep -rn -i contrast` over `internal/qr`, `internal/link` and
+  `internal/httpx` returns nothing, and its one hit anywhere else in non-test Go
+  is a comment at `cmd/lctl/demo_phase2.go:1329` — so the sentence at
+  `partials/link_qr.html:573` describes what QR *readers* refuse, not what this
+  product does. Drawing the icon is easy; choosing between a WCAG ratio and a
+  QR-specific luminance delta, and defending the threshold, is a decision the
+  owner has not been asked. The advisory sentence stays until it is.
+- **Nothing about what a logo does** — only where its control sits.
+
+## 2026-08-14 — M50.8, the two its plan review turned into questions
+
+**D192 — the tab gets a real tooltip, and the add control grays out at
+capacity.** Owner-answered 2026-08-14, on the two findings from
+[M50.8](phase-details/m50.8.md)'s independent plan review that were
+definition-of-done changes rather than corrections.
+
+**A tooltip this product owns, not the browser's.** F238(g) and (i) both ask for
+hover tooltips, and today's are `<title>` elements inside a `h-3 w-3` glyph. The
+review's finding was that this cannot be enforced and does not reach everybody:
+a native tooltip is drawn by the operating system with no DOM presence, so no
+browser assertion can watch it appear, and a `disabled` button is unfocusable,
+so a keyboard user never triggers one at all — on the very control whose whole
+purpose is to explain a refusal.
+
+Offered against moving the native `title` onto the button (cheap, fixes the
+hover zone, enforceable only as *the attribute is there*) and against doing that
+now and filing the rest. The owner took the build: **a styled element the page
+owns, shown on hover and on focus, with `aria-describedby` tying it to its
+control.**
+
+What that costs is a UI pattern this product has never had, in both themes, and
+the standing risk that it becomes a second way to say what the page already
+says. What it buys is the thing the cheap option could not: the kept browser
+suite can assert the tooltip **appears**, so (g)'s explanation and (i)'s hover
+zone stop being claims and become tests. It also reaches keyboard users, which
+matters most exactly where the owner asked for it.
+
+**The `+` control is disabled at capacity, with its reason on it.** Today's add
+form is *absent* at 20/20 and a comment says the counter explains it. That is
+the same absent-versus-disabled choice F238(g) reverses two bullets earlier, so
+answering it the other way would have left one list carrying both conventions.
+Owner-set: **grayed out with the reason**, which makes the rule one rule.
+
+Both answers fold into the same mechanism, which is why they were asked
+together: the reason on a disabled `+` and the reason on a disabled remove
+button are the same pattern, and neither would have been assertable under the
+native-title option.
+
+## 2026-08-14 — M50.8 built: a remembered position, and two readers that mistook the flag for a place
+
+**D193 — a save returns to a remembered scroll position, not to a fragment; and
+two readers that took the default's *place* for the default are corrected in the
+same diff.** Taken by the build, which [m50.8.md](phase-details/m50.8.md) asks
+for in as many words on the first of them: *"The milestone does not specify the
+mechanism — a fragment on the redirect and a scroll restoration in the script
+are both available… The build chooses, argues it in a decision entry, and says
+what it rejected."*
+
+**The position, over the fragment.** Both were available and both work. A
+fragment on `qrReturn`'s redirect is the cheaper one — no script at all — and it
+answers a different question from the one that was asked: it lands every reader
+on one named element, so somebody who was on the size control and somebody who
+was on the logo upload both come back to whichever element the fragment names.
+The owner asked for *"If the page needs to be reloaded it should keep its
+current position whenever possible"*, and a position is what that is. The
+fragment is also already there and already insufficient — the link-page branch of
+`qrReturn` has carried `#qr` since D178, which is why a save lands at the top of
+the QR card rather than at the very top of the document, and the report is about
+that landing.
+
+So `static/js/qr-size.js` stores `window.scrollY` in `sessionStorage` on the way
+out of any write inside `#qr` — a native submit, and htmx's own
+`htmx:beforeRequest` for the logo upload, which posts on `change` and fires no
+submit event — and applies it once on the way in. Three properties are worth
+stating because each is a way this shape goes wrong elsewhere:
+
+- **It is applied twice, unconditionally, and an earlier draft was wrong to
+  guard the second one.** The browser performs its own `#qr` fragment scroll
+  during load, after `DOMContentLoaded`, so applying once is simply overwritten
+  by it. The first draft applied again on `load` but skipped it if the page had
+  moved since — meaning to yield to a reader who had scrolled in between, and in
+  fact yielding to the fragment jump every single time, because that is the one
+  thing which reliably happens in that window. **The browser case caught it and
+  only after the case was itself fixed**: asserting the control was *on screen*
+  after a save passed on the fragment's own landing, with the restoration
+  deleted. It asserts the offset against both landings now. What the
+  unconditional second application gives up is a reader who scrolls in the
+  sub-second between `DOMContentLoaded` and `load` on a page whose only pictures
+  are inline SVG.
+- **It is taken out of storage once**, whether or not it is ever used. An offset
+  that survived would drop a later, unrelated load somewhere nobody scrolled to.
+- **Every storage access is guarded.** A browser with storage disabled throws
+  rather than returning null, and losing a scroll position is not a reason to
+  break the page.
+
+What it costs is the precedent, which is D191's concern and is bounded there: the
+file does this and binds the size control, and m50.8.md's *deliberately not done*
+is what the next request argues against.
+
+**And the mirror is deliberately one-way at the edges, under a condition worth
+stating.** The number moves the slider only for a value inside the slider's
+range. A range input clamps, so mirroring a typed 9999 would leave the slider at
+2048 — off the `size_shown` witness, which is what `httpx.requestedQRSize` takes
+as *the slider moved* — and the server would store 2048. Leaving the slider
+alone keeps the box winning the arbitration **while the slider is still on the
+witness**, which is every typed size on a form nobody has dragged, and the
+service then refuses 9999 with a sentence naming the range. Silently storing a
+clamped size is the exact defect shape that reopened M49 three times.
+
+**The condition is not decoration: drag the slider first and the refusal does
+not happen.** Drag to some X, then type 9999, then save — the slider is already
+off `size_shown`, so `requestedQRSize` returns the slider whatever the box says,
+X is stored, and nothing is refused. The one-way mirror keeps the common case
+right and cannot reach that one. **This is M49's arbitration (D182) and it
+predates every line of this milestone** — what M50.8 changed is that the two
+inputs now follow each other, so a reader watches them agree and then watches
+the box disagree, where before neither ever moved on its own and the divergence
+was invisible. Out of spec here and therefore filed rather than fixed:
+[F240](deferred-findings.md#open) carries the reproduction, which the browser
+case in `qr-tab-controls.spec.mjs` drives up to the save and deliberately stops
+short of.
+
+**The sort's hidden edge, and it was a defect rather than a risk.** F238(a)
+moves `ListQRCodes` from `ORDER BY (NOT (is_default OR slug = '')), created_at,
+id` to `ORDER BY lower(label), id`. Two readers then became wrong, and neither
+is in the query or the template:
+
+- `link.ListQRCodes` synthesised the default code when `!rows[0].IsDefault &&
+  rows[0].Slug != ""`. That was the whole set's answer *by construction* — the
+  one row that could hold the flag was the row the query put first. Alphabetical
+  order breaks the identity, so a link whose flag-holder does not sort first
+  would have listed a **fourth, invented** default beside its three real codes.
+- `analytics.qrCodeSplit` asked the same question the same way, and then added
+  the untagged bucket's clicks onto the flag-holder's row further down. So the
+  same scans would have been reported **twice** on one page: once in a
+  synthesised row and once on the code that actually holds the flag.
+
+Both are now a scan over every row, both are commented where they are, and both
+are pinned by an integration test that puts the flag on the alphabetically last
+code — the arrangement the old code got wrong — and asserts one bucket and one
+click. The sabotage for each was to restore `rows[0]`, and each fails on exactly
+the symptom above.
+
+**The order test is an integration test and not the `internal/link` one the
+milestone asks for.** The order is produced by SQL. A unit test in that package
+would have to fake `dbgen.Querier` whole to see it and would then be asserting a
+fake's ordering rather than Postgres's. It drives `link.Service.ListQRCodes`,
+which is the surface the bullet names, against the database that does the
+sorting.
+
+**The prose bound moves 900 → 750, and the number is arithmetic rather than a
+choice.** This is the one part of the milestone where a gate is moved by the
+work that has to meet it, so the rule matters more than the figure: measure the
+tab by [D188](../../Plan.md#phase-3-decisions)'s stated method — the text inside
+`<p>` elements, template actions and tags stripped, whitespace collapsed,
+anything under forty characters dropped as a label — and round the measurement
+**up to the next fifty**. Two paragraphs left the tab on the owner's own cuts:
+the last-code sentence, whose reason moved onto the remove control (F238g), and
+*"What a second code buys is knowing which one people scanned"*, which the owner
+judged help-page material (F238e). The tab then measures **715** across four
+paragraphs — analytics 100, code meta 153, contrast 191, logo 271 — so the bound
+is 750. The logo paragraph moved into the style section unchanged and is counted
+exactly as it was. `qrProseBound` in `internal/ui/link_qr_prose_test.go` carries
+the number with that arithmetic beside it, and D188's row records the
+supersession; **what is superseded is the number and nothing else** — the method
+is D188's, and a later milestone wanting a sentence still has to raise the bound
+deliberately and say what it bought.
+
+**Two more facts the build had to settle, both smaller.** The `<title>` inside a
+glyph is a *native* tooltip, so any control that carries one of this page's own
+tooltips would show two — icons.html therefore draws a glyph decoratively when
+its dot is empty, and the button names itself. And the kept browser suite signs
+in once per test: `LOGIN_RATE_PER_MIN` is **10**, the suite runs in well under a
+minute from one address, and a new spec file with a sign-in per case put it
+over — every spec then failed at sign-in claiming the credentials were wrong.
+M50.8's spec shares one signed-in page across its scripted cases for that reason
+and says so where it does it.
+
+**The number after that, because a note saying "a new spec put it over" tells
+nobody how much room is left.** Counted against the tree rather than
+remembered — one sign-in each from `link-tabs`, `workspace-control` and
+`qr-logo`, three from `qr-codes-list`, two from `qr-tab-controls` — `make
+verify-ui` now performs **8 sign-ins against a limit of 10**. Two spare, and the
+next spec that adds a third is one short of a suite-wide red whose message names
+every file except the one that caused it. The headroom itself is
+[F242](deferred-findings.md#open): the limit is a production default nobody
+should tune for a test harness, and the suite has no way to say *this run is one
+address* to it.
+
+## 2026-08-14 — M50.8, two amendments its reviewer forced
+
+Orchestrator amendments at step 3.4, both fact-level, both on a milestone file a
+worker may not touch. Each is an **enumeration that was short**, which is the
+one shape this project keeps re-learning: workflow.md requires an enumeration to
+be counted rather than trusted, and both of these were written by counting the
+sites a report named instead of the sites a tree has.
+
+**One — the records citing the old order.** As it stood: *"**Two records cite
+the old order and are part of this milestone, not cleanup.**"*, naming
+`internal/store/query/campaigns.sql:169-176` and `internal/link/qr.go:247`. As
+amended: **three**, the third being `internal/httpx/web_links.go:675` —
+*"The link's codes (M50), default first, and which of them the form below them
+is editing."* Tree fact: that comment documents `linkQRView.QRCodes`, which
+`web_links.go:1140` fills straight from `link.ListQRCodes`, whose order this
+milestone reverses to alphabetical. The bullet's own logic put it in scope and
+the plan review's sweep had not reached it.
+
+**Two — the default control's strings.** As it stood: *"Owner-set, replacing
+*"%s is the default code"* / *"Make %s the default code"*
+(`partials/link_qr.html:257`, `:262`)."* As amended: two pairs and four sites,
+adding the `links.read` branch at `:301` and `:306` —
+*"%s is the default code"* / *"%s is not the default code"*. Tree fact: at
+`ea656bd` the template renders the control twice, once writable and once not,
+and `grep -n 'the default code'` over that file returns four lines rather than
+two. The build had already moved all four, correctly and for a reason the bullet
+did not carry: the glyph goes decorative on both branches, so a read-only button
+left behind would have had to name itself in the very wording being replaced.
+
+**The amendment is the count, not the change.** Neither of these is a choice
+anyone could have made differently — a comment that says *default first* about a
+list that is now alphabetical is wrong whoever reads it, and a rename that skips
+half its sites is half a rename. That is what keeps them
+[amendments rather than prompts](phase-loop.md#amending-a-bullet). The second
+one's *second* string is the near miss: `Not the Default QR Code` is the build's
+wording and not the owner's, because the owner's report names only a control
+they can press. It is recorded here so that a later reader knows which of the
+four strings has no report behind it.
+
+## 2026-08-14 — M50.8, five more amendments, three of them on a shipped milestone
+
+Orchestrator amendments at step 3.4, all fact-level, forced by the second
+attempt's reviewer. Three are on [m50.7.md](phase-details/m50.7.md), which is
+`done` — and that is the point worth recording, because a shipped file
+describing a tree a later milestone deliberately changed is the case this
+project has no other name for. It is **not** a reopening: reopening is for a
+milestone whose claim is false *by defect*, and M50.7's claims were true when it
+shipped. F238(i) is the owner asking for them to stop being true. So the file is
+amended where it is superseded, saying which milestone did it, exactly as
+[README.md](phase-details/README.md)'s rules table has been amended twice
+before. A `done` row that silently describes a tree nobody has any longer is the
+outcome the amendment rule exists to prevent.
+
+**One, two and three — m50.7.md, on the default icons.** As they stood: *"each
+icon carries an accessible name naming **its** code and the pressed state is
+exposed"*; the *Enforced by* clause asserting *"that each carries an accessible
+name"*; and the icon-file paragraph's *"They follow that file's shape exactly:
+… an `aria-label` and a `<title>` fed from the template argument."* As amended:
+the name is on the **button** and names no code, the assertion is of the button,
+and `icons.html` now draws two shapes — decorative when its dot is empty, named
+otherwise. Tree fact: `partials/link_qr.html:441` and `:450` call
+`icon_default_on`/`icon_default_off` with `""`, and the glyph renders
+`aria-hidden="true"` with no `<title>`; the seven such callers are all inside a
+`.qr-tip-host`, so no control lost its name. The reason the glyph had to go
+decorative is in D193 — a `<title>` is a *native* tooltip and would draw a
+second one over the page's own.
+
+**Four — m50.8's order test.** As it stood: *"an `internal/link` test asserting
+the returned order"*. As amended: an **integration** test. Tree fact: the order
+is `ORDER BY lower(q.label), q.id` in `campaigns.sql`, so a test in that package
+would have to fake `dbgen.Querier` whole and would then be asserting the fake.
+The test drives `link.Service.ListQRCodes` — the surface the bullet names —
+against Postgres, which is the same claim tested one layer out rather than a
+different claim.
+
+**Five — m50.8's scroll case.** As it stood: *"a browser case scrolling to the
+size control, saving, and asserting the control is still in the viewport"*. As
+amended: it scrolls to and asserts the **Save** button. Tree fact: the case was
+written against the size control and passed with the restoration *deleted*,
+because `#qr`'s own fragment lands near enough to it — the Save button is far
+enough down the tab to tell a restored position from the fragment's landing, and
+is where a reader actually is when a write happens. The bullet's claim, that a
+save returns you to where you were, is unchanged.
+
+**The count is the recurring failure and this is its third instance in one
+milestone.** Two enumerations were amended earlier today for naming fewer sites
+than the tree has; these five are the same shape one level up — a milestone that
+changes a surface must ask which *records* of that surface it falsifies, and
+answering it by grepping the thing that changed finds only the records phrased
+the way the change was phrased. Both sweeps this milestone ran were over the
+sort order. Neither would have found a comment about tooltips.
+
+## 2026-08-14 — M50.8, the prose bound moved and the file that derives it did not
+
+The third review's findings, all three of them records rather than code, and all
+three the orchestrator's to make: two amendments and a documentation correction
+that workflow.md approves in advance. No fourth worker was spawned for them,
+because a worker never amends a milestone file and the remaining item is the
+wording of a document.
+
+**One — m50.7.md's bound section, which is where the number is derived.**
+As it stood: *"**The bound is 900**, owner-set 2026-08-13 over 1200 and 1500"*,
+with a derivation reaching 1081, a note that *"the bound has ~23 characters of
+headroom"*, and the instruction that *"a build that lands above 900 with a
+reason states the reason and **moves the number in this file**"*. As amended:
+750 since M50.8, measured 715 by the same method, headroom 35 — and the
+911-against-900 arithmetic marked spent, because it was computed against the
+last-code and second-code paragraphs that M50.8 deletes. Tree fact:
+`qrProseBound = 750` at `internal/ui/link_qr_prose_test.go:39`, and the four
+surviving paragraphs measure 100, 153, 191 and 271.
+
+**The instruction was followed everywhere except the file that gave it.**
+`Plan.md`'s D188 row was superseded correctly and D193 records the measurement,
+so the number was moved in the index and in the log while the sentence saying
+*move the number in this file* sat unmoved in the file it meant. That is the
+same failure as the two enumerations amended earlier today, in its most exact
+form: a milestone asked which records it falsified and answered by grepping what
+it had changed. It had changed a bound, and the record it missed was the one
+that set it.
+
+**Two — the milestone's title in two indexes.** `Plan.md` and
+[phase-details/README.md](phase-details/README.md) both read *"and the first
+script this product writes"*, which
+[m50.8.md](phase-details/m50.8.md) itself struck at its plan review:
+`internal/ui/static/js/docs.js` has booted Swagger UI for two phases. Both rows
+now carry the file's own title — *"the first script the dashboard depends on"*.
+Tree fact: `docs.js` is 34 lines and predates this phase. A corrected overclaim
+that survives in the two places a reader meets first is not corrected.
+
+**Three — `docs/usage.md` on what the sort sorts by**, which is a documentation
+correction and not an amendment. It read *"**The list is in alphabetical order
+by name** and stays there"*; the sort is `lower(q.label)` on the **stored**
+label, and a code with no label draws a substitute — *The original code*, or
+*Unnamed code*. `api/openapi.yaml:5937` has always stated the carve-out and the
+UI document did not. It does now.
+
+**The question underneath it is not settled and is [F243](deferred-findings.md#open).**
+Sorting on a value the reader cannot see is defensible while at most one row can
+have it, and the add form requires no name, so two are reachable. Whether
+*alphabetical by name* should mean the name on the row is the owner's, and it
+reaches the API rather than only the tab.
+
+## 2026-08-14 — M50.8, the fourth report and where its seven items go
+
+**D194 — the QR tab's fourth report reopens M50.8 for five of its seven limbs**,
+owner-answered the day it arrived, over three alternatives each of which was put
+with its cost.
+
+**The band is what removed the option the third report used.** M50.8's own file
+states that `M50.9` is reserved for reviews, so no M50.x milestone can be
+inserted between M50 and M51 — the third report became a milestone and the
+fourth one cannot. What was left was a reopening, Phase 4 rows, or a milestone
+numbered somewhere else, and the owner took the reopening for the four cheap
+limbs: three prose removals and moving the logo picker above the save button.
+
+**Limb (a) joined them by rule rather than by choice.** It was put to the owner
+as unresolved — the build could not reproduce it — and they re-checked and
+reported it precisely: *"immediately upon changing the default the screen
+reloads at the top of the page then jumps down to match the previous scroll
+position."* That makes M50.8's *"a save returns you to where you were"* false as
+stated, and [workflow.md](workflow.md) reopens a milestone whose claim is false
+rather than filing a successor. Since M50.8 was already being reopened, (a)
+costs nothing extra to house and the trail stays on one number.
+
+**What (a) actually is, and it is not a bug in the restoration.**
+`internal/ui/static/js/qr-size.js:175-179` applies the restore a second time
+*because* the browser performs its `#qr` fragment scroll after
+`DOMContentLoaded`. So the correcting scroll is by construction after a paint,
+and the reader is shown the top of the card before being moved back. D193 chose
+a remembered position **over** a fragment and left the fragment on the redirect
+(`internal/httpx/web_qr.go:123`, there since D178), so two mechanisms now aim at
+the same scroll and the second exists to undo the first. The reopening does not
+pick between removing the fragment and restoring before paint; that is the
+build's, with an entry.
+
+**Three probes and the harness saw none of it, which is recorded because it is
+the more useful half.** The first searched for `button[name="default"]` where
+the control is `name="make_default"` and **skipped in silence** — the exact
+shape [F237](deferred-findings.md#open) warns about and this milestone's own
+risk section named. The second let the driver auto-scroll the control into view,
+so the position it stored was never the position a reader holds. The third
+observed nothing because the restore beats the first animation frame in
+headless. A browser check answered *"does it settle in the right place"*, which
+was true, while the owner's complaint was about what happens before it settles.
+**The reopening's enforcement is therefore an assertion about the interval, not
+about the endpoint.**
+
+**(b) and (e) are Phase 4 rows.** (b) — the preview vanishing when a code is
+selected — is a navigation rather than a rendering fault: each row links to the
+panel route, which is a page with no link heading row, so answering it means
+deciding what selecting a code should do. (e) stays
+[F239](deferred-findings.md#open), now with the owner's placement specified and
+still without the contrast metric F239 exists to name.
+
+## 2026-08-14 — M50.8, the fragment yields rather than being out-scrolled
+
+**D195 — the QR tab's `#qr` fragment is taken off the URL by the script that
+has a better position, rather than the script correcting the fragment's scroll
+afterwards.** The reopening left this open in as many words: two mechanisms are
+aiming at one scroll, the milestone does not say which goes, the build chooses.
+
+**What was measured, first, because the reasoning rests on it.** Chromium at
+1000×400 against the test instance at `a12cf16`, recording `window.scrollY` at
+the document's first script, at `DOMContentLoaded`, at `load`, on every scroll
+event and on 120 animation frames. Changing the default from a reader standing
+at **230**:
+
+```
+script 0 · DOMContentLoaded 230 · load 409 · scroll 230 · frame 230 × 96
+```
+
+The offset is restored at `DOMContentLoaded`, the browser performs its `#qr`
+fragment scroll to **409** between the two events, and the second restoration
+puts it back before the first frame. So the intermediate position is real and is
+observable at the `load` event — and is invisible to a frame sampler in
+headless, which is why three probes reported the page was fine. On a machine
+that paints in that window, which is the owner's, it is a jump and a settle.
+
+**The two options, and what each costs.**
+
+*Remove `#qr` from `qrReturn`'s link-page branch* (`internal/httpx/web_qr.go`).
+One line, nothing left to fight, and the position is applied once from a
+`defer`red script — which runs after parsing and before both `DOMContentLoaded`
+and the fragment scroll. What it costs is D178's own argument: with the script
+blocked, or storage refused, a save on the link page would land at the top of
+the document rather than at the QR card, and that reader has nothing else. The
+fragment is not decoration; it is the no-script return path.
+
+*Strip the fragment at runtime, only where a position is being restored*
+(chosen). `history.replaceState` in the same deferred script removes the
+fragment before the browser acts on it, so exactly one mechanism aims at the
+scroll on any given load. A reader with the script blocked still gets `#qr`,
+untouched, because nothing ran to take it away — the degradation the milestone
+promised holds without a second code path to keep it. What it costs is a
+dependence on ordering: the fragment scroll must come *after* deferred scripts.
+That is the same ordering the code being deleted was written against and the
+same ordering the measurement above shows, so the risk is not new; if it were
+ever wrong, `replaceState` would land after the jump and the result would be
+today's behaviour rather than a worse one.
+
+**It costs a second thing, and that one is a worse outcome rather than an equal
+one.** The ordering argument above is about `replaceState` running *late*; this
+is about it not running at all. `qr-size.js` wraps the call in a `try` because
+the history API can refuse — and on a load where it does, the fragment survives,
+the browser performs its scroll after `DOMContentLoaded`, and the second
+application that used to put the position back is the code this decision
+deleted. So that reader **ends** at the top of the QR card instead of jumping
+there and settling at their own offset: *"a save returns you to where you were"*
+fails outright for them, where under the shipped M50.8 it failed imperfectly.
+The code comment at the `catch` says this; this entry now says it too, because
+the sentence above it argued the fallback was *today's behaviour rather than a
+worse one* and that is true of the ordering risk and false of this one.
+
+**Taken rather than fixed, and the reasoning is the shape of the fix.** Putting
+the `load` restoration back behind the refusal is six lines and would restore the
+old behaviour exactly on the only path that needs it — but it is a branch nothing
+in the kept suite can reach, and a case that cannot fail is
+[F237](deferred-findings.md#open)'s shape, which this same reopening exists to
+stop repeating. Against that: `history.replaceState` is present in every browser
+this dashboard supports, it is called once per load so no throttle reaches it,
+and a reader it refuses still lands on the QR card rather than at the top of the
+document — D178's own guarantee, and the same place a reader with no script at
+all arrives. The regression is from *their place* to *the card*, not to nothing.
+
+**Rejected: keep both and guard the second application.** M50.8 already tried a
+guard, recorded in the file it deleted here — it could not tell a reader who had
+scrolled from the browser's own fragment jump, so it yielded every time and the
+feature did nothing. A second attempt at the same distinction would fail the
+same way, because the two are the same event.
+
+**What the fix is not.** It does not make the restoration earlier: the script is
+`defer`red, so `document.readyState` is already `interactive` when it runs and
+the restore was always applied at the first possible moment. Nothing was slow.
+What was wrong was that something else moved the page afterwards.
+
+**The enforcement is the `load` event and that is the transferable part.**
+`tools/agent-browser/specs/qr-tab-controls.spec.mjs` records the trail from
+before the page's own scripts and asserts every sample — script, DCL, load,
+scroll, frames — is the position the reader stood at. An assertion about frames
+alone passes on the broken build. Three preconditions ride with it, one per
+probe that failed: the control is asserted present under `name="make_default"`,
+the reader's position is set by scrolling the document with the control already
+in the viewport so the driver never scrolls it, and that position is asserted
+far enough from the bare fragment's landing to be distinguishable from it.
+
+## 2026-08-14 — M50.8, the logo picker above the save button, and the prose bound at 300
+
+**The reopening's three cheap limbs, and the two of them that had a choice in
+them.** F244(c), (d) and (f) are removals the owner set verbatim; (g) is a move.
+
+**The logo controls go before the whole style form, which is the only place
+above that Save button.** F244(g) asks for the picker *"above the save button so
+all changes to the logo are together"*. The constraint M50.8 recorded has not
+moved: a file needs `enctype="multipart/form-data"`, the style form cannot carry
+it without every one of its other buttons arriving in a body the handler does
+not read, and HTML forbids nesting forms. So the upload cannot sit *between* the
+style form's fields and the style form's submit — there is no such position
+outside the form. Ahead of the form is the only one, and that is where it went.
+What it costs is that the file input now renders before **Name**: the section
+reads logo, then name and colours and size, then Save. The alternative was
+`form=` attribute machinery to move the submit out of the form instead, which
+m50.8.md already declined for this surface and which would put the section's
+save button outside the thing it saves.
+
+**(d) takes the last statement on the tab of what the default *does*.** The
+filled icon and the `Default QR Code` tooltip say *which* code holds the flag;
+after this nothing on the tab says an untagged scan is counted against it.
+`api/openapi.yaml` and `docs/usage.md` both still say it and both stay — the
+claim is not withdrawn, it is off a surface the owner has now asked four times
+to carry less. The test that asserted the sentence was present, which was the
+reader's half of D183, now asserts it is absent **and** that the icon's name is
+still there, because a removal that also lost the icon would leave the default
+unmarked and both halves would pass.
+
+**(f) is answerable rather than a matter of taste.** *"The user will get an
+error if it is too big and should not be bothered before hitting the issue"* is
+a claim about a refusal, and the refusal exists and names the number with the
+reader's own dimensions in it — `internal/link/qr.go:1959-1963` for the side
+bound, `internal/httpx/api_qr.go:551` for the upload's size, `qr.go:1968-1970`
+for the stored size. What the paragraph carried that no refusal does is the
+error-correction clause, which docs/usage.md still states, and the promise that
+an oversized image is resized rather than refused, which the `"logo"` marker's
+notice still makes with the actual numbers after the fact.
+
+**The prose bound is 300, by M50.7's rule and not by choice.** Measured by that
+method the tab now carries **252** characters across two paragraphs — the code
+meta line at 61 and the contrast sentence at 191 — and the bound is the
+measurement rounded up to the next fifty. Two of the four paragraphs the last
+bound was written for are gone, so the headroom is 48 characters: a later
+milestone adding a sentence here fails on the first one. After four reports
+asking this surface to say less, that is the setting rather than an oversight.
+
+## 2026-08-14 — M50.8's reopening, four citations its own diff moved
+
+Orchestrator amendments at step 3.4, all fact-level, all line numbers in the
+reopening section of [m50.8.md](phase-details/m50.8.md). The worker flagged them
+and did not touch them, which is correct — a worker never amends.
+
+As they stood, and as amended: `qr-size.js:175-179` → **`:179-199`**, the comment
+having grown when `dropFragment` was added below it at `:201`; `web_qr.go:123` →
+**`:131`**; `Save` at `link_qr.html:687`, `Restore defaults` at `:716` and the
+file input at `:861` → **`:866`, `:895` and `:725`**, the logo block having moved
+above the style form, which is the change the bullet asked for; and limb (b)'s
+`link_qr.html:230` → **`:236`**.
+
+**This is the third time in two days that the same hazard has cost an
+amendment**, and it is worth naming as a rule rather than as an incident: a
+citation written against a diff that is still in flight goes stale before the
+diff lands. The reopening's citations were written while the reopening was being
+planned, against a tree the build then moved by doing exactly what the file
+asked. The answer is not to write fewer citations — they are what makes a bullet
+falsifiable — but to re-read them **after** the diff, at step 3.4, which is
+where these were caught.
+
+**Two** of the three sentences F244(c) and (d) removed still appear in the
+template as quotations inside the comments that record their removal, which is
+this file's convention and not a leftover: `link_qr.html:41` and `:241` quote
+what went and say who asked. A grep for either therefore finds it, and that is
+the intended outcome rather than a failed deletion. **(f)'s is not among them** —
+the logo block's new comment quotes the owner's *instruction* rather than the
+limits sentence, so `grep "PNG or JPEG, at most"` returns nothing. This
+paragraph said three and named two line numbers, and the milestone's reviewer
+counted it; it is corrected here before the entry lands, which is the same
+enumeration failure this file has now recorded four times in two days and the
+first time it has appeared inside the correction itself.
+
+## 2026-08-14 — three shipped entries the fourth report's removals falsified
+
+Corrections to entries that have **landed**, so they are made here rather than in
+place: this file is append-only and a later entry corrects an earlier one. All
+three are M50.7's and D186's, and all three were falsified by F244(c), (d) and
+(f) — the reopening deleted the sentences those entries pointed at as evidence.
+The milestone's reviewer counted them; the reopening's own entries named
+`docs/usage.md` and the API reference as survivors and did not reach these.
+
+**One — M50.7's meta-line justification.** The *M50.7 built* entry defends
+dropping *"every picture of it already printed resolves through it"* on the
+ground that *"the meta line on the default's own row still says a scan carrying
+no code is counted against it, so a reader is told which code an old picture
+lands on where that matters."* **F244(d) deleted that clause**, owner-set. The
+cut M50.7 made is not reopened by this and the reader is still told — but in
+`api/openapi.yaml` and `docs/usage.md`, not on the row, and *on the row* was the
+whole of what that sentence claimed. What the tab now says about the default is
+which code it is, and nothing about what being it does.
+
+**Two and three — the logo paragraph, cited as live by M50.7's entry and by
+D186.** M50.7 built says *"The logo paragraph still names H and still names the
+return to the free level when the logo goes, which is what D186 says is owed"*;
+D186 says *"the level is not silent where it moves: the logo paragraph says an
+upload raises it to H…"*. **F244(f) deleted the paragraph.** D186's obligation
+is **not** discharged by `docs/usage.md`, and saying so would be the easy answer
+and the wrong one. It is discharged by the upload notice itself —
+`internal/httpx/web_qr.go:650-663`, which names level H at the moment a logo is
+applied, to the reader who applied it. That is a better discharge than the
+paragraph was: it is stated where the change happens rather than beside a control
+somebody might not read. D186 stands; only the record of *where* it is met moves.
+
+**Four — a symbol that has never existed, in a landed entry and in three places
+this run.** M50.7's entry says *"`internal/httpx/web_qr.go`'s `logo_applied`
+notice prints the uploaded dimensions and the stored ones whenever they
+differ"*. There is no `logo_applied` anywhere in the Go: the marker is `"logo"`
+(`web_qr.go:440`), handled by `case "logo":` at `:650`. The claim is true and
+the name is invented. It had been copied into two more template comments and one
+new entry by the time the reopening's reviewer counted it; those three are
+corrected in place, being this run's own and unlanded, and this paragraph
+corrects the landed one. **A wrong symbol survives review precisely because the
+sentence around it is right** — nobody greps a name that is doing no work in the
+argument, and this one was load-bearing twice over, being the mechanism F244(f)'s
+removal was argued on.
+
+**The pattern is worth more than the four corrections.** Every one of them is a
+shipped entry that cited a sentence on the surface as its evidence, and the
+surface is being cut on the owner's instruction faster than the entries citing it
+are being read. An entry that says *the tab still says X* is a claim with a
+lifetime; an entry that says *X is stated at web_qr.go's upload notice* is a claim
+about a mechanism. The tab has been reported four times in three days and the
+prose bound has gone 900 → 750 → 300 in one of them. **Future entries about this
+surface cite the mechanism, not the sentence** — that is the rule this run earned,
+and it is why the third correction above lands on the notice rather than on the
+next paragraph that happens to say H.
+
+## 2026-08-16 — M50.8, the paint is held, the logo submits to a form it is not in, and the slider draws its own stops
+
+The QR tab's **fifth** report, three limbs, and the first of them is the second
+time this milestone has been reopened for one sentence. F246; the scheduling and
+its stated cost are in [m50.8.md](phase-details/m50.8.md).
+
+**D196 — the position is applied before the first paint by *withholding* the
+paint, because applying it earlier is not available.**
+
+The first reopening stopped the `#qr` fragment from moving the page after the
+restore and left the restore where it was: at `DOMContentLoaded`, reached from a
+`defer`red script. That is after the parse and therefore after the paint, so the
+correction the owner saw simply changed shape — *top → position* instead of
+*`#qr` → position*. Measured at `928504f` over 80 ms / 4 Mbps / 2× CPU: eight or
+nine frames at the wrong offset, about a third of a second; at 150 ms, twenty and
+two thirds of a second. Unthrottled, none, which is why four probes and one kept
+browser case all said the page was fine.
+
+The milestone named three mechanisms and said the build would choose. **One of
+them cannot work at all, and that is the finding rather than the cost.** A
+parser-blocking `<script src>` ahead of the body does run before the first paint
+— and at that moment the document has no body, no height and nothing to scroll:
+`window.scrollTo` clamps to 0 and the restore is silently lost. A position can
+only be applied to a laid-out document, and a laid-out document is one the
+browser is ready to paint. The same objection disposes of the third option,
+moving the offset onto something the server renders: a server cannot scroll a
+browser, so the offset would still be applied by script at the same moment, and
+it would additionally put a reader's scroll position on the wire.
+
+So the second option is the only one, and it is what shipped. `qr-size.js` loads
+without `defer`, runs in `<head>` with parsing blocked, reads its stored offset
+there, and puts `qr-restoring` on `<html>`; `app.css` holds `body` at
+`visibility: hidden` while it is there; `restore()` scrolls at
+`DOMContentLoaded` and takes the class off. `visibility` and not `display`,
+because the document must still lay out — an unlaid-out document has no height,
+which is the impossibility above wearing a different hat.
+
+**What it costs, stated in full.** The script is render-blocking on every page of
+the dashboard now. It is not an extra round trip: the preload scanner starts it
+with `app.css`, which is render-blocking already and four times the size, so the
+paint waits on the stylesheet either way. And on the one load that has a position
+to restore — the load after a write on this tab, and no other — the reader waits
+on the page's own background instead of watching its content arrive at the wrong
+offset. That is the trade in one sentence: the jump the owner called jarring is
+not made correct, because correct is not available; it is made invisible.
+
+**A page that stays hidden is worse than a page that jumps**, so the reveal has
+three independent paths: a `finally` inside `restore` that fires on every exit
+including a throw, a `load` listener, and a four-second timer set at head time.
+The class is only ever added when there is an offset for this pathname, so a
+browser with `sessionStorage` refused, a script that failed to load, and every
+page in the product that is not this one are all untouched.
+
+**The enforcement is the case that already asserted this claim, run throttled.**
+`specs/qr-tab-controls.spec.mjs` was green for a day on a build that flashed for
+two thirds of a second, because localhost is the one profile where a script wins
+the race by construction. It now drives the write through a CDP session at
+80 ms / 4 Mbps / 2×, asserts the emulation took effect by the loaded document's
+own `responseStart`, and samples `visibility` beside every offset. The assertion
+is that no **visible** sample stands away from the reader's position, plus that
+at least one sample was visible — because a filter that passes by matching
+nothing is this tab's recurring failure and it has now produced it twice.
+
+**D195's stated cost is corrected here, because this entry is what falsified
+it.** That entry priced the fragment removal as *"a dependence on ordering: the
+fragment scroll must come after deferred scripts"*, and there is no deferred
+script on this page any more. The mechanism is unharmed and the dependence is
+narrower than it was: `replaceState` runs from the `DOMContentLoaded` handler,
+which is still before the browser's fragment scroll, so what the ordering now
+rests on is the event rather than the attribute — and `qr-size.js:198-208` says
+so where a reader of the code will meet it. Written here rather than by editing
+D195, which is append-only, and written at all because this surface's own rule
+is to cite the mechanism rather than the sentence: an entry whose cost paragraph
+names a `defer` nobody can find is how a correct argument stops being checkable.
+
+**D197 — the logo's controls move into the style form's grid, by `form="…"`.**
+
+Owner, F246(b): *"The logo upload thould be below the color pickers and above
+size."* One reopening ago this file recorded the opposite as a constraint —
+*"it moves within the section; it does not move into the style form"* — and that
+sentence was drawn from two facts that are both still true: a file needs
+`enctype="multipart/form-data"`, and HTML forbids nesting one `<form>` in
+another. **Neither is the whole rule.** The ban is on the `<form>` *element*. A
+form-associated control carries `form="<id>"`, may sit anywhere in the document,
+and submits to the form it names. So the two `<form>` elements stay where they
+were, keeping their own route and their own encoding, and lose their visible
+controls; the file input and the remove button render in the style form's grid
+between the background colour and the size.
+
+Three things follow, and each is a claim rather than a tidy-up:
+
+- **The `change` trigger moves onto the input.** `hx-trigger="change"` sat on
+  the `<form>`, which worked because the input was inside it and `change`
+  bubbles up the **DOM** — not to the form a control is associated with. From
+  the grid, that form would never see the event. Every htmx attribute moved with
+  it, since htmx issues a request from whatever element carries them.
+- **htmx serializes the form a control *owns*, not the one it sits in, and this
+  was measured rather than reasoned about.** The build first wrote an
+  `hx-params="logo,next,code"` filter on the belief that the closest ancestor
+  form — the style form — would ride along with the file. Driving the upload
+  with the filter removed showed a body of exactly `code`, `logo`, `next`, and
+  the vendored source says why: htmx takes `elt.form || closest(elt, 'form')`,
+  so the association wins. The filter was removed as machinery guarding a body
+  that never existed, and the measurement is kept as the spec's assertion —
+  which is where a claim about a dependency belongs. **This is the milestone's
+  own instruction working as intended**: it said htmx serializing a
+  form-associated control was a claim to demonstrate on the instance, and the
+  demonstration corrected the build rather than confirming it.
+- **The busy state gained a second selector.** `form.htmx-request .file-pick`
+  was written when the form issued the request; htmx marks the issuing element,
+  which is the input now. Both selectors ship, and F214(b) is why: a pressed
+  state that quietly stops arriving is the defect that control was reopened for.
+
+**Demonstrated rather than argued**, which the milestone asked for in as many
+words: `specs/qr-logo.spec.mjs` reads the parts of the multipart body htmx
+actually sent and asserts they are `code`, `logo`, `next` and nothing else, and
+asserts the input's owner form and its ancestor form are two different elements.
+An ordering test alone cannot tell a working upload from a detached one.
+
+**D198 — the slider's detents are SVG geometry the template renders.**
+
+Owner, F246(c): *"The Size slider should have visible detents at the stop
+points."* The stops were never missing from the page — the `<datalist>` has named
+them since D182, and Chromium draws ticks from one. `appearance: none` in
+input.css takes those away with the native track, which was verified by forcing
+`appearance: auto` on the shipped control and watching eight marks appear.
+
+**Restoring the appearance is not the fix**: `appearance: none` is what lets the
+track and the thumb take theme tokens, so giving it back trades the theme for the
+marks. **And the custom-property route the milestone offered is closed**: a
+custom property has to reach CSS through a `style` attribute, and this product's
+`style-src 'self'` carries no `'unsafe-inline'`. That leaves what
+`middleware.go`'s own CSP comment already names for the bar charts — *"dynamic
+bar widths are SVG attributes rather than style attributes"* — so the marks are
+one `<line>` per stop with `x1`/`x2` as percentages, which CSP does not reach
+because they are not CSS at all.
+
+Two measurements ride with it. The position is `(stop − min) / (max − min)`,
+computed by a new `rangePct` template function rather than a `QRSizeMarks` field
+beside `QRSizeStops` — a second list is a list that can disagree with the first,
+and the marks exist precisely to say truthfully which sizes a code offers. And
+the strip is inset by half a thumb at each end, in input.css beside the thumb it
+is derived from, because a range input's thumb travels between its own
+half-widths: marks drawn edge to edge are right in the middle and wrong at both
+ends, which is the hardest kind of wrong to notice.
+
+The template test compares the marks against `QRSizeStops` — count, values and
+positions — and renders a raised floor to show the low stops drop out with it,
+which is the case a fixed strip of eight gets wrong. The browser case reads the
+rendered geometry, because the `<datalist>` proves that markup naming the stops
+and a control drawing them are two different things.
+
+**One amendment at acceptance, fact-level, on this milestone's own bullet.**
+
+As it stood, in the reopening's first bullet: *"Whatever it picks, **the
+position is applied before the first paint of the loaded document**, not
+corrected after it."*
+As amended: *"Whatever it picks, **the reader is never shown a position they did
+not stand at** — no painted frame of the loaded document carries the wrong
+offset,"* with the sentence it replaced quoted beside it.
+Tree fact: the same bullet offers three mechanisms and prices *"a body held back
+until the position is applied"* as one of them, and that is the one the build
+took — `qr-size.js:305` marks `<html>` at head time and `input.css:197-199`
+holds `body` unpainted until `restore()` scrolls at `DOMContentLoaded`. So the
+old sentence described the shape of a *different* mechanism from the same menu
+rather than the requirement all three share, and D196 above shows the shape it
+described cannot be built at all. What the bullet asserts is unchanged, which is
+what makes this an amendment rather than a prompt: the owner's choice was
+already delegated by the menu, and no reading of it would have let the hold
+through while stopping something else.
+
+---
+
+## 2026-08-17 — M50.8, selecting a code is the tab strip's own swap
+
+**D199 — a row in the codes list swaps `#link-tabs` on the page the reader is
+already on, and its `href` is the same URL.** M50.8's third reopening leaves the
+mechanism to the build and requires it be argued; this is the argument, and what
+it rejected.
+
+**What the finding actually was.** `internal/httpx/web_links.go:970` called
+`h.linkQR` with an empty slug, unconditionally, and nothing on the link page's
+path read `code` from the request. So on that page *selected* meant *default*,
+and moving the flag was the only way to change what the tab drew — which is why
+making a code the default appeared to select it, and why that path kept the
+reader's position while selecting one did not. The list's rows were the other
+half: every one of them pointed at `/links/{id}/qr?code=`, the panel route, which
+is a different page with no link heading row. [F244](deferred-findings.md)(b),
+the vanishing thumbnail, and [F246](deferred-findings.md)(d), the lost position,
+are one navigation and are answered by removing it.
+
+**Chosen: the mechanism `partials/link_tabs.html` already runs.** The row is
+`hx-get` → `#link-tabs`, `hx-select="#link-tabs"`, `hx-swap="outerHTML"`,
+`hx-push-url="true"` — the tab strip's four attributes, one argument further
+down, fetching `/links/{id}?tab=qr&code=<slug>`. The href is that same string.
+Three properties follow from it and none of them is separately engineered:
+
+- **No load, so nothing to restore.** The whole scroll-restoration machinery
+  ([D193](#2026-08-14--m508-built-a-remembered-position-and-two-readers-that-mistook-the-flag-for-a-place),
+  [D195](#2026-08-14--m508-the-fragment-yields-rather-than-being-out-scrolled),
+  [D196](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops))
+  exists because a *write* is a redirect and a redirect is a load. A swap is
+  neither. The position is not preserved so much as never disturbed, and
+  `qr-size.js` needed no change at all: it stores an offset on
+  `htmx:beforeRequest` and forgets it on `htmx:afterSwap`, which is exactly the
+  pair a selection produces.
+- **The thumbnail stays because it was never redrawn.** It renders in the link
+  page's heading row, outside `#link-tabs`. F244(b) closes as a consequence of
+  F246(d)'s fix rather than as a second change.
+- **One URL for both readers.** The `href` and the `hx-get` are one string, so a
+  reader with the script blocked follows it to a page showing that code —
+  [D178](#2026-08-11--m47-built-the-stack-becomes-tabs-and-d178)'s
+  standing argument on this tab, and it is not spent here.
+
+**Rejected: swapping `#qr` from the panel route.** `hx-get="{{.Panel}}"` with
+`hx-select="#qr"` fetches one section instead of a whole link page, and the link
+page's assembly is three page-replacing reads and five soft ones including an
+analytics rollup. It is the cheaper request and it was not taken, because
+`hx-push-url="true"` would then push the *panel* URL onto the link page: a
+refresh or a bookmark lands on the page with no heading row, which is the defect.
+The way out is `hx-push-url="/links/{id}?tab=qr&code=…"` naming a different URL
+from the one fetched — one control with two addresses, and the script-blocked
+reader still on the wrong one. The cost of the choice is stated instead: picking
+a code costs exactly what switching tabs costs, because it is the same request.
+
+**Rejected: keeping the href on the panel route and adding the swap over it.**
+This is the smallest diff and it fixes nothing for a reader without the script,
+who is the reader D178 is about. It also makes the two readers see different
+pages from one control, which is the property this tab has spent three reopenings
+acquiring.
+
+**Rejected: a script of this list's own.** m50.8.md bounds `qr-size.js` to two
+things and says anything else wanting script is a decision rather than a
+follow-on. Nothing here needs one.
+
+**Two things moved with it, and they are the milestone's own bullets.**
+`qrReturn`'s link-page branch carried no `code` — written into the panel branch
+alone, and correct until now, because the link page could not show a non-default
+code. Left there, the first save on a selected code would return the reader to
+the default one. The same is true of a **refusal**: `finishQRAction`'s link-page
+branch renders rather than redirects, and `loadLinkDetail` takes the selection
+off a query string a POST does not have, so it re-derives the view from the
+posted `code` the way it already re-derives `Tab`. That second one is not in the
+milestone's text and is in its scope: it is a defect this change creates, on the
+claim this change makes.
+
+**`Select` is per surface and `QRSelectSwapsTabs` says which.** The panel's own
+page has no `#link-tabs`, so its rows keep the plain link they always had and
+htmx is handed no target it cannot place. `qrSelectPath` builds both paths and
+compares against them — **matched, never followed**, which is `qrReturn`'s own
+discipline rather than a second answer to the same question.
+
+**What is enforced, and where.** `TestSelectingACodeDoesNotLeaveTheLinkPage`
+(internal/ui) holds the markup on both surfaces, including that the href and the
+`hx-get` are one string. `qr_select_test.go` (internal/httpx) holds the two path
+builders. `TestTheLinkPageDrawsTheCodeTheRequestNames` (integration) drives the
+request, the fallback, the save and the refusal. The claim that only a browser
+can make — no load, the offset unmoved, the drawing changed, the thumbnail still
+on screen — is a case in `specs/qr-tab-controls.spec.mjs`, on that file's shared
+serial page so it costs no sign-in ([F242](deferred-findings.md)), with the
+script-blocked half folded into the case that already has a scripts-off context
+for the same reason. The no-load half is asserted by a property set on `window`
+before the click: a document load wipes it, and nothing else in the case can see
+the difference between a swap and a navigation.
+
+**Not done here, and recorded rather than left to be noticed.** The panel route
+keeps its own page and its missing heading row. Nothing on the tab links to it;
+whether it should exist at all is a question this reopening does not ask.
+
+**One shipped entry this diff falsified, corrected here because decisions.md is
+append-only.** The 2026-08-11 entry *M48 reopened: the QR popup folds into its
+tab* defends keeping `/links/{id}/qr` as a route with a clause in its disposition
+table: *"The route keeps answering — the codes list selects a code through it
+(`?code=`) and it is what a bookmark reaches."* Half of that is now false. The
+codes list selects through it **on the panel's own page only**; on the link page
+no row points there, which is the whole of this reopening. The route's other two
+justifications are untouched and are why it stays: a bookmark still reaches it,
+and `TestEveryPanelIsAlsoACompletePage` still holds it to rendering complete. The
+two places that mirror the same sentence — `pages/link_qr.html` and
+`internal/ui/panel_test.go` — were corrected in this diff; the decision entry
+could not be, so it is corrected by this paragraph. Found by the milestone's
+reviewer, and it is the third time on this surface that a diff has been right
+while a record elsewhere quietly stopped being: D195's own cost sentence went the
+same way one reopening ago, which is why the rule is to sweep per *reversed
+argument* rather than per changed symbol. The argument reversed here is
+*the route is how a code gets selected*.
+
+## 2026-08-17 — M57.9's reopened run: what it checked, what it found, what it refuted, and one amendment
+
+The pre-release review, re-run because its range grew after it first ran. The
+original run of 2026-08-09 stands — F181–F184, all closed by M58 — and this
+section is additive, covering `6743fbd~1..HEAD`: 55 commits, 2026-08-10 to
+2026-08-17, about 17,800 inserted lines outside `docs/`. That is M52's
+reopening, M57.5, M46.5, M46.6 and its two reopenings, M47's, M47.5's, M48's,
+M49's three, M50's, M50.5's, M50.6's two, M50.7, M50.8 and its **three**, and
+M37's map fix, which is outside the numeric range and owed deliberately.
+
+**Two of the range's own claims were re-verified by measurement rather than by
+reading**, because both had been made false once already by a check that could
+not fail on the profile the reader is actually on.
+
+| Checked | On the final build |
+| --- | --- |
+| The redirect SLO | `make seed-slo` then `make load`: **240,001 cached redirects, 100% under 0.5 ms** against a 20 ms target. `make load-uncached` drove 24,572 database reads, also 100% under 20 ms. `internal/redirect/snapshot.go` moved at `2d4f424` and `make load` was skipped there on the owner's decision that the resolve query is byte-identical; this is that measurement taken on the build the tag will ship |
+| The single-instance conformance guarantee | `scripts/single-instance-check.sh linkctrl:test` passes: redirect, invalidation, dashboard, jobs, rate limiting and a boot against a Redis URL that resolves to nothing. The nil-Redis guard the original run sabotaged is still at `internal/redirect/resolver.go:258` |
+| Every gate | `make check` green; `make test-integration` green under `GOFLAGS=-count=1`, 197s; `make check-links` green; `make verify-scan` — **9256 of 9256 decodes exact** over 1360 pictures at five pixels-per-module through two decoders |
+| The browser check (owner-set 2026-08-11) | `make verify-ui` **green, 17 passed**, against an image rebuilt from this commit with the demo data restored under it |
+
+**And the range's newest work was driven rather than read**, under the 80 ms /
+4 Mbps / 2× CPU profile F246(a) was measured on — the corollary the last run
+earned is that a check pinned to localhost cannot fail on a latency-driven
+defect, so this one was not. Selecting a non-default code from the list: the
+offset held at 232 before and after, the URL took `&code=`, and the style form
+followed the selection rather than staying on the code it had. Saving with that
+code selected: the reader came back to **the same code**, at **232**, and
+across 159 traced frames there were **zero painted frames at an offset the
+reader did not stand at** — eight frames were held blank by D196's
+`qr-restoring` class, which is the mechanism working rather than failing. Back
+after a swap returned the tab intact. Console clean throughout. M50.8's third
+reopening holds on the profile that broke the two before it.
+
+### What it found
+
+**[F251](deferred-findings.md#open) — the 0.3.0 release notes will omit the
+whole dashboard redesign.** `CHANGELOG.md` carries a dated, closed
+`## [0.3.0] - 2026-08-10` section and, above it, an `[Unreleased]` section
+holding everything built after M58's documentation pass. No `v0.3.0` tag
+exists. Running the release workflow's own awk over the tree produces 941 lines
+of notes; the 217 lines of `[Unreleased]` are not among them, and the published
+body would say *tab strip* zero times while `README.md:122` calls the dashboard
+*"Rebuilt in 0.3.0"*. Both gates — `scripts/release-check.sh:65` and
+`.github/workflows/release.yml:97` — only grep for the section's existence.
+
+It makes [M58](phase-details/m58.md)'s own bullet false: *"the `awk` extraction
+is checked against the file **as it will be at 0.3.0** before anything is
+tagged"*. That is [workflow.md](workflow.md#an-issue-is-found--any-time-any-source)'s
+reopening trigger, and reopening is scheduling, so it is a row and a prompt
+rather than a fix.
+
+**[F248](deferred-findings.md#open) counted rather than left at three.** The row
+was filed for three stale `#open` anchors. Resolving every link in tracked
+Markdown against the section its row is actually in finds **39**: 22 in
+`decisions.md`, which is append-only and was correct when each was written, and
+**17 in maintained files** — `Plan.md` ×3 and nine milestone files. All 17 point
+at Open for a row that is Closed. The detector is thirty lines, which is the
+argument for the gate F248 asks about.
+
+### What it refuted
+
+A review that reports everything it suspected is not adversarial; these were
+tried and failed.
+
+- **`docs/SECURITY.md` has no row for the dashboard's first script or for
+  client-side storage.** Refuted: `script-src 'self'` did not move — htmx and
+  `docs.js` have been served from it for two phases — and the stored value is a
+  scroll offset in `sessionStorage`, which is neither a secret nor a
+  cross-reader fact. The page is organised by security area and this adds none.
+- **Changing a link's alias silently breaks every printed QR code, and nothing
+  says so.** Refuted twice: the rename **reserves** the old alias
+  (`internal/link/service.go`, the `reserved_aliases` write, whose comment names
+  the redirect hijack it exists to stop), so the failure is a 404 rather than a
+  hand-over; and the alias affordance is Phase 1's, outside this review's range.
+  The stale *stored size* half of it is already [F228](deferred-findings.md#open).
+- **`?code=` reaches `qrDownloadPath` unescaped**, where `qrSelectPath` escapes.
+  Refuted: `linkQR` resets the slug and both download paths whenever
+  `qrCodeExists` fails, so the unescaped value survives only if `ListQRCodes`
+  errors while `Links.Get` on the same request succeeded — which is not
+  reachable, since a database failure takes the earlier read first.
+
+**Three findings from a range this size is low, and the reason is structural
+rather than flattering.** Every milestone in it landed through the per-milestone
+reviewer added on 2026-08-09, and the QR tab was additionally reported on five
+times by the owner against the running product. This run is reading a range that
+has already been read, which is not the state M32.9's *a review that finds
+nothing was not adversarial enough* was written about — and it is why the two
+findings above are both about **records** rather than code: the code has been
+looked at repeatedly and the records have not.
+
+### D200 — the doc-cost judgement: trim what the ratio says is skipped, defend what it says is read
+
+`make doc-cost` put the `/work phase` resume charge at **70,138 bytes against
+65,339**, a growth of **4,799**. [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others)
+asks for a defence or a trim, and this is both, split by the realized read
+ratio rather than by which file grew most.
+
+**Trimmed, 2,515 bytes of it.** `phase-details/README.md` grew 2,879 while its
+realized ratio *fell* from 0.87 to 0.66 — the same evidence M51.9 trimmed on:
+bytes being paid for at every resume and skipped. What had grown was history —
+the whole reopening trail of the QR tab's five reports, the blind-task rounds
+behind M46–M48, and the arithmetic of each insertion — in a file
+[step 1](phase-loop.md#1-validate) reads for a status table and an inherited
+rules table. It is now a pointer to the milestone files, `git log`, and
+[W40](workflow-changes.md#made), and the file is 13,932 bytes with its ratio
+back to 0.70. `Plan.md`'s charged row went 194 → 1,382 because M50.8's cell had
+absorbed the same trail; step 1 reads one ordering row, and that row is now 660.
+
+**Defended, the rest.** `phase-loop.md`'s 732 bytes bought the reviewer actor
+and the parked-milestone fallback, and its ratio *rose* from 0.40 to 0.50 —
+more of it is being read than before, which is the opposite of the trim
+argument. The resume charge closes at **67,623**, a growth of 2,284 rather than
+4,799: **52% of it paid down**, and what is left is status rather than history.
+
+### The amendment: the range paragraph, caught short a sixth time
+
+[Step 1](phase-loop.md#amending-a-bullet) wants all three, and a fact-level
+wrongness is corrected rather than prompted about.
+
+**As it stood:**
+
+> the size slider draws its stops. So this review's range includes a milestone
+> that shipped, was reported against, and shipped again **twice** between two
+> readings of this paragraph. **F244 stays open** for its two unscheduled limbs
+> — the preview vanishing when a code is selected, and the contrast warning
+> ([F239](deferred-findings.md#open)) — both of which the owner placed in Phase
+> 4 and neither of which this review schedules.
+
+**As amended:** the same sentence, followed by M50.8's **third** reopening —
+`966e0ea`, built at `3b2174f`, D199 — and F244 narrowed to **one** unscheduled
+limb, the contrast warning, because the preview limb was discharged there.
+
+**The tree fact that forced it:** `git log` carries `966e0ea` and `3b2174f`
+dated 2026-08-17, `decisions.md` carries D199 at line 30076, and
+`deferred-findings.md` has F246 in the **Closed** table with F244(b) marked
+discharged. The paragraph stopped at the fifth report. That is the sixth time
+this list has been caught short and the fourth time by a reviewer rather than by
+the run that wrote it — which is the argument its own text makes for listing a
+scheduled milestone before it is built, applied to a reopening nobody scheduled
+in advance.
+
+## 2026-08-17 — M57.9's triage: three rows scheduled, and the one the owner took further than was recommended
+
+The review's product is a conversation, and this is it. Three questions, each
+with options, costs and a recommendation; two answered as recommended and one
+against it, which is the one worth recording the reasoning of.
+
+**D201 — [F251](deferred-findings.md#open): [M58](phase-details/m58.md) is
+reopened.** The 0.3.0 release notes would omit everything built after
+2026-08-10. Four routes were offered: reopen M58 and fold; fix it inside M57.9,
+which is already open and holding a commit; leave it until the tag; or a Phase 4
+row. The owner took the reopening, which is also what
+[workflow.md](workflow.md#an-issue-is-found--any-time-any-source) asks for a
+falsified shipped claim — M58's bullet promised the extraction was checked
+against the file *as it will be at 0.3.0*, and it was, on 2026-08-10, before
+fifty-five commits landed above it. Fixing it inside the review was the cheaper
+route and was declined for the reason the review exists: M58's row would have
+stayed `done` asserting something untrue.
+
+It carries a third thing neither the row nor the recommendation asked for, and
+it is the half that outlives the fix: `release-check` gains a gate that refuses
+a non-empty `[Unreleased]` when a version is named. Both existing guards —
+`scripts/release-check.sh:65` and `.github/workflows/release.yml:97` — only
+grep for the section's existence, so a release whose notes are in the wrong
+section passes both. A fix no gate can see regresses the silent way this one
+arrived, which is D173's own argument from the review before this one.
+
+**D202 — [F248](deferred-findings.md#open): the gate and the seventeen, both.**
+Offered the gate alone, the seventeen alone, or both, the owner took both. The
+seventeen are the links in maintained files — `Plan.md` and nine milestone
+files — that point a reader at the **Open** table for a row that is **Closed**;
+`decisions.md`'s twenty-two are left, that file being append-only and each
+having been true when it was written. The cost is stated rather than discovered:
+`check-links` already resolves 3568 links and a row-membership check gives it a
+new way to fail somebody's unrelated diff. Taken, because `check-links` passing
+on a tree carrying the defect is precisely what hid this twice.
+
+**D203 — [F249](deferred-findings.md#open) and
+[F250](deferred-findings.md#open): both now, in M50.8's fourth reopening, against
+the recommendation.** The recommendation was Phase 4 for both — neither
+falsifies a shipped claim, F250 is bounded by D196's four-second reveal, and a
+fourth reopening lands on a phase already eight milestones over its size target.
+The owner chose to clear the tab's remaining rows before the tag instead. That
+is scheduling and it is theirs; what the recommendation bought is that the cost
+is on the record rather than discovered afterwards.
+
+**F249 still owes a decision before it can be built**, and it is the whole of
+what that limb is: the heading thumbnail links to `?tab=qr` with no code, so
+following it silently returns the tab to the default. Whether the thumbnail
+means *this link has a QR code* — in which case it should carry the selection so
+it stops dropping one — or *the code you are looking at* — in which case it
+should also be redrawn on a swap, which it currently cannot be, sitting outside
+`#link-tabs` — is not a defect to fix but a meaning to choose. It is put to the
+owner at the reopening rather than assumed here.
+
+## 2026-08-17 — Two reopenings from M57.9's triage, and what the QR thumbnail means
+
+[M58](phase-details/m58.md) and [M50.8](phase-details/m50.8.md) both go back to
+`in progress (reopened)`, for the reasons D201 and D203 record. Their status
+rows and their milestone files carry the work; this entry carries the one answer
+that had to be given before either could be built.
+
+**D204 — the QR thumbnail means *this link has a QR code*, so it carries the
+selection rather than following it.** Owner-set, from three readings offered.
+
+The picture beside the link's name goes on being the **default** code's, always,
+which `internal/httpx/web_links.go:1262-1269` already does deliberately — it
+stands for *this link has a code*, not for whichever one the tab is showing, and
+its comment says so. What changes is only the `href` and the `hx-get` beside it
+(`internal/ui/templates/partials/link_qr.html:87-89`): they carry whichever code
+is selected, so a reader who follows the thumbnail keeps their selection instead
+of being returned to the default without being told. That is
+[F249](deferred-findings.md#open), and it is one attribute.
+
+**The cost is that the thumbnail and the tab show different codes** whenever a
+non-default one is selected, and it was put that way rather than discovered: it
+is precisely what the second reading — *the code you are looking at* — calls the
+defect. That reading was declined on mechanism, not on taste. The thumbnail
+renders **outside** `#link-tabs`, which is what made
+[F244](deferred-findings.md#open)(b) close at all: the swap cannot touch it, and
+therefore cannot redraw it. Following the selection would need `hx-swap-oob` or
+a second target, which is new htmx mechanism on the surface
+[M50.8](phase-details/m50.8.md) bounded its scripting to when it wrote this
+product's first hand-written script — and D191 says that bound outlives the
+feature.
+
+The third reading, leaving the `href` bare and explaining it in the label, was
+declined because the silence is the finding: a label does not stop the click.
+
+## 2026-08-17 — M50.8, the offset is forgotten when the request ends, not when it swaps
+
+The QR tab's **fourth** reopening, two rows, and only one of them was built —
+[F249](deferred-findings.md#open) raised a decision the milestone did not
+anticipate and is returned unanswered. This entry is
+[F250](deferred-findings.md#closed).
+
+**D205 — `qr-size.js` forgets a stored scroll offset on `htmx:afterRequest`,
+which supersedes [D196](#2026-08-16--m508-the-paint-is-held-the-logo-submits-to-a-form-it-is-not-in-and-the-slider-draws-its-own-stops)'s
+choice of `htmx:afterSwap`.**
+
+D196 wrote the listener onto the swap and said why: *"the swap is the observable
+fact and does not depend on which htmx event runs first."* Both halves of that
+are true and neither answers the question. A swap is observable **when there is
+one**, and the requests this file has to forget for are exactly the ones that
+produce none: a 5xx, a response htmx refuses to swap, an abort, a timeout. The
+argument silently assumed every request ends in a swap,
+and it read as safe for as long as the only htmx request on this tab was a logo
+upload — rare, and refused rarely. The third reopening made every row of the
+codes list an htmx request from inside `#qr`, so `remember()` now fires on this
+tab's most-used control and the assumption started costing something. Frequency
+is what changed; the reasoning was never right.
+
+**One ending [F250](deferred-findings.md#closed) names is deliberately not
+claimed**: a reader who navigates away mid-request. That is the one whose
+handler would have to run while the document is being torn down — the XHR is
+aborted by the navigation, and whether `onabort` dispatches before the JS
+context is discarded is the browser's to decide, not this file's. Nothing here
+demonstrates it and no case in the kept suite drives it, so it is named as the
+finding's and left out of the fix's coverage. What is left uncovered is the
+narrow residue of the row rather than the row: that reader returning to the same
+pathname in the same tab, on a browser that discarded the context before
+`onabort` ran.
+
+**What replaces it is not "the other event", it is a rule.** The offset exists to
+be read by a document load, so it is forgotten when the request ends **unless the
+response promises that load**. `htmx:afterRequest` is what fires on every ending
+— htmx triggers it from `onload`, `onerror`, `onabort` and `ontimeout` alike —
+and the guard is two response headers: `HX-Redirect`, which is how every accepted
+write on this tab comes back, and `HX-Refresh`, which is the same promise by
+another name. `HX-Location` is deliberately **not** in the guard: htmx performs
+that navigation itself over ajax and no document load follows, so an offset kept
+for one would be exactly the stale offset this fixes.
+
+**The guard is not tidiness and the ordering is why.** htmx sets
+`location.href` from the `HX-Redirect` header and then fires `htmx:afterRequest`
+in the same task, before the navigation it just asked for — read out of the
+vendored source (`static/js/htmx.min.js`, `g.onload`: `M(r,T)` handles the
+header, `ae(r,"htmx:afterRequest",T)` follows it). An unguarded listener would
+therefore throw the offset away on precisely the load that exists to consume it,
+which is every accepted logo upload, and it would do so silently — nothing in the
+kept suite asserted the position after an accepted htmx write until this
+milestone added it to `qr-logo.spec.mjs`. That assertion is the guard's
+enforcement and it is where a later author will meet the constraint.
+
+**Rejected: a listener per failure** — `htmx:responseError`, `htmx:sendError`,
+`htmx:sendAbort` and `htmx:timeout`, keeping `afterSwap` for the success path.
+It needs no header guard, which is its whole appeal, and it costs four more
+listeners and a gap: a 204, or any success htmx declines to swap, still leaves
+the offset behind. One listener with a stated rule is the smaller thing to
+maintain and the easier thing to be right about.
+
+**Rejected: forgetting only for requests from inside `#qr`.** The listener is
+global, as the swap listener was. Narrowing it would look tighter and buy
+nothing — nothing outside this tab ever stores an offset, so there is nothing
+for a wider listener to throw away — while adding a `closest()` that has to stay
+true as the tab's markup moves.
+
+**The three reveals D196 argues are untouched**, which the milestone required in
+as many words: the `finally` inside `restore`, the `load` listener and the
+four-second timer all stand, because a page that stays hidden is far worse than a
+page that jumps and none of that reasoning depended on which event forgets.
+
+## 2026-08-17 — M50.8, the thumbnail was already right, and D204 asked a question it then over-answered
+
+**D206 — the QR picture beside a link's name goes on being the default code's,
+and clicking it goes on opening the QR tab **on the default**. That is the
+intended behaviour. [F249](deferred-findings.md#closed) is closed with no change
+and [D204](decisions.md) is superseded in its second half.**
+
+Owner-set 2026-08-17, when the row was put to them as a defect with four ways to
+fix it:
+
+> *"This QR code should always render as the default for the link and clicking
+> it should load the QR tab with the default, which I thought was the existing
+> functionality."*
+
+It is the existing functionality exactly.
+`internal/ui/templates/partials/link_qr.html:88` is `href="/links/{id}?tab=qr"`
+with nothing else on it; `internal/httpx/web_links.go:1008` reads a `code`
+parameter that is not there and draws the default; and `:1262-1269` has always
+drawn the default's picture in that anchor whatever the tab is showing, with a
+comment saying so. Nothing changed and nothing needed to.
+
+**What D204 got right and what it over-reached on.** The question put to the
+owner was *what does the thumbnail mean*, and the answer — *this link has a QR
+code*, not *the code you are looking at* — stands and is what keeps the picture
+on the default. What D204 then drew from it, that the `href` should carry the
+selected code so a click does not discard one, was a second decision the
+question had not asked and the owner had not made. This entry withdraws it.
+
+**The mechanism is what sent it back, and the shape is worth keeping.** D204
+declined the *code you are looking at* reading on the ground that redrawing the
+thumbnail would need `hx-swap-oob` or a second target — new htmx on a surface
+[M50.8](phase-details/m50.8.md) had bounded — and priced its own choice at *one
+attribute*. Building it showed the price was the same on both sides: the anchor
+renders **outside** `#link-tabs`, and since this milestone's third reopening a
+selection is a swap **of** `#link-tabs`, so a server-rendered `href` is written
+once at load and is stale for the only reader the row was about. There was no
+version of *carry the selection* that did not spend the bound D204 had just
+refused to spend. Pricing it is what turned a build into a question, and the
+question's answer was that the destination had never been wrong.
+
+**The general shape, since this is the second time on this surface.** A decision
+that answers *what does this mean* should stop there. The behaviour that follows
+from a meaning is a separate decision, and inferring it inside the first one
+produces work nobody asked for — here, an `hx-swap-oob` in the tree, a redraw of
+identical bytes on every swap, and a spent scripting precedent, all to change
+something correct. The worker that met the mismatch returned the prompt
+unanswered rather than building against the inference, which is the split working
+as intended: the mismatch reached the owner instead of reaching the tree.
+
+## 2026-08-17 — M58, the release notes fold into 0.3.0, and the date a gate keeps honest
+
+[M58](phase-details/m58.md)'s reopening, from
+[F251](deferred-findings.md#closed) and D201. The milestone's own bullet said the
+`awk` extraction is checked against `CHANGELOG.md` **as it will be at 0.3.0**
+before anything is tagged. It was, on 2026-08-10, and fifty-five commits landed
+above it afterwards — so the check had been run against a file that no longer
+existed, and the sentence was false about the one it names. Nothing was
+published, which is the only reason this cost a fold rather than a retraction.
+
+**The fold.** `[Unreleased]`'s 217 lines go into the `0.3.0` section, by
+subsection: its `### Changed` bullets ahead of that section's `### Changed`, its
+`### Fixed` ahead of that section's `### Fixed`. Ahead rather than behind,
+because the file's own first line says *newest first* and the folded work is the
+newer — a reader scanning 0.3.0 meets the tab strip before the QR panel the tab
+strip moved. `[Unreleased]` stays, empty, heading and link reference intact, so
+Phase 4 writes into it without reconstructing anything. The release workflow's
+own awk (`.github/workflows/release.yml:278-282`) run over the result yields
+**1152 lines** where it yielded 941, and contains *tab strip* once where it
+contained it zero times, against a `README.md:122` that calls the dashboard
+*"Rebuilt in 0.3.0"*. That is the bullet's check, re-run against the file it
+actually names.
+
+**The fold is what makes two of 0.3.0's own bullets contradict it**, and moving
+prose without marking that is how a reader gets two answers. `[Unreleased]`'s
+work replaced the shape the section below already described: the link page as one
+scrolling column of eight sections, and the QR code as a popup opened from a
+section further down. Both were written when they were true and both are now
+eight lines from a bullet saying the page is seven tabs and the popup is gone —
+in the same `### Changed`, in the same release. The file already has an answer for
+this and it is used twice in the block above: a `*(Superseded later in this
+release: …)*` parenthetical, left on the older bullet rather than deleted from
+it, because a changelog is a record of what happened and the intermediate shape
+did happen. Deleting the older bullets was declined for that reason; re-ordering
+them was declined because the file is newest-first and they are not newest.
+
+**D207 — the section is dated 2026-08-17, the day the fold was made.** The
+bullet asks for *the day the tag is cut*, and the tag is the owner's act; a
+worker cannot know that day and must not perform it. Three options existed:
+today's date, no date, or a placeholder. The last two were declined together —
+Keep a Changelog dates a released version, `[Unreleased]` is precisely the
+section for the undated, and a second undated section would make the file
+contradict the format it claims in its own header. So today's date, and what
+makes it defensible is stated rather than hoped: it is right if the tag is cut
+today, and it is *made* right on any other day by D208 below, which refuses to
+let a tag be cut against a section dated anything but the day of the run. What
+would make it wrong is the one path that leaves: the owner tagging without
+running `release-check`. That is the same way every other check in that script is
+skipped, and it is not a hazard this decision can close.
+
+**D208 — the gate checks the date too, and every half fails rather than warns.**
+The reopening asked for one check: `release-check` refuses a non-empty
+`[Unreleased]` when a version is named. The date is the same defect rotated
+ninety degrees — notes that describe the release, under a date that describes
+nothing — and it is the defect D207 has just created a way to reach. A section
+re-dated today and tagged next week drifts again by exactly the mechanism this
+reopening exists to stop, so the gate that exists to stop it should be the thing
+that notices.
+
+Neither is a warning. This repository has the argument on record twice already —
+*on record is not answered for* — and a check that cannot fail obliges nobody.
+The cost is stated rather than discovered: `release-check` run on a day *before*
+the tag now fails on the date, which is a false failure for a rehearsal. It is
+accepted because the script's own header calls it *everything that must hold
+before a tag is pushed* rather than a rehearsal tool, because the remedy it asks
+for is the one-line edit it is already demanding, and because the failure
+direction is the safe one — it cannot pass a tree it should have refused.
+
+**Stating a cost is not discharging it**, which is what the first attempt at this
+diff did. A cost an operator meets is owed a remedy in the document the operator
+reads, so `docs/releasing.md` gains *When the tag is not cut on the day the notes
+were folded*: both failures as they actually print, the statement that they are
+the check working rather than a fault, and the three commands. Two things go
+stale between a fold and a tag and they are checked separately because either
+happens without the other — the date always, and `[Unreleased]` whenever ordinary
+work continued, which the per-commit Docs gate requires it to. That second one is
+a standing conflict between two gates rather than a fact about this release, and
+it is [F254](deferred-findings.md#open): closing it means changing what
+[workflow.md](workflow.md) tells a worker to do, and a milestone amending its own
+contract is the thing the actor split exists to prevent.
+
+**Three checks, not two, and neither the existence check nor the date check reads
+a regex.** The `[Unreleased]` heading being *present* is its own failure rather
+than an empty count: `awk` that never enters the section counts zero lines, so a
+`CHANGELOG.md` with the heading deleted passed the emptiness check as *empty*
+while the `[Unreleased]:` definition at the foot of the file pointed at nothing —
+and `scripts/check-links.sh` resolves references without looking for unreferenced
+definitions, so nothing else would have said so. The version's heading is found
+by `index($0, want) == 1` against a fixed string, and the date is taken from what
+follows it on that same line, because interpolating the version into a regex
+makes its dots any-char: `## [0130] - 2026-08-17` satisfied a `sed`-built date
+check for `v0.3.0` that the fixed-string existence check had just refused, which
+is two checks disagreeing about which heading they are reading. Trailing
+whitespace is stripped before the comparison, or a section dated today with a
+space after it fails with a message saying it is dated today. And a version whose
+section is *absent* skips the date check rather than reporting that an absent
+section carries no date — the failure one line above already said the true thing.
+All four were verified on fixtures rather than reasoned about.
+
+**Why it is safe to check the date at all**, which was the thing worth verifying
+rather than assuming: `.github/workflows/release.yml` never runs
+`scripts/release-check.sh`. Its only mention is a comment at `:5`. A date check
+living in CI would compare against the *workflow's* run date and would refuse a
+legitimate release tagged the evening before, so the same rule in the two places
+is not the same rule. It belongs where the tag is cut, which is a person's
+terminal, and that is also where the standing rule puts it: what a CI step does
+lives in `scripts/`, and what CI *is* cannot be committed from here.
+
+The consequence is that `docs/releasing.md` was overstating what the machine
+re-verifies, and it now does not. `.github/workflows/release.yml:89-98` is the
+bare `grep -qF "## [<version>]"` it has always been, so CI repeats **one** of the
+four local changelog checks; the document said *the changelog check again*
+without a number, nineteen lines below the paragraph this diff added, which read
+as all of them. Naming which one, and why the date deliberately cannot move
+there, is what makes the asymmetry legible instead of looking like an oversight
+somebody should fix.
+
+**Each check was sabotage-proven alone**, the gate never having fired, so none of
+them could be passing for another's reason. Content restored to `[Unreleased]` —
+two non-blank lines — and `scripts/release-check.sh v0.3.0` refused it by name
+while the other two passed; the date alone set back to 2026-08-10 and it refused
+that while the other two passed; the `[Unreleased]` heading alone deleted and it
+refused that while the other two passed. Counter-edit each time, never
+`git checkout`, and the fold's conservation re-proved afterwards by a sorted
+multiset diff against `HEAD:CHANGELOG.md` — which accounts for every line: two
+blank lines and one duplicate `### Changed` and `### Fixed` gone to the merge,
+the date, and the seven lines of the two supersession parentheticals.
+
+## 2026-08-18 — The conformance gate waits on the socket the application uses, and a streak alone was not enough
+
+**D209 — the single-instance check's readiness wait asks `pg_isready` over
+**TCP**, not over the container's unix socket, and the three-success streak
+beside it is belt rather than the mechanism.** [F256](deferred-findings.md#closed)
+closes with it.
+
+Owner-scheduled 2026-08-18, in those terms: *the phase/PR can't be considered
+complete unless all tests succeed appropriately*. It is a task-class commit under
+[workflow.md](workflow.md)'s scope gate rather than a reopening — the milestone
+it was found in is `done` and nothing it claims is false; what was false was a
+gate.
+
+**What was wrong.** `scripts/single-instance-check.sh` waited for `pg_isready`
+over the unix socket, **broke on the first yes**, and then re-ran it once as a
+confirmation. Those are two different servers. `postgres:17-alpine` runs `initdb`
+against a temporary server that answers on the socket, shuts it down, and starts
+the real one behind it — so the loop could break on the temporary server and the
+confirming shot could land in the window where nothing was listening. The gate
+failed and passed on the same commit twice, in opposite directions, decided only
+by where a one-second cadence fell across a sub-second gap.
+
+**The first fix was wrong and measurement caught it before it shipped.** It kept
+the socket and required three consecutive successes, on the reasoning that a
+streak spanning two seconds cannot fit inside a window measured in fractions of
+one. Then a run produced `................RRR` — a temporary server answering
+ready for **exactly three consecutive polls** — and the streak broke on it. The
+reasoning was probabilistic, which is the same kind of reasoning that produced
+the defect; it read as safe because the numbers were bigger.
+
+**What replaced it is a boundary rather than a margin.** The entrypoint starts
+the temporary server with `listen_addresses=''`, so it has **no TCP listener at
+all** and a TCP question cannot see it. Polled from container start, both at
+once: socket `........RR...RRRR`, TCP `............RRRRR` — one
+ready-to-not-ready transition on the socket, **zero** on TCP, first yes four
+polls later. That is not a smaller race, it is the absence of one.
+
+It is also the honest question. The container under test reaches Postgres across
+a docker network; it never touches that socket. A readiness check asking about a
+transport the subject does not use was answering about the wrong thing even on
+the runs where it happened to be right.
+
+The streak stays, documented as belt and not as the argument: a future image that
+published TCP during `initdb` would put the race back, and three successes cost
+three seconds on a check that takes minutes. **There is deliberately no check
+after the loop** — a single shot outside it is the defect being removed, and
+re-adding one later would restore it exactly.
+
+**Sabotage-verified against the new mechanism rather than the old symptom.**
+Starting the *real* server with `listen_addresses=''` makes the check refuse
+after its budget — `Postgres never became ready`, 62 seconds — where the old code
+passed immediately on the socket. Restored by counter-edit, byte-identical.
+
+**And the date check fired for real the day after it was written.**
+`release-check` refused the `0.3.0` section for carrying 2026-08-17 while the run
+was on 2026-08-18, exactly as [D208](decisions.md) said it would and exactly as
+`docs/releasing.md` documents. Re-dated. The check cost one line and caught the
+thing it was built for on its first opportunity, which is more than most gates
+manage.

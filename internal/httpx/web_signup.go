@@ -103,8 +103,9 @@ func (h *Web) SignupSubmit(w http.ResponseWriter, r *http.Request) {
 		// one, and the answer goes to the address by mail (F13). A branch here
 		// would be unreachable, and an unreachable branch asserting the opposite
 		// of the behaviour is what the next reader would believe. The text it
-		// used to render also offered a password reset, which this product has
-		// never had (F141).
+		// used to render also offered a password reset, which this product did
+		// not have until M51 closed F141 — and which the sign-in page now
+		// offers whenever a mailer is configured to carry it.
 		case errors.Is(err, signup.ErrClosed):
 			h.errorPage(w, r, http.StatusForbidden, "Sign-ups are closed",
 				"This instance does not accept public registration.")

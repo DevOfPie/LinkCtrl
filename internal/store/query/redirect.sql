@@ -63,6 +63,44 @@
 -- click_events.destination_id — and the weight is the arm's share; both have to
 -- be in the snapshot because reading either at request time would be the query
 -- this design exists to avoid.
+--
+-- The second lateral is M50's, and it is the same bargain a third time. A link
+-- may carry several QR codes, each printing a slug in its payload, and a scan
+-- may only be attributed to a slug this link actually has — otherwise the
+-- parameter is an open write surface into `link_dimension_daily`, reachable by
+-- anybody who can read a URL. Checking that at request time would be a query on
+-- the hot path; checking it against the snapshot is a scan of a slice bounded by
+-- domain.MaxQRCodesPerLink. So the slugs ride home in the round trip that was
+-- happening anyway, on `qr_codes_link_idx` — the index 03700 restored — and find
+-- nothing at all for the overwhelming majority of links, because a link with no
+-- named codes is the default and always will be.
+--
+-- Slugs only, never labels or styles. The redirect path has no use for either: a
+-- label is what a person reads in the dashboard and a style is how the picture
+-- is drawn, and putting them in the snapshot would serialize workspace free text
+-- into every cached entry for nothing.
+--
+-- **`q.slug <> ''` stays, and what it excludes has shrunk to one row** (D183).
+-- It used to leave the whole default code out, because the default *was* the row
+-- with no slug. The flag carries that identity now and the row it used to be
+-- gains a slug the moment a second code appears beside it, so a link's default
+-- rides home like every other code and a payload naming it is matched. What is
+-- still left out is a link's *only* code, which keeps the empty slug and the
+-- untagged payload — and it is left out because there is nothing to match it
+-- with: `Snapshot.CodeSlug` returns before it scans when the parameter is empty
+-- or absent, so an empty string in this array could never be compared against
+-- anything. Carrying it would serialize a byte no request can reach into every
+-- cached entry for the majority of links, and falsify what `Snapshot.Codes`
+-- promises about the payload a link with no named codes carries — which is the
+-- premise CacheKeyVersion was not bumped on.
+--
+-- **`is_default` deliberately does not.** A request carrying no `qrc` still
+-- records the bare `qr` it has always recorded — the value on every row this
+-- product has written since M41 — and which code that belongs to is a question
+-- the breakdown answers when somebody reads it, from the flag as it stands then.
+-- Resolving it here instead would put the answer in `link_dimension_daily`,
+-- where moving the flag afterwards could not reach it, and would rewrite what
+-- every pre-reopening scan is stored as for no gain a reader can see.
 SELECT
     l.id,
     l.workspace_id,
@@ -80,7 +118,8 @@ SELECT
     l.bot_blocking,
     d.block_bots,
     d.block_bots_enforced,
-    COALESCE(r.rules, '[]'::jsonb)::jsonb AS rules
+    COALESCE(r.rules, '[]'::jsonb)::jsonb AS rules,
+    COALESCE(qc.slugs, '[]'::jsonb)::jsonb AS code_slugs
 FROM links l
 JOIN domains d ON d.id = l.domain_id
 LEFT JOIN LATERAL (
@@ -98,6 +137,12 @@ LEFT JOIN LATERAL (
     WHERE rr.link_id = l.id
       AND rr.enabled
 ) r ON true
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(q.slug ORDER BY q.created_at, q.id) AS slugs
+    FROM qr_codes q
+    WHERE q.link_id = l.id
+      AND q.slug <> ''
+) qc ON true
 WHERE l.domain_id = $1
   AND l.alias = $2
   AND l.deleted_at IS NULL;

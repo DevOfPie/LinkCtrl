@@ -4,8 +4,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -16,6 +18,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
@@ -48,6 +51,22 @@ type Web struct {
 	// form. Nil leaves the signup and verification pages unregistered, and every
 	// registration refused.
 	Signup *signup.Service
+	// Recovery repairs a forgotten password (M51). Nil leaves both public pages
+	// unregistered and the "Forgot your password?" link undrawn, which is the
+	// state every instance was in before this existed — a lockout with no route
+	// back but the operator's database client (F141).
+	Recovery *recovery.Service
+	// Accounts ends an account's life (M52). Nil leaves the delete section off
+	// the account page and its route unregistered, which is the state every
+	// instance was in before this existed — no account deletion of any kind,
+	// for anybody (F44).
+	Accounts *account.Service
+	// MFA owns the second factor (M53). Nil leaves the enrolment page, the code
+	// prompt and the account page's section unregistered, which is the state
+	// every instance was in before this existed. Non-nil with no MFA_SECRET_KEY
+	// is a different state and the page says so: enrolled accounts still stop at
+	// the prompt, and their route on is a recovery code.
+	MFA *auth.MFAService
 	// Disputes serves the review queue and the appeal a refused creator files.
 	// Nil leaves the page unregistered and takes the "ask for a review" button
 	// off the link form, because a refusal must not offer a door that is not
@@ -73,7 +92,13 @@ type shell struct {
 	//
 	// Empty is the ordinary state of a new account, and the bell renders an
 	// empty state rather than an empty box for it.
-	UnreadPreview []notify.Notification
+	//
+	// Carries each row's destination since M48, which is why it is a view rather
+	// than the service's own type: the bell is the surface unread notifications
+	// are actually read on, and an item there that leads nowhere while the same
+	// item on /notifications leads somewhere would be two answers to one
+	// question.
+	UnreadPreview []notificationView
 	// Theme is the explicit override, or "" to follow prefers-color-scheme.
 	// Rendered as an attribute on <html> by the layout, so the first response
 	// is already in the right theme and there is no correcting script — the
@@ -140,7 +165,7 @@ func (h *Web) shell(r *http.Request, title, nav string) shell {
 	// not be computed is the wrong trade.
 	if h.Notify != nil && s.Identity != nil {
 		if n, items, err := h.Notify.UnreadPreview(r.Context(), s.Identity, notify.PreviewLimit); err == nil {
-			s.Unread, s.UnreadPreview = n, items
+			s.Unread, s.UnreadPreview = n, notificationViews(items)
 		}
 	}
 	// Same trade for the switcher: a page whose content the reader asked for
@@ -362,6 +387,10 @@ type loginPageData struct {
 	// refusal is worse than no link, and on an instance with no mailer `open`
 	// is not open — so this is the effective mode and not the configured one.
 	SignupOpen bool
+	// RecoveryAvailable draws the "forgot your password?" link, on the same rule
+	// and for the same reason: recovery is delivered by mail, so an instance with
+	// no relay has no recovery to offer and must not appear to.
+	RecoveryAvailable bool
 }
 
 func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
@@ -376,7 +405,11 @@ func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := loginPageData{shell: h.shell(r, "Sign in", ""), SignupOpen: h.signupOpen()}
+	data := loginPageData{
+		shell:             h.shell(r, "Sign in", ""),
+		SignupOpen:        h.signupOpen(),
+		RecoveryAvailable: h.recoveryAvailable(),
+	}
 	if r.URL.Query().Get("next") != "" {
 		data.Next = safeNext(r.URL.Query().Get("next"))
 	}
@@ -387,6 +420,15 @@ func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
 	// is proven; all that is left is the password they chose at the form.
 	if r.URL.Query().Get("verified") == "1" {
 		data.Notice = "Your address is confirmed and your account is ready. Sign in below."
+	}
+	// Where a completed deletion lands (M52). Said on this page rather than on
+	// a page of its own because there is no signed-in surface left to say it
+	// on, and the sentence has to name the lag: access ended in the transaction
+	// that deleted the account, and the remaining trace is scrubbed by a sweep
+	// that runs hourly.
+	if r.URL.Query().Get("deleted") == "1" {
+		data.Notice = "Your account has been deleted. Anything recorded about you " +
+			"elsewhere is erased within the hour."
 	}
 	h.render(w, r, http.StatusOK, "login", data)
 }
@@ -405,10 +447,11 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		data := loginPageData{
-			shell:      h.shell(r, "Sign in", ""),
-			Email:      r.PostFormValue("email"),
-			Next:       safeNext(r.PostFormValue("next")),
-			SignupOpen: h.signupOpen(),
+			shell:             h.shell(r, "Sign in", ""),
+			Email:             r.PostFormValue("email"),
+			Next:              safeNext(r.PostFormValue("next")),
+			SignupOpen:        h.signupOpen(),
+			RecoveryAvailable: h.recoveryAvailable(),
 		}
 		switch {
 		case isCredentialFailure(err):
@@ -425,6 +468,20 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.render(w, r, http.StatusUnauthorized, "login", data)
+		return
+	}
+
+	// The second factor (M53). No cookie, and the token travels in the redirect
+	// rather than in one: it is a credential for one operation with a five-minute
+	// life, where a cookie would send it on every request to the origin for the
+	// rest of the browser's session.
+	//
+	// A redirect rather than rendering the prompt in place, so the code form is a
+	// GET a browser can reload without re-posting the password — the same reason
+	// every other successful post here answers 303.
+	if res.SecondFactorRequired() {
+		seeOther(w, r, "/login/code?t="+url.QueryEscape(res.Pending.Token)+
+			"&next="+url.QueryEscape(safeNext(r.PostFormValue("next"))))
 		return
 	}
 
@@ -449,6 +506,15 @@ type setupPageData struct {
 	Name  string
 	Email string
 	Error string
+	// UpdateCheckOffered draws the first-run prompt (M55, D149). False when the
+	// deployment already answered with LINKCTRL_UPDATE_CHECK=false, and then the
+	// page says so in place of the control rather than offering a checkbox whose
+	// state nothing would read — an air-gapped instance must not appear to be
+	// asking a question it has already had answered for it.
+	UpdateCheckOffered bool
+	// UpdateCheck is the box's state, so a submission that fails validation
+	// comes back with the operator's answer rather than with the default.
+	UpdateCheck bool
 }
 
 func (h *Web) SetupPage(w http.ResponseWriter, r *http.Request) {
@@ -463,7 +529,24 @@ func (h *Web) SetupPage(w http.ResponseWriter, r *http.Request) {
 		seeOther(w, r, "/login")
 		return
 	}
-	h.render(w, r, http.StatusOK, "setup", setupPageData{shell: h.shell(r, "Set up", "")})
+	h.render(w, r, http.StatusOK, "setup", setupPageData{
+		shell:              h.shell(r, "Set up", ""),
+		UpdateCheckOffered: h.updateCheckOffered(),
+		// Pre-ticked, which is D149: on by default, and asked rather than
+		// assumed. A default the operator has to opt *into* would be the
+		// recommendation the owner overruled, dressed as a form.
+		UpdateCheck: true,
+	})
+}
+
+// updateCheckOffered reports whether the first-run prompt has anything to ask.
+//
+// Two things have to be true. The deployment must allow the check at all, and
+// there must be somewhere to record the answer — `Instance` is nil on a
+// deployment wired without that service, and a control whose write would land
+// nowhere is worse than no control.
+func (h *Web) updateCheckOffered() bool {
+	return h.Config.UpdateCheck && h.Instance != nil
 }
 
 func (h *Web) SetupSubmit(w http.ResponseWriter, r *http.Request) {
@@ -483,19 +566,48 @@ func (h *Web) SetupSubmit(w http.ResponseWriter, r *http.Request) {
 
 	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
+	// An unticked checkbox sends nothing at all, so absence is "no" and any value
+	// is "yes". Read before the validation branches below so the answer survives
+	// a rejected password.
+	updateCheck := r.PostFormValue("update_check") != ""
 
 	fail := func(msg string) {
 		h.render(w, r, http.StatusUnprocessableEntity, "setup", setupPageData{
-			shell: h.shell(r, "Set up", ""),
-			Name:  r.PostFormValue("name"),
-			Email: email,
-			Error: msg,
+			shell:              h.shell(r, "Set up", ""),
+			Name:               r.PostFormValue("name"),
+			Email:              email,
+			Error:              msg,
+			UpdateCheckOffered: h.updateCheckOffered(),
+			UpdateCheck:        updateCheck,
 		})
 	}
 
 	if len(password) < auth.MinPasswordLength {
 		fail("The password must be at least 12 characters.")
 		return
+	}
+
+	// The first-run answer, written **before** the instance is claimed (M55).
+	//
+	// Order is the whole point. SetUpdateCheckAtSetup refuses once an account
+	// exists, so it has to run first — and running first is also what makes the
+	// failure direction safe: a Register that then fails leaves the answer
+	// standing and the operator's retry rewrites it, where the other order would
+	// claim the instance and lose a *no* to any error after it.
+	//
+	// ErrClaimed here is the NeedsSetup check above losing a race with another
+	// setup request, and it gets the same answer that check gives: the page is
+	// gone. A 500 would be technically honest and would tell whoever won nothing
+	// useful about an instance that is now claimed.
+	if h.updateCheckOffered() {
+		switch err := h.Instance.SetUpdateCheckAtSetup(r.Context(), updateCheck); {
+		case errors.Is(err, instance.ErrClaimed):
+			seeOther(w, r, "/login")
+			return
+		case err != nil:
+			h.webError(w, r, err)
+			return
+		}
 	}
 
 	if _, err := h.Auth.Register(r.Context(), auth.RegisterInput{

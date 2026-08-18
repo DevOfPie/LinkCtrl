@@ -26,8 +26,10 @@
 -- it did the moment before. That default is deliberate rather than cautious:
 -- the classifier this feature is built on has never had its false-positive rate
 -- measured, because until now nothing depended on it, and a person it
--- misclassifies has no way past the refusal until Phase 3. Whoever switches
--- blocking on takes that cost knowingly.
+-- misclassifies has no way past the refusal, and **nothing schedules one**.
+-- This read "until Phase 3" until M58; Phase 3 declined the redirect-path work
+-- area outright (D108), so the bypass lost its phase number rather than moving
+-- to the next one. Whoever switches blocking on takes that cost knowingly.
 ALTER TABLE links
     ADD COLUMN bot_blocking text NOT NULL DEFAULT 'inherit'
         CHECK (bot_blocking IN ('inherit', 'on', 'off'));

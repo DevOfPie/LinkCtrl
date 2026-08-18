@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -24,6 +25,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/invite"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
@@ -102,6 +104,19 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
+	// Account recovery (M51). Wired because the mailer above exists: with none
+	// its two endpoints refuse everything with 503, and the contract test would
+	// be replaying a refusal instead of the operation.
+	recoverySvc, err := recovery.NewService(pool, recovery.Config{
+		AppURL: cfg.AppOrigin(),
+		Hasher: authSvc.Hasher(),
+		Mail:   mailSvc,
+		Audit:  audit.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	inviteSvc, err := invite.NewService(pool, invite.Config{
 		AppURL:      cfg.AppOrigin(),
 		TTL:         168 * time.Hour,
@@ -136,6 +151,31 @@ func newAPI(t *testing.T) *apiFixture {
 	// spec operations nothing exercises.
 	instanceSvc := instance.NewService(pool, instance.Config{Audit: audit.NewService(pool)})
 
+	// Account deletion and erasure (M52). Wired for the same reason as the
+	// roster above: without it the endpoint is unregistered and the contract
+	// test reports a spec operation nothing exercises.
+	accountSvc, err := account.NewService(pool, account.Config{
+		Auth: authSvc, Audit: audit.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The second factor (M53). Wired with a real cipher for the reason the
+	// mailer above is real: with none, every enrolment endpoint answers 503 and
+	// the contract test would be replaying a refusal instead of the operation.
+	mfaCipher, err := auth.NewMFACipher(testMFAKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mfaSvc, err := auth.NewMFAService(pool, auth.MFAConfig{
+		Auth: authSvc, Cipher: mfaCipher, Issuer: "linkctrl.test",
+		Audit: audit.NewService(pool), Notify: notify.NewService(pool),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config:   cfg,
 		Health:   &httpx.Health{DB: pool},
@@ -148,6 +188,9 @@ func newAPI(t *testing.T) *apiFixture {
 		Invites:  inviteSvc,
 		Team:     teamSvc,
 		Signup:   signupSvc,
+		Recovery: recoverySvc,
+		Accounts: accountSvc,
+		MFA:      mfaSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 	}))

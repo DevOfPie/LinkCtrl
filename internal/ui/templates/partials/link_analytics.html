@@ -1,0 +1,57 @@
+{{define "link_analytics"}}
+{{- /* Everything this page reports rather than configures (M37, M41), gathered
+       into one partial by M47 and moved below the configuration.
+
+       It used to be the first thing on the page — three tiles, a chart, a world
+       map and six breakdowns, about 300px of reading before the first control —
+       so changing where a link points meant scrolling past a report nobody had
+       asked for. That is the complaint this milestone discharges, and the tiles
+       count as analytics: leaving a summary strip at the top would put the
+       reader back behind it.
+
+       M47 first moved them *below* the configuration; its reopening put them
+       behind the Analytics tab, where the recent-activity table joins them —
+       the same data one row at a time. The window links carry tab=analytics
+       for the reason GeoBase does: every one re-renders this page for the
+       sake of something this panel draws. */ -}}
+<div class="grid gap-4 sm:grid-cols-3">
+  <div class="rounded-lg border border-line bg-raised p-4">
+    <p class="text-sm text-muted">Clicks ({{.Days}}d)</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.Clicks}}</p>
+  </div>
+  <div class="rounded-lg border border-line bg-raised p-4">
+    <p class="text-sm text-muted">Unique visitors <span class="cursor-help text-subtle" title="{{.Stats.Caveat}}">ⓘ</span></p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.UniqueVisitors}}</p>
+  </div>
+  <div class="rounded-lg border border-line bg-raised p-4">
+    <p class="text-sm text-muted">Bot clicks</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums">{{fmtInt .Stats.Totals.BotClicks}}</p>
+  </div>
+</div>
+
+<div class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <div class="mb-4 flex items-center justify-between">
+    <h2 class="text-sm font-medium text-ink">Clicks per day</h2>
+    <div class="flex gap-1 text-sm">
+      {{range .Windows}}
+      <a href="/links/{{$.Link.ID}}?tab=analytics&amp;days={{.}}"
+         class="{{if eq . $.Days}}rounded-md bg-accent-soft px-2 py-1 font-medium text-accent-ink{{else}}rounded-md px-2 py-1 text-muted hover:bg-sunken{{end}}">{{.}}d</a>
+      {{end}}
+    </div>
+  </div>
+  {{template "series_chart" (barChart .Series 720 160)}}
+</div>
+
+<div class="mt-6">
+  {{template "worldmap" (dict "Map" .Map "Base" .GeoBase "List" .GeoList)}}
+</div>
+
+<div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  {{template "breakdown" (dict "Title" "Devices"   "Items" .Stats.Dimensions.device   "Total" .Stats.Totals.Clicks "Donut" .Donuts.device)}}
+  {{template "breakdown" (dict "Title" "Browsers"  "Items" .Stats.Dimensions.browser  "Total" .Stats.Totals.Clicks "Donut" .Donuts.browser)}}
+  {{template "breakdown" (dict "Title" "Operating systems" "Items" .Stats.Dimensions.os "Total" .Stats.Totals.Clicks "Donut" .Donuts.os)}}
+  {{template "breakdown" (dict "Title" "Referrers" "Items" .Stats.Dimensions.referrer "Total" .Stats.Totals.Clicks "Donut" .Donuts.referrer "Empty" "No referrers — direct traffic only")}}
+  {{template "breakdown" (dict "Title" "Languages" "Items" .Stats.Dimensions.language "Total" .Stats.Totals.Clicks "Donut" .Donuts.language)}}
+  {{template "breakdown" (dict "ID" "countries" "Title" "Countries" "Items" .Countries "Total" .Stats.Totals.Clicks "Donut" .Donuts.country "Empty" .GeoUnavailable)}}
+</div>
+{{end}}

@@ -56,7 +56,24 @@ CREATE TABLE qr_codes (
     id           uuid        PRIMARY KEY,
     link_id      uuid        NOT NULL REFERENCES links(id) ON DELETE CASCADE,
     workspace_id uuid        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    -- colours, logo reference, error-correction level, margin, shape
+    -- What this blob actually holds, as of M50.6 (0.3.0): `qr.Style` has six
+    -- fields — foreground, background, error-correction level, margin, scale,
+    -- and the output size in pixels that M49 added (D182).
+    --
+    -- **The level is a floor and a row usually carries none** (D184, D187). It
+    -- was written into every style until 0.3.0 because Normalize filled it in;
+    -- it no longer is, and what a code draws at is the stronger of this field
+    -- and the strongest level its own payload gets for free. A row that still
+    -- names `M` is a row an older release wrote, and it draws the same picture
+    -- as one naming nothing.
+    --
+    -- This line read "colours, logo reference, error-correction level, margin,
+    -- shape" from the first migration until M58. Two of those five were never
+    -- built into the blob and one still is not. **The logo is a `bytea` column**
+    -- (`logo`, 03800_qr_code_logo.sql, D134), not a reference in here — bytes
+    -- were chosen over a reference precisely so the row and the picture cannot
+    -- disagree. **Shape is not built and nothing schedules it**: the renderer
+    -- draws square modules only, and area F closed with 0.3.0.
     style        jsonb       NOT NULL DEFAULT '{}'::jsonb,
     -- Nothing increments this in Phase 1. See docs/data-model.md before
     -- writing a feature against it.
@@ -136,12 +153,18 @@ CREATE INDEX notifications_user_unread_idx
 --
 -- actor_user_id has no foreign key on purpose: an audit record must survive
 -- the deletion of the user it refers to, and actor_label is a snapshot so the
--- record stays readable. Erasure **would** overwrite the label rather than
--- delete the row, since audit records of actions are retained under legitimate
--- interest — that is the design, and it is not built: no erasure routine exists
--- anywhere in this product (F44). Written in the present tense here until 0.2.0,
--- which is one of the five sites that made an absent feature read as a shipped
--- one.
+-- record stays readable. Erasure overwrites the label rather than deleting the
+-- row, since audit records of actions are retained under legitimate interest —
+-- and since M52 that is what happens rather than what was designed for. The
+-- sweep sets actor_label to a constant tombstone and leaves actor_user_id alone
+-- (D148), so one erased actor's entries stay correlated by the id
+-- audit_logs_actor_idx already keys on and nothing is derived from anything.
+--
+-- Written in the present tense here from the first migration until 0.2.0, when
+-- no such routine existed at all (F44) — one of the five sites that made an
+-- absent feature read as a shipped one. The tense is the same now and the
+-- sentence is finally true; the history stays because a reader meeting it in an
+-- old checkout needs to know which of the two applied.
 CREATE TABLE audit_logs (
     id            uuid        NOT NULL,
     occurred_at   timestamptz NOT NULL,

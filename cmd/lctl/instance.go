@@ -143,8 +143,8 @@ func principalMove(args []string) error {
 Moves the instance principal onto an existing account, and off every account that
 holds it. Use it when the account that claimed this instance can no longer be
 reached: a forgotten password with no mailer configured, or a colleague who has
-left. There is no account recovery in this product, so losing that password and
-losing the principal are the same event.
+left. Password reset is delivered by email, so with no mailer there is nothing to
+deliver it with and losing that password is still losing the principal.
 
 It is a move and never an addition. Exactly one account holds the principal
 afterwards, checked before the change commits — an operation that could create a

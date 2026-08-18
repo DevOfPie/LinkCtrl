@@ -345,8 +345,47 @@ func (r *Resolver) fromDatabase(ctx context.Context, domainID uuid.UUID, alias, 
 		DomainBotPolicy: domain.DomainBots(row.BlockBots, row.BlockBotsEnforced),
 	}
 	r.attachRules(snap, row.Rules, alias)
+	r.attachCodes(snap, row.CodeSlugs, alias)
 	r.store(ctx, k, snap, now)
 	return snap, nil
+}
+
+// attachCodes fills in the link's QR code slugs (M50).
+//
+// Failure is dropped rather than returned, exactly as attachRules drops a
+// malformed condition and for the same reason: a link whose codes cannot be
+// decoded still has a destination, and a redirect is not the place to turn a
+// hand-written UPDATE into an outage. What it costs is attribution — every scan
+// resolves as the default code for as long as the payload is unreadable — which
+// is a number being wrong rather than a visitor going nowhere.
+//
+// Slugs that do not match the shape this product generates are dropped
+// individually. Nothing writes such a row through the service, so one is a row
+// somebody edited by hand; keeping it would let a value the redirect path never
+// validated reach `link_dimension_daily`, which is the single property this
+// whole parameter is bounded by.
+func (r *Resolver) attachCodes(snap *Snapshot, raw []byte, alias string) {
+	if len(raw) == 0 {
+		return
+	}
+	var slugs []string
+	if err := json.Unmarshal(raw, &slugs); err != nil {
+		r.log.Warn("discarding undecodable qr code slugs",
+			slog.String("alias", alias), slog.String("error", err.Error()))
+		return
+	}
+	if len(slugs) > domain.MaxQRCodesPerLink {
+		slugs = slugs[:domain.MaxQRCodesPerLink]
+	}
+	out := make([]string, 0, len(slugs))
+	for _, slug := range slugs {
+		if domain.ValidQRCodeSlug(slug) {
+			out = append(out, slug)
+		}
+	}
+	if len(out) > 0 {
+		snap.Codes = out
+	}
 }
 
 // queryRule is a rule as the SQL lateral spells it.

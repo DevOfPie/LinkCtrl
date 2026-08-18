@@ -162,4 +162,62 @@
     <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Change password</button>
   </form>
 </div>
+
+{{/* The second factor (M53). A summary and a link, not the controls: enrolment
+     is a sequence — scan, confirm, write the recovery codes down — and a
+     sequence sharing a page with six unrelated panels is one people abandon
+     halfway. /account/mfa is where it happens. */}}
+{{if .ShowMFA}}
+<div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Two-factor authentication</h2>
+  {{if not .MFA.Available}}
+  <p class="mb-4 text-sm text-muted">Not available on this instance: no <code class="font-mono text-xs">LINKCTRL_MFA_SECRET_KEY</code> is configured, so a second factor has nowhere safe to keep its secret.{{if .MFA.Enabled}} This account is enrolled, so sign in with a recovery code until the key is restored.{{end}}</p>
+  {{else if .MFA.Enabled}}
+  <p class="mb-4 text-sm text-muted">
+    On. Signing in needs a code from your authenticator app.
+    {{if eq .MFA.RecoveryCodesRemaining 0}}<span class="font-medium text-danger-ink">No recovery codes left</span> &mdash; issue a new set before you lose your phone.{{else}}{{.MFA.RecoveryCodesRemaining}} unused recovery {{if eq .MFA.RecoveryCodesRemaining 1}}code{{else}}codes{{end}}.{{end}}
+  </p>
+  {{else}}
+  <p class="mb-4 text-sm text-muted">Off. Add a code from an authenticator app on top of your password, so a stolen password is not enough on its own.</p>
+  {{end}}
+  <a href="/account/mfa" class="inline-block rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">{{if .MFA.Enabled}}Manage{{else}}Set it up{{end}}</a>
+</div>
+{{end}}
+
+{{if .ShowDelete}}
+<div class="mt-6 max-w-2xl rounded-lg border border-danger-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-danger-ink">Delete this account</h2>
+  <p class="mb-4 text-sm text-muted">
+    Permanent, and it takes effect the moment you confirm. Your sessions, API keys,
+    notifications and memberships go with it, and the address becomes available for
+    a new account. What other people can still see &mdash; the audit trail, and any
+    destination review you filed or decided &mdash; stays, because it is a record of
+    what happened rather than a record of you; your name and address are scrubbed out
+    of it by a job that runs <span class="font-medium text-ink">every hour</span>.
+  </p>
+  <p class="mb-4 text-sm text-warn-ink">
+    Your links are not deleted. They belong to the workspace, and it outlives you
+    leaving. If you are the only owner of an organization, hand it over or delete it
+    first &mdash; this will refuse until you have, and say which.
+  </p>
+  <form method="post" action="/account/delete" class="space-y-4">
+    <div>
+      <label for="delete_password" class="block text-sm font-medium text-ink">Your password</label>
+      <input id="delete_password" name="password" type="password" required autocomplete="current-password"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "delete_password")}}
+    </div>
+    <div>
+      <label for="delete_confirm" class="block text-sm font-medium text-ink">
+        Type <span class="font-mono text-xs">{{.DeleteConfirmation}}</span> to confirm
+      </label>
+      <input id="delete_confirm" name="confirm" type="text" required autocomplete="off"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{template "field_error" (index .FieldErrors "confirm")}}
+    </div>
+    <button type="submit"
+            class="rounded-md bg-danger px-4 py-2 text-sm font-medium text-on-accent hover:bg-danger-hover">Delete my account</button>
+  </form>
+</div>
+{{end}}
 {{end}}

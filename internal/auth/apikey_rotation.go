@@ -83,7 +83,38 @@ type RotateAPIKeyInput struct {
 	// DefaultRotationGrace; anything outside [MinRotationGrace, MaxRotationGrace]
 	// is refused.
 	Grace time.Duration
+	// Reach narrows the successor's tenancy, which is D87's second axis (M54).
+	//
+	// Three states, and they are not two: Unset copies the predecessor verbatim,
+	// which is what every rotation did before and what an unattended one still
+	// does. ReachOrganization pins an account-wide predecessor to the
+	// organization the request resolved into. ReachAccount asks for account-wide
+	// and is refused for a pinned predecessor, because a successor may not reach
+	// more organizations than the key it replaces.
+	//
+	// The refusal is why the third state exists at all. Leaving it out would make
+	// pinned-to-account-wide unaskable rather than refused, and "you cannot do
+	// this" is a thing an API should be able to say rather than a shape it
+	// declines to have a word for.
+	Reach RotationReach
 }
+
+// RotationReach is what a rotation asks of the successor's tenancy.
+type RotationReach int
+
+const (
+	// ReachUnchanged copies the predecessor's organization verbatim, NULL
+	// included. The zero value, because it is the rotation an unattended
+	// deployment makes.
+	ReachUnchanged RotationReach = iota
+	// ReachOrganization pins the successor to the organization this request
+	// resolved into. Narrowing, and available to an account-wide predecessor.
+	ReachOrganization
+	// ReachAccount asks for a successor that reaches every organization its
+	// owner belongs to. A no-op for a predecessor that is already account-wide,
+	// and refused for one that is pinned.
+	ReachAccount
+)
 
 // RotatedPredecessor is what the caller needs to know about the key it just
 // replaced: which one it was, and the deadline it now has.
@@ -115,6 +146,11 @@ type APIKeyRotation struct {
 	// the one that changed what the credential could do.
 	ScopesNarrowed bool
 	OrgWide        bool
+	// ReachNarrowed says the successor is pinned to one organization where the
+	// key it replaced was account-wide. Recorded beside ScopesNarrowed and for
+	// the same reason: the rotation worth finding afterwards is the one that
+	// changed what the credential could reach, and reach is now two axes.
+	ReachNarrowed bool
 }
 
 // APIKeyRevocation is one administrator stopping somebody else's key.
@@ -137,6 +173,12 @@ type APIKeyRevocation struct {
 type APIKeyAuditor interface {
 	RecordAPIKeyRotation(ctx context.Context, actor *Identity, ev APIKeyRotation) error
 	RecordAPIKeyRevocation(ctx context.Context, actor *Identity, ev APIKeyRevocation) error
+	// RecordAPIKeyReachRevocation is an administrator cutting their organization
+	// out of an account-wide key (M54). A separate method rather than a flag on
+	// the one above, because the two are different acts and the record is the
+	// only place the difference is visible: one destroyed a credential, the other
+	// narrowed somebody else's.
+	RecordAPIKeyReachRevocation(ctx context.Context, actor *Identity, ev APIKeyRevocation) error
 }
 
 // ErrAPIKeyAlreadyRotated is the refusal a second rotation of one key gets.
@@ -220,13 +262,18 @@ func (s *APIKeyService) Rotate(ctx context.Context, actor *Identity, in RotateAP
 		return nil, errs
 	}
 
+	organizationID, reachErrs := narrowReach(pred.OrganizationID, in.Reach, actor.OrgID)
+	if len(reachErrs) > 0 {
+		return nil, reachErrs
+	}
+
 	graceEnds := now.Add(grace)
 	successorID := uuid.Must(uuid.NewV7())
 
 	row, token, err := s.insertSuccessor(ctx, tx, dbgen.CreateAPIKeyParams{
 		ID:             successorID,
 		UserID:         pred.UserID,
-		OrganizationID: pred.OrganizationID,
+		OrganizationID: organizationID,
 		// Copied verbatim, NULL included. A rotation cannot move a key between
 		// workspaces and cannot turn a workspace-bound key into an
 		// organization-wide one — that choice is the creator's, and it is made
@@ -238,6 +285,44 @@ func (s *APIKeyService) Rotate(ctx context.Context, actor *Identity, in RotateAP
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// The predecessor's reach revocations, carried onto the successor before
+	// anything commits.
+	//
+	// Rotation is the one operation that produces a credential with the
+	// predecessor's authority under a new id, and a bar names an id — so until
+	// this, an administrator's reach revocation was escapable by the credential it
+	// was aimed at, using nothing but its own token. The copy is here rather than
+	// beside the audit record below because it is part of the successor being
+	// correct: a successor that exists for even one request without its
+	// predecessor's bars is the defect, and a failure has to take the whole
+	// rotation with it rather than be logged.
+	//
+	// A no-op in both pinned directions, and by data rather than by a branch —
+	// see the statement, which reads the successor's reach off the row rather
+	// than off `organizationID` here.
+	if err := q.CarryAPIKeyReachRevocations(ctx, dbgen.CarryAPIKeyReachRevocationsParams{
+		SuccessorID: successorID, PredecessorID: pred.ID,
+	}); err != nil {
+		return nil, fmt.Errorf("carry reach revocations to the successor: %w", err)
+	}
+
+	// Read back, inside the same transaction, because the response says what the
+	// successor is and the bars are part of that.
+	//
+	// The alternative — returning an empty array on the reasoning that a key
+	// minted a moment ago cannot have been barred — was what this did, and the
+	// statement above is precisely what makes it false. A caller that rotates and
+	// reads the answer would have been told its credential is unrestricted while
+	// the row saying otherwise had already been written by the same transaction,
+	// and would have had to call `GET /api/v1/api-keys` to find out. Read rather
+	// than assembled from what was just copied, for the reason the statement
+	// itself gives: the rows are the record, and the two pinned directions copy
+	// nothing by data rather than by a branch here.
+	carried, err := q.ListAPIKeyOrgRevocations(ctx, []uuid.UUID{successorID})
+	if err != nil {
+		return nil, fmt.Errorf("read the successor's carried reach revocations: %w", err)
 	}
 
 	n, err := q.MarkAPIKeyRotated(ctx, dbgen.MarkAPIKeyRotatedParams{
@@ -254,7 +339,10 @@ func (s *APIKeyService) Rotate(ctx context.Context, actor *Identity, in RotateAP
 	}
 
 	out := &RotatedAPIKey{
-		CreatedAPIKey: CreatedAPIKey{APIKeyInfo: keyInfo(row), Key: token},
+		CreatedAPIKey: CreatedAPIKey{
+			APIKeyInfo: keyInfo(row, barsByKey(carried)[successorID]),
+			Key:        token,
+		},
 		Predecessor: RotatedPredecessor{
 			ID: pred.ID, Prefix: pred.Prefix, StopsWorkingAt: graceEnds,
 		},
@@ -272,6 +360,7 @@ func (s *APIKeyService) Rotate(ctx context.Context, actor *Identity, in RotateAP
 			Scopes:         scopes,
 			ScopesNarrowed: len(scopes) < len(pred.Scopes),
 			OrgWide:        pred.WorkspaceID == nil,
+			ReachNarrowed:  pred.OrganizationID == nil && organizationID != nil,
 		}
 		if err := s.auditor.RecordAPIKeyRotation(ctx, actor, ev); err != nil {
 			s.log.Warn("api key rotated but the audit record was not written",
@@ -401,6 +490,54 @@ func narrowScopes(held, requested []string) ([]string, domain.ValidationErrors) 
 		}}
 	}
 	return out, nil
+}
+
+// narrowReach resolves the successor's organization against the predecessor's.
+//
+// **D87's rule, re-derived on a second axis** (M54). Rotation is authorized by
+// the key's own token and nothing else, which is only safe while a successor is
+// *identical or narrower*. Scopes were the whole of narrower while a key lived
+// in one organization; an account-wide key adds tenancy, and a rotation that
+// could widen it would be a credential granting itself reach into a tenant
+// nobody signed in to authorize.
+//
+// So: an account-wide key may rotate into a pinned one, and a pinned key may
+// not rotate into an account-wide one. The asymmetry is the whole rule, and it
+// is not symmetric because the two directions are not the same act — narrowing
+// is something a credential may do to itself, and widening is not.
+//
+// resolvedOrg is where *this request* landed, and it is the only organization a
+// rotation may pin to. It is not a parameter the caller supplies: an
+// account-wide key pinning itself to some other tenant would be choosing a reach
+// on the strength of a token that happens to be valid somewhere else, and the
+// authorization for the organization it is currently acting in is the request
+// itself.
+func narrowReach(
+	predecessor *uuid.UUID, want RotationReach, resolvedOrg uuid.UUID,
+) (*uuid.UUID, domain.ValidationErrors) {
+	switch want {
+	case ReachOrganization:
+		if predecessor != nil {
+			// Already pinned. Pinning it to the organization it is pinned to is the
+			// rotation it would have got by saying nothing, so it goes through
+			// rather than being refused for being redundant.
+			return predecessor, nil
+		}
+		org := resolvedOrg
+		return &org, nil
+	case ReachAccount:
+		if predecessor != nil {
+			return nil, domain.ValidationErrors{{
+				Field: "reach", Code: "would_widen",
+				Message: "this key is pinned to one organization, and a successor may not reach " +
+					"more organizations than the key it replaces; a session can mint an " +
+					"account-wide key",
+			}}
+		}
+		return nil, nil
+	default:
+		return predecessor, nil
+	}
 }
 
 // successorExpiry gives the successor the predecessor's **lifetime**, measured

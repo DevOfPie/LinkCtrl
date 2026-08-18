@@ -24,8 +24,11 @@
   </div>
 
   {{if .Map.Unavailable}}
-  {{- /* No GeoIP database. The map is not drawn at all, and the sentence is the
-         one the ranked list has always used — a world uniformly coloured
+  {{- /* Nothing resolved in this link's window and nothing that could resolve —
+         the caller sets this only when both are false (F160), not on the GeoIP
+         setting alone, and "nothing resolved" is per link and per window rather
+         than per instance (F195). The map is not drawn at all, and the sentence
+         is the one the ranked list has always used: a world uniformly coloured
          "unknown" would be a picture of nothing that looks like a picture of
          something. */ -}}
   <p class="text-sm text-subtle">{{.Map.Unavailable}}</p>

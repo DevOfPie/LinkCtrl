@@ -288,7 +288,8 @@ func TestBotBlockingRefusesBotsAndNobodyElse(t *testing.T) {
 			}
 			if got := f.statusOf("/"+alias, humanUA); got != tc.wantHuman {
 				t.Errorf("a browser got %d, want %d — a gate that refuses people "+
-					"is worse than no gate, and there is no way past it until Phase 3",
+					"is worse than no gate, and there is no way past it: no bypass "+
+					"is built and nothing schedules one (D108)",
 					got, tc.wantHuman)
 			}
 		})

@@ -1,127 +1,194 @@
 {{define "content"}}
-<div class="mb-6 flex items-baseline justify-between">
+{{/* Order on this page is the milestone (M46), so it is stated once here rather
+     than inferred from four separate comments.
+
+       1. the search box, and it is the first control inside <main>
+       2. the rest of the filters, behind one disclosure
+       3. creating a link, behind one disclosure, one action away
+       4. the list
+
+     It used to be 3, 1+2, 4, and the owner "accidentally clicked on the create a
+     link destination URL box instead of the search box a few times". The first
+     text input on a list page is where a hand goes, so the first text input is
+     now the one that searches the list.
+
+     Campaigns and Folders used to sit at the top right of this page as two text
+     links the owner had not noticed existed. They are the second chrome bar now,
+     drawn by the layout for every page whose Nav is "links"; partials/nav.html
+     carries the reasoning. */}}
+<div class="mb-6 flex flex-wrap items-baseline justify-between gap-3">
   <h1 class="text-xl font-semibold tracking-tight">Links</h1>
-  {{/* The tree lives on its own page rather than in the header. The top-level
-       nav holds exactly three destinations by decision (F6, F7), and folders
-       are read from here — which is where somebody is when they wonder where a
-       link went. */}}
-  <div class="flex items-baseline gap-4">
-    <a href="/campaigns" class="text-sm font-medium text-accent-ink hover:underline">Campaigns →</a>
-    <a href="/folders" class="text-sm font-medium text-accent-ink hover:underline">Folders →</a>
-  </div>
 </div>
 
 {{template "flash_ok" .Notice}}
 {{template "flash_error" .Error}}
 
+{{/* Six filter controls existed and the owner asked for "only 1-2 hot controls
+     on the page and a filter control that displays all the filter controls".
+     Search is the hot one and it is the only one — the walkthrough reached for
+     it by name and reached for nothing else in this bar, and the prescription
+     permits one. Filling the second slot would be a guess wearing evidence's
+     clothes.
+
+     Search stays outside the disclosure rather than being repeated inside it. A
+     second `name="search"` in the same form submits `?search=a&search=b` for one
+     parameter, and this milestone's claim is that the query parameters do not
+     change. With one hot control sitting against the disclosure's own summary,
+     both are on screen at once anyway, which is what the prescription is for.
+
+     A <details> and not a popover, which is what the header menus use. D24 chose
+     the Popover API there for one reason — Escape — because those are overlay
+     menus and M26.5 asked for light dismissal. This panel is in flow: it pushes
+     the list down instead of covering it, it is dismissed by the control that
+     opened it, and it needs no viewport-anchored geometry, which a top-layer
+     element mid-page would. Neither is a general rule about the other.
+
+     `open` is server-rendered when any hidden filter is set, so a filtered list
+     never hides why it is filtered. That is the whole risk of demoting five
+     controls and it is answered in markup rather than in a note. */}}
+{{$hidden := or (ne .Status "") (ne .Folder "") (ne .Campaign "") (ne .Domain "") (ne .Sort "newest")}}
+<form method="get" action="/links" class="mb-4"
+      hx-get="/links" hx-target="#links-table" hx-select="#links-table" hx-swap="outerHTML" hx-push-url="true">
+  <div class="flex flex-wrap items-center gap-3">
+    <input type="search" name="search" value="{{.Search}}" placeholder="Search links…"
+           aria-label="Search links"
+           hx-get="/links" hx-trigger="input changed delay:300ms" hx-include="closest form"
+           class="w-full min-w-0 rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none sm:w-64">
+    {{/* The one submit, and it is still here (D103 notwithstanding). The
+         dashboard requires JavaScript and that is written down — this button is
+         not a claim that it does not. It is a capability this page had before a
+         milestone about decluttering started moving its controls around, and
+         taking it away is a decision to put on its own rather than a side effect.
+
+         In the hot row rather than in the panel: a form control inside a closed
+         <details> is still submitted, so one button applies every filter. */}}
+    <noscript><button type="submit" class="shrink-0 rounded-md border border-line-strong px-3 py-1.5 text-sm">Filter</button></noscript>
+  </div>
+
+  <details class="mt-3"{{if $hidden}} open{{end}}>
+    <summary class="w-fit cursor-pointer rounded-md border border-line-strong px-3 py-1.5 text-sm text-ink hover:bg-surface">
+      Filters{{if $hidden}} <span class="font-medium text-accent-ink">· on</span>{{end}}
+    </summary>
+    <div class="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-line bg-sunken p-3">
+      <select name="status" aria-label="Status"
+              hx-get="/links" hx-trigger="change" hx-include="closest form"
+              class="min-w-0 rounded-md border border-line-strong px-2 py-1.5 text-sm">
+        <option value="" {{if eq .Status ""}}selected{{end}}>All statuses</option>
+        <option value="active" {{if eq .Status "active"}}selected{{end}}>Active</option>
+        <option value="archived" {{if eq .Status "archived"}}selected{{end}}>Archived</option>
+        <option value="expired" {{if eq .Status "expired"}}selected{{end}}>Expired</option>
+      </select>
+      {{/* The folder filter (M38). Drawn only when the workspace has folders: a
+           select whose every option is "All folders" is a control that can do
+           nothing. `none` is the links in no folder — a different question from
+           "no filter", and one an id cannot ask. */}}
+      {{if .FolderOptions}}
+      <select name="folder" hx-get="/links" hx-trigger="change" hx-include="closest form"
+              aria-label="Folder"
+              class="min-w-0 rounded-md border border-line-strong px-2 py-1.5 text-sm">
+        <option value="" {{if eq .Folder ""}}selected{{end}}>All folders</option>
+        <option value="none" {{if eq .Folder "none"}}selected{{end}}>No folder</option>
+        {{range .FolderOptions}}
+        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      {{end}}
+      {{/* The campaign filter (M41). Drawn only when the workspace has campaigns,
+           on the same terms and for the same reason the folder filter above is,
+           and spelling "no campaign" with the same `none` sentinel so the two
+           controls read the same way. */}}
+      {{if .CampaignOptions}}
+      <select name="campaign" hx-get="/links" hx-trigger="change" hx-include="closest form"
+              aria-label="Campaign"
+              class="min-w-0 rounded-md border border-line-strong px-2 py-1.5 text-sm">
+        <option value="" {{if eq .Campaign ""}}selected{{end}}>All campaigns</option>
+        <option value="none" {{if eq .Campaign "none"}}selected{{end}}>No campaign</option>
+        {{range .CampaignOptions}}
+        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+      {{end}}
+      {{/* The hostname filter (M40). Drawn only when the workspace can use more
+           than one, which on a default instance is never: a select whose only
+           option is "All hostnames" is a control that cannot change anything.
+           No "none" option, unlike folders — every link is on exactly one
+           hostname, so there is no third question to ask. */}}
+      {{if .DomainOptions}}
+      <select name="domain" hx-get="/links" hx-trigger="change" hx-include="closest form"
+              aria-label="Hostname"
+              class="min-w-0 rounded-md border border-line-strong px-2 py-1.5 text-sm">
+        <option value="" {{if eq .Domain ""}}selected{{end}}>All hostnames</option>
+        {{range .DomainOptions}}
+        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Hostname}}</option>
+        {{end}}
+      </select>
+      {{end}}
+      <select name="sort" aria-label="Sort"
+              hx-get="/links" hx-trigger="change" hx-include="closest form"
+              class="min-w-0 rounded-md border border-line-strong px-2 py-1.5 text-sm">
+        <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest first</option>
+        <option value="oldest" {{if eq .Sort "oldest"}}selected{{end}}>Oldest first</option>
+        <option value="clicks" {{if eq .Sort "clicks"}}selected{{end}}>Most clicks</option>
+      </select>
+    </div>
+  </details>
+</form>
+
 {{if and .Identity (.Identity.Can "links.create")}}
-<div class="mb-6 rounded-lg border border-line bg-raised p-6">
-  <h2 class="mb-4 text-sm font-medium text-ink">Create a link</h2>
-  <form method="post" action="/links" class="grid gap-4 sm:grid-cols-[1fr_12rem_auto]">
-    <div>
-      <label for="url" class="block text-sm font-medium text-ink">Destination URL</label>
-      <input id="url" name="url" type="url" required placeholder="https://example.com/page" value="{{.Form.URL}}"
-             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-      {{template "field_error" (index .FieldErrors "url")}}
-    </div>
-    <div>
-      <label for="alias" class="block text-sm font-medium text-ink">Alias <span class="text-subtle">(optional)</span></label>
-      <input id="alias" name="alias" type="text" placeholder="generated" value="{{.Form.Alias}}"
-             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-      {{template "field_error" (index .FieldErrors "alias")}}
-    </div>
-    <div class="flex items-end">
-      <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create</button>
-    </div>
-  </form>
-  {{/* The appeal, offered only after a low-confidence refusal (M31).
+{{/* Creating a link: demoted, not buried. One action from this page, in view
+     without scrolling, and no longer the thing a hand lands on when it meant to
+     search.
 
-       It is a separate form rather than a second button inside the one above,
-       because it posts somewhere else and must not carry the alias. The value it
-       carries is the destination the person typed, unrendered anywhere on this
-       page — the field above already holds it, and this input is `hidden`, so
-       nothing here turns a refused URL into something a browser resolves.
+     Open on its own when the last attempt failed. The handler re-renders this
+     page with FieldErrors, the typed values and — after a low-confidence
+     refusal — DisputeURL, all of which are inside this panel; a closed panel
+     would swallow every one of them and leave a page that had silently done
+     nothing. `open` is an attribute the server can write, which is why this is a
+     disclosure and not something that needs a script to reopen itself. */}}
+{{$openCreate := or .DisputeURL (index .FieldErrors "url") (index .FieldErrors "alias")}}
+<details class="mb-6 rounded-lg border border-line bg-raised"{{if $openCreate}} open{{end}}>
+  <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-ink">Create a link</summary>
+  <div class="border-t border-line p-4 sm:p-6">
+    <form method="post" action="/links" class="grid gap-4 sm:grid-cols-[1fr_12rem_auto]">
+      <div>
+        <label for="url" class="block text-sm font-medium text-ink">Destination URL</label>
+        <input id="url" name="url" type="url" required placeholder="https://example.com/page" value="{{.Form.URL}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "url")}}
+      </div>
+      <div>
+        <label for="alias" class="block text-sm font-medium text-ink">Alias <span class="text-subtle">(optional)</span></label>
+        <input id="alias" name="alias" type="text" placeholder="generated" value="{{.Form.Alias}}"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+        {{template "field_error" (index .FieldErrors "alias")}}
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Create</button>
+      </div>
+    </form>
+    {{/* The appeal, offered only after a low-confidence refusal (M31).
 
-       The other two tiers deliberately reach nothing: `.DisputeURL` is set only
-       when the reason code names the low-confidence tier, and dispute.File
-       re-derives the tier server-side anyway. */}}
-  {{if .DisputeURL}}
-  <form method="post" action="/disputes" class="mt-4 border-t border-line pt-4">
-    <input type="hidden" name="url" value="{{.DisputeURL}}">
-    <p class="text-sm text-muted">This instance refused that destination on a rule that can be wrong. You can ask the owner to look at it.</p>
-    <button type="submit" class="mt-2 rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-surface">Ask for a review</button>
-  </form>
-  {{end}}
-</div>
+         It is a separate form rather than a second button inside the one above,
+         because it posts somewhere else and must not carry the alias. The value it
+         carries is the destination the person typed, unrendered anywhere on this
+         page — the field above already holds it, and this input is `hidden`, so
+         nothing here turns a refused URL into something a browser resolves.
+
+         The other two tiers deliberately reach nothing: `.DisputeURL` is set only
+         when the reason code names the low-confidence tier, and dispute.File
+         re-derives the tier server-side anyway. */}}
+    {{if .DisputeURL}}
+    <form method="post" action="/disputes" class="mt-4 border-t border-line pt-4">
+      <input type="hidden" name="url" value="{{.DisputeURL}}">
+      <p class="text-sm text-muted">This instance refused that destination on a rule that can be wrong. You can ask the owner to look at it.</p>
+      <button type="submit" class="mt-2 rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-surface">Ask for a review</button>
+    </form>
+    {{end}}
+  </div>
+</details>
 {{end}}
 
-<div class="rounded-lg border border-line bg-raised p-6">
-  <form method="get" action="/links" class="mb-4 flex flex-wrap items-center gap-3"
-        hx-get="/links" hx-target="#links-table" hx-select="#links-table" hx-swap="outerHTML" hx-push-url="true">
-    <input type="search" name="search" value="{{.Search}}" placeholder="Search links…"
-           hx-get="/links" hx-trigger="input changed delay:300ms" hx-include="closest form"
-           class="w-64 rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none">
-    <select name="status" hx-get="/links" hx-trigger="change" hx-include="closest form"
-            class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
-      <option value="" {{if eq .Status ""}}selected{{end}}>All statuses</option>
-      <option value="active" {{if eq .Status "active"}}selected{{end}}>Active</option>
-      <option value="archived" {{if eq .Status "archived"}}selected{{end}}>Archived</option>
-      <option value="expired" {{if eq .Status "expired"}}selected{{end}}>Expired</option>
-    </select>
-    {{/* The folder filter (M38). Drawn only when the workspace has folders: a
-         select whose every option is "All folders" is a control that can do
-         nothing. `none` is the links in no folder — a different question from
-         "no filter", and one an id cannot ask. */}}
-    {{if .FolderOptions}}
-    <select name="folder" hx-get="/links" hx-trigger="change" hx-include="closest form"
-            aria-label="Folder"
-            class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
-      <option value="" {{if eq .Folder ""}}selected{{end}}>All folders</option>
-      <option value="none" {{if eq .Folder "none"}}selected{{end}}>No folder</option>
-      {{range .FolderOptions}}
-      <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
-      {{end}}
-    </select>
-    {{end}}
-    {{/* The campaign filter (M41). Drawn only when the workspace has campaigns,
-         on the same terms and for the same reason the folder filter above is,
-         and spelling "no campaign" with the same `none` sentinel so the two
-         controls read the same way. */}}
-    {{if .CampaignOptions}}
-    <select name="campaign" hx-get="/links" hx-trigger="change" hx-include="closest form"
-            aria-label="Campaign"
-            class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
-      <option value="" {{if eq .Campaign ""}}selected{{end}}>All campaigns</option>
-      <option value="none" {{if eq .Campaign "none"}}selected{{end}}>No campaign</option>
-      {{range .CampaignOptions}}
-      <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
-      {{end}}
-    </select>
-    {{end}}
-    {{/* The hostname filter (M40). Drawn only when the workspace can use more
-         than one, which on a default instance is never: a select whose only
-         option is "All hostnames" is a control that cannot change anything.
-         No "none" option, unlike folders — every link is on exactly one
-         hostname, so there is no third question to ask. */}}
-    {{if .DomainOptions}}
-    <select name="domain" hx-get="/links" hx-trigger="change" hx-include="closest form"
-            aria-label="Hostname"
-            class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
-      <option value="" {{if eq .Domain ""}}selected{{end}}>All hostnames</option>
-      {{range .DomainOptions}}
-      <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Hostname}}</option>
-      {{end}}
-    </select>
-    {{end}}
-    <select name="sort" hx-get="/links" hx-trigger="change" hx-include="closest form"
-            class="rounded-md border border-line-strong px-2 py-1.5 text-sm">
-      <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>Newest first</option>
-      <option value="oldest" {{if eq .Sort "oldest"}}selected{{end}}>Oldest first</option>
-      <option value="clicks" {{if eq .Sort "clicks"}}selected{{end}}>Most clicks</option>
-    </select>
-    <noscript><button type="submit" class="rounded-md border border-line-strong px-3 py-1.5 text-sm">Filter</button></noscript>
-  </form>
-
+<div class="rounded-lg border border-line bg-raised p-4 sm:p-6">
   {{template "links_table" .}}
 </div>
 {{end}}

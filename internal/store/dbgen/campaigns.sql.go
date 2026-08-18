@@ -12,6 +12,119 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearDefaultQRCode = `-- name: ClearDefaultQRCode :execrows
+
+UPDATE qr_codes SET is_default = false, updated_at = now()
+ WHERE link_id = $1 AND workspace_id = $2 AND is_default
+`
+
+type ClearDefaultQRCodeParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// Moving the flag an untagged scan resolves through takes two statements and one
+// transaction (M50's reopening, D183).
+//
+// **Two rather than one, and the reason is the index rather than taste.**
+// `UPDATE … SET is_default = (id = $3)` over the whole link reads as the obvious
+// single statement, and `qr_codes_link_default_key` is a plain unique index,
+// which Postgres checks as each row version is written rather than at the end of
+// the statement. Such an update collides with itself whenever the scan reaches
+// the incoming default before the outgoing one — the same failure
+// `UPDATE t SET n = n + 1` has on a unique column. A partial index cannot be
+// declared DEFERRABLE, because only a constraint can and a constraint cannot be
+// partial, so the ordering is made explicit instead: clear, then set, inside the
+// transaction the service opens.
+//
+// The window between them holds a link with no default at all. It is invisible:
+// the transaction has not committed, so no reader outside it sees either write,
+// and inside it the only reader is the second statement.
+// The first half. Takes the flag off whichever row holds it, or off nothing.
+func (q *Queries) ClearDefaultQRCode(ctx context.Context, arg ClearDefaultQRCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearDefaultQRCode, arg.LinkID, arg.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearOrphanedQRCodeLogos = `-- name: ClearOrphanedQRCodeLogos :execrows
+WITH doomed AS (
+    SELECT q.id
+      FROM qr_codes q
+      JOIN links l ON l.id = q.link_id
+     WHERE q.logo IS NOT NULL
+       AND l.deleted_at IS NOT NULL
+     ORDER BY q.id
+     LIMIT $1::int
+       FOR UPDATE OF q SKIP LOCKED
+)
+UPDATE qr_codes SET logo = NULL, updated_at = now()
+ WHERE id IN (SELECT id FROM doomed)
+`
+
+// The orphan sweep, run hourly by the maintenance pass.
+//
+// **What is orphaned under a column, and what is not.** Removing a code, a
+// workspace or an organization takes its logos by cascade, and replacing one is
+// the single UPDATE above, so none of those can leave bytes behind. Deleting a
+// *link* can, and does: a link is soft-deleted with a purge deadline, so its
+// `qr_codes` rows survive the whole trash window while every read in this file
+// filters them out with `l.deleted_at IS NULL`. Those bytes are unreachable
+// through the product — the endpoint that would clear them answers 404 for a
+// deleted link — and they sit in the row and in every `pg_dump` until the purge
+// fires, which for a large backlog is several hourly runs away and for a row
+// the purge skips is longer still.
+//
+// This is what makes m50.5.md's claim *deleting the link removes its artefacts*
+// true rather than merely intended. The row itself is left alone: the trash
+// window exists so a link can be brought back by hand, and the artefact is the
+// thing deletion was asked to remove.
+//
+// Idempotent by construction — a second run matches nothing, because `logo IS
+// NOT NULL` is the predicate. Bounded like every other pass in that job, and
+// SKIP LOCKED so it can never block, or be blocked by, a concurrent write to
+// the same code.
+func (q *Queries) ClearOrphanedQRCodeLogos(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, clearOrphanedQRCodeLogos, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearQRCodeLogo = `-- name: ClearQRCodeLogo :execrows
+UPDATE qr_codes SET logo = NULL, style = $3, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2
+`
+
+type ClearQRCodeLogoParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+}
+
+// Removes the image, and the row stays: a code without a logo is a code.
+//
+// NULL rather than an empty bytea, because the schema has one spelling for "no
+// logo" and two would disagree the first time somebody wrote a zero-length one.
+//
+// **The style goes with it, in this statement rather than a second one**
+// (M50.6's second reopening). The upload forces error correction to H and the
+// removal puts it back, which is a style write — and a style write of its own
+// would be an upsert, so a `DELETE` landing between the two would find no row to
+// conflict with and **insert a fresh code**, slug and all. One statement keyed on
+// the id cannot do that: a row that is gone updates nothing. The caller passes
+// the style it read, unchanged, for a code that had no logo to begin with.
+func (q *Queries) ClearQRCodeLogo(ctx context.Context, arg ClearQRCodeLogoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearQRCodeLogo, arg.ID, arg.WorkspaceID, arg.Style)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countCampaigns = `-- name: CountCampaigns :one
 SELECT count(*) FROM campaigns
 WHERE workspace_id = $1 AND deleted_at IS NULL
@@ -19,6 +132,24 @@ WHERE workspace_id = $1 AND deleted_at IS NULL
 
 func (q *Queries) CountCampaigns(ctx context.Context, workspaceID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countCampaigns, workspaceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countQRCodes = `-- name: CountQRCodes :one
+SELECT count(*) FROM qr_codes WHERE link_id = $1 AND workspace_id = $2
+`
+
+type CountQRCodesParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// What domain.MaxQRCodesPerLink is checked against, the way campaign creation
+// checks CountCampaigns.
+func (q *Queries) CountQRCodes(ctx context.Context, arg CountQRCodesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countQRCodes, arg.LinkID, arg.WorkspaceID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -103,19 +234,28 @@ func (q *Queries) DeleteCampaign(ctx context.Context, arg DeleteCampaignParams) 
 	return result.RowsAffected(), nil
 }
 
-const deleteQRCode = `-- name: DeleteQRCode :execrows
-DELETE FROM qr_codes WHERE link_id = $1 AND workspace_id = $2
+const deleteQRCodeByID = `-- name: DeleteQRCodeByID :execrows
+DELETE FROM qr_codes WHERE id = $1 AND workspace_id = $2
 `
 
-type DeleteQRCodeParams struct {
-	LinkID      uuid.UUID
+type DeleteQRCodeByIDParams struct {
+	ID          uuid.UUID
 	WorkspaceID uuid.UUID
 }
 
-// Returns the link's code to the default style. A hard delete, because a style
-// row holds nothing but the preference being withdrawn.
-func (q *Queries) DeleteQRCode(ctx context.Context, arg DeleteQRCodeParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteQRCode, arg.LinkID, arg.WorkspaceID)
+// Removes one code. Scoped by workspace rather than by link, because the id is
+// already unique and the service has resolved the link before it gets here; the
+// workspace column is the tenancy check.
+//
+// **`AND slug <> ”` is gone** (D183). It was what refused to delete the default
+// code, back when the default *was* the empty slug; the refusal that replaces it
+// is the service's, and it is about arithmetic rather than identity — a link's
+// last code cannot be removed, whichever one it is.
+//
+// The logo goes with the row, which is the whole of what D134 bought: no second
+// statement, and no way for the two to come apart.
+func (q *Queries) DeleteQRCodeByID(ctx context.Context, arg DeleteQRCodeByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteQRCodeByID, arg.ID, arg.WorkspaceID)
 	if err != nil {
 		return 0, err
 	}
@@ -154,23 +294,57 @@ func (q *Queries) GetCampaign(ctx context.Context, arg GetCampaignParams) (Campa
 	return i, err
 }
 
-const getQRCode = `-- name: GetQRCode :one
-SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at FROM qr_codes q
+const getDefaultQRCode = `-- name: GetDefaultQRCode :one
+SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at,
+       q.label, q.slug, q.is_default, (q.logo IS NOT NULL)::boolean AS has_logo
+  FROM qr_codes q
 JOIN links l ON l.id = q.link_id
 WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL
+  AND (q.is_default OR q.slug = '')
+ORDER BY q.is_default DESC
+LIMIT 1
 `
 
-type GetQRCodeParams struct {
+type GetDefaultQRCodeParams struct {
 	LinkID      uuid.UUID
 	WorkspaceID uuid.UUID
 }
 
-// The stored style for a link's code, or no rows for a link that has never been
-// styled. No rows is not an error: it means the default style, which is what
-// every link's code is drawn with until somebody changes it.
-func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error) {
-	row := q.db.QueryRow(ctx, getQRCode, arg.LinkID, arg.WorkspaceID)
-	var i QrCode
+type GetDefaultQRCodeRow struct {
+	ID          uuid.UUID
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	IsDefault   bool
+	HasLogo     bool
+}
+
+// The code an untagged scan resolves through (M50's reopening, D183).
+//
+// One flagged row at most, which `qr_codes_link_default_key` (04400) is what
+// makes true: a partial unique index over `link_id WHERE is_default`. No rows
+// means the link's default code has never been written down — the synthesised
+// default D139 describes — and the service answers for it at the product style
+// rather than reporting an absence.
+//
+// **The empty slug is a fallback rather than the answer, and it is the second
+// half of what makes this migration safe.** 03700's identity was `slug = ”`,
+// and a row can still arrive carrying it and not the flag: written by the
+// previous release during a rolling deploy, when `is_default` is a column it
+// does not know about, or written by hand. Reading the flag alone would report
+// such a link as having no default at all, and the next style write would then
+// insert a second unnamed row against `qr_codes_link_slug_key`. Preferring the
+// flag and falling back to the empty slug costs one ORDER BY and makes both
+// spellings of the same fact resolve to the same row. `LIMIT 1` because the two
+// can name different rows only on a link that has more than one code, where the
+// empty slug does not occur at all.
+func (q *Queries) GetDefaultQRCode(ctx context.Context, arg GetDefaultQRCodeParams) (GetDefaultQRCodeRow, error) {
+	row := q.db.QueryRow(ctx, getDefaultQRCode, arg.LinkID, arg.WorkspaceID)
+	var i GetDefaultQRCodeRow
 	err := row.Scan(
 		&i.ID,
 		&i.LinkID,
@@ -178,8 +352,111 @@ func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, e
 		&i.Style,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Label,
+		&i.Slug,
+		&i.IsDefault,
+		&i.HasLogo,
 	)
 	return i, err
+}
+
+const getQRCode = `-- name: GetQRCode :one
+
+SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at,
+       q.label, q.slug, q.is_default, (q.logo IS NOT NULL)::boolean AS has_logo
+  FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.slug = $3 AND l.deleted_at IS NULL
+`
+
+type GetQRCodeParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Slug        string
+}
+
+type GetQRCodeRow struct {
+	ID          uuid.UUID
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	IsDefault   bool
+	HasLogo     bool
+}
+
+// **`q.*` is gone from the four reads below, and that is M50.5 rather than
+// style.** *(Three when M50.5 wrote this; `GetDefaultQRCode` is D183's, and it
+// carries the same explicit list for the same reason.)* `qr_codes` now carries a `logo bytea` (03800, D134) bounded at
+// qr.MaxLogoStoredBytes — a little over a megabyte a row — and a link may hold
+// domain.MaxQRCodesPerLink of them. A star projection would fetch every one of
+// those bytes to draw a list of names, so the reads carry an explicit column
+// list and report the logo as the one fact a reader of the list needs:
+// **whether there is one**. `logo IS NOT NULL` is answered from the row's TOAST
+// pointer without detoasting the value, so asking costs nothing.
+//
+// The bytes themselves are read by nothing here. Nothing in M50.5 serves a
+// stored logo back — the two operations are set and clear — and M50.6, which
+// composites one into a picture, is where a query that reads them belongs.
+// One code of a link's, by slug. No rows means the code does not exist, and the
+// service reports that.
+//
+// **The default code is not reachable here and that is the point** (D183). It
+// used to be `slug = ”`; it is now whichever row carries `is_default`, which is
+// GetDefaultQRCode's job, because a caller that wanted "the default" and passed
+// the empty string would silently match nothing at all now that no row holds it.
+func (q *Queries) GetQRCode(ctx context.Context, arg GetQRCodeParams) (GetQRCodeRow, error) {
+	row := q.db.QueryRow(ctx, getQRCode, arg.LinkID, arg.WorkspaceID, arg.Slug)
+	var i GetQRCodeRow
+	err := row.Scan(
+		&i.ID,
+		&i.LinkID,
+		&i.WorkspaceID,
+		&i.Style,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Label,
+		&i.Slug,
+		&i.IsDefault,
+		&i.HasLogo,
+	)
+	return i, err
+}
+
+const getQRCodeLogo = `-- name: GetQRCodeLogo :one
+SELECT q.logo
+  FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.slug = $3 AND l.deleted_at IS NULL
+`
+
+type GetQRCodeLogoParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Slug        string
+}
+
+// The bytes, for the one thing they are for (M50.6).
+//
+// **The only read in this file that projects the column**, and it is separate
+// from GetQRCode rather than folded into it for exactly the reason the three
+// reads above stopped saying `q.*`: drawing a list of twenty names must not
+// fetch twenty images. This is called once, by a surface that is about to
+// composite one code's logo into one picture, and only for a code whose
+// `has_logo` already said there is something to fetch.
+//
+// NULL comes back for a code with no logo, which the service reads as "nothing
+// to draw" rather than as an error: `has_logo` and this can disagree by exactly
+// one concurrent clear, and the honest answer to that race is the picture
+// without the logo.
+func (q *Queries) GetQRCodeLogo(ctx context.Context, arg GetQRCodeLogoParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getQRCodeLogo, arg.LinkID, arg.WorkspaceID, arg.Slug)
+	var logo []byte
+	err := row.Scan(&logo)
+	return logo, err
 }
 
 const listCampaigns = `-- name: ListCampaigns :many
@@ -252,6 +529,244 @@ func (q *Queries) ListCampaigns(ctx context.Context, workspaceID uuid.UUID) ([]L
 		return nil, err
 	}
 	return items, nil
+}
+
+const listQRCodes = `-- name: ListQRCodes :many
+SELECT q.id, q.link_id, q.workspace_id, q.style, q.created_at, q.updated_at,
+       q.label, q.slug, q.is_default, (q.logo IS NOT NULL)::boolean AS has_logo
+  FROM qr_codes q
+JOIN links l ON l.id = q.link_id
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND l.deleted_at IS NULL
+ORDER BY lower(q.label), q.id
+`
+
+type ListQRCodesParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+type ListQRCodesRow struct {
+	ID          uuid.UUID
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	IsDefault   bool
+	HasLogo     bool
+}
+
+// Every code a link carries (M50), in alphabetical order by name.
+//
+// Unpaginated, and bounded instead by domain.MaxQRCodesPerLink, which is the
+// same trade ListCampaigns makes: the cap is small enough that a page of them is
+// the whole set, and a pager over a list that cannot exceed it would be a
+// control nobody ever operates.
+//
+// **The default no longer leads, and that reverses what this comment argued**
+// (M50.8). The key was `NOT (is_default OR slug = ”)` — false before true, so
+// the flag-holder led whatever order the rest were created in — and the defence
+// written here was that *"the list re-orders when the reader moves it, which is
+// the visible half of what setting a default does"*. The owner reported the
+// other half of that: *"Selecting a different default code re-orders the list of
+// codes which can make it seem like the selection didn't change."* The argument
+// is answered rather than withdrawn. M50.7 put a filled icon on the row that
+// holds the flag, so being visible is now the icon's job; the sort was carrying
+// it as a side effect, and carrying it was what made the change look like
+// nothing had happened.
+//
+// `lower(q.label)` with `q.id` behind it, which is exactly `ORDER BY
+// lower(c.name), c.id` at ListCampaigns above: one collation for one product,
+// and a tie-break so two codes sharing a name have a stable order rather than
+// whatever the plan returns. An unnamed code sorts first, which is where the
+// default of a link nobody has named codes on already was.
+//
+// **Nothing may read position 0 as the default any more.** link.ListQRCodes and
+// analytics.qrCodeSplit both did — `!rows[0].IsDefault && rows[0].Slug != ""`
+// as the test for "no row holds the flag" — and both scan every row since this
+// milestone. The flag is a column; it was never a position.
+func (q *Queries) ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]ListQRCodesRow, error) {
+	rows, err := q.db.Query(ctx, listQRCodes, arg.LinkID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQRCodesRow{}
+	for rows.Next() {
+		var i ListQRCodesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LinkID,
+			&i.WorkspaceID,
+			&i.Style,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Label,
+			&i.Slug,
+			&i.IsDefault,
+			&i.HasLogo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markDefaultQRCode = `-- name: MarkDefaultQRCode :execrows
+UPDATE qr_codes SET is_default = true, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2
+`
+
+type MarkDefaultQRCodeParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+}
+
+// The second half, and never run on its own: without the clear before it, it is
+// the collision the comment above describes.
+func (q *Queries) MarkDefaultQRCode(ctx context.Context, arg MarkDefaultQRCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markDefaultQRCode, arg.ID, arg.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const nameQRCode = `-- name: NameQRCode :execrows
+UPDATE qr_codes SET slug = $3, is_default = true, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2 AND slug = ''
+`
+
+type NameQRCodeParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Slug        string
+}
+
+// Gives a slug to the one code that may not have one (M50's reopening, D183).
+//
+// A link's only code carries no slug: there is nothing to tell it apart from,
+// and handing one out while writing a style would change what a picture says.
+// When a second code appears the first one needs a tag, and this is the
+// statement that writes it.
+//
+// **`AND slug = ”` is what makes it structurally incapable of a rename.** A
+// slug is printed, so moving one breaks every copy already in the world —
+// UpdateQRCodeLabel says so above and this is the same rule enforced by the
+// WHERE clause rather than by the caller. Naming a code that has no name is not
+// moving anything: nothing printed carries the value being replaced, because
+// there was no value.
+//
+// **`is_default = true` goes with the slug, and it is the one statement in this
+// file that sets the flag without clearing another.** The row this reaches is
+// whichever row GetDefaultQRCode answered with, and that read falls back to the
+// empty slug for a row the flag never reached — one written by the previous
+// release during a rolling deploy, where `is_default` is a column it does not
+// know about. Taking the empty slug off such a row without putting the flag on
+// it would leave the link matching neither half of `(is_default OR slug = ”)`:
+// no default at all, a phantom code synthesised into every list and breakdown,
+// and the untagged `qr` bucket no longer folding onto the code every already-
+// printed picture of this link resolves through. The empty slug and the flag are
+// two spellings of the same fact, so the statement that removes one writes the
+// other.
+//
+// Against `qr_codes_link_default_key` this is safe by the same read: it runs
+// only on a row carrying the empty slug, and GetDefaultQRCode orders the flag
+// first, so a link with some *other* row flagged never returns this row to be
+// named. What the read cannot rule out is the flag moving between it and this
+// write, which is a unique violation and is the caller's to answer — CreateQRCode
+// re-reads the winner rather than failing over it.
+func (q *Queries) NameQRCode(ctx context.Context, arg NameQRCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, nameQRCode, arg.ID, arg.WorkspaceID, arg.Slug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const oldestQRCode = `-- name: OldestQRCode :one
+SELECT q.id, q.slug
+  FROM qr_codes q
+WHERE q.link_id = $1 AND q.workspace_id = $2 AND q.id <> $3
+ORDER BY q.created_at, q.id
+LIMIT 1
+`
+
+type OldestQRCodeParams struct {
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	ID          uuid.UUID
+}
+
+type OldestQRCodeRow struct {
+	ID   uuid.UUID
+	Slug string
+}
+
+// The code that has existed longest, which is what a removed default promotes to
+// (M50's reopening).
+//
+// `created_at, id` is the order ResolveAliasForRedirect enumerates codes in, and
+// the oldest code is the one whose pictures have been in the world longest —
+// which is what makes it the right one to inherit every untagged scan.
+//
+// **The rule is unchanged and the sentence that explained it is** (M50.8). This
+// comment used to add *"so the promoted code is the one at the top of the list
+// the reader is looking at"*, which was true while ListQRCodes ordered by
+// creation. That list is alphabetical now, so the promoted code is wherever its
+// name puts it. D183 chose the oldest and nothing here reverses that; what went
+// is a claim about where the reader's eye lands, which had stopped being true.
+//
+// Excluding a row by id rather than filtering on
+// `is_default`, because the caller runs this *after* deleting the flag-holder in
+// the same transaction and inside it that row is already gone — the exclusion is
+// what makes the statement correct if it is ever called before one.
+func (q *Queries) OldestQRCode(ctx context.Context, arg OldestQRCodeParams) (OldestQRCodeRow, error) {
+	row := q.db.QueryRow(ctx, oldestQRCode, arg.LinkID, arg.WorkspaceID, arg.ID)
+	var i OldestQRCodeRow
+	err := row.Scan(&i.ID, &i.Slug)
+	return i, err
+}
+
+const setQRCodeLogo = `-- name: SetQRCodeLogo :execrows
+
+UPDATE qr_codes SET logo = $3, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2
+`
+
+type SetQRCodeLogoParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Logo        []byte
+}
+
+// --- QR logos (M50.5) --------------------------------------------------------
+// Stores the re-encoded image against one code.
+//
+// **One statement, so setting and replacing are the same operation and neither
+// has a gap in it.** A logo that replaced another leaves nothing behind to
+// collect: the previous value is overwritten by this write rather than deleted
+// by a second one, which is the property the storage decision was chosen for
+// (D134) and the reason "replacing removes the artefact it replaced" needs no
+// code of its own.
+//
+// The bytes are already bounded — the request body by http.MaxBytesReader, the
+// decode by qr.MaxDecodedLogoPixels, and this value by qr.MaxLogoStoredBytes,
+// which internal/qr enforces rather than assumes. Since D180, qr.MaxLogoPixels
+// bounds the *stored* artefact alone and refuses nothing: an image above it is
+// resampled down to it before it reaches this statement.
+func (q *Queries) SetQRCodeLogo(ctx context.Context, arg SetQRCodeLogoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setQRCodeLogo, arg.ID, arg.WorkspaceID, arg.Logo)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const unassignCampaignLinks = `-- name: UnassignCampaignLinks :execrows
@@ -337,31 +852,84 @@ func (q *Queries) UpdateCampaign(ctx context.Context, arg UpdateCampaignParams) 
 	return i, err
 }
 
+const updateQRCodeLabel = `-- name: UpdateQRCodeLabel :execrows
+UPDATE qr_codes SET label = $3, updated_at = now()
+ WHERE id = $1 AND workspace_id = $2
+`
+
+type UpdateQRCodeLabelParams struct {
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Label       string
+}
+
+// Renames one code. The slug is untouched on purpose: it is printed, and a
+// rename that moved it would break every copy already in the world.
+func (q *Queries) UpdateQRCodeLabel(ctx context.Context, arg UpdateQRCodeLabelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateQRCodeLabel, arg.ID, arg.WorkspaceID, arg.Label)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertQRCode = `-- name: UpsertQRCode :one
-INSERT INTO qr_codes (id, link_id, workspace_id, style)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (link_id) DO UPDATE
+INSERT INTO qr_codes (id, link_id, workspace_id, slug, label, style, is_default)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (link_id, slug) DO UPDATE
    SET style = EXCLUDED.style, updated_at = now()
-RETURNING id, link_id, workspace_id, style, created_at, updated_at
+RETURNING id, link_id, workspace_id, style, created_at, updated_at,
+          label, slug, is_default, (logo IS NOT NULL)::boolean AS has_logo
 `
 
 type UpsertQRCodeParams struct {
 	ID          uuid.UUID
 	LinkID      uuid.UUID
 	WorkspaceID uuid.UUID
+	Slug        string
+	Label       string
 	Style       []byte
+	IsDefault   bool
 }
 
-// One row per link, which qr_codes_link_key (02700) is what makes true. Without
-// the unique index this is two concurrent inserts and a link with two styles.
-func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error) {
+type UpsertQRCodeRow struct {
+	ID          uuid.UUID
+	LinkID      uuid.UUID
+	WorkspaceID uuid.UUID
+	Style       []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Label       string
+	Slug        string
+	IsDefault   bool
+	HasLogo     bool
+}
+
+// One row per (link, slug), which qr_codes_link_slug_key (03700) is what makes
+// true. Without the unique index this is two concurrent inserts and a link with
+// two codes answering to one name.
+//
+// The label is not in the DO UPDATE list. This statement is how a *style* is
+// written, and a style write must not silently rename the code it is drawn for;
+// UpdateQRCodeLabel is the operation that renames one. **Nor is the logo**, for
+// the same reason and with more at stake: restyling a code must not throw away
+// the image somebody uploaded to it, and the insert branch leaves the column at
+// its NULL default because a code that has just come into being has no logo.
+// `is_default` is not in the DO UPDATE list either, and for the strongest of the
+// three reasons: which code an untagged scan resolves through is not something a
+// style write may move. ClearDefaultQRCode and MarkDefaultQRCode are the pair
+// that moves it, and they are the only pair that does.
+func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (UpsertQRCodeRow, error) {
 	row := q.db.QueryRow(ctx, upsertQRCode,
 		arg.ID,
 		arg.LinkID,
 		arg.WorkspaceID,
+		arg.Slug,
+		arg.Label,
 		arg.Style,
+		arg.IsDefault,
 	)
-	var i QrCode
+	var i UpsertQRCodeRow
 	err := row.Scan(
 		&i.ID,
 		&i.LinkID,
@@ -369,6 +937,10 @@ func (q *Queries) UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrC
 		&i.Style,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Label,
+		&i.Slug,
+		&i.IsDefault,
+		&i.HasLogo,
 	)
 	return i, err
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -94,6 +95,38 @@ func demoCoverage() []demoFeature {
 			Shows: "the link list, which is the first page anybody opens",
 		},
 		{
+			// The dashboard's *Recent links* is `ORDER BY created_at DESC LIMIT 5`
+			// over the workspace a sign-in lands in, and for five milestones it
+			// was five rows reading zero clicks on an instance holding 1.9 million
+			// of them (F165). Exactly five links carried the instant of the seed —
+			// the four gated ones and the one on the custom hostname, all created
+			// by the Phase 2 seeder, which backdated nothing and generated no
+			// traffic — and a limit of five made those five the whole list.
+			//
+			// Shaped as *the newest N must include one that has been clicked*
+			// rather than as a count, because the count was never the problem: the
+			// query is right and the counter is not stale. What was wrong is which
+			// rows reach the top of it, and this is the smallest claim that
+			// notices. It says nothing about which links they are, so a milestone
+			// that adds a link is free to change the answer and not this row.
+			Milestone: "M8", Feature: "A recently-created link that has been clicked",
+			Query: `SELECT count(*) FROM (
+			              SELECT l.click_count
+			                FROM links l
+			               WHERE l.workspace_id = (SELECT id FROM workspaces
+			                                        WHERE organization_id = $1
+			                                          AND deleted_at IS NULL
+			                                        ORDER BY created_at, id LIMIT 1)
+			                 AND l.deleted_at IS NULL
+			               ORDER BY l.created_at DESC, l.id DESC
+			               LIMIT 5) newest
+			         WHERE newest.click_count > 0`,
+			Min: 1,
+			Shows: "a front page worth reading. The five newest links are the whole " +
+				"of what the dashboard lists, and five zeroes is the least " +
+				"convincing page in the demo — on the first screen an evaluator opens",
+		},
+		{
 			Milestone: "M9", Feature: "Click history",
 			Query: `SELECT count(*) FROM click_events WHERE workspace_id IN (` + demoWorkspaces + `)`,
 			Min:   1000,
@@ -143,6 +176,32 @@ func demoCoverage() []demoFeature {
 			           AND EXISTS (SELECT 1 FROM links l WHERE l.workspace_id = w.id)`,
 			Min:   2,
 			Shows: "that scoping is observable: switching changes what the list holds",
+		},
+		{
+			// Which workspace, and not only how many (F169). The row above counts
+			// workspaces that hold links and is satisfied by any two; nothing
+			// asked whether the five links `demoWorkspace2Catalogue` defines are
+			// in the workspace it defines them for. They were not. `actAs` moved
+			// the owner by writing `last_workspace_id`, which is rung 3 of
+			// ResolveWorkspaceForUser, and the demo owner had rung 2 —
+			// `default_workspace_id` — pinned at the catalogue's workspace, so
+			// every one of the five was filed there and Campaigns had never held a
+			// row. The switcher moved between two workspaces, one of them empty,
+			// which reads as a broken feature rather than an unseeded one.
+			//
+			// Bounded on both sides and against the catalogue's own length, so it
+			// fails in both directions: none of them arriving, and all twenty-one
+			// of the *other* workspace's arriving here instead.
+			Milestone: "M25", Feature: "The second workspace's own links, in it",
+			Query: `SELECT count(*) FROM links l
+			          JOIN workspaces w ON w.id = l.workspace_id
+			         WHERE w.organization_id = $1 AND w.slug = '` + demoWorkspace2Slug + `'
+			           AND l.deleted_at IS NULL`,
+			Min: int64(len(demoWorkspace2Catalogue())),
+			Max: int64(len(demoWorkspace2Catalogue())),
+			Shows: "the only thing a second workspace is for: switch, and the list, " +
+				"the tags and the analytics are a different set. An empty one " +
+				"demonstrates the switcher and nothing underneath it",
 		},
 		{
 			Milestone: "M27", Feature: "An outstanding invitation",
@@ -321,6 +380,30 @@ func demoCoverage() []demoFeature {
 			Min: 1, Max: 1,
 			Shows: "the exact counter beside the limit. A limit with nothing " +
 				"against it is indistinguishable from a limit that does not work",
+		},
+		{
+			// A budget spent further than the link was clicked (F166). Not a
+			// feature the demo shows — a state it must not be in. A redirect
+			// consumes a click from the budget *and* records a click event, so
+			// `consumed` can never run ahead of `click_count`; the seeder spent the
+			// budget through internal/gate and recorded nothing, which produced
+			// `first-fifty` reading *12 of 50 spent* in its gate section and *0
+			// clicks* on the dashboard beside it. Two true statements about one
+			// link that cannot both be true, on adjacent pages, is exactly what a
+			// reader uses to decide whether any number here is worth believing.
+			//
+			// The other direction is left alone on purpose: `click_count` counts
+			// bots and every click the link ever took, and a budget added to a link
+			// that already had traffic starts at zero, so a total larger than the
+			// budget is ordinary.
+			Milestone: "M35", Feature: "No budget spent further than its link was clicked",
+			Query: `SELECT count(*) FROM link_click_budget b
+			          JOIN links l ON l.id = b.link_id
+			         WHERE b.workspace_id IN (` + demoWorkspaces + `)
+			           AND b.consumed > l.click_count`,
+			MaxIsZero: true,
+			Shows: "numbers that agree with each other. This is the row that says " +
+				"the gate counter and the click counter describe the same visits",
 		},
 		{
 			Milestone: "M35", Feature: "A link that requires a signed URL",
@@ -517,15 +600,162 @@ func demoCoverage() []demoFeature {
 			// Exactly one link carries a stored style; every other link's code
 			// is drawn at the default. A demo where all of them are styled shows
 			// one state, and a reader cannot see that a style is a preference —
-			// nor that "back to black on white" is a button that appears only on
-			// a link that has one.
+			// nor that "Restore defaults" is a control that does anything on a
+			// link that has none — it is drawn in both states since M50.7 and
+			// disabled with a reason in one of them (F224j).
+			// **The ceiling moved to two under M50**, which added a named code
+			// to the same link. It is still a ceiling and still says the same
+			// thing: exactly one link carries stored codes, and every other
+			// link's code is drawn at the default with no row at all.
 			Milestone: "M41", Feature: "A QR code somebody has styled",
 			Query: `SELECT count(*) FROM qr_codes
 			         WHERE workspace_id IN (` + demoWorkspaces + `)`,
+			Min: 2, Max: 2,
+			Shows: "the QR panel with a code that is not black on white, and Restore " +
+				"defaults live beside it — with no styled code the panel shows one " +
+				"state and the style form looks like it does nothing. Since M50.7 " +
+				"that button is drawn either way and disabled with a reason when " +
+				"there is nothing stored, so what a styled code shows is the enabled " +
+				"half of a control rather than the only half that exists",
+		},
+		{
+			// M50. Two codes on one link, each named, and scan history against
+			// both.
+			//
+			// **Three assertions rather than one, because the feature is the
+			// difference between them.** A link with two rows shows a list; a
+			// link whose two rows are both unnamed shows a list nobody can read;
+			// and a link whose two codes have no scans between them shows a
+			// breakdown of zeroes. The whole value of per-code identity is
+			// telling two numbers apart, so a demo that seeds the codes and not
+			// the traffic demonstrates nothing.
+			Milestone: "M50", Feature: "Two QR codes on one link, told apart",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND label <> ''`,
+			Min: 2, Max: 2,
+			Shows: "the QR panel listing a link's codes by name, with a scan count " +
+				"beside each — one code is a list of one, and unnamed codes are a " +
+				"list nobody can read",
+		},
+		{
+			// **Both, since M50's reopening.** The count was 1 and the ceiling
+			// said so: the default code was the one *without* a slug, and its
+			// absence was its identity. D183 moved that identity onto
+			// `is_default`, so today's default carries a generated slug like
+			// every other code, and a demo where one of the two still had none
+			// would be showing the shape this reopening removed.
+			Milestone: "M50", Feature: "Every code carries an identity in its payload",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND slug <> ''`,
+			Min: 2, Max: 2,
+			Shows: "two codes whose pictures each encode ?src=qr&qrc=<slug>, which is " +
+				"what makes them scannable apart and what makes either removable",
+		},
+		{
+			// M50's reopening. One code holds the flag, and only one can.
+			//
+			// **A ceiling as well as a floor, and the ceiling is the invariant.**
+			// `qr_codes_link_default_key` refuses a second default per link, and
+			// the demo seeds one link with codes — so two would mean either the
+			// index is not there or the seeder wrote a second link's codes
+			// without a default, and both are defects this row would catch.
+			Milestone: "M50", Feature: "One code is the default, and it is a flag",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND is_default`,
 			Min: 1, Max: 1,
-			Shows: "the QR panel with a code that is not black on white, and the " +
-				"reset button beside it — with no styled code the panel shows one " +
-				"state and the style form looks like it does nothing",
+			Shows: "a codes list whose rows each carry a remove control and a default " +
+				"icon, exactly one of them filled — the code an untagged scan is " +
+				"counted against — where before this the first row had no way to be " +
+				"removed at all. The worded buttons became icons at M50.7; what the " +
+				"demo has to show is still one list with both actions on every row",
+		},
+		{
+			// **Three values rather than two, since M50's reopening.** The
+			// default code's row is the sum of two of them — the bare `qr` an
+			// untagged picture records, and `qr:<its own slug>` from a picture
+			// printed since it gained one — and a demo carrying only one of the
+			// pair would not show that the fold happens at all. That fold is
+			// what let today's default code gain a slug without any recorded
+			// scan being rewritten (D183), so it is the thing worth looking at.
+			Milestone: "M50", Feature: "Scan history against more than one code",
+			Query: `SELECT count(DISTINCT referrer_host) FROM click_events
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND (referrer_host = 'qr' OR referrer_host LIKE 'qr:%')`,
+			Min: 3,
+			Shows: "two rows in the per-code breakdown with different numbers in " +
+				"them — the default code's row counting both its own tagged scans " +
+				"and the untagged ones every picture printed before it had a slug " +
+				"still sends",
+		},
+		{
+			// M50.5. The first uploaded file this product holds, and since
+			// M50.6 the one that is drawn into a picture.
+			//
+			// **The row stays M50.5's and M50.6 adds none**, which m50.6.md
+			// asks be stated rather than left blank. The seeded upload is
+			// exactly what M50.6 needed to find already there — the milestone
+			// that composites a logo would otherwise have had to seed the
+			// upload too, and the seam between the two would stop being where
+			// the split put it. One row covers both halves because there is one
+			// thing to look at: a code on the demoQRStyled link with a mark in
+			// the middle of it. *(That comment said `/qr-styled` until
+			// 2026-08-08, which is a link this demo has never had; it is named
+			// by the constant now, which cannot go stale when F174 moved the
+			// codes from `/summer-sale` to `/launch`.)*
+			//
+			// Bounded above at one for the reason the style row is: a demo
+			// where every code carries a logo cannot show that carrying one is
+			// a choice.
+			Milestone: "M50.5", Feature: "A QR code carrying an uploaded logo",
+			Query: `SELECT count(*) FROM qr_codes
+			         WHERE workspace_id IN (` + demoWorkspaces + `)
+			           AND logo IS NOT NULL`,
+			Min: 1, Max: 1,
+			Shows: "a QR code with a logo drawn in the middle of it — the file " +
+				"this instance accepted, re-encoded and stored, composited into " +
+				"the picture at error-correction level H",
+		},
+		{
+			// **The guard that was missing, and F174 is what it costs to not
+			// have it.** Every row above counts `qr_codes` and every one of
+			// them passed while the link those codes point at answered `410
+			// Gone` — the seeded codes hung off `/summer-sale`, which exists in
+			// the catalogue to demonstrate expiry. The pictures rendered, the
+			// scan counts were there, and scanning any of them got nothing.
+			//
+			// This is the shape F160 named: **a coverage row counts what was
+			// seeded and cannot see what the instance does with it.** The
+			// answer is not to make the test drive a redirect — `newDemoDB`
+			// seeds into a throwaway database and there is no server — but to
+			// count the *reachability the row already implies*. A code is a
+			// picture of a link's short URL, so a code on a link that refuses
+			// is a picture of a refusal.
+			//
+			// Expiry, the click budget, the gate and deletion, because those
+			// are the four ways a link stops resolving for the person holding
+			// the printed picture. A custom hostname is deliberately not one:
+			// the demo's is an RFC 2606 name that never resolves, so a code on
+			// it would be unscannable for a reason this query cannot see, and
+			// the constant's own comment carries that requirement instead.
+			Milestone: "M50", Feature: "No QR code points at a link that refuses",
+			Query: `SELECT count(*) FROM qr_codes q
+			          JOIN links l ON l.id = q.link_id
+			         WHERE q.workspace_id IN (` + demoWorkspaces + `)
+			           AND (l.deleted_at IS NOT NULL
+			                OR (l.expires_at IS NOT NULL AND l.expires_at <= now())
+			                OR (l.max_clicks IS NOT NULL
+			                    AND l.click_count >= l.max_clicks)
+			                OR l.password_hash IS NOT NULL)`,
+			MaxIsZero: true,
+			Shows: "that the demo's QR codes can be scanned. Every code is a " +
+				"picture of its link's short URL, so a code on an expired, " +
+				"exhausted, gated or deleted link is a picture somebody points " +
+				"a phone at and is refused by — which is how three milestones " +
+				"of QR work came to be demonstrated by codes that resolved to " +
+				"410 Gone",
 		},
 		{
 			Milestone: "M41", Feature: "Campaigns, more than one, and one of them over",
@@ -678,20 +908,27 @@ func demoCoverage() []demoFeature {
 			// boundary-row move M34, M36, M39, M40, M41, M42 and M43 each made
 			// before it.
 			//
-			// Four rows for three credentials, and the arithmetic is the feature:
-			// the seeder mints three and rotates one, and a rotation is a fourth
-			// row rather than an edit to the third.
+			// Five rows for four credentials, and the arithmetic is the feature:
+			// the seeder mints four and rotates one, and a rotation is a fifth
+			// row rather than an edit to the fourth.
 			//
 			// Bounded above as well as below, and the ceiling is the load-bearing
 			// half. Every row here is a live credential on a public instance —
 			// unusable, because the token is discarded and only an HMAC is stored,
 			// but a seeder that quietly grew this number would be minting keys
 			// nobody asked for on every demo-update.
-			Milestone: "M44", Feature: "Four key rows: three minted, one of them a successor",
-			Query: `SELECT count(*) FROM api_keys WHERE organization_id = $1`,
-			Min:   4, Max: 4,
+			//
+			// Keyed on the **owner** since M54, not on the organization alone. An
+			// account-wide key has no organization_id, so the old predicate would
+			// have counted four of the five and failed for the one reason this row
+			// is not about.
+			Milestone: "M44", Feature: "Five key rows: four minted, one of them a successor",
+			Query: `SELECT count(*) FROM api_keys
+			         WHERE user_id = $2 AND (organization_id = $1 OR organization_id IS NULL)`,
+			Min: 5, Max: 5,
 			Shows: "the key page as a list rather than as an empty panel, with a " +
-				"rotated pair, an organization-wide key and an ordinary one on it",
+				"rotated pair, an organization-wide key, an account-wide key and " +
+				"an ordinary one on it",
 		},
 		{
 			// The rotation itself, which is the whole of what M44 added and the one
@@ -719,6 +956,37 @@ func demoCoverage() []demoFeature {
 			Min: 2, Max: 2,
 			Shows: "that a key's reach is a choice: one bound to the workspace it " +
 				"was made in, one valid across the organization",
+		},
+		{
+			// The third value the *Reach* column gained (M54). Counted as its own
+			// row rather than folded into the one above, because the two questions
+			// are on different axes: that one is about workspaces and this is about
+			// tenants, and a demo that showed two of three states would read as
+			// though the third did not exist.
+			//
+			// Bounded above for the reason every key row here is: these are live
+			// credentials on a public instance, and an account-wide one is the
+			// widest of them.
+			//
+			// The teardown reaches it by `user_id`, which the organization
+			// predicate cannot — so a ceiling of one is also what catches a
+			// demo-update that stopped cleaning up after itself and started
+			// accumulating a fresh account-wide key on every run.
+			// The membership clause is not decoration. An account-wide key with no
+			// organization-wide membership anywhere reaches nothing and shows
+			// nothing, so the claim is a key the demo's own organization is
+			// reachable from rather than a row with a NULL in it.
+			Milestone: "M54", Feature: "An account-wide key",
+			Query: `SELECT count(*) FROM api_keys k
+			         WHERE k.user_id = $2 AND k.organization_id IS NULL
+			           AND EXISTS (SELECT 1 FROM memberships m
+			                        WHERE m.user_id = k.user_id
+			                          AND m.organization_id = $1
+			                          AND m.workspace_id IS NULL)`,
+			Min: 1, Max: 1,
+			Shows: "that a key can belong to an account rather than to one " +
+				"organization — the third value in the Reach column, beside the " +
+				"workspace-bound and organization-pinned ones",
 		},
 		{
 			// Not a display claim — a safety claim, and the same shape D81 and D86
@@ -797,6 +1065,177 @@ func demoCoverage() []demoFeature {
 			Min:   2,
 			Shows: "that an instance-wide act is recorded where it happened rather " +
 				"than filed under whichever organization the person was standing in",
+		},
+
+		{
+			// M48's click-through, and the one thing it needs the demo to have:
+			// an inbox holding notifications of **more than one kind**, so
+			// clicking two of them goes to two different places.
+			//
+			// m48.md asks whether a coverage row is owed at all —
+			// *"demoCoverage() gains a row only if a kind ends up with no seeded
+			// example; whether it does is settled during the work rather than
+			// guessed here"* — and the answer is yes, but not the row that
+			// question implies. Three of the seven declared kinds have no seeded
+			// example: `audit.growth`, `domain.failing` and `domain.unverified`.
+			// None of them is seedable without the demo asserting something
+			// untrue about itself — that its audit log has outgrown its disk, or
+			// that a hostname it serves has stopped verifying — so the honest row
+			// is about what the feature needs rather than about the vocabulary
+			// being complete. decisions.md carries the full reasoning.
+			//
+			// Counted as distinct kinds rather than as a list of them. A query
+			// naming the kinds would be a second enumeration of the vocabulary,
+			// which internal/httpx's notificationTargets is deliberately the only
+			// one of — and one written in SQL, where no test would notice it
+			// going stale.
+			Milestone: "M48", Feature: "Notifications of more than one kind in the owner's inbox",
+			Query: `SELECT count(DISTINCT kind) FROM notifications
+			         WHERE user_id = $2
+			           AND (workspace_id IS NULL
+			                OR workspace_id IN (` + demoWorkspaces + `))`,
+			Min: 2,
+			Shows: "that opening a notification goes somewhere, and somewhere " +
+				"different for a different kind. One kind in the inbox shows a " +
+				"click-through that could be a hardcoded link",
+		},
+		{
+			// Not a display claim — a safety claim, and the same shape D81, D86
+			// and M44's grace row have.
+			//
+			// **M51 seeds nothing, and this row is what says so on purpose rather
+			// than by omission.** The inherited rule asks a milestone that ships
+			// something visible to extend the seeder; what M51 ships is two public
+			// pages reachable on the demo with no seeded data at all, because the
+			// demo configures a mailer and the sign-in page therefore draws the
+			// link. There is no page anywhere that lists reset tokens, so a seeded
+			// row would show nobody anything.
+			//
+			// What it would do is put a live password-reset token on a public
+			// instance anybody can drive — the one credential in this schema that
+			// sets a password, where the demo's four API keys are unusable because
+			// only an HMAC is stored. Asserted rather than trusted, because "the
+			// seeder does not do that" is exactly the claim that survives the
+			// change making it false.
+			Milestone: "M51", Feature: "The seeder mints no password-reset token",
+			Query: `SELECT count(*) FROM password_resets pr
+			          JOIN users u ON u.id = pr.user_id
+			         WHERE u.id = $2 OR u.id IN (
+			             SELECT DISTINCT m.user_id FROM memberships m
+			              WHERE m.organization_id = $1)`,
+			MaxIsZero: true,
+			Shows: "that seeding the demo hands nobody a way into an account: the " +
+				"recovery pages are reachable and working on the demo, and every " +
+				"link they issue is one a visitor asked for",
+		},
+		{
+			// **The residue, because there is nothing else to show.** A deleted
+			// account renders as an absence everywhere in this product — no row on
+			// the members page, no name in a list — and an absence is
+			// indistinguishable from a feature nobody built, which is precisely
+			// what F44 was for five releases. What an evaluator can actually check
+			// is what erasure left: the same audit trail, with the person taken
+			// out of it.
+			//
+			// Scoped to the organization, so it counts the `invitation.redeemed`
+			// record the departed person wrote while they were a member. The
+			// `account.deleted` record is instance-wide and deliberately outside
+			// this count — the point is a tombstone standing beside live actors in
+			// an ordinary trail, not one on a surface only the principal reads.
+			//
+			// The label comes from the constant rather than being spelled out, so
+			// a change to the tombstone is a change in one place. The M21 row
+			// above is what asserts live actors are there too; between them, the
+			// trail has both kinds in it.
+			Milestone: "M52", Feature: "An erased actor in the audit trail",
+			Query: `SELECT count(*) FROM audit_logs
+			         WHERE organization_id = $1 AND actor_label = '` +
+				account.TombstoneLabel + `'`,
+			Min: 1,
+			Shows: "what account deletion leaves behind: the record of what " +
+				"happened, correlatable by actor id, with the address gone from it",
+		},
+		{
+			// **One enrolled account, and it is deliberately not the owner's.**
+			// Every seeded account shares the published password and the owner is
+			// who an evaluator signs in as first; a second factor there would put
+			// a step in front of the demo itself. Sam is the viewer, and
+			// `demoMFASecret` is published so anybody can scan it and walk the
+			// whole flow — the code prompt between the password and the session,
+			// and the enrolled state on the account page behind it.
+			//
+			// Counted through `users` joined to nothing, because enrolment is a
+			// property of an account rather than of an organization; scoped to the
+			// demo organization's members so a stray row elsewhere cannot satisfy
+			// it.
+			Milestone: "M53", Feature: "An account with a second factor",
+			Query: `SELECT count(*) FROM users u
+			         WHERE u.mfa_enabled_at IS NOT NULL
+			           AND u.mfa_secret IS NOT NULL
+			           AND u.id IN (
+			               SELECT DISTINCT m.user_id FROM memberships m
+			                WHERE m.organization_id = $1)`,
+			Min: 1, Max: 1,
+			Shows: "the enrolled state of the account page, and the code prompt " +
+				"between a right password and a session. Without it every " +
+				"second-factor surface on the demo is an empty offer",
+		},
+		{
+			// The other half, and the one that is about the schema rather than the
+			// page: an enrolment issues ten single-use codes, and a demo that
+			// showed the factor without them would be showing the half of the
+			// milestone that cannot lock anybody out.
+			//
+			// Exactly ten, unspent. The seeder discards them, so a spent one here
+			// would mean something in this instance signed in with a recovery code
+			// — which nothing seeded does.
+			Milestone: "M53", Feature: "Recovery codes behind the second factor",
+			Query: `SELECT count(*) FROM mfa_recovery_codes rc
+			         WHERE rc.used_at IS NULL
+			           AND rc.user_id IN (
+			               SELECT DISTINCT m.user_id FROM memberships m
+			                WHERE m.organization_id = $1)`,
+			Min: 10, Max: 10,
+			Shows: "that enrolling issues the codes that make a lost phone " +
+				"recoverable, which is the dependency the whole milestone rests on",
+		},
+		{
+			// **The demo runs the check; it does not seed the notification.**
+			//
+			// m55.md decides that outright, and D149 is why: on the *default off*
+			// limb the row would have had to seed a notification directly, because
+			// a demo cannot show a feature it also has switched off — and seeding
+			// one would have meant the demo asserting that its own instance found
+			// a release it never asked about. D149 chose on, so the honest row is
+			// that the demo really is an instance whose operator said yes, making
+			// the same daily request every such instance makes.
+			//
+			// **`IS TRUE` rather than a bare test, because the column has three
+			// states** (D164). The demo's instance is claimed by a script rather
+			// than by somebody filling in the setup form, so it arrives in the
+			// state an upgraded instance is in — unanswered, and therefore quiet —
+			// and `seedUpdateCheck` answers it through the same service call the
+			// dashboard prompt reaches. Spelling the assertion this way is what
+			// makes it fail on *unanswered* rather than silently counting it with
+			// *declined*: those are different demos and only one of them is this
+			// one.
+			//
+			// So this asserts the setting rather than an inbox row, and it is a
+			// safety-and-configuration claim of the shape M51's row has rather
+			// than a display claim. There is deliberately nothing to look at: a
+			// notification appears if and only if a newer LinkCtrl has actually
+			// been published, and a demo that manufactured one would be showing a
+			// release that does not exist.
+			//
+			// It is also the row that would fail if somebody quietly gave the demo
+			// an exemption from what docs/SECURITY.md tells every operator their
+			// instance does.
+			Milestone: "M55", Feature: "The daily update check, on, as on any instance whose operator said yes",
+			Query: `SELECT count(*) FROM instance_settings WHERE id AND update_check_enabled IS TRUE`,
+			Min:   1, Max: 1,
+			Shows: "that the demo is not exempt from what its operator was asked " +
+				"and agreed to: it makes the same outbound request, once a day, " +
+				"that docs/SECURITY.md's egress row now counts",
 		},
 	}
 }
@@ -888,6 +1327,76 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 				feature.Feature, feature.Milestone, counts[i], moved[i])
 		}
 	}
+}
+
+// TestTheSecondWorkspaceFillsWhenTheOwnerHasPinnedADefault is F169, and the pin
+// is the whole of what it adds.
+//
+// The coverage row it asserts — the second workspace's own links, in it — passes
+// on a database nobody has expressed a preference in, because with no pin,
+// `actAs`'s write to `last_workspace_id` is the highest-ranked answer there is
+// and the owner moves. The demo instance was not that database. Somebody had
+// pinned a default workspace, `ResolveWorkspaceForUser` ranks the pin above
+// last-used, and the identity `actAs` handed back was still in the catalogue's
+// workspace — so `link.Service.Create` read `actor.WorkspaceID` and filed all
+// five of the second workspace's links in the first one. Two consecutive clean
+// seeds, Campaigns holding nothing both times, and the seeder reporting success
+// both times because nothing compared where a link was asked for with where it
+// went.
+//
+// So the state is reached from the outside, the way somebody clicking *make this
+// my default* reaches it, and the pin is set on the catalogue's own workspace —
+// which is both what the demo instance actually had and the one value that does
+// not trip `demoActor`'s refusal on the way in. Everything after that is the
+// seeder's problem, which is the point.
+func TestTheSecondWorkspaceFillsWhenTheOwnerHasPinnedADefault(t *testing.T) {
+	ctx := context.Background()
+	pool := newDemoDB(t)
+	cfg := demoTestConfig()
+	owner := claimDemoInstance(t, pool, cfg)
+
+	runDemoSeed(t, ctx, pool, cfg, owner.Email)
+	orgID, ownerID := demoScope(t, pool, owner.Email)
+
+	const pin = `
+		UPDATE users SET default_workspace_id = (
+		    SELECT w.id FROM workspaces w
+		     WHERE w.organization_id = $2 AND w.deleted_at IS NULL
+		     ORDER BY w.created_at, w.id
+		     LIMIT 1)
+		 WHERE id = $1
+		RETURNING default_workspace_id`
+	var pinned *uuid.UUID
+	if err := pool.QueryRow(ctx, pin, ownerID, orgID).Scan(&pinned); err != nil {
+		t.Fatalf("pin the owner's default workspace: %v", err)
+	}
+	if pinned == nil {
+		t.Fatal("the demo organization has no workspace to pin")
+	}
+
+	runDemoSeed(t, ctx, pool, cfg, owner.Email)
+	orgID, ownerID = demoScope(t, pool, owner.Email)
+
+	var elsewhere int64
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM links l
+		  JOIN workspaces w ON w.id = l.workspace_id
+		 WHERE w.organization_id = $1 AND w.slug = '`+demoWorkspace2Slug+`'
+		   AND l.deleted_at IS NULL`, orgID).Scan(&elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(len(demoWorkspace2Catalogue())); elsewhere != want {
+		t.Errorf("the %s workspace holds %d links after a seed run by an owner with a "+
+			"pinned default workspace, want %d. The pin is rung 2 of "+
+			"ResolveWorkspaceForUser and last-used is rung 3, so a seeder that moves "+
+			"the actor by writing last-used alone does not move it at all — and every "+
+			"link it makes next is filed in whichever workspace the pin names.",
+			demoWorkspace2Slug, elsewhere, want)
+	}
+
+	// And the rest of the demo is still the demo: a seeder that reached the
+	// second workspace by breaking something else would satisfy the count above.
+	checkDemoCoverage(t, pool, orgID, ownerID)
 }
 
 // TestDemoResetClearsTheCatalogueFromAnyWorkspaceInTheOrganization is F68's
@@ -1121,6 +1630,11 @@ func demoTestConfig() config.Config {
 	// test cannot be weaker than a deployed one. Any 32 bytes will do here: the
 	// tokens are discarded and nothing verifies one afterwards.
 	cfg.APIKeyPepper = config.Secret("a-demo-seeder-pepper-of-32-plus-bytes")
+	// The seeder enrols one account in the second factor (M53), and the MFA
+	// service refuses a key below the configuration floor — deliberately, for the
+	// reason the pepper above does. Any 32 bytes will do here: the secret is
+	// written and read back inside this process.
+	cfg.MFASecretKey = config.Secret("a-demo-seeder-mfa-key-of-32-plus-bytes")
 	return cfg
 }
 

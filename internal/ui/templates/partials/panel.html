@@ -1,0 +1,96 @@
+{{/* The on-demand panel (M48).
+     ---------------------------------------------------------------------------
+
+     **A panel is a route first and a popup second.** Its contents live at a URL
+     that renders as an ordinary page — nav, heading, back link, the lot — and
+     the popup is what the browser does with the same markup when it can. That
+     order is the requirement rather than an implementation detail: open the
+     route directly and you get a page; open it from the surface it belongs to
+     and you get a panel over that surface without leaving it.
+
+     M48 shipped two callers; **one remains** — the dispute reviewer roster
+     (`partials/dispute_reviewers.html` → /disputes/reviewers). The QR area's
+     popup retired at the F212 reopening (2026-08-11): the tabs un-buried its
+     section, so its contents render in flow on the QR tab, and the page form
+     at /links/{id}/qr outlived the popup. The mechanism is still defined
+     once — TestThePanelMechanismIsDefinedOnce reads the rendered HTML rather
+     than the templates, so a second surface that invents its own popup fails
+     the build.
+
+     THE ELEMENT IS THE POPOVER API, not <details> and not a framework. D24 chose
+     it for the header menus and the reason is one word — Escape — and it applies
+     here for a second one: these panels cover the page rather than pushing it
+     down, which is exactly the case D120 said <details> was for and this is not.
+     M47's links-page filter panel stays a <details> and nothing here changes it;
+     the two decisions do not conflict because they are about different shapes.
+
+     No modal framework, no CDN, no Node, no script of any kind. `popovertarget`
+     is markup, so the CSP is untouched and `ui` stays stdlib-only. htmx is
+     already served on every page and is not used here — there is nothing to
+     fetch, because the panel's contents are rendered with the page that carries
+     it.
+
+     GEOMETRY, and it is written out because a top-layer element does not
+     position the way the markup around it suggests:
+
+       inset-0 m-auto  centres it in the viewport. The UA sheet already says
+                       this, in a :where() rule with zero specificity, and
+                       Tailwind's preflight zeroes margin on every element — so
+                       the centring has to be re-stated here or the panel pins
+                       itself to the top-left corner. Not `fixed`: the UA sheet
+                       gives [popover] position:fixed at the same zero
+                       specificity, and preflight does not touch `position`.
+       w-[min(…)]      42rem, or the window less a 1rem gutter on each side,
+                       whichever is smaller. One value, correct at every width.
+       max-h-[85vh]    with overflow-y-auto below it, so a long panel scrolls
+                       inside itself rather than off the screen. The header stays
+                       put while it does, which is what makes Close reachable
+                       from the bottom of a long form.
+
+     The floor is the one D24 already raised: Chrome 114, Safari 17, Firefox 125.
+     Below it the attribute is ignored, the panel renders as an ordinary block in
+     the page, and every control in it still works — which is the failure mode
+     worth having, and the same one the header menus accept.
+
+     WHY THE CHROME IS HERE AND THE BODY IS NOT. Go's html/template cannot pass a
+     block of markup to another template, so the mechanism is an opening partial
+     and a closing one with the caller's own markup between them. The alternative
+     is a registry of body names dispatched inside this file, which is one place
+     every future panel has to be added to — a pattern with a list is a pattern
+     that grows a list. The cost is that the two partials have to be used as a
+     pair, and the test above is what notices when they are not.
+     ------------------------------------------------------------------------ */}}
+
+{{/* The invoker, and a word rather than an icon: an unlabelled glyph is a guess
+     for anybody who does not already know what the panel holds, which is the
+     same reason m48.md gives for the download control keeping its text. */}}
+{{define "panel_trigger"}}
+<button type="button" popovertarget="{{.ID}}"
+        class="inline-flex shrink-0 cursor-pointer items-center rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken">{{.Label}}</button>
+{{end}}
+
+{{/* The panel, opened. Takes ID, Title and Href; the caller writes the body and
+     then invokes panel_close.
+
+     `Href` is not decoration. It is the route this panel's contents are served
+     at, and it is on screen so that the page form of the panel is discoverable
+     from the popup form rather than only from a milestone file. It is also what
+     a reader shares, bookmarks or opens in a second tab. */}}
+{{define "panel_open"}}
+<div id="{{.ID}}" popover="auto"
+     class="inset-0 m-auto max-h-[85vh] w-[min(42rem,calc(100vw_-_2rem))] overflow-y-auto rounded-lg border border-line bg-raised shadow-lg">
+  <div class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-raised px-5 py-3">
+    <div class="min-w-0">
+      <h2 class="truncate text-sm font-medium text-ink">{{.Title}}</h2>
+      <a href="{{.Href}}" class="text-xs font-medium text-accent-ink hover:underline">Open as a page</a>
+    </div>
+    <button type="button" popovertarget="{{.ID}}" popovertargetaction="hide"
+            class="shrink-0 cursor-pointer rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">Close</button>
+  </div>
+  <div class="px-5 py-4">
+{{end}}
+
+{{define "panel_close"}}
+  </div>
+</div>
+{{end}}

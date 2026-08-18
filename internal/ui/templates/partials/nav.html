@@ -6,45 +6,176 @@
 
 {{define "flash_ok"}}{{if .}}<div class="mb-4 rounded-md border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink">{{.}}</div>{{end}}{{end}}
 
+{{/* The workspace pair, fused into one control (M46.6, F204).
+
+     One bordered container: the label, a hairline divider, then the switcher —
+     so "this is where you are" and "here is how you leave" read as a single
+     claim instead of two fragments that happen to be adjacent. The boundary is
+     this define, built across the two below rather than a wrapper div in
+     layout.html, so the conditions deciding what renders live in the file that
+     explains them. Structurally the pair survives: workspace_label and
+     workspace_switch are still the label <p> and a form beside it — since the
+     M46.6 reopening the form holds a chevron-button invoker and a popover
+     panel rather than a <select> — and every answer they encode — the current
+     workspace is never an option, no switcher above one membership, the label
+     whenever a workspace is current — is preserved, not restated.
+
+     Three states. Several memberships: label, divider, select. One: the label
+     alone — no divider, no dead affordance (M25 holds), the account still
+     named in the same box. No current workspace: nothing at all, never an
+     empty bordered box (D36). The predicate is "some workspace is current"
+     rather than a length check because the label's own condition is .Current,
+     and the container must not outlive its content.
+
+     focus-within:border-accent puts the invoker's focus on the shared border:
+     the chevron button is the pair's only focusable element and it carries no
+     border of its own, so the boundary is what indicates focus.
+
+     anchor-name is what the switcher's panel right-aligns to — the panel must
+     align with this whole control, not with the chevron sliver at its end.
+     The POSITIONING note on workspace_switch says why the menus' shared-edge
+     literals cannot do it. */}}
+{{define "workspace_control"}}
+{{- $current := false}}{{range .Workspaces}}{{if .Current}}{{$current = true}}{{end}}{{end -}}
+{{- if $current}}
+<div class="flex min-w-0 items-center gap-2 rounded-md border border-line-strong bg-raised px-2 py-1 focus-within:border-accent [anchor-name:--linkctrl-workspace]">
+  {{- template "workspace_label" .}}
+  {{- template "workspace_switch" .}}
+</div>
+{{- end}}
+{{end}}
+
+{{/* Where you are: the current organization and workspace, named.
+
+     M46. Blind task 9 could not be completed — the owner could not confirm which
+     workspace they were in without opening the switcher — and below two
+     memberships the switcher renders nothing at all, so the shell named neither.
+     This is the label that closes both cases, and it is why the switcher below
+     may now drop the current workspace from its options.
+
+     It is not a control and never was: M25 decided that "a control that cannot
+     do anything" stays absent, and that decision is honoured rather than
+     reversed. The gap was always the label.
+
+     Rendered from .Workspaces rather than from a new shell field, because the
+     switcher's own list already carries Current, the organization name and the
+     workspace name, and a second copy on the shell is a second thing that can
+     disagree. Nothing renders when no entry is current — an account that belongs
+     to nothing has no workspace to name (D36).
+
+     min-w-0 and truncate on both halves, and the pair repeated in `title`: an
+     organization name has no length bound, and an unbounded string in a flex row
+     is what pushed this header past 360px in the first place. */}}
+{{define "workspace_label"}}
+{{- range .Workspaces}}{{if .Current}}
+<p class="flex min-w-0 items-baseline gap-1 text-sm" title="{{.OrganizationName}} · {{.Name}}">
+  <span class="sr-only">Current workspace:</span>
+  <span class="min-w-0 truncate text-muted">{{.OrganizationName}}</span>
+  <span aria-hidden="true" class="shrink-0 text-subtle">·</span>
+  <span class="min-w-0 truncate font-medium text-ink">{{.Name}}</span>
+</p>
+{{end}}{{end -}}
+{{end}}
+
 {{/* The workspace switcher.
 
      Drawn only when there is more than one to switch between. Every instance
-     today has exactly one membership per user, and a dropdown with a single
+     today has exactly one membership per user, and a switcher with a single
      entry is a control that can do nothing — so this renders nothing at all
      until a second membership exists, which is the milestone's promise that the
      switcher costs today's users nothing.
 
-     The select switches on change and there is no button (D103, F21). The old
-     comment here claimed a plain form "with no JavaScript" was forced, because
-     an auto-submitting select needs a change handler and the CSP forbids inline
-     script. The premise was wrong: htmx is already served on every page from
-     layout.html under script-src 'self', already does exactly this on the links
-     page, and needs no inline script — so the CSP never forbade this and the
-     two-step control was defending a constraint that did not exist.
+     M46: the current workspace is no longer an option in it. The owner asked for
+     that on blind task 9 and it could not be done then, because the switcher was
+     the only place in the whole shell the current workspace appeared — removing
+     it would have made the task impossible rather than merely hard.
+     `workspace_label` above is what makes it available now. What is left is a
+     list of the places you can go, which is what a switcher is.
 
-     No <noscript> fallback. The owner settled the stance instead (D103): the
-     dashboard requires JavaScript, and that is written down rather than
-     defended in markup nobody looks at twice. The redirect tree is a different
-     claim and stays scriptless.
+     This was a <select> until the M46.6 reopening, and its opened state was the
+     engine's popup — unpositionable, unstylable, opening on the blank
+     placeholder row the chevron-only face forced, and painting the chosen
+     option's text into the w-8 face until the redirect landed. Four symptoms
+     the owner named on sight, one cause, and no fix reaches any of them from
+     inside a <select> (F209). So the opened state is the shell's own now: the
+     Popover API pattern both header menus already use (D24) — a chevron-button
+     invoker and a popover="auto" panel — which carries Escape, light dismiss
+     and one-open-at-a-time by construction. Nothing can flash: a button's face
+     is the chevron glyph (the identity menu's own, not a new icon), with no
+     selected text to paint, before, during, or after a switch. And no
+     placeholder row exists to draw — a select must display something, a button
+     need not, which is why the disabled-placeholder assertion retired with its
+     premise (owner-approved in approving the reopening).
 
-     hx-include carries the hidden `next`, and the handler answers through
-     seeOther, which turns an htmx request into HX-Redirect — a full navigation
-     rather than this partial swapped into a fragment. So the switch behaves
-     identically whichever way it was submitted.
+     Each workspace in the panel is a submit button in this form, workspace_id
+     on its value, so selecting is still one POST to /workspace/switch with the
+     hidden `next`, and the handler is untouched. The htmx change-handler went
+     with the select — a real button submits a form scriptless. D103's stance
+     is unchanged; this control simply stopped needing JavaScript at all.
+
+     A screen reader hears a button named "Switch workspace" — aria-label, and
+     aria-expanded mapped from the popovertarget attribute itself — then a list
+     of buttons, each naming its workspace. Button-and-group rather than
+     role-free combobox: the same recorded trade (D24) the two menus made.
+
+     The invoker keeps the face's shipped geometry: w-8, because a chevron
+     holds no text to size against, and no border or background of its own —
+     the shared container in workspace_control carries the boundary and
+     indicates focus (focus-within), with a hairline divider separating the
+     label from the switcher.
+
+     POSITIONING. The panel is right-aligned with the fused control, which the
+     menus' shared-edge literals cannot express: the control sits mid-bar, and
+     the width to its right — the bell, the identity button, an email of any
+     length — is not a constant. So the container carries
+     anchor-name: --linkctrl-workspace and the panel anchors to it,
+     position-anchor plus right: anchor(right), the @supports gate keeping the
+     literal as the fallback. Probed 2026-08-11 in all three pinned engines
+     (chromium-1234, firefox-1538, webkit-2336): all three support anchor
+     positioning, and the panel's right edge lands exactly on the container's,
+     including with the panel nested inside its own anchor, popover shown. An
+     engine below that floor falls back to the base literal — the same
+     container edge both menus align to — so the panel is still governed
+     there, merely menu-aligned rather than control-aligned; below the popover
+     floor itself it renders as a plain block, the failure mode the menus
+     already accepted. The top literals and the viewport-anchoring trap they
+     answer are the menus' POSITIONING note below.
+
+     The panel's width comes from its two insets, not from a width utility: a
+     control near the bar's middle can sit closer than 16rem to the viewport's
+     left edge at 360px, and a fixed-width panel anchored to it overflows the
+     viewport — the first verify-ui run proved exactly that. So the left inset
+     clamps, max(1rem, anchor(right) - 16rem): 16rem wide everywhere it fits,
+     left edge pinned at 1rem where it does not, right edge on the control
+     either way. w-auto is load-bearing beside it — the UA stylesheet gives
+     [popover] width: fit-content and margin: auto, and with left, right and a
+     non-auto width the box is over-constrained, the auto margins absorb the
+     slack, and the panel drifts off its anchor. Probed with the geometry
+     above, same date, same three engines: right edge on the container at
+     every width, left edge at 16px when clamped.
+
+     The panel matches the control it hangs from — border-line-strong,
+     rounded-md — rather than the menus' border-line/rounded-lg, because it
+     must read as the control opening, not as a third menu.
 
      The path travels on the form so switching leaves you on the page you were
      reading, looking at the other workspace's version of it. */}}
 {{define "workspace_switch"}}
 {{if gt (len .Workspaces) 1}}
-<form method="post" action="/workspace/switch" class="flex items-center gap-1">
+<span aria-hidden="true" class="h-4 w-px shrink-0 bg-line-strong"></span>
+<form method="post" action="/workspace/switch" class="flex shrink-0 items-center">
   <input type="hidden" name="next" value="{{.Path}}">
-  <select name="workspace_id" aria-label="Workspace"
-          hx-post="/workspace/switch" hx-trigger="change" hx-include="closest form"
-          class="rounded-md border border-line-strong bg-raised px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none">
-    {{range .Workspaces}}
-    <option value="{{.ID}}"{{if .Current}} selected{{end}}>{{.OrganizationName}} · {{.Name}}</option>
-    {{end}}
-  </select>
+  <button type="button" popovertarget="linkctrl-workspace-menu" aria-label="Switch workspace"
+          class="flex w-8 shrink-0 cursor-pointer items-center justify-center py-0.5 text-ink focus:outline-none">
+    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M12 15.5a1 1 0 0 1-.7-.3l-4-4a1 1 0 1 1 1.4-1.4l3.3 3.3 3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-.7.3Z"/></svg>
+  </button>
+  <div id="linkctrl-workspace-menu" popover="auto"
+       class="fixed inset-auto top-[5.25rem] sm:top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] [position-anchor:--linkctrl-workspace] supports-[anchor-name:--linkctrl-workspace]:right-[anchor(right)] supports-[anchor-name:--linkctrl-workspace]:left-[max(1rem,calc(anchor(right)_-_16rem))] supports-[anchor-name:--linkctrl-workspace]:w-auto z-20 max-w-[calc(100vw_-_2rem)] rounded-md border border-line-strong bg-raised py-1 shadow-lg">
+    {{range .Workspaces}}{{if not .Current}}
+    <button type="submit" name="workspace_id" value="{{.ID}}" title="{{.OrganizationName}} · {{.Name}}"
+            class="block w-full cursor-pointer truncate px-3 py-2 text-left text-sm text-ink hover:bg-sunken">{{.OrganizationName}} · {{.Name}}</button>
+    {{end}}{{end}}
+  </div>
 </form>
 {{end}}
 {{end}}
@@ -83,8 +214,18 @@
      explicitly against the viewport, and looked at in a browser rather than
      inferred from this markup:
 
-       top-[3.75rem]  the bar is h-14 (3.5rem) plus a 1px border, so this clears
-                      it by 3px and the panel reads as hanging off the header.
+       top-[5.25rem] sm:top-[3.75rem]
+                      the bar is h-14 (3.5rem) plus a 1px border from `sm` up, so
+                      3.75rem clears it by 3px and the panel reads as hanging off
+                      the header. Below `sm` the bar wraps to two lines and is
+                      h-20 (5rem) plus the same border, so 5.25rem clears that by
+                      the same 3px (M46). Two literals rather than one, because a
+                      top-layer element cannot be positioned against the header:
+                      see the paragraph above. The wrap is what stops the shell
+                      scrolling sideways at 360px — a phone cannot hold the logo,
+                      two destinations, the workspace label, the switcher, the
+                      bell and the identity control on one line, and the honest
+                      answer is a second line rather than a narrower label.
        right-[max(1rem,calc(50%-35rem))]
                       the container is `mx-auto max-w-6xl px-4`, so its content
                       edge is 1rem from the window until the window passes 72rem
@@ -123,7 +264,7 @@
      accessible name at every width, and sign-out has to stay reachable on a
      phone — it was a separate button before this menu existed. */}}
 {{define "identity_menu"}}
-<div class="flex items-center">
+<div class="flex shrink-0 items-center">
   <button type="button" popovertarget="linkctrl-identity-menu"
           class="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted hover:bg-sunken hover:text-ink">
     <svg viewBox="0 0 24 24" class="h-5 w-5 fill-current" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.7-8 6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1c0-3.3-3.6-6-8-6Z"/></svg>
@@ -131,18 +272,20 @@
     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 fill-current" aria-hidden="true"><path d="M12 15.5a1 1 0 0 1-.7-.3l-4-4a1 1 0 1 1 1.4-1.4l3.3 3.3 3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-.7.3Z"/></svg>
   </button>
   <div id="linkctrl-identity-menu" popover="auto"
-       class="fixed inset-auto top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] z-20 w-56 max-w-[calc(100vw_-_2rem)] rounded-lg border border-line bg-raised py-1 shadow-lg">
+       class="fixed inset-auto top-[5.25rem] sm:top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] z-20 w-56 max-w-[calc(100vw_-_2rem)] rounded-lg border border-line bg-raised py-1 shadow-lg">
     {{/* The three administrative destinations, and the argument M26.5 asked the
          next milestone to make before taking a top-level slot.
 
          M28 makes it, and the answer is no slot. Members, Invitations and
          Workspaces are all visited when something changes — somebody joins,
          somebody leaves, a workspace is added — and never while work is being
-         done, which is what the three top-level destinations are for. Putting
-         one of them up there would also mean choosing which, since they are one
-         subject, and TestTopLevelNavHoldsThreeDestinations still asserts the
-         count exactly so that whoever disagrees has to argue in a decision entry
-         rather than in a template edit.
+         done, which is what the top-level destinations are for. Putting one of
+         them up there would also mean choosing which, since they are one
+         subject, and TestTopLevelNavHoldsTwoDestinations still asserts the count
+         exactly so that whoever disagrees has to argue in a decision entry
+         rather than in a template edit. *(The count was three until M46 moved
+         API keys down here on the same argument; the test was renamed with it
+         rather than deleted.)*
 
          Each is gated on exactly what the page behind it requires: a menu entry
          that leads to a 403 is worse than no entry. members.read is held by
@@ -209,6 +352,22 @@
          belongs to nothing must still be able to leave, and it is the one thing
          this menu always holds. */}}
     {{if .HasOrganization}}
+    {{/* API keys (M46). It was a top-level destination — one of the three F6 and
+         F7 cut the nav down to — and it is here now because blind task 7's first
+         click came looking for it here.
+
+         That is the same argument M28 made for Members, Invitations and
+         Workspaces (D35), and M39, M42 and M43 repeated for Domains, Webhooks
+         and Automation: a top-level slot is for a place you go while work is
+         being done, and a key is minted once and then not thought about until
+         it stops working. API keys was the one destination in the product that
+         matched that description and was not in this menu, and the owner's first
+         click is the evidence that the mismatch was visible from outside.
+
+         Gated exactly as it was in the header — on having an organization and on
+         nothing else — because /keys itself gates on nothing else. Moving it must
+         not quietly change who can see it. */}}
+    <a href="/keys" class="block px-3 py-2 text-sm {{if eq .Nav "keys"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">API keys</a>
     {{/* The reputation-feed disclosure (M32, D40). The one entry in this menu
          gated on no permission at all, and that is the point of it: what the
          page discloses is where *your* destinations go, so an editor is exactly
@@ -238,16 +397,23 @@
      Bounded on purpose, at notify.PreviewLimit. A preview long enough to scroll
      would be a worse copy of the page it links to.
 
-     The items are text rather than links. Nothing here is the only way to reach
-     a notification — every one of them is on /notifications, which is what View
-     all is for — and inventing a per-notification destination would be scope
-     this milestone does not have.
+     **The items lead somewhere since M48**, and this comment used to say the
+     opposite: *"inventing a per-notification destination would be scope this
+     milestone does not have"*. M22 was right to defer it and M48 is the
+     milestone that has the scope — the mapping from a notification's kind and
+     data to a URL is in internal/httpx, enumerated and tested per kind, and the
+     bell is the surface these are most often read on.
+
+     A form submit rather than an anchor, for the reason the notifications page
+     uses one: opening a notification marks it read, and a state change behind a
+     GET is one any prefetch can fire. An item whose kind leads nowhere stays
+     text, which is what it always was.
 
      The empty state is the common case for a new account, so the panel says so
      rather than opening onto a blank box. Both count and preview arrive from one
      service call; see shell in internal/httpx/web.go. */}}
 {{define "notification_bell"}}
-<div class="flex items-center">
+<div class="flex shrink-0 items-center">
   <button type="button" popovertarget="linkctrl-notification-menu"
           class="flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 {{if eq .Nav "notifications"}}text-accent-ink{{else}}text-muted hover:bg-sunken hover:text-ink{{end}}">
     <svg viewBox="0 0 24 24" class="h-5 w-5 fill-current" aria-hidden="true"><path d="M12 2a6 6 0 0 0-6 6v3.8l-1.9 3.7A1 1 0 0 0 5 17h14a1 1 0 0 0 .9-1.5L18 11.8V8a6 6 0 0 0-6-6Zm0 20a3 3 0 0 0 2.8-2H9.2a3 3 0 0 0 2.8 2Z"/></svg>
@@ -255,13 +421,19 @@
     {{if .Unread}}<span class="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-xs font-semibold text-on-accent" aria-label="{{.Unread}} unread">{{.Unread}}</span>{{end}}
   </button>
   <div id="linkctrl-notification-menu" popover="auto"
-       class="fixed inset-auto top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] z-20 w-80 max-w-[calc(100vw_-_2rem)] rounded-lg border border-line bg-raised shadow-lg">
+       class="fixed inset-auto top-[5.25rem] sm:top-[3.75rem] right-[max(1rem,calc(50%_-_35rem))] z-20 w-80 max-w-[calc(100vw_-_2rem)] rounded-lg border border-line bg-raised shadow-lg">
     <p class="border-b border-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-subtle">Notifications</p>
     {{if .UnreadPreview}}
     <ul class="max-h-80 overflow-y-auto">
       {{range .UnreadPreview}}
       <li class="border-b border-line px-3 py-2 last:border-b-0">
+        {{if .Target}}
+        <form method="post" action="/notifications/{{.ID}}/open">
+          <button type="submit" class="w-full cursor-pointer text-left text-sm font-medium text-ink hover:underline">{{.Title}}</button>
+        </form>
+        {{else}}
         <p class="text-sm font-medium text-ink">{{.Title}}</p>
+        {{end}}
         {{if .Body}}<p class="mt-0.5 line-clamp-2 text-xs text-muted">{{.Body}}</p>{{end}}
         <p class="mt-1 text-xs text-subtle">{{.CreatedAt.Format "2 Jan 2006, 15:04"}} UTC</p>
       </li>
@@ -320,3 +492,43 @@
         {{if $on}}aria-current="true"{{end}}
         class="rounded-md px-3 py-1 text-sm {{if $on}}bg-raised font-medium text-ink shadow-sm{{else}}text-muted hover:text-ink{{end}}">{{.Label}}</button>
 {{end}}
+
+{{/* The links area's own navigation (M46).
+
+     Campaigns and Folders were two text links in the top-right corner of the
+     links page (pages/links.html:9-10 before this milestone), which the owner
+     had "not even noticed … existed until now". They are destinations, not page
+     furniture, and they are now a bar of their own.
+
+     In the chrome rather than in the page, for two reasons. It is drawn on all
+     four links-area pages from one place instead of being pasted into three
+     templates that can then disagree. And it keeps the links page's search input
+     the first control inside <main>, which is the trap this milestone is
+     removing — a sub-navigation rendered as page content would sit in front of
+     it and re-create the problem with different markup.
+
+     Not a fourth, fifth and sixth top-level slot: the top bar holds the places
+     you go, and these three are one place seen three ways. That is D35's
+     argument applied one level down rather than a new rule.
+
+     Active state comes from .Path, which is switchTarget(r.URL.Path) — already
+     on the shell for the switcher's `next`, and already collapsing /links/{id}
+     to /links, which is the answer this bar wants too: a link's detail page is
+     inside Links.
+
+     overflow-x-auto on the strip. Three short labels fit 360px today; a fourth
+     added later must scroll this bar rather than the page. */}}
+{{define "links_nav"}}
+<nav aria-label="Links" class="border-b border-line bg-raised">
+  <div class="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4 py-2">
+    {{template "subnavlink" (dict "Href" "/links" "Label" "Links" "Active" (eq .Path "/links"))}}
+    {{template "subnavlink" (dict "Href" "/campaigns" "Label" "Campaigns" "Active" (eq .Path "/campaigns"))}}
+    {{template "subnavlink" (dict "Href" "/folders" "Label" "Folders" "Active" (eq .Path "/folders"))}}
+  </div>
+</nav>
+{{end}}
+
+{{/* One entry in it. `aria-current="page"` rather than colour alone, because the
+     colour is the only other signal and it is the one a screen reader cannot
+     read. */}}
+{{define "subnavlink"}}<a href="{{.Href}}"{{if .Active}} aria-current="page"{{end}} class="shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium {{if .Active}}bg-sunken text-accent-ink{{else}}text-muted hover:bg-sunken hover:text-ink{{end}}">{{.Label}}</a>{{end}}

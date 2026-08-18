@@ -57,9 +57,40 @@ type LinkStats struct {
 	// (M36). Empty for a link that has never sent a click anywhere other than
 	// its own destination, which is every link on a default instance.
 	Destinations []DestinationSplit `json:"destinations"`
+	// QRCodes is the per-code breakdown (M50). Empty for a link nobody has
+	// scanned, and one row — the default code — for a link with a single code,
+	// which is every link until somebody adds a second.
+	QRCodes []QRCodeSplit `json:"qr_codes"`
 	// Caveat travels with the data rather than living only in documentation,
 	// so a client rendering these numbers can surface it.
 	Caveat string `json:"caveat"`
+}
+
+// QRCodeSplit is one QR code's share of a link's scans (M50).
+//
+// **Read from the referrer dimension the scans were already rolled up into**,
+// which is what keeps this a filter rather than a second rollup: `qr` is the
+// default code and `qr:<slug>` is a named one, and both were written by the pass
+// that writes every other breakdown.
+type QRCodeSplit struct {
+	// Slug is the identity printed in the code's payload. Empty for the default
+	// code — the one whose payload carries no code parameter, and the one every
+	// picture drawn before M50 is.
+	Slug string `json:"slug"`
+	// Label is what the workspace calls this code. Empty for a code nobody has
+	// named and for one that has since been deleted, which is why Removed exists
+	// beside it: a client needs to know the difference between "unnamed" and
+	// "gone".
+	Label string `json:"label"`
+	// Removed marks scans attributed to a code that no longer exists. They are
+	// reported rather than dropped, exactly as a removed split arm's are: a
+	// link's totals must not change because somebody retired a poster. New scans
+	// of a deleted code's printed payload do not land here — an unrecognised
+	// slug is recorded as the default code — so a removed row stops growing at
+	// the moment the code is deleted.
+	Removed        bool  `json:"removed,omitempty"`
+	Clicks         int64 `json:"clicks"`
+	UniqueVisitors int64 `json:"unique_visitors"`
 }
 
 // DestinationSplit is one destination's share of a link's clicks (M36).
@@ -191,7 +222,176 @@ func (r *Reader) LinkStats(ctx context.Context, actor *auth.Identity, linkID uui
 	}
 	out.Destinations = destinations
 
+	codes, err := r.qrCodeSplit(ctx, actor.WorkspaceID, linkID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out.QRCodes = codes
+	collapseQRReferrers(out.Dimensions)
+
 	return out, nil
+}
+
+// collapseQRReferrers puts every QR value in the referrers breakdown back under
+// the single `qr` row M41 promised (M50).
+//
+// **The panel that existed before this milestone still shows what it showed.**
+// D76 put scans in the Referrers breakdown as one value beside `direct`, and a
+// link that grew a second code would otherwise turn that one row into a row per
+// code — a shipped surface changing shape because a feature the reader is not
+// looking at was used. The per-code split has its own section; this one keeps
+// answering "how many of these visits came from a QR code at all".
+//
+// The sum is exact for the rows it was given, not for the link: the read above
+// is bounded at twenty values ordered by clicks, so a code outside that bound is
+// outside this total too. That is the bound every breakdown here already has and
+// it is why QRCodes is read separately rather than derived from these rows.
+func collapseQRReferrers(dimensions map[string][]DimensionValue) {
+	rows, ok := dimensions["referrer"]
+	if !ok {
+		return
+	}
+	out := make([]DimensionValue, 0, len(rows))
+	var merged DimensionValue
+	var seen bool
+	for _, row := range rows {
+		if _, named := domain.QRCodeSlugOf(row.Value); !named && row.Value != domain.ClickSourceQR {
+			out = append(out, row)
+			continue
+		}
+		seen = true
+		merged.Clicks += row.Clicks
+		// Summed rather than distinct-counted, the same way the daily uniques
+		// are summed across days: the visitor hashes behind two codes cannot be
+		// intersected from a rollup, so this over-counts anybody who scanned
+		// both. Caveat says so for the whole page.
+		merged.UniqueVisitors += row.UniqueVisitors
+	}
+	if !seen {
+		return
+	}
+	merged.Value = domain.ClickSourceQR
+	out = append(out, merged)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Clicks > out[j].Clicks })
+	dimensions["referrer"] = out
+}
+
+// qrCodeSplit assembles the per-code breakdown (M50).
+//
+// Two reads and no scan of click_events, which is destinationSplit's shape and
+// deliberately so: the rolled-up rows filtered to the QR values, and the link's
+// codes to give each slug a label. Storing the label in the rollup instead would
+// freeze it at the moment of the rollup and make a renamed code read as two.
+//
+// A code with no scans is still a row, because "this poster has produced
+// nothing" is the answer somebody opens this breakdown to get. A slug with scans
+// and no code is also a row, marked Removed, for the reason a removed
+// destination is: retiring a poster must not change what the link's history
+// says.
+//
+// **Every code has a slug now and the breakdown tells them apart by it** (D183).
+// What it does *not* have a slug for is the untagged bucket — the bare `qr` the
+// redirect records for a picture carrying no code parameter — and that is folded
+// onto the flag-holder below rather than shown as a row of its own. A reader
+// asking "which of my posters is working" is not asking about the difference
+// between two payloads that resolve to the same code.
+func (r *Reader) qrCodeSplit(
+	ctx context.Context, workspaceID, linkID uuid.UUID, from, to time.Time,
+) ([]QRCodeSplit, error) {
+	rows, err := r.q.GetLinkQRDimensions(ctx, dbgen.GetLinkQRDimensionsParams{
+		LinkID: linkID, FromDay: from, ToDay: to,
+		RowLimit: int32(domain.MaxQRCodesPerLink) + 1,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read qr code breakdown: %w", err)
+	}
+	known, err := r.q.ListQRCodes(ctx, dbgen.ListQRCodesParams{
+		LinkID: linkID, WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read link qr codes: %w", err)
+	}
+	if len(rows) == 0 && len(known) <= 1 {
+		// A link with no scans and no code anybody named. Reporting a one-row
+		// "breakdown" saying its only code produced nothing is noise on every
+		// link on the instance.
+		return nil, nil
+	}
+
+	counted := make(map[string]QRCodeSplit, len(rows))
+	for _, row := range rows {
+		slug, _ := domain.QRCodeSlugOf(row.Value)
+		counted[slug] = QRCodeSplit{
+			Slug: slug, Clicks: row.Clicks, UniqueVisitors: row.UniqueVisitors,
+		}
+	}
+
+	out := make([]QRCodeSplit, 0, len(known)+len(counted))
+	seen := make(map[string]struct{}, len(known)+1)
+	// The default code exists whether or not a row holds it, so it leads the
+	// list even for a link whose codes were all added later.
+	//
+	// **Every row is asked, not the first one** (M50.8). ListQRCodes led with
+	// the flag-holder until that milestone made it alphabetical, so `known[0]`
+	// was the whole set's answer by construction; afterwards it is one row's.
+	// Left alone this would have added a bucket for an untagged scan *and* then
+	// added the same clicks onto the flag-holder's row below — the same scans
+	// reported twice, on any link whose default does not sort first.
+	held := false
+	for _, code := range known {
+		if code.IsDefault || code.Slug == "" {
+			held = true
+			break
+		}
+	}
+	if !held {
+		out = append(out, counted[""])
+		seen[""] = struct{}{}
+	}
+	for _, code := range known {
+		split := counted[code.Slug]
+		split.Slug, split.Label = code.Slug, code.Label
+		// **The untagged bucket lands on whichever code holds the flag** (D183),
+		// and this is the whole of how a picture printed before that flag existed
+		// goes on being counted where it always was. The bare `qr` value is what
+		// the redirect path records for a scan carrying no `qrc` — every picture
+		// this product drew before M50, every one it drew of a default code
+		// before this reopening, and every scan whose `qrc` names a code the link
+		// no longer has. None of that history was rewritten to give the default
+		// code a slug: it is added here, to the row the flag is on when somebody
+		// looks.
+		//
+		// So the flag moving moves this bucket with it, which is exactly what the
+		// flag means — *where does a picture with no code on it land* — and is
+		// why the surface says so when it moves rather than letting a reader find
+		// out from a number.
+		if code.IsDefault {
+			split.Clicks += counted[""].Clicks
+			// Summed rather than distinct-counted, on collapseQRReferrers'
+			// reasoning: two buckets' visitor hashes cannot be intersected from a
+			// rollup, so somebody who scanned both the old picture and the new one
+			// counts twice. The page's caveat covers it.
+			split.UniqueVisitors += counted[""].UniqueVisitors
+			seen[""] = struct{}{}
+		}
+		out = append(out, split)
+		seen[code.Slug] = struct{}{}
+	}
+	// The known codes keep the order ListQRCodes gave them — alphabetical by
+	// name since M50.8, and default-first before it — because that is the order
+	// the panel lists them in, and a breakdown that reordered itself by traffic
+	// would not line up with the list beside it. Removed codes follow, sorted by
+	// slug so that a map's iteration order never reaches the response.
+	removed := make([]QRCodeSplit, 0, len(counted))
+	for slug, split := range counted {
+		if _, ok := seen[slug]; ok {
+			continue
+		}
+		split.Removed = true
+		removed = append(removed, split)
+	}
+	sort.Slice(removed, func(i, j int) bool { return removed[i].Slug < removed[j].Slug })
+	return append(out, removed...), nil
 }
 
 // destinationDimension is the name RollupDestinationDaily writes its rows under.

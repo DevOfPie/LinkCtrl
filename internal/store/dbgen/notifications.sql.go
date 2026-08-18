@@ -12,6 +12,41 @@ import (
 	"github.com/google/uuid"
 )
 
+const countNotificationsAboutVersion = `-- name: CountNotificationsAboutVersion :one
+SELECT count(*) FROM notifications
+ WHERE user_id = $1
+   AND kind = $2
+   AND data->>'version' = $3::text
+`
+
+type CountNotificationsAboutVersionParams struct {
+	UserID  uuid.UUID
+	Kind    string
+	Version string
+}
+
+// The other re-notify guard, and it is keyed on the thing rather than on the
+// clock (M55).
+//
+// CountRecentNotificationsOfKind above suppresses a warning that is *still
+// true* — the audit log is still too big — so it asks "was this said lately".
+// A release is a different shape: the answer is not that it was said lately, it
+// is that this exact version has already been reported and reporting it again
+// says nothing new. So the version is the key, and there is no window: an
+// operator who was told about 0.4.0 a year ago is not told again, and 0.5.0 is
+// a new fact that arrives once.
+//
+// Reading `data->>'version'` rather than a column of its own is deliberate. The
+// notification is the record that the operator was told; a column beside it
+// would be a second place for the same fact, and the two would disagree the
+// first time one write succeeded and the other did not.
+func (q *Queries) CountNotificationsAboutVersion(ctx context.Context, arg CountNotificationsAboutVersionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countNotificationsAboutVersion, arg.UserID, arg.Kind, arg.Version)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRecentNotificationsOfKind = `-- name: CountRecentNotificationsOfKind :one
 SELECT count(*) FROM notifications
  WHERE user_id = $1
@@ -63,6 +98,41 @@ func (q *Queries) CountUnreadNotifications(ctx context.Context, arg CountUnreadN
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const getNotification = `-- name: GetNotification :one
+SELECT id, user_id, workspace_id, kind, title, body, data, read_at, created_at
+  FROM notifications
+ WHERE id = $1 AND user_id = $2
+`
+
+type GetNotificationParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// One row of the actor's own inbox, scoped by user_id like every statement
+// around it: somebody else's notification is "no rows" rather than a 403 that
+// confirms the id exists.
+//
+// Read by the click-through (M48). Where a notification leads is computed from
+// its `kind` and its `data`, and both have to come off the row — a destination
+// carried on the request would be a redirect target the caller chose.
+func (q *Queries) GetNotification(ctx context.Context, arg GetNotificationParams) (Notification, error) {
+	row := q.db.QueryRow(ctx, getNotification, arg.ID, arg.UserID)
+	var i Notification
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.WorkspaceID,
+		&i.Kind,
+		&i.Title,
+		&i.Body,
+		&i.Data,
+		&i.ReadAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const insertNotification = `-- name: InsertNotification :exec
@@ -369,6 +439,37 @@ type MarkNotificationReadParams struct {
 // double click.
 func (q *Queries) MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markNotificationRead, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markNotificationUnread = `-- name: MarkNotificationUnread :execrows
+UPDATE notifications
+   SET read_at = NULL
+ WHERE id = $1 AND user_id = $2 AND read_at IS NOT NULL
+`
+
+type MarkNotificationUnreadParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// `read_at` back to NULL, which is the whole of "unread": 00600 declared the
+// column nullable and the inbox has always used NULL for it, so putting one
+// back is an UPDATE and never a migration (M48).
+//
+// **Deliberately not the mirror image of MarkNotificationRead.** That statement
+// refuses to touch an already-read row so that "when did you first see this"
+// survives a double click. This one carries no such guard: it exists because the
+// click-through M48 adds marks a notification read as a side effect of opening
+// it, and somebody undoing that is saying they have not dealt with it — which is
+// as true of a row read last week as of one read by accident a second ago. The
+// first-seen timestamp is what is being discarded, on purpose, by the person it
+// belongs to.
+func (q *Queries) MarkNotificationUnread(ctx context.Context, arg MarkNotificationUnreadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markNotificationUnread, arg.ID, arg.UserID)
 	if err != nil {
 		return 0, err
 	}

@@ -6,30 +6,92 @@
   <title>{{.Title}} · LinkCtrl</title>
   <link rel="stylesheet" href="{{asset "css/app.css"}}">
   <link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
+  {{/* htmx 2.0.9 injects a `.htmx-indicator` stylesheet at load unless told not
+       to, and `style-src 'self'` blocks it — a console error on every page, in
+       every browser (F206). Nothing uses hx-indicator; a template that starts to
+       must ship the rules in app.css. A meta tag is CSP-safe where an inline
+       script is not. */}}
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
   <script src="{{asset "js/htmx.min.js"}}" defer></script>
+  {{/* The QR tab's size control and its scroll restoration (M50.8, D191/D193) —
+       this product's first hand-written interactive script, served from the same
+       directory htmx and the /docs initialiser already come from, so
+       `script-src 'self'` is untouched and there is no build step, no CDN and no
+       Node in the path.
+
+       **On every page rather than on the tab.** The QR tab arrives by an htmx
+       swap as often as by a load, so a script tag inside the partial would run
+       again on each swap and would need to be idempotent about it; delegating
+       from `document` and loading once is the cheaper half of that trade. The
+       file does nothing at all on a page with no `#qr` on it — the two
+       delegated handlers test for the section before they act.
+
+       **No `defer`, unlike htmx above, and that is this milestone's second
+       reopening** (F246a, D196). A deferred script runs after the document is
+       parsed, which is after the browser has painted it — so on any connection
+       slower than localhost the reader was shown the top of the page and then
+       watched it scroll to where they had been. Nothing a script does can put a
+       document at an offset before the document exists to have one, so what runs
+       here at head time is the *decision to hold the paint*: the file reads its
+       stored offset, marks this element when there is one, and app.css keeps the
+       body unpainted until the scroll has been applied at `DOMContentLoaded`.
+
+       **What that costs, stated.** This request is render-blocking on every page
+       of the dashboard, where before it was not. It is not an extra round trip:
+       the preload scanner starts it at the same moment as app.css above, which
+       is render-blocking already and four times the size, so the paint waits on
+       the stylesheet either way. What is paid is bandwidth in parallel with a
+       larger file, and what is bought is that a save never shows the reader a
+       position they did not stand at. */}}
+  <script src="{{asset "js/qr-size.js"}}"></script>
 </head>
 <body class="min-h-full bg-surface text-ink antialiased">
 {{if .Identity}}
+{{/* The bar wraps below `sm` and does not above it (M46).
+
+     At 360px the logo, the destinations, the workspace label, the switcher, the
+     bell and the identity control do not fit on one line — measured, not
+     guessed: the round-two walkthrough reported that the "page needs to be
+     scrolled to the side to see anything past half of the workspace switcher".
+     A row that cannot fit either wraps or overflows, and overflowing the whole
+     document is the one answer this milestone forbids.
+
+     h-20 below `sm`, h-14 from `sm` up, and both are exact rather than min-*:
+     the two header panels are in the top layer and are positioned against the
+     viewport, so they need a header height they can be written against. See the
+     POSITIONING note in partials/nav.html.
+
+     min-w-0 on the right-hand group, and truncate inside the label and the
+     switcher. Flex items refuse to shrink below their content by default, which
+     is what turns one long organization name into a document-wide scrollbar. */}}
 <header class="border-b border-line bg-raised">
-  <nav class="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-    <a href="/dashboard" class="flex items-center gap-2 font-semibold tracking-tight text-ink">
+  <nav class="mx-auto flex h-20 max-w-6xl flex-wrap content-center items-center gap-x-3 gap-y-2 px-4 sm:h-14 sm:flex-nowrap sm:gap-x-6">
+    <a href="/dashboard" class="flex shrink-0 items-center gap-2 font-semibold tracking-tight text-ink">
       <svg viewBox="0 0 24 24" class="h-5 w-5 fill-accent" aria-hidden="true"><path d="M10.6 13.4a1 1 0 0 1 0-1.4l3-3a1 1 0 0 1 1.4 1.4l-3 3a1 1 0 0 1-1.4 0Zm-2.2 5.1a4 4 0 0 1-2.9-6.8l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a2 2 0 0 0 2.9 2.9l2.2-2.2a1 1 0 1 1 1.4 1.4l-2.2 2.2a4 4 0 0 1-2.8 1.1Zm7.2-7.2a1 1 0 0 1-.7-1.7l2.2-2.2a2 2 0 0 0-2.9-2.9L12 6.7a1 1 0 1 1-1.4-1.4l2.2-2.2a4 4 0 0 1 5.7 5.7l-2.2 2.2a1 1 0 0 1-.7.3Z"/></svg>
       LinkCtrl
     </a>
-    {{/* The three destinations, drawn only for somebody who has an organization
+    {{/* The two destinations, drawn only for somebody who has an organization
          to spend them in. An account whose only organization was deleted keeps
          its account and belongs to nothing (D36); every link here leads to a
          page that would send it straight back to the one it is on, and a nav
          made entirely of redirects reads as a broken product rather than as an
-         empty state. The count is still exactly three whenever it draws at all,
-         which is what TestTopLevelNavHoldsThreeDestinations holds. */}}
+         empty state. The count is exact whenever it draws at all, which is what
+         TestTopLevelNavHoldsTwoDestinations holds.
+
+         It was three until M46. API keys moved into the identity menu because
+         blind task 7's first click went looking for it there, which is the same
+         argument D35 made for the team surfaces: this level is for where work is
+         done, and a key is minted once. F6 and F7's outcome is amended rather
+         than reversed — the cut from five destinations to three was theirs, and
+         the reasoning that cut it is the reasoning that cut it again. */}}
     {{if .HasOrganization}}
     {{template "navlink" (dict "Href" "/dashboard" "Label" "Dashboard" "Active" (eq .Nav "dashboard"))}}
     {{template "navlink" (dict "Href" "/links" "Label" "Links" "Active" (eq .Nav "links"))}}
-    {{template "navlink" (dict "Href" "/keys" "Label" "API keys" "Active" (eq .Nav "keys"))}}
     {{end}}
-    <div class="ml-auto flex items-center gap-2">
-      {{template "workspace_switch" .}}
+    <div class="ml-auto flex min-w-0 items-center gap-2">
+      {{/* One invocation since M46.6: the pair is fused behind a shared
+           boundary, and partials/nav.html owns the three membership states. */}}
+      {{template "workspace_control" .}}
       {{/* Gated like the identity menu's own entries, and for the same reason
            (F47). The bell's View all goes to /notifications, which sits behind
            RequireOrganization and 303s straight back — so an account belonging
@@ -42,6 +104,11 @@
     </div>
   </nav>
 </header>
+{{/* The links area's second bar (M46), drawn for the four pages whose Nav is
+     "links" — the list, a link, campaigns and folders. Its entries were two text
+     links in the corner of the links page until this milestone; partials/nav.html
+     says why they are chrome now and not page content. */}}
+{{if and .HasOrganization (eq .Nav "links")}}{{template "links_nav" .}}{{end}}
 {{end}}
 <main class="mx-auto max-w-6xl px-4 py-8">
 {{block "content" .}}{{end}}

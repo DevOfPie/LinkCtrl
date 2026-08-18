@@ -70,7 +70,52 @@ cmd_init() {
 		http=$demo_http pg=$demo_pg redis=$demo_redis metrics=$demo_metrics
 		restart=$demo_restart level=info
 		extra='# The demo runs the image built at the last validated milestone, so it does
-# not move while a milestone is in progress. make demo-update retags it.'
+# not move while a milestone is in progress. make demo-update retags it.
+
+# Custom-domain re-verification off, and this is the one setting the demo needs
+# that a real deployment must not copy (F162).
+#
+# lctl demo verifies go.linkctrl.example through link.Service.VerifyDomain — the
+# real check, the real audit event — against a stub resolver that lives inside
+# the seeder process and dies with it. The hostname is an RFC 2606 .example name
+# that cannot resolve for anybody, so the long-running server, which wires the
+# real resolver, failed that check every hour from the moment the seed finished
+# and called UnverifyDomain at verification_failing_since + DOMAIN_VERIFY_GRACE.
+# The demo lost its only verified custom hostname 24 hours after every reseed,
+# silently, and the coverage row asserting exactly one verified domain could not
+# see it: that test seeds a throwaway database and asserts in the same instant,
+# so it measures the seed and never the instance.
+#
+# Zero disables the pass and leaves verification on-demand only, which is what
+# the setting is documented to mean — not a longer window, and not a hostname
+# that serves forever on the strength of a check that once passed. The two
+# alternatives are both worse: a grace window of years would leave the domains
+# page showing "verification failing since ..." for the life of the instance,
+# which is the product telling the truth and the demo showing a broken feature;
+# a hostname a real resolver can satisfy needs a TXT record published in a zone
+# somebody owns, which no seeder can do.
+#
+# It switches off a SECOND job with it, and naming only the first was the defect
+# in this comment. jobRunner.runHostReload returns immediately on a non-positive
+# interval, so the per-replica reload of the verified-hostname set stops too.
+# That reload is the backstop F73 bought: it has no leadership, because the set
+# lives in each process, and a replica that missed a pub/sub invalidation is
+# otherwise left serving whatever it last knew until it restarts.
+#
+# The demo can afford to lose that and a real deployment cannot, which is the
+# whole reason this line is marked as one not to copy. The demo runs a single
+# replica, so there is no second process to fall out of step with.
+#
+# What the demo cannot afford, and what make demo-update therefore does: the
+# reseed rewrites the domains rows, so the running app is left holding a host set
+# it loaded before those rows existed. Nothing lazily reloads it — the whole set
+# is held in memory so that a miss costs no query — and lctl runs on the host
+# with no Redis, so it publishes no invalidation either. make demo-update
+# recreates the app container AFTER the reseed for exactly this reason. That
+# ordering is what makes this line safe here; reversed, a fresh demo serves
+# nothing on its custom hostname and a repeat serves a cached entry naming a
+# domain id the reseed deleted.
+LINKCTRL_DOMAIN_VERIFY_INTERVAL=0'
 	else
 		http=$test_http pg=$test_pg redis=$test_redis metrics=$test_metrics
 		restart=$test_restart level=debug
@@ -113,6 +158,12 @@ LINKCTRL_RESTART=$restart
 
 # ─── Secrets ─────────────────────────────────────────────────────────────────
 LINKCTRL_API_KEY_PEPPER=$(openssl rand -base64 48 | tr -d '\n')
+# Optional in the product and minted here anyway (M53). An instance without it
+# offers no second factor, and a local instance that silently could not do a
+# thing the product does is the shape a feature goes unnoticed in. Its own value
+# and never the pepper: rotating an API-key secret must not lock every account
+# out of its authenticator.
+LINKCTRL_MFA_SECRET_KEY=$(openssl rand -base64 48 | tr -d '\n')
 POSTGRES_PASSWORD=$(openssl rand -base64 36 | tr -dc 'A-Za-z0-9' | cut -c1-40)
 
 # ─── Local ───────────────────────────────────────────────────────────────────

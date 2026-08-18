@@ -40,13 +40,17 @@
 // which a ring inside another ring is a hole whichever way round it is wound.
 // The template carries the attribute; geo.FillRule is where it comes from.
 //
-// The antimeridian needs no special handling *and that is checked rather than
-// assumed*: Natural Earth cuts its geometry at ±180 already, so no ring wraps.
-// The generator fails if any decoded coordinate lands outside the sphere, which
-// is what a wrapped ring would look like — a country stretched across the whole
-// frame is the failure this catches before it is committed. Russia and Fiji do
-// touch both frame edges, in separate rings, which is the cut working rather
-// than a wrap.
+// The antimeridian **does** need special handling, and the first version of
+// this comment claimed otherwise (F210). world-atlas does not cut its rings at
+// ±180: Fiji's ring and two of Russia's (the mainland, and Wrangel Island)
+// cross it whole, every coordinate staying inside [-180, 180] while consecutive
+// points jump ~360° — so the off-the-sphere check below never fires, the
+// projected path wraps 180→-180, and its fill sweeps the frame as a horizontal
+// band at that ring's latitudes. splitRings is the handling: any ring whose
+// consecutive longitudes jump more than 180° is unwrapped into continuous
+// longitude, clipped against the meridian, and emitted as one ring per side,
+// with the crossing points interpolated onto ±180 exactly. Rings that do not
+// cross pass through untouched, so the fix cannot move any other country.
 //
 // # Why the paths are relative
 //
@@ -147,6 +151,10 @@ func main() {
 		if err != nil {
 			fail(fmt.Errorf("%s (%s): %w", code, g.Properties.Name, err))
 		}
+		rings, err = splitRings(rings)
+		if err != nil {
+			fail(fmt.Errorf("%s (%s): %w", code, g.Properties.Name, err))
+		}
 		path := pathOf(rings)
 		if path == "" {
 			fail(fmt.Errorf("%s (%s) produced an empty path", code, g.Properties.Name))
@@ -234,10 +242,10 @@ func decodeArcs(topo *topology) ([][][2]float64, error) {
 			x += d[0]
 			y += d[1]
 			lon, lat := x*sx+tx, y*sy+ty
-			// The sphere, checked rather than assumed. A ring that wrapped the
-			// antimeridian would land outside it, and the whole point of
-			// checking here is that a wrapped ring is invisible in the data and
-			// unmissable on the rendered map.
+			// The sphere, checked rather than assumed. This catches a decode
+			// gone wrong — a bad transform, a corrupt delta. It does not catch
+			// an antimeridian crossing, which stays inside these bounds while
+			// jumping ~360° between consecutive points; splitRings owns that.
 			if lon < -180.0001 || lon > 180.0001 || lat < -90.0001 || lat > 90.0001 {
 				return nil, fmt.Errorf("arc %d point %d decodes to (%.4f, %.4f), off the sphere",
 					i, j, lon, lat)
@@ -308,6 +316,152 @@ func ringsOf(g geometry, arcs [][][2]float64) ([][][2]float64, error) {
 		return nil, fmt.Errorf("no rings")
 	}
 	return out, nil
+}
+
+// splitRings replaces every ring that crosses the antimeridian with one ring
+// per side of ±180, and passes every other ring through untouched — untouched
+// is load-bearing: it is what keeps the 172 countries that do not cross
+// byte-identical in the generated file, so the diff is the fix and nothing
+// else.
+func splitRings(rings [][][2]float64) ([][][2]float64, error) {
+	var out [][][2]float64
+	for _, ring := range rings {
+		if !crossesAntimeridian(ring) {
+			out = append(out, ring)
+			continue
+		}
+		parts, err := splitRing(ring)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, parts...)
+	}
+	return out, nil
+}
+
+// crossesAntimeridian reports whether consecutive points jump more than 180°
+// of longitude. No real edge does — at 110m the longest edges are a few
+// degrees — so a jump can only be the short way round the sphere written the
+// long way round the frame.
+func crossesAntimeridian(ring [][2]float64) bool {
+	for i := 1; i < len(ring); i++ {
+		if math.Abs(ring[i][0]-ring[i-1][0]) > 180 {
+			return true
+		}
+	}
+	return false
+}
+
+// splitRing cuts one antimeridian-crossing ring at ±180.
+//
+// Unwrap first: walk the ring accumulating each step's short-way delta, which
+// makes longitude continuous — Fiji's 177…180, -180…-178 becomes 177…182.
+// Shift the whole ring by a multiple of 360° so its minimum lands in
+// [-180, 180); a crossing ring's maximum then sits past +180, and clipping
+// against that meridian yields the east part directly and the west part after
+// a -360° shift. Crossing points are interpolated onto the meridian exactly,
+// so both halves end flush on the frame edge.
+func splitRing(ring [][2]float64) ([][][2]float64, error) {
+	if ring[0] != ring[len(ring)-1] {
+		// TopoJSON rings close on their first point; guarantee it rather than
+		// assume it, because the edge walk below needs the closing edge.
+		ring = append(append([][2]float64{}, ring...), ring[0])
+	}
+	un := make([][2]float64, len(ring))
+	un[0] = ring[0]
+	for i := 1; i < len(ring); i++ {
+		d := ring[i][0] - ring[i-1][0]
+		if d > 180 {
+			d -= 360
+		} else if d < -180 {
+			d += 360
+		}
+		un[i] = [2]float64{un[i-1][0] + d, ring[i][1]}
+	}
+	minL, maxL := un[0][0], un[0][0]
+	for _, p := range un {
+		minL = math.Min(minL, p[0])
+		maxL = math.Max(maxL, p[0])
+	}
+	if maxL-minL >= 360 {
+		return nil, fmt.Errorf("ring spans %.1f° of longitude unwrapped; only a ring circling the globe does that, and Antarctica is dropped", maxL-minL)
+	}
+	if shift := -360 * math.Floor((minL+180)/360); shift != 0 {
+		for i := range un {
+			un[i][0] += shift
+		}
+		maxL += shift
+	}
+	if maxL <= 180 {
+		return nil, fmt.Errorf("ring flagged as crossing the antimeridian fits inside [-180, 180] unwrapped")
+	}
+
+	// below stays where it is; beyond sits past +180 in unwrapped longitude,
+	// so shifting it a full turn west puts it at the frame's left edge.
+	below := clipRing(un, true)
+	beyond := clipRing(un, false)
+	for i := range beyond {
+		beyond[i][0] -= 360
+	}
+	var parts [][][2]float64
+	for _, p := range [][][2]float64{below, beyond} {
+		if len(p) >= 4 && !degenerate(p) {
+			parts = append(parts, p)
+		}
+	}
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("splitting a crossing ring produced no usable part")
+	}
+	return parts, nil
+}
+
+// clipRing keeps the part of a closed ring at or below lon=180 (keepLE true)
+// or at or beyond it (keepLE false), inserting the crossing points.
+// Sutherland–Hodgman against one half-plane: a concave ring crossing the
+// meridian more than twice would come back joined by zero-width bridges along
+// it, which evenodd fills as nothing and the frame edge hides — but neither
+// crossing ring in the data does.
+func clipRing(ring [][2]float64, keepLE bool) [][2]float64 {
+	inside := func(p [2]float64) bool {
+		if keepLE {
+			return p[0] <= 180
+		}
+		return p[0] >= 180
+	}
+	// Only called when s and e straddle the meridian strictly, so the
+	// denominator is never zero.
+	cross := func(s, e [2]float64) [2]float64 {
+		t := (180 - s[0]) / (e[0] - s[0])
+		return [2]float64{180, s[1] + t*(e[1]-s[1])}
+	}
+	var out [][2]float64
+	for i := 1; i < len(ring); i++ {
+		s, e := ring[i-1], ring[i]
+		switch {
+		case inside(s) && inside(e):
+			out = append(out, e)
+		case inside(e):
+			out = append(out, cross(s, e), e)
+		case inside(s):
+			out = append(out, cross(s, e))
+		}
+	}
+	if len(out) > 0 && out[0] != out[len(out)-1] {
+		out = append(out, out[0])
+	}
+	return out
+}
+
+// degenerate reports a ring with no extent in one axis — the sliver left when
+// a ring merely touches the meridian rather than crossing it.
+func degenerate(ring [][2]float64) bool {
+	minL, maxL := ring[0][0], ring[0][0]
+	minA, maxA := ring[0][1], ring[0][1]
+	for _, p := range ring {
+		minL, maxL = math.Min(minL, p[0]), math.Max(maxL, p[0])
+		minA, maxA = math.Min(minA, p[1]), math.Max(maxA, p[1])
+	}
+	return minL == maxL || minA == maxA
 }
 
 // pathOf projects rings and renders them as one SVG path.

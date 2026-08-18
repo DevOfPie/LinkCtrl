@@ -75,6 +75,48 @@ func LoadMembershipAuthority(
 	return &MembershipAuthority{permission: permission, rows: rows}, nil
 }
 
+// LoadMemberships is the same load with the permission question left out: which
+// scopes does this actor hold a membership in at all, never mind what it grants.
+//
+// It exists for M54. An account-wide API key's authority has to be established
+// in an organization the caller is *not* acting in — an administrator cutting
+// their tenant out of somebody else's key has to know whether the key reaches
+// it — and the question there is membership, not permission. Passing a
+// permission slug would be noise a later reader would try to interpret; the
+// empty string matches no row in `permissions`, so every GrantsPermission comes
+// back false and Reaches below is the only honest thing to ask of the result.
+func LoadMemberships(
+	ctx context.Context, q *dbgen.Queries, userID, orgID uuid.UUID,
+) (*MembershipAuthority, error) {
+	return LoadMembershipAuthority(ctx, q, userID, orgID, "")
+}
+
+// Reaches reports whether any membership covers the scope, ignoring what it
+// grants. In's question minus the permission.
+//
+// A nil workspaceID is the organization-wide scope, and only an
+// organization-wide membership reaches it — the same asymmetry In relies on,
+// and the reason this is the right test for an unpinned key. Such a key has
+// always required an organization-wide membership (GetAPIKeyByPrefix's
+// predicate refuses one covered by a workspace-scoped row), so asking whether
+// it reaches a second organization is asking exactly this.
+//
+// A nil receiver reaches nothing, for the reason In grants nothing.
+func (m *MembershipAuthority) Reaches(workspaceID *uuid.UUID) bool {
+	if m == nil {
+		return false
+	}
+	for _, row := range m.rows {
+		if row.WorkspaceID == nil {
+			return true
+		}
+		if workspaceID != nil && *row.WorkspaceID == *workspaceID {
+			return true
+		}
+	}
+	return false
+}
+
 // In answers for one scope.
 //
 // A nil workspaceID is the **organization-wide** scope, which only an

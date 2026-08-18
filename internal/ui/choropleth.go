@@ -42,10 +42,12 @@ type WorldMap struct {
 	// Unmapped lists codes with traffic that this map has no shape for.
 	Unmapped []string
 
-	// Unavailable is set when no GeoIP database is configured, and carries the
-	// same sentence the ranked list has always used. The map is not rendered at
-	// all in that state: a world drawn entirely in the no-data colour is a
-	// picture of nothing that looks like a picture of something.
+	// Unavailable is set when this view has no country to draw and no way to
+	// acquire one — nothing resolved for the link and window the caller is
+	// rendering, and no database — and carries the same sentence the ranked list
+	// has always used. The map is not rendered at all in that state: a world
+	// drawn entirely in the no-data colour is a picture of nothing that looks
+	// like a picture of something.
 	Unavailable string
 }
 
@@ -69,20 +71,39 @@ type MapBand struct {
 	Upper int64
 }
 
-// GeoUnavailable is the sentence a page shows when no GeoIP database is
-// configured.
+// GeoUnavailable is the sentence a page shows when it has no country to report
+// and no database that could produce one.
 //
-// One constant, used by the map and by the ranked list, because the two views
-// must not be able to disagree about whether this instance can resolve a
-// country. TestCountryViewsAgreeWhenGeoIPIsAbsent asserts they use it.
+// It names the configuration because the configuration is the fix — and it is
+// shown only where that is the whole truth. A link showing country rows in the
+// window on screen gets those rows, not this sentence (F160).
+//
+// **The scope is the link and the window, not the instance.** The caller's test
+// is over one LinkStats breakdown, so on a database-less instance holding
+// country history two links can differ: one with countries inside the selected
+// window draws a map, the one beside it with none meets this sentence. That is
+// narrower than F160's fix note claimed, and widening it needs a query this page
+// deliberately does not make — see httpx.fillLinkAnalytics, and F195.
+//
+// One constant, used by the map and by the ranked list, because the two views of
+// **one** link's window must not be able to disagree about whether a country can
+// be reported for it. TestTheMapAndTheRankedListUseOneSentence asserts they use
+// it — the name written here until 2026-08-10 was of no test in the tree.
 const GeoUnavailable = "Geographic data is unavailable: no GeoIP database is configured."
 
 // Choropleth lays a country breakdown out over the world map.
 //
-// values is per alpha-2 code. available says whether this instance has a GeoIP
-// database at all — passed in rather than inferred from an empty map, because a
-// link with no clicks yet and an instance that cannot resolve a country are
-// different facts and only one of them is worth telling somebody about.
+// values is per alpha-2 code. available says whether a country can be reported
+// for the link and window being drawn — passed in rather than inferred from an
+// empty map, because a link with no clicks yet and a view with no country and no
+// way to acquire one are different facts and only one of them is worth telling
+// somebody about.
+//
+// **It is not "is a GeoIP database configured".** That was the test until F160,
+// and it hid the map from every instance holding country history whose database
+// had never been configured or had since been removed — the demo among them.
+// The caller decides; see httpx.fillLinkAnalytics, where the answer is this
+// window's rows or the configuration, either one.
 func Choropleth(values map[string]int64, metric, caveat string, available bool) WorldMap {
 	m := WorldMap{
 		ViewBox:     geo.ViewBox,

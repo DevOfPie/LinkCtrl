@@ -39,6 +39,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
@@ -61,12 +62,14 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/platform/httpserver"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/postgres"
 	"github.com/DevOfPie/LinkCtrl/internal/platform/redis"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/store/dbgen"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
+	"github.com/DevOfPie/LinkCtrl/internal/update"
 	"github.com/DevOfPie/LinkCtrl/internal/webhook"
 )
 
@@ -391,18 +394,31 @@ func run(cfg config.Config, _ io.Writer) error {
 		// A *configuration* mistake is still fatal — config.Validate refuses an
 		// unparseable sender or credentials that would go over the wire in
 		// clear — so this is only ever about reachability.
-		if err := sender.Verify(ctx); err != nil {
-			log.Error("smtp relay did not accept a connection at startup; "+
-				"queued mail will be retried until it does",
-				slog.String("relay", sender.Addr()),
-				slog.String("tls", cfg.SMTP.TLS),
-				slog.Any("error", err))
-		} else {
+		//
+		// **In its own goroutine, and that is the whole of finding F173** (D166).
+		// Called inline, the sentence above was false: an unreachable relay held
+		// this function for the whole of SMTP_TIMEOUT — ten seconds by default,
+		// measured at 10.05 — before the listener below was ever reached, so a
+		// link shortener with a dead relay stopped serving redirects at every
+		// boot. Nothing between here and ListenAndServe reads the result, so
+		// there was never anything to wait for; the outbox retries regardless of
+		// what this probe finds, which is why its answer can arrive late without
+		// changing a single decision. It is bounded by SMTP_TIMEOUT and by ctx,
+		// so a shutdown during startup cancels it rather than outliving it.
+		go func() {
+			if err := sender.Verify(ctx); err != nil {
+				log.Error("smtp relay did not accept a connection at startup; "+
+					"queued mail will be retried until it does",
+					slog.String("relay", sender.Addr()),
+					slog.String("tls", cfg.SMTP.TLS),
+					slog.Any("error", err))
+				return
+			}
 			log.Info("smtp relay reachable",
 				slog.String("relay", sender.Addr()),
 				slog.String("tls", cfg.SMTP.TLS),
 				slog.Bool("authenticated", cfg.SMTP.Username != ""))
-		}
+		}()
 
 		mailSvc, err = mail.NewService(pools.App, mail.Config{
 			Renderer: renderer, Sender: sender, Logger: log,
@@ -440,6 +456,74 @@ func run(cfg config.Config, _ io.Writer) error {
 		log.Warn("LINKCTRL_SIGNUP_MODE is open but no mailer is configured; "+
 			"public registration verifies an address by email, so sign-ups are invitation-only",
 			slog.String("effective_signup_mode", string(signupSvc.Effective())))
+	}
+
+	// Account recovery (M51). Built beside signup because it is the same shape —
+	// a token mailed to an address, spent once — and after the mailer for the
+	// reason invitations are.
+	//
+	// **The one consumer whose nil mailer is a refusal rather than a
+	// degradation.** Everything else in this tree drops to a lesser behaviour
+	// when SMTP_HOST is unset; the mail here *is* the mechanism, so recovery
+	// says so out loud instead of succeeding into a void (F141).
+	recoverySvc, err := recovery.NewService(pools.App, recovery.Config{
+		AppURL: cfg.AppOrigin(),
+		Hasher: authSvc.Hasher(),
+		Mail:   recoveryMailer(mailSvc),
+		Audit:  auditSvc,
+		Log:    log,
+	})
+	if err != nil {
+		return err
+	}
+	// Said once, at boot, for the reason the signup warning above is: an
+	// operator who has configured no relay has also switched off the only route
+	// back into a locked-out account, and the page that says so is one nobody
+	// is watching.
+	if !recoverySvc.MailerConfigured() {
+		log.Warn("no mailer is configured, so a forgotten password cannot be reset in the product; " +
+			"the operator's only route back into an account is setting its hash directly")
+	}
+
+	// Account deletion and subject erasure (M52). Built after recovery because
+	// it is the other end of the same lifecycle and shares its two collaborators
+	// — the hasher that confirms a password, and the audit writer — and because
+	// both are the answer to a finding rather than to a feature request: F141
+	// was no route back into an account, F44 is no route out of one.
+	accountSvc, err := account.NewService(pools.App, account.Config{
+		Auth:  authSvc,
+		Audit: auditSvc,
+		Log:   log,
+	})
+	if err != nil {
+		return err
+	}
+
+	// The second factor (M53). Built after recovery and deletion because it is
+	// the third thing in the same lifecycle, and after recovery specifically
+	// because it depends on it: a second factor makes lockout strictly more
+	// likely, and shipping one where a lost password was permanent would take a
+	// known defect and multiply it.
+	//
+	// **The cipher is nil when MFA_SECRET_KEY is unset**, which is a supported
+	// instance rather than a misconfiguration — every deployment was that
+	// instance before this milestone. The service is still built, because
+	// enrolled accounts must still stop at the second-factor prompt on an
+	// instance whose key went missing, and their route on is a recovery code.
+	mfaCipher, err := mfaCipherFor(cfg, log)
+	if err != nil {
+		return err
+	}
+	mfaSvc, err := auth.NewMFAService(pools.App, auth.MFAConfig{
+		Auth:   authSvc,
+		Cipher: mfaCipher,
+		Issuer: mfaIssuer(cfg),
+		Audit:  auditSvc,
+		Notify: notifySvc,
+		Log:    log,
+	})
+	if err != nil {
+		return err
 	}
 
 	// Invitations. Built after the mailer, because whether one exists is the
@@ -795,9 +879,27 @@ func run(cfg config.Config, _ io.Writer) error {
 		Observer: metrics,
 	})
 
+	// The update check (M55). **Nil unless LINKCTRL_UPDATE_CHECK allows it**, and
+	// that is where the variable takes effect: an instance with it off builds no
+	// client, registers no work in the job family, and therefore cannot open the
+	// one socket in this product that leaves the deployment on a schedule.
+	//
+	// The operator's other half of the switch — the answer they gave at the
+	// first-run prompt (D149) — is a row rather than a variable, so it is read on
+	// every pass instead of at boot: it can change after this line has run.
+	var updateSvc *update.Service
+	if cfg.UpdateCheck {
+		updateSvc = update.NewService(pools.App, update.Config{
+			Version:  build.Get().Version,
+			Announce: notifySvc,
+			Log:      log,
+		})
+	}
+
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
-		linkSvc, webhookSvc, automationSvc, hostCache, cfg.Domains,
+		recoverySvc, accountSvc, mfaSvc,
+		linkSvc, webhookSvc, automationSvc, hostCache, updateSvc, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()
@@ -856,6 +958,9 @@ func run(cfg config.Config, _ io.Writer) error {
 		Invites:  inviteSvc,
 		Team:     teamSvc,
 		Signup:   signupSvc,
+		Recovery: recoverySvc,
+		Accounts: accountSvc,
+		MFA:      mfaSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
 		Metrics:  metrics,
@@ -863,8 +968,9 @@ func run(cfg config.Config, _ io.Writer) error {
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
-			Team: teamSvc, Signup: signupSvc, Disputes: disputeSvc,
-			Instance: instanceSvc,
+			Team: teamSvc, Signup: signupSvc, Recovery: recoverySvc,
+			Accounts: accountSvc, MFA: mfaSvc,
+			Disputes: disputeSvc, Instance: instanceSvc,
 		},
 	})
 
@@ -1003,4 +1109,54 @@ func signupMailer(m *mail.Service) signup.Enqueuer {
 		return nil
 	}
 	return m
+}
+
+// recoveryMailer is signupMailer for the recovery service, and exists for the
+// same typed-nil reason. It matters most here: a nil Enqueuer is what makes
+// account recovery refuse rather than degrade (M51), so a typed nil sneaking
+// through as a non-nil interface would offer a reset the instance cannot send.
+func recoveryMailer(m *mail.Service) recovery.Enqueuer {
+	if m == nil {
+		return nil
+	}
+	return m
+}
+
+// mfaCipherFor builds the TOTP secret's cipher, or reports that there is none.
+//
+// **Unset is not an error**, which is the whole of this function's shape: an
+// instance without MFA_SECRET_KEY offers no second factor, and that is what every
+// instance was before M53. It is warned about once at boot rather than refused,
+// for the reason the mail-free recovery warning above exists — the page that says
+// so is one nobody is watching, and the operator who has enrolled accounts and has
+// lost the key needs to read it in the log.
+//
+// A key that is present and unusable *is* an error. That is a value somebody
+// typed, so booting past it would leave an instance that looks configured and
+// refuses every code.
+func mfaCipherFor(cfg config.Config, log *slog.Logger) (*auth.MFACipher, error) {
+	if cfg.MFASecretKey.IsZero() {
+		log.Warn("no LINKCTRL_MFA_SECRET_KEY is set, so two-factor authentication is " +
+			"unavailable on this instance. Accounts already enrolled cannot use an " +
+			"authenticator code and must sign in with a recovery code")
+		return nil, nil
+	}
+	c, err := auth.NewMFACipher(cfg.MFASecretKey.Reveal())
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// mfaIssuer is what an authenticator app files the entry under.
+//
+// The dashboard's host, so somebody with three of these on their phone can tell
+// them apart, falling back to the product name on an instance with no parsed
+// origin — which is a configuration this product otherwise refuses, so the
+// fallback is a guard rather than a path.
+func mfaIssuer(cfg config.Config) string {
+	if u := cfg.AppBaseURLParsed(); u != nil && u.Host != "" {
+		return u.Host
+	}
+	return "LinkCtrl"
 }

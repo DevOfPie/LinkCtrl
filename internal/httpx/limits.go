@@ -48,6 +48,22 @@ type Limiters struct {
 	// answer falls back to local buckets, which errs toward writing more rows
 	// rather than fewer.
 	BlockedAudit *ratelimit.Limiter
+	// Upload guards the endpoints that accept a file (M50.5).
+	//
+	// **The API limit is not this limit, and the difference is what a request
+	// costs rather than how many there are.** Everything else under `/api/v1` is
+	// a JSON body this product caps at 256 KiB and decodes with the standard
+	// library's parser; an upload is up to `qr.MaxLogoUploadBytes` of somebody
+	// else's bytes handed to an image decoder. `API_RATE_PER_MIN`'s 600 was
+	// chosen about the first kind, and inheriting it for the second would be a
+	// number nobody set for what it would then bound.
+	//
+	// Shared through Redis like Login, because a per-replica budget on a
+	// four-replica instance is four times the limit an operator configured, and
+	// bandwidth is the resource being protected. A Redis that does not answer
+	// falls back to this instance's own buckets, which errs toward refusing less
+	// rather than refusing a legitimate upload.
+	Upload *ratelimit.Limiter
 }
 
 // NewLimiters builds the limits from configuration.
@@ -96,6 +112,9 @@ func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limit
 		BlockedAudit: ratelimit.New(link.BlockedAuditRatePerMin, ratelimit.Options{
 			Shared: shared("blocked_audit"),
 		}),
+		Upload: ratelimit.New(cfg.Auth.UploadRatePerMin, ratelimit.Options{
+			Shared: shared("upload"),
+		}),
 	}
 }
 
@@ -116,10 +135,11 @@ func NewLimiters(cfg config.Config, rdb *goredis.Client, log *slog.Logger) Limit
 // refuses a request, so it has no rate_limited_total series — that is
 // structural, and these three bookkeeping series are the only view of it.
 func (l Limiters) Stats() map[string]observability.LimiterStats {
-	out := make(map[string]observability.LimiterStats, 5)
+	out := make(map[string]observability.LimiterStats, 6)
 	for name, lim := range map[string]*ratelimit.Limiter{
 		"login": l.Login, "api": l.API, "redirect_404": l.NotFound,
 		"link_password": l.LinkPassword, "blocked_audit": l.BlockedAudit,
+		"upload": l.Upload,
 	} {
 		if lim != nil {
 			out[name] = lim

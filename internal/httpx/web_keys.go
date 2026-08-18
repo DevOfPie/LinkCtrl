@@ -32,8 +32,12 @@ type keysPageData struct {
 	// than seeing it and being refused.
 	CanCreateOrgWide bool
 	Form             struct {
-		Name    string
-		OrgWide bool
+		Name string
+		// Reach is the form's own value for the control, not a derived flag, so a
+		// refused submission redraws what was chosen rather than what it decayed
+		// into. Three options since M54 — "workspace", "organization",
+		// "account" — where there used to be two.
+		Reach string
 	}
 	FieldErrors map[string]string
 	Notice      string
@@ -105,10 +109,18 @@ func (h *Web) KeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Three reaches, two fields. "workspace" pins to the workspace being acted
+	// in; "organization" and "account" are both unpinned there and differ one
+	// tier up, which is exactly the shape the two columns have.
+	reach := r.PostFormValue("scope_reach")
 	in := auth.CreateAPIKeyInput{
 		Name:    r.PostFormValue("name"),
 		Scopes:  r.PostForm["scopes"],
-		OrgWide: r.PostFormValue("scope_reach") == "organization",
+		OrgWide: reach == "organization" || reach == "account",
+	}
+	if reach == "organization" {
+		org := IdentityFrom(r.Context()).OrgID
+		in.OrganizationID = &org
 	}
 	if raw := r.PostFormValue("expires_in"); raw != "" {
 		var days int
@@ -138,7 +150,7 @@ func (h *Web) KeyCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Form.Name = r.PostFormValue("name")
-		data.Form.OrgWide = in.OrgWide
+		data.Form.Reach = reach
 		data.FieldErrors = fields
 		data.Error = general
 		h.render(w, r, http.StatusUnprocessableEntity, "keys", data)
@@ -195,6 +207,22 @@ type accountPageData struct {
 	// cannot fold over .Workspaces to work it out, and a second flag is cheaper
 	// than a template function that exists for one page.
 	WorkspacePinned bool
+
+	// ShowMFA draws the second-factor summary (M53). False on an instance wired
+	// without the service, where the routes are not registered either. True with
+	// MFA.Available false is a different state and the section says so: the
+	// instance has no MFA_SECRET_KEY, which matters most to somebody already
+	// enrolled.
+	ShowMFA bool
+	MFA     auth.MFAStatus
+
+	// ShowDelete draws the account-deletion section (M52). False on an instance
+	// wired without the service, where the route is not registered either.
+	ShowDelete bool
+	// DeleteConfirmation is the word the form requires, rendered into both the
+	// prose and the validation message so the page and the handler cannot come
+	// to disagree about what it is.
+	DeleteConfirmation string
 }
 
 // domainSections fills in the two panels that describe the link domain.
@@ -235,12 +263,36 @@ func (h *Web) domainSections(r *http.Request, data *accountPageData) {
 	data.BlockBotsEnforced = settings.BlockBotsEnforced
 }
 
+// accountDeletionConfirmation is what has to be typed beside the password.
+//
+// A second, deliberate act. The password alone is a field a browser fills in
+// from its store and a person confirms without reading; this one cannot be
+// autofilled and cannot be produced by muscle memory, which is the only defence
+// a page has against an irreversible button being pressed by momentum. The word
+// is in the visible prose above the field, so it costs a reader nothing and
+// costs somebody skimming exactly the pause it is for.
+const accountDeletionConfirmation = "DELETE"
+
 // accountPage assembles the page, so the handlers that re-render it after a
 // failed form do not each have to remember which sections it has.
 func (h *Web) accountPage(r *http.Request) accountPageData {
 	data := accountPageData{
 		shell:       h.shell(r, "Account", "account"),
 		FieldErrors: map[string]string{},
+		// The section is drawn only where the service exists, for the reason
+		// every other optional section on this page is: an instance wired
+		// without it must not show a button whose route is not registered.
+		ShowMFA:            h.MFA != nil,
+		ShowDelete:         h.Accounts != nil,
+		DeleteConfirmation: accountDeletionConfirmation,
+	}
+	if h.MFA != nil {
+		// A failed read leaves the zero status, which draws the "off" summary and
+		// a link to the page that will report the real error. The same trade
+		// domainSections makes: a panel is not worth replacing the page over.
+		if st, err := h.MFA.Status(r.Context(), IdentityFrom(r.Context())); err == nil {
+			data.MFA = st
+		}
 	}
 	for _, ws := range data.Workspaces {
 		if ws.Default {
@@ -264,6 +316,13 @@ func (h *Web) AccountPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Query().Get("bots") == "1" {
 		data.Notice = "Bot blocking updated. Cached links were refreshed, so it applies now."
+	}
+	// Where a completed disable lands (M53). Said here rather than on the page
+	// that performed it, because with the factor gone that page is an offer to
+	// enrol again, and a success notice above an offer reads as an undo button.
+	if r.URL.Query().Get("mfa") == "off" {
+		data.Notice = "Two-factor authentication is off. The authenticator entry and " +
+			"every recovery code have been removed."
 	}
 	h.domainSections(r, &data)
 	h.render(w, r, http.StatusOK, "account", data)
@@ -383,4 +442,74 @@ func (h *Web) BotBlockingUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	seeOther(w, r, "/account?bots=1")
+}
+
+// AccountDelete handles the dashboard's account-deletion form (M52).
+//
+// The same service call the JSON endpoint makes, with the browser's answer to
+// each refusal instead of a problem document. Nothing is decided here: the API
+// key check below is the one duplicate, and it is duplicated for the reason
+// PasswordChange duplicates it — the person gets a sentence rather than a
+// permission slug they never asked to hold.
+//
+// **Where it lands is the interesting part.** On success there is no signed-in
+// surface left to render — the session row is gone with the account — so the
+// cookie is expired here and the browser goes to /login, which says what
+// happened and names the erasure lag. Redirecting to /account would have meant
+// the auth middleware answering the redirect with another one.
+func (h *Web) AccountDelete(w http.ResponseWriter, r *http.Request) {
+	actor := IdentityFrom(r.Context())
+
+	if actor.IsAPIKey() {
+		h.errorPage(w, r, http.StatusForbidden, "Not allowed",
+			"Deleting an account requires a signed-in session, not an API key.")
+		return
+	}
+	if err := parseForm(w, r); err != nil {
+		h.errorPage(w, r, http.StatusBadRequest, "Bad request", "The form could not be read.")
+		return
+	}
+
+	// Re-rendered rather than redirected, so a refusal keeps the reader in front
+	// of the form that produced it. The status carries the distinction a redirect
+	// would flatten: a mistyped confirmation is 422, and a refusal about the
+	// state of the account is 409.
+	fail := func(status int, field, msg string) {
+		data := h.accountPage(r)
+		h.domainSections(r, &data)
+		if field == "" {
+			data.Error = msg
+		} else {
+			data.FieldErrors[field] = msg
+		}
+		h.render(w, r, status, "account", data)
+	}
+
+	if r.PostFormValue("confirm") != accountDeletionConfirmation {
+		fail(http.StatusUnprocessableEntity, "confirm",
+			"Type "+accountDeletionConfirmation+" to confirm.")
+		return
+	}
+
+	if err := h.Accounts.Delete(r.Context(), actor, r.PostFormValue("password")); err != nil {
+		switch {
+		case errors.Is(err, auth.ErrInvalidCredentials):
+			fail(http.StatusUnprocessableEntity, "delete_password",
+				"That password is not correct.")
+		case errors.Is(err, domain.ErrConflict):
+			// Both conflicts — the instance principal, and an organization left
+			// with no owner — carry a sentence naming what to do about it, and
+			// SoleOwnerError names which organizations. Beside the form rather
+			// than on an error page, because the remedy is on other pages this
+			// reader can reach and an error page would send them back a step
+			// first.
+			fail(http.StatusConflict, "", conflictMessage(err))
+		default:
+			h.webError(w, r, err)
+		}
+		return
+	}
+
+	http.SetCookie(w, ClearSessionCookie(h.Config.SecureCookies))
+	seeOther(w, r, "/login?deleted=1")
 }

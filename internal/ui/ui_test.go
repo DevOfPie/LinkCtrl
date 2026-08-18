@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DevOfPie/LinkCtrl/internal/qr"
 )
 
 // identityStub satisfies what the layout and pages ask of an identity — Can,
@@ -30,7 +32,18 @@ func owner() *identityStub {
 		Email: "o@example.com", Name: "Owner", Role: "owner",
 		UserID: "0198c9c5-0000-7000-8000-000000000001",
 		perms: map[string]bool{
-			"links.create": true, "links.update": true, "links.delete": true,
+			// **links.read was missing until M48**, and three sections of the
+			// link page were therefore rendered by nothing: `link_qr`,
+			// `link_rules` and `link_split` are each guarded on it, so
+			// TestEveryPageRenders had been exercising a link page with its QR
+			// code, its routing rules and its split test all absent since M47
+			// decomposed the page. Every owner holds links.read — an owner who
+			// could create a link and not read one is not a state this product
+			// has — so the fixture was wrong rather than narrow.
+			//
+			// Found by M48, which could not assert that its panel renders on the
+			// link page until the section carrying it did.
+			"links.read": true, "links.create": true, "links.update": true, "links.delete": true,
 			// The identity menu's three administrative entries are drawn from
 			// the shell on every page, so an owner holds all three permissions
 			// here and every page exercises those branches.
@@ -71,6 +84,41 @@ func twoWorkspaces() []map[string]any {
 	}
 }
 
+// linkForm mirrors httpx.linkFormData field for field, and the types are the
+// point of it (F167).
+//
+// The link page's edit form was fixtured as a `map[string]string`. A missing key
+// in one yields `""`, which `{{if}}` reads as false — so `ForwardQuery`,
+// `ForwardPath`, `HasPassword` (twice), `ClearPassword`, `OneTime` and
+// `RequireSignature` took their else limb on every run of every test in this
+// package, and the *Remove the password* control they gate was never drawn at
+// all. Counted on 2026-08-07 against the page this fixture renders: `Remove the
+// password` 0 times, `Set — type to replace` 0, and each of the three `checked`
+// attributes 0. Six branches on the product's largest form, on a page whose
+// tests otherwise scan every colour and every wide element it draws.
+//
+// Same class as F20 — a fixture whose type differs from the one production
+// builds, so the template is exercised in a shape nothing ships. A struct here
+// also fails loudly where the map failed silently: a field renamed on one side
+// stops compiling instead of quietly rendering nothing.
+//
+// It cannot be `httpx.linkFormData` itself. `internal/httpx` imports this
+// package, so naming it here would be an import cycle, and `ui` depends on
+// nothing outside the standard library by design.
+type linkForm struct {
+	URL, Alias, Title, Description, ExpiresAt, Tags string
+	ForwardQuery                                    bool
+	ForwardPath                                     bool
+	BotBlocking                                     string
+	FolderID                                        string
+	CampaignID                                      string
+	HasPassword                                     bool
+	ClearPassword                                   bool
+	MaxClicks                                       string
+	OneTime                                         bool
+	RequireSignature                                bool
+}
+
 // pageData returns representative data for every page, so the test renders
 // each one for real. A page added without an entry here fails the test, which
 // is the point: an unexercised template is a 500 waiting for a visitor.
@@ -78,6 +126,7 @@ func pageData(t *testing.T) map[string]any {
 	t.Helper()
 	now := time.Now()
 	ownerUserID := "0198c9c5-0000-7000-8000-000000000001"
+	consumed := int64(416)
 	lnk := map[string]any{
 		"ID": "0198c9c5-0000-7000-8000-000000000001", "Alias": "demo",
 		"ShortURL": "http://links.test/demo", "URL": "https://example.com/x",
@@ -85,6 +134,13 @@ func pageData(t *testing.T) map[string]any {
 		"Tags":       []map[string]any{{"Name": "launch"}},
 		"ClickCount": int64(1234), "LastClickAt": &now,
 		"CreatedAt": now, "UpdatedAt": now,
+		// A gated link, so the click-limit control renders the branch M47
+		// rewrote rather than its no-budget fallback. The figure is the one from
+		// the blind task that produced the rewrite: the owner had 416 clicks and
+		// could not tell whether a limit of 50 or of 466 was the right answer.
+		// `withBudget` leaves this nil for a link with no gate, which is why the
+		// template has a branch for that at all.
+		"ClicksConsumed": &consumed,
 	}
 	stats := map[string]any{
 		"Totals": map[string]int64{"Clicks": 40, "UniqueVisitors": 12, "BotClicks": 3},
@@ -140,6 +196,20 @@ func pageData(t *testing.T) map[string]any {
 			"NextURL": "/links?cursor=abc",
 			"Total":   func() *int64 { n := int64(1); return &n }(),
 			"Search":  "demo", "Status": "", "Sort": "newest", "Filtered": true,
+			// The three conditional filters, each drawn only when the workspace
+			// has any of that thing. Populated here so every control in M46's
+			// filter panel renders on every run: without them the panel held two
+			// selects, and the milestone's claim is about what happens to six.
+			"Folder": "", "Campaign": "", "Domain": "",
+			"FolderOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000041", "Label": "‒ Summer", "Selected": false},
+			},
+			"CampaignOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000050", "Label": "Summer 2026", "Selected": false},
+			},
+			"DomainOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000051", "Hostname": "go.example.com", "Selected": false},
+			},
 			"Form":        map[string]string{"URL": "", "Alias": ""},
 			"FieldErrors": map[string]string{"url": "bad"},
 			// The appeal affordance, drawn only after a low-confidence refusal.
@@ -429,21 +499,29 @@ func pageData(t *testing.T) map[string]any {
 			// that is *not* the reader: one carries a Withdraw control and the
 			// other says "you". A single-row fixture would leave half the
 			// section unrendered, which is the same trap twoWorkspaces avoids.
-			"Reviewers": []map[string]any{
-				{
-					"UserID": "0198c9c5-0000-7000-8000-000000000001",
-					"Email":  "o@example.com", "Name": "Owner",
-					"GrantedAt": now, "GrantedBy": (*string)(nil), "CanDecide": true,
-				},
-				{
-					"UserID": "0198c9c5-0000-7000-8000-000000000002",
-					"Email":  "admin@example.com", "Name": "Admin",
-					"GrantedAt": now, "GrantedBy": &ownerUserID, "CanDecide": true,
-				},
-			},
+			"Reviewers": reviewerRoster(now, &ownerUserID),
+			// Where the panel's forms return to when they are submitted from
+			// this page rather than from the roster's own route (M48).
+			"ReviewersReturn": "/disputes",
+		},
+		// The reviewer panel as a page (M48): the same block the popup on
+		// /disputes renders, served at /disputes/reviewers. Both entries carry
+		// the same roster, so a divergence between the two surfaces shows up as
+		// one of them rendering something the other does not.
+		"dispute_reviewers": map[string]any{
+			"Title": "Who reviews disputes", "Nav": "disputes", "Identity": owner(),
+			"Reviewers":       reviewerRoster(now, &ownerUserID),
+			"ReviewersReturn": "/disputes/reviewers",
+			"Notice":          "", "Error": "",
 		},
 		"link_detail": map[string]any{
 			"Title": "/demo", "Nav": "links", "Identity": owner(),
+			// The strip as the handler builds it for an identity holding every
+			// permission (linkTabs in internal/httpx), and the landing tab. A
+			// scan that must see every section's markup renders once per tab —
+			// see linkDetailTabs and the loops that use it.
+			"Tabs": linkDetailTabsFixture(),
+			"Tab":  "edit",
 			"Link": lnk, "Stats": stats, "Series": series,
 			"RecentClicks": []map[string]any{{
 				"OccurredAt": now, "Device": "mobile", "Browser": "Chrome",
@@ -472,13 +550,116 @@ func pageData(t *testing.T) map[string]any {
 				{"Value": "ZA", "Clicks": int64(4), "UniqueVisitors": int64(1)},
 				{"Value": "HK", "Clicks": int64(2), "UniqueVisitors": int64(1)},
 			},
-			"GeoBase":        "/links/0198c9c5-0000-7000-8000-000000000001?days=30",
-			"GeoList":        "/links/0198c9c5-0000-7000-8000-000000000001?days=30#countries",
-			"GeoUnavailable": GeoUnavailable,
-			"Form": map[string]string{
-				"URL": "https://example.com/x", "Alias": "demo", "Title": "A demo",
-				"Description": "", "ExpiresAt": "", "Tags": "launch",
-				"CampaignID": "0198c9c5-0000-7000-8000-000000000050",
+			// Routing rules and the split test, which the fixture has never
+			// carried because the permission that draws them was missing from
+			// `owner` — see the note there. Both sections render an empty state
+			// and a populated one, and the populated one is the interesting
+			// branch: a table, a toggle whose label flips on `Enabled`, and a
+			// fallback row. One rule of each state, and one arm of each, for the
+			// reason twoWorkspaces gives.
+			"Rules": []map[string]any{
+				{
+					"Rule": map[string]any{
+						"ID": "0198c9c5-0000-7000-8000-000000000060", "Priority": 10,
+						"URL": "https://example.com/uk", "Enabled": true,
+					},
+					"Summary": "Country is GB",
+				},
+				{
+					"Rule": map[string]any{
+						"ID": "0198c9c5-0000-7000-8000-000000000061", "Priority": 20,
+						"URL": "https://example.com/mobile", "Enabled": false,
+					},
+					"Summary": "Device is mobile",
+				},
+			},
+			"RuleWeekdays":       []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"},
+			"RuleHelp":           "One condition per line.",
+			"ReturningAvailable": true,
+			"Split": map[string]any{
+				"Kind": "weighted",
+				"Variants": []map[string]any{
+					{
+						"ID":  "0198c9c5-0000-7000-8000-000000000070",
+						"URL": "https://example.com/a", "Weight": 60,
+						"Enabled": true, "Share": 60.0,
+					},
+					{
+						"ID":  "0198c9c5-0000-7000-8000-000000000071",
+						"URL": "https://example.com/b", "Weight": 40,
+						"Enabled": false, "Share": 0.0,
+					},
+				},
+				"Fallback": map[string]any{
+					"ID":  "0198c9c5-0000-7000-8000-000000000072",
+					"URL": "https://example.com/fallback", "Enabled": true,
+				},
+			},
+			"SplitKinds":        []string{"weighted", "sequential"},
+			"SplitHelp":         "A weight is a share, not a percentage.",
+			"MaxWeight":         100,
+			"MinPasswordLength": 12,
+			"GeoAvailable":      true,
+			"GeoBase":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30",
+			"GeoList":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30#countries",
+			// **Empty, because that is what the handler would have set** (F192).
+			// The fixture carried the sentence *and* GeoAvailable, which since
+			// F160 is a pair production cannot build: the sentence is reached only
+			// when nothing resolved in the window and nothing can resolve, and
+			// Countries above holds four resolved rows with clicks on them. It was harmless only
+			// because a non-empty breakdown never renders its empty state, so the
+			// contradiction sat one branch away from being visible. The sentence
+			// has its own coverage in choropleth_test.go, which builds the state
+			// it belongs to instead of borrowing this one.
+			"GeoUnavailable": "",
+			// A struct, and every boolean on: see linkForm above for what a
+			// map[string]string did to the six branches these fields gate (F167).
+			//
+			// **On rather than off**, because the "on" limb is the one with markup
+			// in it — three `checked` attributes, a different placeholder, and the
+			// *Remove the password* control, which does not exist at all when
+			// HasPassword is false. Every scan in this package reads this fixture,
+			// so drawing the gates set is what puts that markup in front of the
+			// theme check, the overflow check and the fold measurement. The other
+			// limb is not left unexercised: TestEveryGateOnTheEditFormDrawsBothStates
+			// renders it, and the third state ClearPassword needs.
+			"Form": linkForm{
+				URL: "https://example.com/x", Alias: "demo", Title: "A demo",
+				Description: "", ExpiresAt: "", Tags: "launch",
+				FolderID:   "0198c9c5-0000-7000-8000-000000000041",
+				CampaignID: "0198c9c5-0000-7000-8000-000000000050",
+				// The limit the blind task's owner was trying to set, beside the
+				// 416 already spent on Link.ClicksConsumed. Both numbers, because
+				// the sentence M47 replaced two elements with names both and
+				// TestTheClickLimitNamesTheTotalAndWhatIsSpent reads it.
+				MaxClicks:    "466",
+				ForwardQuery: true,
+				ForwardPath:  true,
+				// A password that is set, and a request to remove it that has come
+				// back with the form — which is what a validation error on any other
+				// field does. It is the only state in which the checkbox renders
+				// ticked, and it is the innermost of the six branches.
+				HasPassword:      true,
+				ClearPassword:    true,
+				OneTime:          true,
+				RequireSignature: true,
+			},
+			// **The folder select, which no fixture in this package rendered**
+			// (F192). link_edit.html draws it only `{{if .FolderOptions}}`, and the
+			// only FolderOptions in this file is on the `links` page's filter
+			// panel — a different template — so the whole control, the option loop
+			// and the `{{if eq .Form.FolderID ""}}` branch inside it were
+			// unreachable by the theme scan, the overflow scan and the fold
+			// measurement alike. F167's map-yields-empty-string, one key sideways:
+			// an absent slice is an empty range and an empty range is markup that
+			// never renders.
+			//
+			// Filed rather than unfiled, and selected to match, because the
+			// campaign select below is drawn on identical terms and the fixture
+			// that gave one a chosen option and the other none would be asserting
+			// the asymmetry the template does not have.
+			"FolderOptions": []map[string]any{
+				{"ID": "0198c9c5-0000-7000-8000-000000000041", "Label": "‒ Summer", "Selected": true},
 			},
 			// The campaign select and the QR panel (M41). The SVG is a stub
 			// rather than a real code: this test exercises the template, and
@@ -486,28 +667,203 @@ func pageData(t *testing.T) map[string]any {
 			"CampaignOptions": []map[string]any{
 				{"ID": "0198c9c5-0000-7000-8000-000000000050", "Label": "Summer 2026", "Selected": true},
 			},
-			"QRSVG":     template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" role="img"></svg>`),
+			// **The attributes qr.Render actually emits, not a bare tag** (F191).
+			// A stub that stated no width was invisible to the overflow scan's
+			// newest assertion — it reads `width="N"` off the element, and there
+			// was nothing to read — so the wrapper below the panel's frame was
+			// checked at one real site and at neither fixture. The numbers are the
+			// stub style's own: a 29-module code with a 4-module quiet zone at 20
+			// pixels a module is 37 spans of 20, which is 740 and past the 360px
+			// viewport the scan measures against. The drawing itself is still
+			// empty; internal/qr is where the encoder is tested. The class is
+			// named rather than spelled, exactly as the mfa fixture's (F200):
+			// qr.Render always emits it, and both hand-typed copies of this stub
+			// have now lost an attribute — F191 the width, F200 the class.
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" ` +
+				`class="` + qr.FluidClass + `" width="740" height="740" ` +
+				`viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
+				`role="img"></svg>`),
+			// The class is QRThumbClass rather than a copy of it: this stub is what
+			// TestTheEditControlIsReachableWithoutScrolling measures the heading
+			// row's height from, and a fixture free to state a different height
+			// from the one internal/httpx renders would measure a page nobody is
+			// served.
+			"QRThumbSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" class="` +
+				QRThumbClass + `" width="111" height="111" role="img"></svg>`),
 			"QRContent": "http://links.test/demo?src=qr",
 			"QRStyle": map[string]any{
 				"Foreground": "#000000", "Background": "#ffffff",
-				"Level": "M", "Margin": 4, "Scale": 8,
+				"Level": "M", "Margin": 4, "Scale": 20,
 			},
-			"QRLevels":      []string{"L", "M", "Q", "H"},
+			// Since M49 the form asks for one number in pixels and no longer
+			// asks for a level, a quiet zone or a module size. 740 is what the
+			// stub style above comes to for a 29-module code, so the fixture is
+			// a state internal/qr could actually produce rather than a number
+			// picked to look plausible — scale 20 is inside qr.MaxScale, and the
+			// size is inside the range the form itself declares. QRMinSize is
+			// this code's floor rather than the package's since D182:
+			// qr.MinSizeFor(29) is 2 × (29 + 6) = 70.
+			"QRSize":    740,
+			"QRMinSize": 70,
+			"QRMaxSize": 2048,
+			// The slider's marks, as httpx.qrSizeStops hands them over: the
+			// owner's eight, less any below this code's own floor (D182).
+			"QRSizeStops":   []int{128, 256, 300, 512, 600, 1024, 1200, 2048},
 			"QRStored":      true,
 			"QRDownload":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+			"QRDownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
 			"QRSourceLabel": "qr",
-			"FieldErrors":   map[string]string{},
-			"Notice":        "", "Error": "",
+			"QRReturn":      "/links/0198c9c5-0000-7000-8000-000000000001",
+			// The link page selects in place since M50.8's third reopening: the
+			// rows carry the tab strip's own swap and their hrefs name the code
+			// on this page rather than on the panel route. Both halves are the
+			// fixture's business, because the two surfaces render one block and
+			// a fixture that gave them the same rows would render a page
+			// internal/httpx does not build.
+			"QRSelectSwapsTabs": true,
+			// Two codes (M50), because the fixture has to render the state the
+			// milestone exists for: a link with one code and a link with two are
+			// different markup, and the theme scan, the overflow check and the
+			// fold measurement all read whichever this fixture is.
+			//
+			// **Both rows carry a slug and both are removable since M50's
+			// reopening** (D183). The first row was the default code and its
+			// slug was empty, because the default *was* the absence of one —
+			// which is what made it the one row with no remove control. The flag
+			// carries the identity now, so the fixture's first row is a code
+			// with a slug that happens to hold `Default`.
+			"QRCodes": []map[string]any{
+				{"Slug": "d3f4u1t0", "Label": "", "Name": "The original code", "Size": 740,
+					"Default": true, "Selected": true,
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001?tab=qr&code=d3f4u1t0",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
+					"Clicks":      412, "Counted": true},
+				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
+					"Default": false, "Selected": false,
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001?tab=qr&code=k7m2qh4b",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
+					"Clicks":      37, "Counted": true},
+			},
+			"QRSlug":      "d3f4u1t0",
+			"QRLabel":     "",
+			"QRMaxCodes":  20,
+			"QRMaxLabel":  60,
+			"FieldErrors": map[string]string{},
+			"Notice":      "", "Error": "",
+		},
+		// The QR panel as a page (M48). Same fields as the link page's QR area,
+		// because it is the same block: linkQRView is one struct embedded in two
+		// page structs, and this fixture is the assertion that the second one is
+		// not short of anything the block reads. What differs is the surface:
+		// QRReturn is the panel's own route rather than the link page, and
+		// since M50.8's third reopening QRSelectSwapsTabs and the rows' Select
+		// follow it — this page has no `#link-tabs`, so a row here is the plain
+		// link to `?code=` that both surfaces used to draw.
+		"link_qr": map[string]any{
+			"Title": "QR code · /demo", "Nav": "links", "Identity": owner(),
+			"Link": lnk,
+			// **The attributes qr.Render actually emits, not a bare tag** (F191).
+			// A stub that stated no width was invisible to the overflow scan's
+			// newest assertion — it reads `width="N"` off the element, and there
+			// was nothing to read — so the wrapper below the panel's frame was
+			// checked at one real site and at neither fixture. The numbers are the
+			// stub style's own: a 29-module code with a 4-module quiet zone at 20
+			// pixels a module is 37 spans of 20, which is 740 and past the 360px
+			// viewport the scan measures against. The drawing itself is still
+			// empty; internal/qr is where the encoder is tested. The class is
+			// named rather than spelled, exactly as the mfa fixture's (F200):
+			// qr.Render always emits it, and both hand-typed copies of this stub
+			// have now lost an attribute — F191 the width, F200 the class.
+			"QRSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" ` +
+				`class="` + qr.FluidClass + `" width="740" height="740" ` +
+				`viewBox="0 0 37 37" shape-rendering="crispEdges" ` +
+				`role="img"></svg>`),
+			// The class is QRThumbClass rather than a copy of it: this stub is what
+			// TestTheEditControlIsReachableWithoutScrolling measures the heading
+			// row's height from, and a fixture free to state a different height
+			// from the one internal/httpx renders would measure a page nobody is
+			// served.
+			"QRThumbSVG": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" class="` +
+				QRThumbClass + `" width="111" height="111" role="img"></svg>`),
+			"QRContent": "http://links.test/demo?src=qr",
+			"QRStyle": map[string]any{
+				"Foreground": "#000000", "Background": "#ffffff",
+				"Level": "M", "Margin": 4, "Scale": 20,
+			},
+			"QRSize":    740,
+			"QRMinSize": 70,
+			"QRMaxSize": 2048,
+			// The slider's marks, as httpx.qrSizeStops hands them over: the
+			// owner's eight, less any below this code's own floor (D182).
+			"QRSizeStops":       []int{128, 256, 300, 512, 600, 1024, 1200, 2048},
+			"QRStored":          true,
+			"QRDownload":        "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.svg",
+			"QRDownloadPNG":     "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr.png",
+			"QRSourceLabel":     "qr",
+			"QRReturn":          "/links/0198c9c5-0000-7000-8000-000000000001/qr",
+			"QRSelectSwapsTabs": false,
+			// Two codes (M50), because the fixture has to render the state the
+			// milestone exists for: a link with one code and a link with two are
+			// different markup, and the theme scan, the overflow check and the
+			// fold measurement all read whichever this fixture is.
+			//
+			// **Both rows carry a slug and both are removable since M50's
+			// reopening** (D183). The first row was the default code and its
+			// slug was empty, because the default *was* the absence of one —
+			// which is what made it the one row with no remove control. The flag
+			// carries the identity now, so the fixture's first row is a code
+			// with a slug that happens to hold `Default`.
+			"QRCodes": []map[string]any{
+				{"Slug": "d3f4u1t0", "Label": "", "Name": "The original code", "Size": 740,
+					"Default": true, "Selected": true,
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=d3f4u1t0",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/d3f4u1t0/image.png",
+					"Clicks":      412, "Counted": false},
+				{"Slug": "k7m2qh4b", "Label": "Autumn poster", "Name": "Autumn poster", "Size": 740,
+					"Default": false, "Selected": false,
+					"Select":      "/links/0198c9c5-0000-7000-8000-000000000001/qr?code=k7m2qh4b",
+					"Download":    "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.svg",
+					"DownloadPNG": "/api/v1/links/0198c9c5-0000-7000-8000-000000000001/qr/codes/k7m2qh4b/image.png",
+					"Clicks":      37, "Counted": false},
+			},
+			"QRSlug":     "d3f4u1t0",
+			"QRLabel":    "",
+			"QRMaxCodes": 20,
+			"QRMaxLabel": 60,
+			"Notice":     "",
 		},
 		"keys": map[string]any{
 			"Title": "API keys", "Nav": "keys", "Identity": owner(),
+			// Three rows, one per reach, because the *Reach* cell branches three
+			// ways since M54 and a fixture with one row exercises one branch.
+			// `OrgWide` is the workspace axis and `OrganizationID` the tenancy
+			// one, so the combinations that mean something are: not org-wide
+			// (workspace), org-wide with an organization (organization), and
+			// org-wide without one (account).
 			"Keys": []map[string]any{{
 				"ID": "0198c9c5-0000-7000-8000-000000000002", "Name": "ci",
 				"Prefix": "lk_live_abcdefgh", "Scopes": []string{"links.read"},
 				"LastUsedAt": &now, "ExpiresAt": (*time.Time)(nil),
 				"RevokedAt": (*time.Time)(nil), "CreatedAt": now, "Expired": false,
+				"OrgWide": false, "OrganizationID": "0198c9c5-0000-7000-8000-0000000000aa",
+			}, {
+				"ID": "0198c9c5-0000-7000-8000-000000000003", "Name": "reporting",
+				"Prefix": "lk_live_bbcdefgh", "Scopes": []string{"links.read"},
+				"LastUsedAt": &now, "ExpiresAt": (*time.Time)(nil),
+				"RevokedAt": (*time.Time)(nil), "CreatedAt": now, "Expired": false,
+				"OrgWide": true, "OrganizationID": "0198c9c5-0000-7000-8000-0000000000aa",
+			}, {
+				"ID": "0198c9c5-0000-7000-8000-000000000004", "Name": "personal",
+				"Prefix": "lk_live_cbcdefgh", "Scopes": []string{"links.read"},
+				"LastUsedAt": &now, "ExpiresAt": (*time.Time)(nil),
+				"RevokedAt": (*time.Time)(nil), "CreatedAt": now, "Expired": false,
+				"OrgWide": true, "OrganizationID": nil,
 			}},
-			"ScopeOptions": []string{"links.read", "links.create"},
+			"CanCreateOrgWide": true,
+			"ScopeOptions":     []string{"links.read", "links.create"},
 			"Created": map[string]any{
 				"Key": "lk_live_abcdefgh_0123456789012345678901234567890123456789012",
 			},
@@ -523,12 +879,23 @@ func pageData(t *testing.T) map[string]any {
 			// somebody chooses otherwise, and the one the control has to show
 			// as *Last-Used*.
 			"WorkspacePinned": false,
+			// The second factor's summary (M53), drawn in its enrolled state so
+			// the recovery-code count and the "Manage" wording are both
+			// exercised. The unenrolled and unavailable branches are the "mfa"
+			// page's, below.
+			"ShowMFA": true,
+			"MFA": map[string]any{
+				"Available": true, "Enabled": true,
+				"RecoveryCodesRemaining": int64(7),
+			},
 		},
-		// Both states in one render: a read notification and an unread one, so
-		// the branch that draws the dot and the "mark read" button is exercised
-		// alongside the branch that does not. Unread is non-zero so the nav
-		// badge renders too — it is drawn from the shell on every page, and a
-		// template error there would break every page rather than this one.
+		// Every state in one render. A read notification and an unread one, so
+		// the dot, "Mark read" and "Mark unread" are each exercised; and since
+		// M48 one item that leads somewhere beside one that does not, because
+		// those are two different headings — a submit button and an <h2>. Unread
+		// is non-zero so the nav badge renders too: it is drawn from the shell on
+		// every page, and a template error there would break every page rather
+		// than this one.
 		"notifications": map[string]any{
 			"Title": "Notifications", "Nav": "notifications", "Identity": owner(),
 			"Unread": int64(1),
@@ -538,11 +905,13 @@ func pageData(t *testing.T) map[string]any {
 					"Title":  "The audit log has passed its size threshold",
 					"Body":   "audit_logs now uses 5.2 GiB on disk.",
 					"Data":   map[string]any{"bytes": int64(5583457484)},
+					"Target": "",
 					"ReadAt": (*time.Time)(nil), "CreatedAt": now,
 				},
 				{
-					"ID": "0198c9c5-0000-7000-8000-000000000004", "Kind": "audit.growth",
-					"Title": "An older notice", "Body": "",
+					"ID": "0198c9c5-0000-7000-8000-000000000004", "Kind": "automation.fired",
+					"Title": "Automation rule fired: Expiring soon", "Body": "",
+					"Target": "/automation",
 					"ReadAt": &now, "CreatedAt": now,
 				},
 			},
@@ -599,7 +968,15 @@ func pageData(t *testing.T) map[string]any {
 				"Email": "new@example.com", "Role": "editor", "Emailed": false,
 				"URL": "http://links.test/invite/2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
 			},
-			"Form":        map[string]string{"Email": "", "Role": "editor"},
+			// The shape the handler passes, hand-typed as an anonymous struct
+			// because that is how invitesPageData declares Form and
+			// internal/httpx imports this package, so there is no name to derive
+			// from — F200's rule is "do not copy what can be named", and here
+			// there is none (F201). The struct is F167's guard: a template
+			// reading a Form field the handler does not supply now fails the
+			// render instead of silently rendering empty. One direction only —
+			// it catches a field the handler gains, not one it loses.
+			"Form":        struct{ Email, Role string }{Role: "editor"},
 			"FieldErrors": map[string]string{},
 			"Notice":      "", "Error": "", "MailConfigured": false,
 		},
@@ -653,8 +1030,19 @@ func pageData(t *testing.T) map[string]any {
 			"GrantTargets": []map[string]any{
 				{"UserID": "0198c9c5-0000-7000-8000-00000000001c", "Email": "admin@example.com", "Role": "admin"},
 			},
-			"FieldErrors": map[string]string{},
-			"Notice":      "", "Error": "",
+			// The grant form's own state (M58). Role is the lowest one on offer,
+			// which is what both creation forms arrive on since F182, and the
+			// note is the one the conditioned copy exists for: this fixture's
+			// only target is an organization-wide admin, so granting them editor
+			// in a workspace is the grant that changes nothing.
+			// membersPageData's shape, on the invites fixture's reasoning (F201):
+			// anonymous in the handler, so hand-typed here, and one-directional
+			// as a guard.
+			"Form":          struct{ Role string }{Role: "editor"},
+			"GrantNote":     "admin@example.com already holds admin across every workspace, which reaches everything editor does. This would add a membership to the list and nothing to what they can do.",
+			"GrantNoteWarn": true,
+			"FieldErrors":   map[string]string{},
+			"Notice":        "", "Error": "",
 		},
 		// A workspace the reader may manage and one they may not, plus the
 		// organization form — which only an account holding orgs.create ever
@@ -724,6 +1112,66 @@ func pageData(t *testing.T) map[string]any {
 			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
 			"Error": "",
 		},
+		// Account recovery (M51). Both pages are drawn in the state that has the
+		// form: the three other states — sent, no mailer, done — are a heading and
+		// two paragraphs each, and rendering the form is what exercises the
+		// partials this test is looking for.
+		"forgot": map[string]any{
+			"Title": "Reset your password", "Nav": "", "Identity": (*identityStub)(nil),
+			"Sent": false, "NoMailer": false,
+			"Form":        map[string]string{"Email": "someone@example.com"},
+			"FieldErrors": map[string]string{"email": "that does not look like an email address"},
+			"Error":       "",
+		},
+		// The enrolment offer, which is the state with the most markup in it: the
+		// QR, the secret in text, the otpauth link and the confirm form. The
+		// enrolled and unavailable branches render strictly less.
+		"mfa": map[string]any{
+			"Title": "Two-factor authentication", "Nav": "account", "Identity": owner(),
+			"Secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+			// What the MFA handler emits for the URI below, attribute for
+			// attribute: 456px at the default style, and the class that lets a
+			// 360px viewport shrink it (F184). The stub carried width="8" until
+			// then, which is a size no enrolment code is and the reason the
+			// overflow scan could not see the one page in the dashboard that
+			// scrolled sideways.
+			//
+			// **The class is named rather than spelled.** internal/ui's shipped
+			// code depends on nothing outside the standard library and that stays
+			// true — this is a test file, internal/qr does not import internal/ui,
+			// and no cycle is in the way. A fixture that spelled the constant out
+			// would let the emitter change under the scan that reads it.
+			"QR": template.HTML(`<svg xmlns="http://www.w3.org/2000/svg" ` +
+				`class="` + qr.FluidClass + `" width="456" height="456" ` +
+				`viewBox="0 0 57 57" shape-rendering="crispEdges" role="img"></svg>`),
+			"URI": template.URL("otpauth://totp/example.test:owner@example.com" +
+				"?algorithm=SHA1&digits=6&issuer=example.test&period=30&secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"),
+			"RecoveryCodes": []string(nil),
+			"Regenerated":   false,
+			"Status": map[string]any{
+				"Available": true, "Enabled": false,
+				"RecoveryCodesRemaining": int64(0),
+			},
+			"FieldErrors": map[string]string{
+				"code": "that code is not valid",
+			},
+			"Error": "",
+		},
+		"mfa_challenge": map[string]any{
+			"Title": "Enter your code", "Nav": "", "Identity": (*identityStub)(nil),
+			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
+			"Next":  "/dashboard",
+			"Error": "that code is not valid",
+		},
+		"reset": map[string]any{
+			"Title": "Choose a new password", "Nav": "", "Identity": (*identityStub)(nil),
+			"Token": "2ZQ3jd0eGkEaBcDeFgHiJkLmNoPqRsTuVwXyZ012",
+			"Done":  false,
+			"FieldErrors": map[string]string{
+				"password": "the password must be at least 12 characters",
+			},
+			"Error": "",
+		},
 	}
 
 	// Shell fields every page carries, supplied once rather than in each entry
@@ -753,21 +1201,134 @@ func pageData(t *testing.T) map[string]any {
 	organizationNew, _ := data["organization_new"].(map[string]any)
 	organizationNew["HasOrganization"] = false
 	organizationNew["Workspaces"] = []map[string]any{}
+
+	// The links area's own bar reads .Path for its active entry (M46), and the
+	// loop above gives every page /dashboard. Left at that, all four links pages
+	// would render the bar with nothing current — which renders fine and asserts
+	// nothing, so the fixture carries the path each page is actually served at.
+	// /links/{id} collapses to /links on the shell (switchTarget), which is also
+	// the right answer for this bar: a link's page is inside Links.
+	for page, path := range map[string]string{
+		"links":       "/links",
+		"link_detail": "/links",
+		"campaigns":   "/campaigns",
+		"folders":     "/folders",
+	} {
+		m, _ := data[page].(map[string]any)
+		m["Path"] = path
+	}
 	return data
+}
+
+// linkDetailTabs is the strip in the owner-set order, and the list every
+// whole-page scan iterates. It mirrors linkTabs in internal/httpx for an
+// identity holding every permission, the way linkForm mirrors linkFormData —
+// `ui` depends on nothing outside the standard library, so the shape is
+// restated here and a drift between the two fails the tests that render it.
+var linkDetailTabs = []string{
+	"edit", "qr", "routing", "split", "signed", "analytics", "danger",
+}
+
+func linkDetailTabsFixture() []map[string]any {
+	labels := map[string]string{
+		"edit": "Edit", "qr": "QR", "routing": "Routing", "split": "Split",
+		"signed": "Signed", "analytics": "Analytics", "danger": "Danger",
+	}
+	// The badges as attachTabBadges would build them from this file's own
+	// link_detail fixture (M47.5): two QR codes, two rules, a weighted split,
+	// RequireSignature on, and the stats fixture's 40 clicks. Danger carries
+	// none, and Edit — its five enabled protections notwithstanding — none
+	// either, since the F211 reopening removed its count. Mirrored rather
+	// than imported for the same reason linkDetailTabs is; the empty and
+	// cross states have their own renders in TestEveryTabCarriesItsState.
+	badges := map[string]map[string]any{
+		"edit":      {"Badge": "", "Count": int64(0)},
+		"qr":        {"Badge": "count", "Count": int64(2)},
+		"routing":   {"Badge": "count", "Count": int64(2)},
+		"split":     {"Badge": "weighted", "Count": int64(0)},
+		"signed":    {"Badge": "check", "Count": int64(0)},
+		"analytics": {"Badge": "count", "Count": int64(40)},
+		"danger":    {"Badge": "", "Count": int64(0)},
+	}
+	out := make([]map[string]any, 0, len(linkDetailTabs))
+	for _, id := range linkDetailTabs {
+		out = append(out, map[string]any{
+			"ID": id, "Label": labels[id],
+			"Badge": badges[id]["Badge"], "Count": badges[id]["Count"],
+		})
+	}
+	return out
+}
+
+// renderingsOf returns every rendering a scan must read to have seen all of a
+// page's markup. One for every page but link_detail, which since M47's
+// reopening draws one section panel at a time: each tab is its own document,
+// and a scan that read only the landing tab would silently drop six sections
+// from every claim asserted over rendered markup — F167's failure, at page
+// scale instead of branch scale.
+func renderingsOf(page string, d any) map[string]any {
+	if page != "link_detail" {
+		return map[string]any{"": d}
+	}
+	m, _ := d.(map[string]any)
+	out := make(map[string]any, len(linkDetailTabs))
+	for _, tab := range linkDetailTabs {
+		v := make(map[string]any, len(m))
+		for k, val := range m {
+			v[k] = val
+		}
+		v["Tab"] = tab
+		out["?tab="+tab] = v
+	}
+	return out
+}
+
+// reviewerRoster is the instance's dispute reviewers, as both surfaces that
+// render them see them (M45; two surfaces since M48).
+//
+// Two rows, because the roster's interesting branch is the one that is *not* the
+// reader: it carries a Withdraw control and the other says "you". A single-row
+// fixture would leave half the section unrendered, which is the same trap
+// twoWorkspaces avoids.
+//
+// A function rather than a literal in each entry, so the queue's summary and the
+// panel's page are rendered from the same rows. Two copies would let one drift
+// and still render.
+func reviewerRoster(now time.Time, grantedBy *string) []map[string]any {
+	return []map[string]any{
+		{
+			"UserID": "0198c9c5-0000-7000-8000-000000000001",
+			"Email":  "o@example.com", "Name": "Owner",
+			"GrantedAt": now, "GrantedBy": (*string)(nil), "CanDecide": true,
+		},
+		{
+			"UserID": "0198c9c5-0000-7000-8000-000000000002",
+			"Email":  "admin@example.com", "Name": "Admin",
+			"GrantedAt": now, "GrantedBy": grantedBy, "CanDecide": true,
+		},
+	}
 }
 
 // unreadPreview is the bell's data: two unread notifications, one with a body
 // and one without, so both branches of the item template render.
+//
+// **Their Targets differ, and that is the point of the pair since M48.** One
+// leads somewhere and renders as a submit button; the other leads nowhere and
+// stays text, which is the branch a kind like audit.growth actually takes. A
+// fixture where both had a destination would render half the template.
 func unreadPreview(now time.Time) []map[string]any {
 	return []map[string]any{
 		{
 			"ID": "0198c9c5-0000-7000-8000-000000000005", "Kind": "audit.growth",
-			"Title": "The audit log has passed its size threshold",
-			"Body":  "audit_logs now uses 5.2 GiB on disk.", "CreatedAt": now,
+			"Title":  "The audit log has passed its size threshold",
+			"Body":   "audit_logs now uses 5.2 GiB on disk.",
+			"Target": "", "CreatedAt": now,
 		},
 		{
-			"ID": "0198c9c5-0000-7000-8000-000000000006", "Kind": "audit.growth",
-			"Title": "A notice with no body", "Body": "", "CreatedAt": now,
+			"ID": "0198c9c5-0000-7000-8000-000000000006", "Kind": "dispute.filed",
+			"Title": "A notice with no body", "Body": "",
+			"Target":    "/disputes?all=1#dispute-0198c9c5-0000-7000-8000-000000000030",
+			"CreatedAt": now,
 		},
 	}
 }
@@ -785,16 +1346,18 @@ func TestEveryPageRenders(t *testing.T) {
 			if !ok {
 				t.Fatalf("no test data for page %q; add an entry to pageData so the template is exercised", page)
 			}
-			rec := httptest.NewRecorder()
-			if err := r.Render(rec, http.StatusOK, page, d); err != nil {
-				t.Fatalf("render %s: %v", page, err)
-			}
-			body := rec.Body.String()
-			if !strings.Contains(body, "<!doctype html>") {
-				t.Error("page did not go through the layout")
-			}
-			if !strings.Contains(body, "</html>") {
-				t.Error("page is truncated")
+			for suffix, d := range renderingsOf(page, d) {
+				rec := httptest.NewRecorder()
+				if err := r.Render(rec, http.StatusOK, page, d); err != nil {
+					t.Fatalf("render %s%s: %v", page, suffix, err)
+				}
+				body := rec.Body.String()
+				if !strings.Contains(body, "<!doctype html>") {
+					t.Errorf("%s%s did not go through the layout", page, suffix)
+				}
+				if !strings.Contains(body, "</html>") {
+					t.Errorf("%s%s is truncated", page, suffix)
+				}
 			}
 		})
 	}
@@ -916,6 +1479,10 @@ func TestBarChartGeometry(t *testing.T) {
 	if c.Bars[0].H <= c.Bars[2].H {
 		t.Error("10 clicks drew a shorter bar than 7")
 	}
+	// The axis, not the peak. This series maxes at 10 and niceCeil(10) is 10, so
+	// the two figures coincide here and this assertion cannot tell them apart —
+	// which is how F164 lived on the dashboard for as long as it did. The pair is
+	// separated in TestTheChartsPeakIsAReadingAndNotItsAxis.
 	if c.MaxY != 10 {
 		t.Errorf("axis max = %d, want the nice ceiling 10", c.MaxY)
 	}
@@ -976,5 +1543,120 @@ func TestTruncate(t *testing.T) {
 	}
 	if got := truncate("short", 10); got != "short" {
 		t.Errorf("truncate lengthened a short string: %q", got)
+	}
+}
+
+// --- M58: the identity and authority surfaces --------------------------------
+
+// selectMarkup is one <select> of a rendered page, found by its id.
+//
+// Needed because both forms under test share their option markup with another
+// select on the same page — /members draws a role select per member row, and a
+// row whose member is an editor emits exactly the string the grant form emits
+// when editor is its default. Asserting on the whole body would pass on the
+// wrong control.
+func selectMarkup(t *testing.T, body, id string) string {
+	t.Helper()
+	i := strings.Index(body, `id="`+id+`"`)
+	if i < 0 {
+		t.Fatalf("no control with id %q on the page", id)
+	}
+	j := strings.Index(body[i:], "</select>")
+	if j < 0 {
+		t.Fatalf("the control with id %q is not a closed <select>", id)
+	}
+	return body[i : i+j]
+}
+
+// F182. Neither form that hands out authority may arrive with the most
+// powerful role it offers already chosen.
+//
+// The two are asserted together because the pair is the finding: /members had
+// no `selected` limb at all and /invites had one against a field the GET never
+// set, and both resolve to the same thing — the browser takes the first option
+// of a list ordered most powerful first. The template's half of the fix is that
+// it marks what the handler chose; that the handler chooses the *weakest* is
+// TestWeakestRoleIsTheDefaultOnBothCreationForms, next door in httpx, because
+// the list arrives from a service this package cannot see.
+func TestNeitherAuthorityFormPreselectsTheStrongestRole(t *testing.T) {
+	for _, tc := range []struct{ page, control string }{
+		{"invites", "role"},
+		{"members", "grant_role"},
+	} {
+		t.Run(tc.page, func(t *testing.T) {
+			markup := selectMarkup(t, renderPage(t, tc.page, nil), tc.control)
+			// The fixture offers admin and editor, in that order. Editor is the
+			// lowest, and the page data says so.
+			if !strings.Contains(markup, `<option value="editor" selected>`) {
+				t.Errorf("the lowest role on offer is not selected:\n%s", markup)
+			}
+			if strings.Contains(markup, `<option value="admin" selected>`) {
+				t.Errorf("the most powerful role on offer is selected:\n%s", markup)
+			}
+			if n := strings.Count(markup, " selected"); n != 1 {
+				t.Errorf("%d options are selected, want exactly 1:\n%s", n, markup)
+			}
+		})
+	}
+}
+
+// F163's second half: the sentence beside the grant form is about the grant
+// being made, not about grants in general.
+//
+// Both directions, because only the pair is meaningful — a note that always
+// renders in its warning colours would pass the first assertion alone, and the
+// swap target has to exist even with nothing to say or htmx has nowhere to put
+// the first answer.
+func TestTheGrantFormSaysWhatThisGrantWouldDo(t *testing.T) {
+	warned := renderPage(t, "members", nil)
+	if !strings.Contains(warned, "already holds admin across every workspace") {
+		t.Error("the grant form does not say what granting this role to this person would do")
+	}
+	if !strings.Contains(warned, `id="grant-note" class="text-sm rounded-md border border-warn-line bg-warn-soft`) {
+		t.Errorf("a grant that changes nothing is not drawn as something to stop at")
+	}
+
+	plain := renderPage(t, "members", map[string]any{
+		"GrantNote":     "This makes someone@example.com admin in Marketing, on top of what they already hold.",
+		"GrantNoteWarn": false,
+	})
+	if !strings.Contains(plain, `id="grant-note" class="text-sm text-muted"`) {
+		t.Error("an ordinary widening grant is drawn in the warning's colours")
+	}
+
+	// D31's invariant is not what F163 was about, and it stays: it is true of
+	// every grant, which is exactly why it could not be the whole of the copy.
+	if !strings.Contains(warned, "It never takes anything away") {
+		t.Error("the union rule D31 asked to be written beside this form is gone")
+	}
+
+	empty := renderPage(t, "members", map[string]any{"GrantNote": ""})
+	if !strings.Contains(empty, `id="grant-note"`) {
+		t.Error("with nothing to say the swap target is missing, so the first " +
+			"change of a select has nowhere to land")
+	}
+}
+
+// F175. The mailer-free instance does not promise the mail it is about to
+// refuse.
+//
+// Asserted in both directions: the sentence is right on every instance that can
+// send, and the page it must not appear on is the one an operator reaches
+// precisely when something is not working.
+func TestForgotDoesNotPromiseMailItCannotSend(t *testing.T) {
+	const promise = "We send a link to your address"
+
+	mailer := renderPage(t, "forgot", nil)
+	if !strings.Contains(mailer, promise) {
+		t.Error("an instance with a relay no longer says what the page does")
+	}
+
+	none := renderPage(t, "forgot", map[string]any{"NoMailer": true})
+	if !strings.Contains(none, "This instance cannot send mail") {
+		t.Fatal("the no-mailer branch did not render; this test has lost its subject")
+	}
+	if strings.Contains(none, promise) {
+		t.Error("the page promises a link by mail directly above the card saying " +
+			"it cannot send one")
 	}
 }

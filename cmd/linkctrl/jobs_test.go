@@ -109,7 +109,7 @@ func jobsDSNFor(name string) string {
 func TestEachJobFamilyHasItsOwnAdvisoryLockKey(t *testing.T) {
 	fams := (&jobRunner{}).families()
 
-	const wantFamilies = 7
+	const wantFamilies = 8
 	if len(fams) != wantFamilies {
 		t.Fatalf("got %d job families, want %d; a family added or merged has to update this count and the key block in jobs.go together",
 			len(fams), wantFamilies)
@@ -153,6 +153,64 @@ func TestEachJobFamilyHasItsOwnAdvisoryLockKey(t *testing.T) {
 		if !seenName[name] {
 			t.Errorf("no %q family: the mail and webhook drains are separate on purpose, so one stalled remote cannot delay the other's queue",
 				name)
+		}
+	}
+}
+
+// TestAReleasedFamilyKeepsItsAdvisoryKey is what closes the deploy-shaped
+// two-leader window, and it is the only thing that can (M57).
+//
+// Two binaries in a rolling deploy contend for leadership only if they ask for
+// the same key. Generation 0 asked for one key for everything, so a generation-0
+// binary beside a generation-1 one gives every family two leaders for the length
+// of the deploy — jobs.go says so, and it is why advisoryLockKeyRetiredV1 is
+// still declared. Generation 1 shipped whole in **0.2.0**, and running more than
+// one replica became a supported configuration in 0.3.0, so no deployment an
+// operator is allowed to perform can put a generation-0 binary in a rolling
+// deploy. The window is closed by that, and by nothing else.
+//
+// Which means the way to re-open it is to renumber a family that has already
+// shipped. The old binary keeps taking the old key, the new one takes the new
+// key, neither excludes the other, and the deploy has two leaders for that
+// family — the generation-0 failure, one family at a time and with no
+// generation bump to make it obvious. So the released assignments are frozen
+// here, by name, and a rename counts: `families()` is keyed by name in
+// ObserveJobSkipped and in every metric an operator alerts on.
+//
+// Adding a family is free and is meant to be. A key the old binary never took
+// cannot be contended for, which is why update-check (0x0108, M55) could arrive
+// mid-phase without touching this.
+func TestAReleasedFamilyKeepsItsAdvisoryKey(t *testing.T) {
+	// Read out of `git show v0.2.0:cmd/linkctrl/jobs.go` rather than copied from
+	// the block above, which would agree with itself by construction.
+	released := map[string]int64{
+		"rollup":           0x6c63_6a6f_6273_0101,
+		"dimension-rollup": 0x6c63_6a6f_6273_0102,
+		"mail":             0x6c63_6a6f_6273_0103,
+		"webhooks":         0x6c63_6a6f_6273_0104,
+		"maintenance":      0x6c63_6a6f_6273_0105,
+		"domains":          0x6c63_6a6f_6273_0106,
+		"automation":       0x6c63_6a6f_6273_0107,
+		// 0.3.0. Frozen from the moment it ships, which is what this line is for.
+		"update-check": 0x6c63_6a6f_6273_0108,
+	}
+
+	got := make(map[string]int64)
+	for _, f := range (&jobRunner{}).families() {
+		got[f.name] = f.key
+	}
+
+	for name, key := range released {
+		switch have, ok := got[name]; {
+		case !ok:
+			t.Errorf("family %q has shipped and is gone from families(); an older binary in a "+
+				"rolling deploy still runs it, and whatever replaced it does not exclude it. "+
+				"Retire the key the way generation 0 was retired rather than dropping the row",
+				name)
+		case have != key:
+			t.Errorf("family %q shipped on key %#x and now asks for %#x; the two binaries in a "+
+				"rolling deploy would each hold their own and each believe they lead",
+				name, key, have)
 		}
 	}
 }
@@ -202,6 +260,116 @@ func TestOneFamilysLockDoesNotBlockAnothers(t *testing.T) {
 	if ran {
 		t.Error("the mail family ran while another session held its key; leadership is not being checked per family")
 	}
+}
+
+// TestLeadershipMovesToAFollowerWhenTheLeaderDies is the failover mechanism,
+// run as one (M56).
+//
+// Every claim in the failover contract rests on a single Postgres property: a
+// session-level advisory lock is released the instant the session holding it
+// ends, whether it ended politely or was killed. Nothing in this product
+// watches for a dead leader, holds a heartbeat, or elects anything — the next
+// follower to tick simply finds the lock free. That is the whole of it, and it
+// is why running several replicas needs no coordinator.
+//
+// The kill is real rather than simulated. `pg_terminate_backend` on the
+// leader's own backend is exactly what Postgres sees when a replica's container
+// is killed: the connection goes away without an unlock ever being sent. What
+// this cannot reproduce is the leader's *goroutine* dying with it, so the pass
+// is abandoned by hand at the same moment — which is the honest half, because
+// a leader that keeps working after its lock is gone is the two-leaders window
+// D77 already documents rather than the failover this test is about.
+//
+// Bounded, not instant, and the bound is a family's tick interval away in
+// production: the fastest family ticks every 60 seconds, so a killed leader
+// costs at most one interval of that family's work. Here the follower is ticked
+// in a loop, so what is measured is the lock becoming free — the part this
+// product is responsible for.
+func TestLeadershipMovesToAFollowerWhenTheLeaderDies(t *testing.T) {
+	pool := jobsPool(t)
+	ctx := context.Background()
+
+	// A scratch table so "the work" is a row somebody can count, rather than a
+	// boolean only this test can see. The database is this test's own.
+	if _, err := pool.Exec(ctx, `CREATE TABLE failover_probe (replica text NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+
+	log := slog.New(slog.DiscardHandler)
+
+	// The leader takes a connection of its own so the kill has one target.
+	leaderConn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaderPID := leaderConn.Conn().PgConn().PID()
+
+	var held bool
+	if err := leaderConn.QueryRow(ctx,
+		"SELECT pg_try_advisory_lock($1)", advisoryLockKeyRollup).Scan(&held); err != nil {
+		t.Fatal(err)
+	}
+	if !held {
+		t.Fatal("could not take the rollup key on a fresh database; the rest of this test would prove nothing")
+	}
+
+	follower := &jobRunner{pool: pool, log: log}
+	work := func(replica string) func(context.Context) error {
+		return func(ctx context.Context) error {
+			_, err := pool.Exec(ctx, `INSERT INTO failover_probe (replica) VALUES ($1)`, replica)
+			return err
+		}
+	}
+
+	// While the leader is up, the follower skips. Work is not done twice.
+	follower.withLeadership(ctx, advisoryLockKeyRollup, "rollup", work("follower"))
+	if n := probeRows(t, pool); n != 0 {
+		t.Fatalf("the follower did %d passes while the leader held the family's lock, want 0; "+
+			"two replicas are running the same job", n)
+	}
+
+	// The leader dies. No unlock is sent — that is the point of terminating the
+	// backend rather than releasing the lock.
+	var terminated bool
+	if err := pool.QueryRow(ctx, "SELECT pg_terminate_backend($1)", leaderPID).Scan(&terminated); err != nil {
+		t.Fatal(err)
+	}
+	if !terminated {
+		t.Fatal("could not terminate the leader's backend; nothing below would be a failover")
+	}
+	leaderConn.Release()
+
+	const bound = 5 * time.Second
+	start := time.Now()
+	var took time.Duration
+	for time.Since(start) < bound {
+		follower.withLeadership(ctx, advisoryLockKeyRollup, "rollup", work("follower"))
+		if probeRows(t, pool) > 0 {
+			took = time.Since(start)
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	switch n := probeRows(t, pool); {
+	case n == 0:
+		t.Errorf("no follower picked the family up within %s of the leader dying; "+
+			"the advisory lock is not the failover mechanism the contract says it is", bound)
+	case n > 1:
+		t.Errorf("the family ran %d times after one failover, want 1; work is being done twice", n)
+	default:
+		t.Logf("the follower took leadership %s after the leader's backend was terminated", took)
+	}
+}
+
+func probeRows(t *testing.T, pool *pgxpool.Pool) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM failover_probe`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // TestTheHostReloadRunsWithoutASubscriberAndWithoutLeadership is F73's fix as a

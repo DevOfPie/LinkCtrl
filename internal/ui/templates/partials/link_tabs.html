@@ -1,0 +1,81 @@
+{{define "link_tabs"}}
+{{- /* The tab strip and the one section panel it has open (M47, reopened).
+
+       F205: nine sections in one column meant the reorder only decided *which*
+       section is expensive to reach, never *how many* are. So the stack became
+       seven tabs, owner-set 2026-08-11 — Edit, QR, Routing, Split, Signed,
+       Analytics, Danger — with recent activity folded into Analytics because
+       it is the same data one row at a time. All eight section partials
+       survive; this file replaces only the shell that arranged them.
+
+       The strip scrolls sideways instead of wrapping. That is the property
+       that made tabs beat the drawn alternatives — it behaves identically at
+       360px and at full width — and the kept spec in
+       tools/agent-browser/specs/link-tabs.spec.mjs is what asserts it.
+
+       Anchors, deliberately. The fold test counts named form controls in
+       front of id="url" and refuses <ul>/<ol> there; an <a> is neither, so
+       the destination box and the alias stay the first two controls the page
+       draws. Each tab is a real URL (?tab=), which is what keeps refresh,
+       bookmarks and every section's return path honest; the click itself is
+       an htmx swap in the workspace switcher's pattern (nav.html), with
+       hx-select trimming the full response to this container. Which tab a
+       write returns to is the handlers' to derive, never the request's to
+       name — D178.
+
+       Every tab carries its state (M47.5), because the badge is then both
+       the answer and the way in: you read `Routing 2` and click `Routing 2`.
+       Five positions — Danger has no state to carry, deletability being a
+       permission, and Edit is bare since the F211 reopening: the owner judged
+       a count of enabled protections not worth a badge, superseding the
+       wireframe-round answer — and every tab holds its width set or empty,
+       so the strip does not reflow as a link is configured and two links
+       compare position by position. Counts read `0` in a muted chip rather
+       than no chip: a missing badge and a badge reading zero are different
+       claims and a reader cannot tell them apart. The cross means *the
+       section is empty*, never *no* — it serves Split and Signed both, and a
+       third meaning would make it lie. The check is the only badge carrying
+       colour, because signed access is a security property worth reading at
+       a glance and it is the strip's one true binary. The glyphs live in
+       partials/icons.html, the icon vocabulary this milestone seeds. */ -}}
+<div id="link-tabs">
+  <nav aria-label="Link sections" class="flex overflow-x-auto whitespace-nowrap border-b border-line">
+    {{range .Tabs}}
+    {{$active := eq .ID $.Tab}}
+    <a href="/links/{{$.Link.ID}}?tab={{.ID}}" {{if $active}}aria-current="page"{{end}}
+       hx-get="/links/{{$.Link.ID}}?tab={{.ID}}" hx-target="#link-tabs"
+       hx-select="#link-tabs" hx-swap="outerHTML" hx-push-url="true"
+       class="flex shrink-0 items-center border-b-2 px-4 py-2 text-sm font-medium {{if $active}}border-accent text-ink{{else}}border-transparent text-muted hover:text-ink{{end}}">{{.Label}}{{template "link_tab_badge" .}}</a>
+    {{end}}
+  </nav>
+  <div class="mt-6">
+    {{if eq .Tab "edit"}}{{if and .Identity (.Identity.Can "links.update")}}{{template "link_edit" .}}{{end}}{{end}}
+    {{if eq .Tab "qr"}}{{if and .Identity (.Identity.Can "links.read")}}{{template "link_qr" .}}{{end}}{{end}}
+    {{if eq .Tab "routing"}}{{if and .Identity (.Identity.Can "links.read")}}{{template "link_rules" .}}{{end}}{{end}}
+    {{if eq .Tab "split"}}{{if and .Identity (.Identity.Can "links.read")}}{{template "link_split" .}}{{end}}{{end}}
+    {{if eq .Tab "signed"}}{{if and .Identity (.Identity.Can "links.update")}}{{template "link_signed" .}}{{end}}{{end}}
+    {{if eq .Tab "analytics"}}<div class="space-y-6">{{template "link_analytics" .}}{{if .RecentClicks}}{{template "link_activity" .}}{{end}}</div>{{end}}
+    {{if eq .Tab "danger"}}{{if and .Identity (.Identity.Can "links.delete")}}{{template "link_danger" .}}{{end}}{{end}}
+  </div>
+</div>
+{{end}}
+
+{{define "link_tab_badge"}}
+{{- /* One tab's badge. Dot is a linkTab; Badge is its vocabulary word and ""
+       is a bare tab — Danger, and Edit since F211. Chips share one box — h-4, min-w-4, px-1 — and a
+       position's two states always draw the same kind, glyph or digit, so
+       every tab holds its width whether set or empty, which is what "the
+       strip does not reflow as a link is configured" rests on. Icon titles:
+       the cross's says *empty* because that is what it means. */ -}}
+{{- if eq .Badge "count" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-xs font-medium tabular-nums {{if .Count}}text-ink{{else}}text-subtle{{end}}">{{.Count}}</span>
+{{- else if eq .Badge "check" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-ok-soft px-1 text-ok-ink">{{template "icon_check" "Signed access required"}}</span>
+{{- else if eq .Badge "cross" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-subtle">{{template "icon_cross" "Empty"}}</span>
+{{- else if eq .Badge "weighted" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-ink">{{template "icon_weighted" "Weighted split"}}</span>
+{{- else if eq .Badge "sequential" -}}
+<span class="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sunken px-1 text-ink">{{template "icon_sequential" "Sequential split"}}</span>
+{{- end -}}
+{{end}}

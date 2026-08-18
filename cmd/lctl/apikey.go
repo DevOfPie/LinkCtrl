@@ -111,6 +111,16 @@ func apikeyCreate(args []string) error {
 		orgWide = fs.Bool("org-wide", false,
 			"not pinned to one workspace: each request resolves one the way a sign-in does, "+
 				"within the organization the key is issued in")
+		// M54's axis, and it only means anything with --org-wide. Off by default
+		// for the same reason --org-wide is off by default, one tier up: an
+		// unpinned key is account-wide unless somebody says otherwise, and saying
+		// otherwise is what pins it. The flag is the *narrowing* one, so leaving it
+		// alone never produces a credential narrower than the operator expected —
+		// it produces the model the product now has, which is the thing the help
+		// text has to make legible at the moment of minting.
+		pin = fs.Bool("pin", false,
+			"with --org-wide: pin the key to this organization instead of letting it "+
+				"reach every organization its owner belongs to")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -124,6 +134,13 @@ func apikeyCreate(args []string) error {
 
 	return withKeyService(context.Background(), *email,
 		func(ctx context.Context, keys *auth.APIKeyService, actor *auth.Identity) error {
+			// Resolved here rather than at flag-parse time because the
+			// organization is a property of the identity, and the identity does
+			// not exist until the pools are open.
+			if *pin {
+				org := actor.OrgID
+				in.OrganizationID = &org
+			}
 			created, err := keys.Create(ctx, actor, in)
 			if err != nil {
 				return err
@@ -213,15 +230,22 @@ func keyState(k auth.APIKeyInfo) string {
 	}
 }
 
-// keyReach names the workspace choice made at creation. Spelled out rather than
-// left to a blank column, because "bound to one workspace" and "valid across the
-// organization" are different credentials and the difference is invisible
-// otherwise.
+// keyReach names the reach chosen at creation. Spelled out rather than left to
+// a blank column, because "bound to one workspace", "valid across one
+// organization" and "valid across the account" are three different credentials
+// and the difference is invisible otherwise.
+//
+// Two columns in the row, three answers here: OrgWide is the workspace tier and
+// OrganizationID is the tenancy tier, and only the second gained a state in M54.
 func keyReach(k auth.APIKeyInfo) string {
-	if k.OrgWide {
+	switch {
+	case !k.OrgWide:
+		return "workspace"
+	case k.OrganizationID != nil:
 		return "organization"
+	default:
+		return "account"
 	}
-	return "workspace"
 }
 
 func stamp(t *time.Time) string {

@@ -31,6 +31,179 @@ During shutdown, `/readyz` fails *first*, then the drain delay elapses, then the
 listener closes. That ordering is what makes a rolling restart lossless; skipping
 it is how clients see connection resets during every deploy.
 
+### The load-balancer contract
+
+Since 0.3.0 this is a promise rather than an observation. Each clause has a test
+behind it, in `internal/httpx/health_test.go` and
+`test/integration/failover_test.go`, so it can be shown false rather than merely
+believed.
+
+| Probe | Wire it to | Because |
+| --- | --- | --- |
+| Liveness — *restart this container* | `GET /healthz` | It touches **neither Postgres nor Redis**, ever. A liveness probe that followed the database would fail on every replica during one Postgres blip and the orchestrator would restart the whole deployment at once, turning a recoverable dependency failure into a far worse outage. |
+| Readiness — *send it traffic* | `GET /readyz` | It reports what this replica can actually do. |
+| Startup | **nothing** | See below. |
+
+Readiness is a rule about the status **code**, not about the word in the body:
+
+- **503 → take the replica out of rotation.** It is `draining` (shutting down,
+  finish what it has) or `unavailable` (Postgres unreachable — it can resolve
+  nothing).
+- **200 → keep it in rotation**, including `degraded`. **A `degraded` replica is
+  a serving replica.** `degraded` means Redis is unreachable; redirects fall
+  through to Postgres and still meet the uncached target, so the replica works.
+  An operator who wires `degraded` to *remove* takes the **entire** deployment
+  out of rotation during a Redis outage — which is the exact failure this
+  distinction exists to prevent.
+
+Read the word to know how worried to be; act on the code.
+
+**Wired that way, a rolling deploy costs nothing, and that is measured.** Three
+replicas behind a balancer polling `/readyz` every second and deregistering
+after two failures, every replica destroyed and rebuilt while 2,000 requests a
+second went through it: **zero requests failed, zero retried, cached p99 295µs,
+the whole replacement in 35 seconds** — 11 to 12 seconds per replica. The run,
+the two columns it has, and what the numbers cannot show are in
+[slo.md](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09). The
+balancer's configuration is in `test/ha/haproxy.cfg`, which is the contract
+above written out in one vendor's syntax and is worth reading beside it.
+
+**There is no startup probe, and that is a choice rather than an omission.**
+Migrations run before the listener binds, so *not yet ready* and *not yet
+listening* are the same observable state — a startup probe would be a second
+name for a connection refused. Configure your orchestrator's start period
+instead, and give it room for migrations on a large `audit_logs`.
+
+### Sizing the drain delay
+
+`LINKCTRL_SHUTDOWN_DRAIN_DELAY` is how long a replica keeps serving *after* its
+readiness starts failing. It has to outlast your load balancer noticing:
+
+```
+DRAIN_DELAY  >  health-check interval  ×  unhealthy threshold
+```
+
+Take the interval and the threshold from your own load balancer, then add one
+interval of slack for the check that was already in flight when readiness
+flipped. A worked example, for a balancer polling every 5s and deregistering
+after 2 consecutive failures: 5 × 2 = 10s of detection, plus 5s of slack, so
+**15s** is the smallest defensible value.
+
+No number is recommended here, because the number belongs to your load balancer
+and not to this product. In particular the shipped default of **5s is not a
+recommendation** — it is what a deployment with no load balancer in front of it
+needs, and behind one that polls every 5s it is too short by half. What a delay
+that is too short costs is connection resets on every deploy: the listener
+closes while the balancer still believes the replica is healthy.
+
+**What a delay that is too short costs, as a number.** The inequality was tested
+from both sides on the same three-replica deployment, at 2,000 rps, replacing
+every replica. Satisfied — 5s of drain against 1s × 2 of detection — **zero
+requests failed and zero were retried**. Removed entirely, by killing each
+replica with SIGKILL instead of stopping it, **905 requests of 239,833 were
+retried, four drew a response error, the slowest took a full second, and the
+generator went from 3 concurrent connections to 212 to hold the rate.** Still
+zero failures, and the credit for that belongs to the balancer's `retries` and
+`redispatch` rather than to this product: a balancer without them answers 503 to
+all 905. The measurement is
+[here](slo.md#measured-during-a-rolling-deploy-for-m57-2026-08-09).
+
+`LINKCTRL_SHUTDOWN_TIMEOUT` is the separate budget for finishing in-flight
+requests *after* the listener closes, and buffered click events are flushed
+after that. **The two are spent in sequence and startup refuses a pair that
+exceeds 25 seconds**, because compose's `stop_grace_period` is 30 and a SIGKILL
+mid-flush loses the click events the flush exists to save. So raising the drain
+delay is a trade against the request budget, not a free knob: the worked example
+above leaves 10s for in-flight requests, and a deployment that needs both
+numbers larger has to raise `stop_grace_period` first.
+
+## Running more than one replica
+
+Nothing here needs a coordinator, an external lock service, or a second
+Postgres. Running one container is unaffected by all of it: with one replica the
+holder of every advisory lock is always the only candidate.
+
+### What happens when a replica dies
+
+| Work | On a replica that is killed | Bound |
+| --- | --- | --- |
+| **Scheduled jobs** | A Postgres advisory lock is released the instant the session holding it ends — killed or not. Nothing detects the death; the next follower to tick simply finds the lock free. | One tick of that family. The fastest family ticks every 60s; the hourly ones every hour. |
+| **Webhook deliveries** | Claimed with `FOR UPDATE SKIP LOCKED` under a **60-second lease**, in the same statement that spends the attempt. A replica killed after claiming leaves a row that comes back on its own rather than one stuck pending. | 60s, then another replica delivers it. |
+| **Mail outbox** | The same claim, the same lease, the same recovery. | 60s. |
+| **Buffered click events** | Lost. The queue is in-process and bounded by design (D77); a graceful shutdown flushes it, a kill does not. | Whatever was in the queue — `linkctrl_analytics_queue_depth` is the number. |
+
+Stated as a single promise: **a replica killed without draining loses at most
+its buffered click events, and nothing else.**
+
+Delivery is therefore **at-least-once, not exactly-once**, and the window is
+worth naming: a replica killed *after* a webhook request left the socket but
+*before* the row was marked delivered sends it again from somewhere else. Every
+delivery carries a stable `X-LinkCtrl-Delivery` uuid for exactly this — dedupe
+on it in the receiver. Making the click queue durable would mean a work queue in
+Redis, which would make Redis required, which is a trade this product has not
+made.
+
+### Can two replicas lead the same job at once
+
+Not because of a deploy, and the distinction is the whole answer.
+
+**A rolling deploy does not produce two leaders.** Every binary from 0.2.0 on
+asks for the same per-family advisory keys, so the old replica and the new one
+contend for one lock and `pg_try_advisory_lock` gives it to exactly one of them.
+The only binary that ever behaved otherwise is 0.1.x, which took a single key
+for every job — and running more than one replica was not a supported
+configuration until 0.3.0, so no upgrade path a deployment is allowed to take
+puts one in a rolling deploy. `TestAReleasedFamilyKeepsItsAdvisoryKey` is what
+keeps that true: renumbering a family that has already shipped would re-open the
+window one family at a time, and it fails when anybody does.
+
+**A leader that loses its database connection while still working does.** The
+lock is held on a connection of its own; the pass works on another. A terminated
+backend, a dropped network or a pause long enough to break keepalives releases
+the lock while the pass keeps running, and the next follower to tick takes it.
+Nothing bounds that window, because nothing detects it — which is the same
+property that makes failover need no coordinator.
+
+**So the window is real and it costs duplicate effort rather than duplicate
+effects.** Every pass is written to survive being run twice: the mail and webhook
+drains claim rows with `FOR UPDATE SKIP LOCKED`, the rollups recompute whole
+days idempotently, partition creation is `IF NOT EXISTS`, the automation
+watermark is compare-and-set, and the daily update check is one `UPDATE` that a
+second replica cannot match. **There was one exception until 0.3.0**, and it was
+a logging defect rather than a data one: custom-domain re-verification decided
+whether to write an audit record from a read taken before its own write, so two
+leaders could record one verification twice. It was
+[F180](build-notes/deferred-findings.md#closed), **closed at 0.3.0** together
+with [F185](build-notes/deferred-findings.md#closed), the same defect at the
+manual *Check DNS* button twelve lines away: both now decide from what the write
+returned, so the leader that did not move the row records nothing.
+
+### Which jobs run on every replica
+
+Two, and both are observations rather than work. Everything else in the
+[background jobs](#background-jobs) table is leader-elected, so on a healthy
+multi-replica deployment most of its runs are `skipped` — that is the normal
+reading, not a fault.
+
+| Pass | Why it takes no lock |
+| --- | --- |
+| Job-staleness reporting (rides the `rollup` family) | It publishes `linkctrl_rollup_staleness_seconds` by reading `job_state`. A follower that never published it would report nothing, and whether an alert fired would depend on which replica Prometheus happened to reach. |
+| `host-reload` | The verified-hostname set is in-process and every replica holds its own, so a reload the leader performs does nothing for the other three. |
+
+The list is enforced rather than described: `TestOnlyTheDocumentedJobsRunOnEveryReplica`
+in `cmd/linkctrl` fails when a pass in `jobs.go` stops taking leadership without
+this table changing with it.
+
+### What to alert on across replicas
+
+**`linkctrl_rollup_staleness_seconds`**, and not a per-replica *job skipped*
+count. It is read from `job_state`, so every replica publishes the same answer
+about the deployment as a whole, and a leader that died is visible as the number
+climbing rather than as a series disappearing. A skipped count says only that
+*this* replica is not the leader, which on a healthy deployment is what most
+replicas are most of the time. The thresholds are in
+[Alerts worth having](#alerts-worth-having).
+
 ## Metrics
 
 Prometheus format at `GET /metrics` on `METRICS_ADDR` (`:9090`), a **separate
@@ -55,8 +228,8 @@ scrape_configs:
 | `linkctrl_http_request_duration_seconds{surface,method}` | Outside view, including all middleware. |
 | `linkctrl_analytics_queue_depth` | Leading indicator for the click pipeline. |
 | `linkctrl_analytics_events_dropped_total` | Clicks discarded to protect redirect latency. |
-| `linkctrl_rate_limited_total{limit}` | Requests refused by a limit: `login`, `api`, `redirect_404` or `link_password`. Never `blocked_audit` — that limiter refuses no request. It bounds how often a destination refusal writes an audit row, so an exhausted budget skips the row rather than the request, and there is nothing here to count. |
-| `linkctrl_rate_limit_tracked_keys{limit}` | Client keys each limiter is holding **in this replica's own table**. Every limiter appears here, `blocked_audit` included despite its absence from the row above. For the Redis-shared limits — `login`, `api`, `link_password` and `blocked_audit` — that table is only written when the shared limiter did not answer, so a healthy shared limit reads **zero** here — which is indistinguishable from no traffic, and is why the next row exists. |
+| `linkctrl_rate_limited_total{limit}` | Requests refused by a limit: `login`, `api`, `redirect_404`, `link_password` or `upload`. Never `blocked_audit` — that limiter refuses no request. It bounds how often a destination refusal writes an audit row, so an exhausted budget skips the row rather than the request, and there is nothing here to count. |
+| `linkctrl_rate_limit_tracked_keys{limit}` | Client keys each limiter is holding **in this replica's own table**. Every limiter appears here, `blocked_audit` included despite its absence from the row above. For the Redis-shared limits — `login`, `api`, `link_password`, `blocked_audit` and `upload` — that table is only written when the shared limiter did not answer, so a healthy shared limit reads **zero** here — which is indistinguishable from no traffic, and is why the next row exists. |
 | `linkctrl_rate_limit_fallback_total{limit}` | Decisions made from this replica's own buckets because the shared limiter did not answer — whether Redis was asked and failed, or the circuit breaker declined to ask at all. **This is the series that says a shared limit has stopped being shared**: any movement means the configured number is being enforced per replica rather than across them. It counts every locally decided request, so during an outage it moves with traffic, and its rate against the request rate says how much of the load is running on per-replica numbers. Always zero for the 404-probe limiter, which is deliberately not shared. |
 | `linkctrl_rate_limit_overflow_total{limit}` | Requests allowed **without being limited** because the key table was full. |
 | `linkctrl_db_pool_*{pool="app"\|"redirect"}` | Saturation, per pool. |
@@ -170,8 +343,9 @@ its own pass just wrote rather than racing it.
 | `partition-check` | 1h | Warns if rows landed in a default partition. |
 | `signup-purge` | 1h | Deletes pending registrations whose verification window has lapsed, and consumed ones past their short retention. Runs only where self-serve sign-up is possible; it exports `linkctrl_job_runs_total` like every other job and was the one `withLeadership` job with no row in this table until 0.2.0 ([F45](build-notes/deferred-findings.md)), so an operator reading it for the set of jobs to watch was one short. |
 | `domain-verification` | 1h | Re-reads every registered hostname's DNS TXT challenge. A hostname that starts passing begins being served without anybody pressing anything; one that stops passing keeps serving for `DOMAIN_VERIFY_GRACE` — a day by default — with the owning workspace notified at the **first** failure, and then stops being served on every replica. **This is the only job whose failure takes something offline**, which is why the window is long and why the warning comes early; the runbook is in [deployment.md](deployment.md#custom-domains). A pass that changed anything logs `custom domain verification` with the counts. **Serving hostnames are checked before registered-but-unserved ones**, so the stop above can only ever be delayed by other serving hostnames — never by a pile of registrations, which anybody can create and whose place in the queue a rename resets. A domain renamed while its check was in flight logs `a domain changed while its verification was in flight` and verifies nothing; one line is an owner renaming at an unlucky moment, a stream of them is somebody trying to have a check of one name land on another. `DOMAIN_VERIFY_INTERVAL=0` switches it off, which also removes the only thing that would ever stop serving a hostname whose record has gone. |
-| `host-reload` | `DOMAIN_VERIFY_INTERVAL` | Re-reads this replica's verified-hostname set from Postgres. **The only job here that does not take leadership, and that is the point**: the set is in-process and every replica holds its own, so a reload the leader performs does nothing for the other three. It is the backstop Redis pub/sub cannot be — pub/sub is at-most-once, so a published invalidation that is simply lost while the subscription stays healthy is never noticed, and an instance with no Redis has no subscriber at all. Before this, such a replica served whatever it last knew until it restarted. One query against a table of tens of rows; a failure is logged and the replica keeps the set it has. `DOMAIN_VERIFY_INTERVAL=0` switches it off with the pass. |
-| `housekeeping` | 1h | The reapers. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions, revoked API keys and finished outbox rows past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. |
+| `host-reload` | `DOMAIN_VERIFY_INTERVAL` | Re-reads this replica's verified-hostname set from Postgres. **The only job in this table that does not take leadership, and that is the point**: the set is in-process and every replica holds its own, so a reload the leader performs does nothing for the other three. (The other per-replica pass is job-staleness reporting, which is not a family of its own and so has no row here — both are in [which jobs run on every replica](#which-jobs-run-on-every-replica).) It is the backstop Redis pub/sub cannot be — pub/sub is at-most-once, so a published invalidation that is simply lost while the subscription stays healthy is never noticed, and an instance with no Redis has no subscriber at all. Before this, such a replica served whatever it last knew until it restarted. One query against a table of tens of rows; a failure is logged and the replica keeps the set it has. `DOMAIN_VERIFY_INTERVAL=0` switches it off with the pass. |
+| `update-check` | 1h | Asks GitHub whether a newer LinkCtrl has been released, and notifies **the instance principal** if there is one. **The only job here whose work leaves your deployment**, which is why it is a family of its own and not a step in the hourly pass — a later "just one more thing" added to `housekeeping` must not be able to become undisclosed egress. The ticker is hourly and the period is daily: the bound is a row in `instance_settings`, not the clock, so a replica restarted every ten minutes still asks once. A failure is one debug line and no retry until the next day. Off entirely with `LINKCTRL_UPDATE_CHECK=false`; off for an instance whose operator declined; and off for one where **nobody has been asked yet**, which is what an upgraded instance is until an administrator signs in — the pass runs, claims nothing and returns. What the request carries is enumerated in [configuration.md](configuration.md#update-check) and counted in [SECURITY.md](SECURITY.md)'s egress row. |
+| `housekeeping` | 1h | The reapers, plus the one pass that reaps nothing. Hard-deletes links whose 30-day trash window has passed — reserving any alias that ever received traffic in the same statement, so it is never reissued — and deletes sessions, revoked API keys, spent and lapsed password-reset tokens, and finished outbox rows past their retention. Each purged link is logged by alias; that log line is the only record of the deletion. **Since 0.3.0 it also erases the residue of deleted accounts**, which is the opposite shape: the rows are kept and the person is taken out of them, because the audit log and the dispute queue are records of what happened. This is what bounds the gap between an account being deleted and its name disappearing from those tables at **one hour** — access ends inside the deleting transaction and does not wait for this. Logged as `deleted accounts erased` with a count and no identifier. |
 
 All of them run once at startup rather than waiting a full interval, so a fresh
 instance has current numbers — except `host-reload`, whose boot pass is process
@@ -330,9 +504,9 @@ defeat the bound that makes delegation safe. Somebody holding it appoints
 reviewers, and reviewers appoint nobody.
 
 That leaves one case — the founding account is gone, or was never the operator's,
-or its password is lost and this product has no password reset. It is the
-operator's to fix, because they have the box and the person who lost the account
-does not:
+or its password is lost on an instance with no mailer, where the product's own
+password reset has nothing to send with. It is the operator's to fix, because
+they have the box and the person who lost the account does not:
 
 ```sh
 $ lctl instance principal show
@@ -366,6 +540,11 @@ Deliberate gaps, so they are not discovered during an incident:
 - **Invalidation needs Redis to cross replicas.** With Redis down, each replica
   falls back to `REDIRECT_TTL` staleness — correct, just slower to converge.
   See [below](#cache-invalidation-across-replicas).
+- **A killed replica loses its buffered click events.** The queue is in-process
+  and bounded on purpose; a graceful shutdown flushes it and a `SIGKILL` does
+  not. Making it durable means a work queue in Redis, and that would make Redis
+  required. Everything else in flight survives — see
+  [what happens when a replica dies](#what-happens-when-a-replica-dies).
 - **The dimension rollup is expensive and gets worse.** It recomputes whole days
   every 60 seconds; at 5.7M click events that measured 16–21 seconds per run, and
   it will eventually exceed its own interval. Redirects are unaffected — the

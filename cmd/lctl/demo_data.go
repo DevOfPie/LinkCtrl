@@ -39,8 +39,29 @@ type pgxExecutor interface {
 // Every row the Phase 2 seeding writes is removed here too, in demoResetPhase2.
 // That is what makes `make demo-update` idempotent: run twice, the same demo.
 func demoReset(ctx context.Context, pool *pgxpool.Pool, actor *auth.Identity, cat []demoLink) error {
+	// The second workspace's aliases are reset here too, and not only by the
+	// workspace delete at the end of demoResetPhase2 that cascades them (F168).
+	//
+	// That delete reaches a link only if the link is *inside* the workspace, and
+	// on 2026-08-07 four of these five were found in the demo's **Default**
+	// workspace instead — `spring-webinar`, `roadshow`, `partner-portal` and
+	// `cw-survey` — while the second workspace held none. Aliases are unique per
+	// **domain** and both workspaces are on the instance default, so the stranded
+	// copies refused the next run's creation of the same names and no re-run could
+	// clear them: `make demo-update` failed identically forever. The reset is what
+	// makes this command idempotent, and an idempotency that depends on the last
+	// run having put every row in the right place is not one.
+	//
+	// Matching by alias across the organization costs nothing when the rows are
+	// where they belong — the workspace delete gets there first — and is the whole
+	// recovery when they are not.
 	aliases := make([]string, 0, len(cat))
 	for _, d := range cat {
+		if d.alias != "" {
+			aliases = append(aliases, d.alias)
+		}
+	}
+	for _, d := range demoWorkspace2Catalogue() {
 		if d.alias != "" {
 			aliases = append(aliases, d.alias)
 		}
@@ -328,6 +349,57 @@ type demoClickRow struct {
 	latency        int32
 }
 
+// demoCountedClicks generates exactly n human clicks on one link.
+//
+// The weighted generator below cannot be asked for a number. It draws from a
+// PRNG, discards whatever lands after the cutoff and adds crawler traffic on
+// top, which is right for a catalogue whose totals only have to look like a
+// month of use — and wrong for a link whose click total is being *compared*
+// against something. `first-fifty` is that link: its budget says twelve of fifty
+// are spent, and a redirect that spends a click records one, so the two numbers
+// have to be the same number (F166).
+//
+// No PRNG for the same reason: nothing here may move between two runs of
+// `lctl demo --reset` on the same day. Every field is derived from the click's
+// index, and `ago` never reaches zero, so every timestamp is in a day that is
+// already over and none is ever discarded — n rows in, n rows out.
+//
+// No bot clicks. All three callers are gated links, and a crawler that met the
+// password form, the signature refusal or a spent budget did not reach the
+// destination; counting it as a click on the link would be the same kind of
+// number-that-cannot-be-true this exists to remove.
+func demoCountedClicks(linkID uuid.UUID, n, oldest int, now time.Time) []demoClickRow {
+	if n <= 0 || oldest <= 0 {
+		return nil
+	}
+	midnight := now.Truncate(24 * time.Hour)
+	rows := make([]demoClickRow, 0, n)
+	for i := range n {
+		// Oldest first, thinning towards today, and never today itself.
+		ago := max(1, oldest-(i*oldest)/n)
+		day := midnight.AddDate(0, 0, -ago)
+		vidx := (i*37 + 11) % 900
+		country := demoCountries[(i*13)%len(demoCountries)]
+		device, browser, osName := demoAgent(vidx)
+		rows = append(rows, demoClickRow{
+			linkID: linkID,
+			at: day.
+				Add(time.Duration(demoHours[(i*7)%len(demoHours)]) * time.Hour).
+				Add(time.Duration((i*17)%60) * time.Minute).
+				Add(time.Duration((i*29)%60) * time.Second),
+			hash:     demoVisitorHash(day, vidx, false),
+			country:  country,
+			device:   device,
+			browser:  browser,
+			os:       osName,
+			lang:     demoLanguage(country),
+			referrer: demoReferrers[(i*23)%len(demoReferrers)],
+			latency:  int32(200 + (i*211)%2600), //nolint:gosec // bounded
+		})
+	}
+	return rows
+}
+
 // demoClickRows generates the click history.
 //
 // Pure, and separated from the COPY below for that reason: the history is the
@@ -451,8 +523,20 @@ func demoClicks(ctx context.Context, pool *pgxpool.Pool, workspaceID string,
 	if err != nil {
 		return 0, err
 	}
-	rows := demoClickRows(cat, ids, opt, now)
+	return demoCopyClicks(ctx, pool, wsID, demoClickRows(cat, ids, opt, now))
+}
 
+// demoCopyClicks writes a batch of click events and refreshes the counters.
+//
+// Separate from demoClicks so that the Phase 2 seeding can write traffic for
+// links the weighted catalogue above does not describe — the gated links and the
+// one on the custom hostname, which were created through the service and then
+// never touched again (F165, F166). Same COPY, same columns, same counter
+// refresh, because a click event those pages disagreed with the catalogue's
+// would be a second shape of demo click for a reader to notice.
+func demoCopyClicks(ctx context.Context, pool *pgxpool.Pool, wsID uuid.UUID,
+	rows []demoClickRow,
+) (int64, error) {
 	copied, err := pool.CopyFrom(ctx,
 		pgx.Identifier{"click_events"},
 		[]string{

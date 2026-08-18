@@ -945,6 +945,246 @@ func TestTheJobCannotVerifyANameItDidNotCheck(t *testing.T) {
 	}
 }
 
+// TestTwoLeadersRecordOneVerificationOnce is F180.
+//
+// **The pass decided whether a hostname had just been verified by looking at the
+// row it read before its own DNS lookup.** That read is a whole round trip stale
+// — seconds of it, against a nameserver the registrant runs and can make as slow
+// as it likes — so two leaders that both found the row unverified both concluded
+// they were the one that verified it, and both wrote a `domain.verified` audit
+// record. The idempotent UPDATE underneath hid nothing, because state was never
+// what duplicated: `verified_at` is correct after both writes and the audit log
+// is not. What it costs is that the log stops being a count of events, so
+// somebody reconciling *how many times was this hostname verified* gets two for
+// one.
+//
+// The second leader is run inside the first one's lookup rather than on a second
+// goroutine, which is the apparatus every race test in this file uses: the
+// interleaving is the one the finding reproduced, and it happens on every run
+// rather than on most of them.
+//
+// `MarkDomainVerified` is deliberately left alone — it was always safe, setting
+// `verified_at` only when it is not already set — and that safety is what the fix
+// reads: the row the write *returns* says which call filled the column.
+func TestTwoLeadersRecordOneVerificationOnce(t *testing.T) {
+	f := newDomains(t)
+	d := f.register(customHost)
+	f.zone.publish(d.Verification.RecordName, d.Verification.RecordData)
+
+	// The second leader, running while the first one's challenge lookup is in
+	// flight. It reads the same unverified row, resolves the same record, and
+	// writes first.
+	var second link.DomainCheckSummary
+	f.zone.interrupt(func() {
+		var err error
+		second, err = f.links.ReverifyDomains(t.Context(), time.Now(), 100)
+		if err != nil {
+			t.Errorf("the second pass this test races against failed: %v", err)
+		}
+	})
+
+	first, err := f.links.ReverifyDomains(t.Context(), time.Now(), 100)
+	if err != nil {
+		t.Fatalf("the first pass failed: %v", err)
+	}
+
+	if _, verified := f.state(d.ID); !verified {
+		t.Fatal("neither pass verified the hostname, so this test raced nothing")
+	}
+	if second.Checked != 1 {
+		t.Fatalf("the second pass checked %d rows; it was meant to reach the one row "+
+			"the first pass is holding a lookup open on", second.Checked)
+	}
+
+	events := f.verifiedEvents()
+	if len(events) != 1 {
+		t.Errorf("the audit log holds %d domain.verified records for one verification "+
+			"(%v); two leaders that both read the row unverified each recorded the "+
+			"event, and a log that counts one verification twice cannot be reconciled",
+			len(events), events)
+	}
+	for _, h := range events {
+		if h != customHost {
+			t.Errorf("a domain.verified record names %s; the only name checked was %s",
+				h, customHost)
+		}
+	}
+	if got := first.Verified + second.Verified; got != 1 {
+		t.Errorf("the two passes between them report %d verifications of one hostname; "+
+			"the summary the leader logs is the same claim the audit log makes", got)
+	}
+}
+
+// TestTwoPressesOfVerifyRecordOneVerificationOnce is F185, which is F180's
+// defect at the second of the two sites that had it.
+//
+// **The reach is what separates them.** F180 needed two leaders of a job family,
+// which is a rolling deploy or a scheduler misconfiguration; this one needs two
+// administrators pressing *Verify* on one hostname, or one of them
+// double-clicking it — and the gap they have to land in is the same DNS round
+// trip, held open by a nameserver the registrant runs and can make as slow as it
+// likes. So the cheaper defect was the one nobody had a test for.
+//
+// The second press runs inside the first one's lookup rather than on a second
+// goroutine, which is the apparatus every race test in this file uses: the
+// interleaving is the one the finding describes, and it happens on every run
+// rather than on most of them.
+func TestTwoPressesOfVerifyRecordOneVerificationOnce(t *testing.T) {
+	f := newDomains(t)
+	d := f.register(customHost)
+	f.zone.publish(d.Verification.RecordName, d.Verification.RecordData)
+
+	// The second press, while the first one's challenge lookup is in flight. It
+	// reads the same unverified row, resolves the same record, and writes first.
+	f.zone.interrupt(func() {
+		if _, err := f.links.VerifyDomain(t.Context(), f.owner, d.ID); err != nil {
+			t.Errorf("the second press this test races against failed: %v", err)
+		}
+	})
+
+	if _, err := f.links.VerifyDomain(t.Context(), f.owner, d.ID); err != nil {
+		t.Fatalf("the first press failed: %v", err)
+	}
+
+	if _, verified := f.state(d.ID); !verified {
+		t.Fatal("neither press verified the hostname, so this test raced nothing")
+	}
+
+	events := f.verifiedEvents()
+	if len(events) != 1 {
+		t.Errorf("the audit log holds %d domain.verified records for one verification "+
+			"(%v); both presses read the row unverified a DNS round trip before their "+
+			"own writes, and a log that counts one verification twice cannot be "+
+			"reconciled", len(events), events)
+	}
+	for _, h := range events {
+		if h != customHost {
+			t.Errorf("a domain.verified record names %s; the only name checked was %s",
+				h, customHost)
+		}
+	}
+}
+
+// TestACheckOnAServingHostnameDoesNotDenyItIsServed is F161's first limb.
+//
+// **Pressing *Check DNS* on a hostname inside D70's grace window returned the
+// sentence "<host> is not verified", which the page renders directly above a
+// badge that re-reads `verified_at` and says *Verified — links are served here*.**
+// One response, both claims. The badge is the true one: the failure write leaves
+// `verified_at` untouched on purpose so a serving hostname goes on serving
+// through the window, and `verified_at` alone gates the redirect path. So the
+// refusal was the thing that was wrong, and it was wrong on the exact action
+// somebody takes to resolve the doubt.
+//
+// The never-verified arm is asserted beside it because that sentence is correct
+// there and is the only feedback a new registration gets — a fix that made both
+// arms say the same thing would have traded one wrong sentence for another.
+func TestACheckOnAServingHostnameDoesNotDenyItIsServed(t *testing.T) {
+	f := newDomains(t)
+	serving := f.verify(f.register(customHost))
+	pending := f.register(otherCustomHost)
+
+	// The deleted CNAME, on the hostname that is serving links.
+	f.zone.withdraw(domain.ChallengeRecordName(customHost))
+
+	refusal := func(id uuid.UUID) domain.ValidationErrors {
+		t.Helper()
+		_, err := f.links.VerifyDomain(t.Context(), f.owner, id)
+		var ve domain.ValidationErrors
+		if !errors.As(err, &ve) {
+			t.Fatalf("a failing check answered %v; a missing record is something its "+
+				"owner fixes, not a server error", err)
+		}
+		if ve[0].Code != "unverified" {
+			t.Errorf("the refusal code is %q; api/openapi.yaml documents this endpoint "+
+				"as failing with hostname/unverified and clients branch on it", ve[0].Code)
+		}
+		return ve
+	}
+
+	served := refusal(serving.ID)[0].Message
+	if strings.Contains(served, "is not verified") {
+		t.Errorf("checking %s answered %q while the row is still verified and still "+
+			"serving links; the page renders that above a badge reading "+
+			"\"Verified — links are served here\"", customHost, served)
+	}
+	if !strings.Contains(served, "still") {
+		t.Errorf("%q does not say the hostname is still served, which is the one fact "+
+			"that makes a failed check on a serving name survivable", served)
+	}
+	if !strings.Contains(served, domain.ChallengeRecordName(customHost)) {
+		t.Errorf("%q no longer names the record to publish, which is the whole "+
+			"remedy and is the documented content of this refusal", served)
+	}
+	if _, verified := f.state(serving.ID); !verified {
+		t.Error("the check un-verified a serving hostname on one failure; D70's grace " +
+			"window is what stops a resolver blip being an outage")
+	}
+
+	// And the registration that has never served keeps the sentence that is true
+	// of it.
+	never := refusal(pending.ID)[0].Message
+	if !strings.Contains(never, otherCustomHost+" is not verified") {
+		t.Errorf("checking a hostname that has never been verified answered %q; "+
+			"nothing is served on it and saying so is the only feedback it gets", never)
+	}
+}
+
+// TestAHostnameThatStopsServingMidCheckIsNotToldItIsStillServed is F161's first
+// limb read from the other side, and it is the branch the fix originally chose
+// with the wrong row.
+//
+// **The two arms are picked apart by a column that can change while the check
+// runs.** `VerifyDomain` reads the row, spends seconds in a DNS lookup against a
+// nameserver the registrant controls, and only then decides which sentence to
+// return. The hourly pass is what ends D70's grace window, and it can land in
+// exactly that gap — so a branch taken on the pre-lookup read answers *"Links on
+// it are still served"* about a hostname that stopped being served while the
+// question was in flight, printed above a badge that re-reads the column and
+// says otherwise. That is the contradiction F161 exists to remove, arriving
+// through the fix for it.
+//
+// The row the failure write returned is the current one and is already in hand,
+// which is F180's answer to the same shape one function down.
+func TestAHostnameThatStopsServingMidCheckIsNotToldItIsStillServed(t *testing.T) {
+	f := newDomains(t)
+	serving := f.verify(f.register(customHost))
+	f.zone.withdraw(domain.ChallengeRecordName(customHost))
+
+	// The hourly pass, committing inside the gap the lookup holds open: the
+	// window has run out and this hostname has stopped serving, which is the one
+	// state in which the grace sentence is false.
+	f.zone.interrupt(func() {
+		if _, err := dbgen.New(f.pool).UnverifyDomain(context.Background(),
+			dbgen.UnverifyDomainParams{
+				ID:                serving.ID,
+				VerificationError: "the grace window expired",
+			}); err != nil {
+			t.Errorf("the un-verification this test races against did not happen: %v", err)
+		}
+	})
+
+	_, err := f.links.VerifyDomain(t.Context(), f.owner, serving.ID)
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) {
+		t.Fatalf("a failing check answered %v; a missing record is something its "+
+			"owner fixes, not a server error", err)
+	}
+	if _, verified := f.state(serving.ID); verified {
+		t.Fatal("the row is still verified, so this test raced nothing")
+	}
+	got := ve[0].Message
+	if strings.Contains(got, "still") {
+		t.Errorf("checking %s answered %q after the row stopped being verified "+
+			"mid-check; the page renders that above a badge that re-reads "+
+			"verified_at and says the hostname is not served", customHost, got)
+	}
+	if !strings.Contains(got, customHost+" is not verified") {
+		t.Errorf("%q is neither sentence; a hostname that is no longer served gets "+
+			"the one that says so, and it is the only feedback there is", got)
+	}
+}
+
 // TestARenameCannotInheritAFailureInFlight is F131: the same claim on the
 // failure path, which was left addressed by id when the reopening scoped the
 // conditional write to the two sites that start serving.

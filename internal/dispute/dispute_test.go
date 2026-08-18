@@ -229,6 +229,13 @@ var queueSources = []string{
 	"internal/httpx/api_disputes.go",
 	"internal/httpx/web_disputes.go",
 	"internal/ui/templates/pages/disputes.html",
+	// The reviewer roster, which M48 moved out of the queue's page into a panel
+	// with a route of its own. It renders no dispute and no destination, and it
+	// is scanned anyway: this list is what the companion check below compares
+	// the feature's files against, and a page carrying the queue's own forms is
+	// squarely inside the surface the gate is drawn around.
+	"internal/ui/templates/pages/dispute_reviewers.html",
+	"internal/ui/templates/partials/dispute_reviewers.html",
 	"internal/store/query/disputes.sql",
 	"internal/store/migrations/01600_destination_disputes.sql",
 	"internal/store/migrations/03300_dispute_matched_entry.sql",

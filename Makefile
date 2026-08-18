@@ -155,7 +155,7 @@ lint: ## Run golangci-lint
 	golangci-lint run
 
 .PHONY: check-links
-check-links: ## Verify every relative link and anchor in tracked markdown
+check-links: ## Verify tracked markdown: every link and anchor resolves, every table row matches its header
 	@scripts/check-links.sh
 
 # A gate, after a phase of being a tool someone remembered to run by hand. This
@@ -163,9 +163,17 @@ check-links: ## Verify every relative link and anchor in tracked markdown
 # for a whole phase, unenforced, and did not work when finally built.
 #
 # The runner ships shellcheck, so this costs an apt-get nothing in CI. Unpinned,
-# unlike golangci-lint: shellcheck's output is stable across minor versions, and
-# its scripts-only surface means a surprise finding is a two-line fix rather than
-# a red build across the repository.
+# unlike golangci-lint — and the reason once given for that, *shellcheck's output
+# is stable across minor versions*, is **false and cost this repository nine days
+# of red CI**. It renamed a diagnostic: an uninvoked function is SC2329 in 0.11
+# and its body is unreachable, SC2317, in the release the runner ships. A
+# suppression written against one version passed here and failed there from
+# 2026-08-09 until M58's close, and nobody looked, because no gate in
+# docs/build-notes/workflow.md asks whether CI is green. What survives of the old
+# argument is the second half: the surface is scripts only, so the fix is a
+# two-line edit rather than a red build across the repository — which is why this
+# stays unpinned rather than becoming a third pinned tool. Both codes are named
+# at every suppression site. See F255.
 .PHONY: shellcheck
 shellcheck: ## Lint every shell script
 	shellcheck scripts/*.sh
@@ -221,7 +229,7 @@ check-version-stamp: build ## Fail if a built binary does not report its version
 	@scripts/check-version-stamp.sh $(BIN)/linkctrl $(BIN)/lctl
 
 .PHONY: check
-check: tidy lint shellcheck test ## Everything CI runs, short of integration tests
+check: tidy lint shellcheck check-links test ## Everything CI runs, short of integration tests
 
 # Deliberately NOT a prerequisite of `check` above, of any ci- target, or of
 # release-check — and this comment sits here because directly above is where
@@ -234,10 +242,10 @@ check: tidy lint shellcheck test ## Everything CI runs, short of integration tes
 # ran it (W14). It reads the class strings out of the templates and the built
 # stylesheet, so it needs no instance running and never touches :8081 or :8080.
 #
-# Node is required, and this target is the only thing in this repository that
-# requires it. D25 is what permits it: shipped code stays stdlib-only, tooling
-# that only verifies it may use Node. tools/render-verify is not imported by
-# anything, not built into anything, and not in the image.
+# Node is required — here and in tools/agent-browser's targets below, and by
+# nothing the product ships. D25 is what permits it: shipped code stays
+# stdlib-only, tooling that only verifies it may use Node. tools/render-verify
+# is not imported by anything, not built into anything, and not in the image.
 #
 # The npm install is done for you; the three browser engines are not. That is
 # several hundred megabytes, and a target that quietly spends it is a target
@@ -247,12 +255,75 @@ RENDER_VERIFY := tools/render-verify
 .PHONY: verify-render
 verify-render: ## Re-verify M26.5's popover geometry in Blink, Gecko and WebKit (needs Node)
 	@command -v node >/dev/null 2>&1 || { \
-		echo "node is not on PATH, and this is the one target in this file that needs it."; \
+		echo "node is not on PATH, and only this file's browser-tooling targets need it."; \
 		echo "See $(RENDER_VERIFY)/README.md, and Plan.md D25 for why it is allowed to."; \
 		exit 1; \
 	}
 	@test -d $(RENDER_VERIFY)/node_modules || npm install --prefix $(RENDER_VERIFY)
 	@node $(RENDER_VERIFY)/verify.mjs $(RENDER_ARGS)
+
+# M46.5 keeps two more things under the same D25 licence: the browser an agent
+# drives — @playwright/cli, pinned in tools/agent-browser the way render-verify
+# pins its own stack — and the kept spec, which asserts what no template scan
+# can: a clean console on a real page served by the running test instance.
+# The CLI is wrapped because it defaults to branded Chrome, which is not on
+# this machine and not among --browser's values; cli-config.json names the
+# bundled chromium instead, and the session it opens persists, so later
+# playwright-cli commands take no flag. Same refusal as verify-render: the npm
+# install is done for you, browser engines are never downloaded silently — a
+# missing engine fails naming the install command.
+AGENT_BROWSER := tools/agent-browser
+PLAYWRIGHT_CLI := $(AGENT_BROWSER)/node_modules/.bin/playwright-cli
+
+.PHONY: browse
+browse: ## Open the pinned browser CLI on the test instance; ARGS="..." runs any playwright-cli command instead
+	@command -v node >/dev/null 2>&1 || { \
+		echo "node is not on PATH. See $(AGENT_BROWSER)/README.md, and Plan.md D25 for why it is allowed to be needed."; \
+		exit 1; \
+	}
+	@test -d $(AGENT_BROWSER)/node_modules || npm install --prefix $(AGENT_BROWSER)
+	@if [ -n "$(ARGS)" ]; then \
+		$(PLAYWRIGHT_CLI) $(ARGS); \
+	else \
+		$(PLAYWRIGHT_CLI) open --config=$(AGENT_BROWSER)/cli-config.json http://127.0.0.1:8081/login; \
+	fi
+
+.PHONY: verify-ui
+verify-ui: ## Run the kept browser spec against the running test instance (needs Node and make up)
+	@command -v node >/dev/null 2>&1 || { \
+		echo "node is not on PATH. See $(AGENT_BROWSER)/README.md, and Plan.md D25 for why it is allowed to be needed."; \
+		exit 1; \
+	}
+	@test -d $(AGENT_BROWSER)/node_modules || npm install --prefix $(AGENT_BROWSER)
+	@curl -sf -o /dev/null http://127.0.0.1:8081/login || { \
+		echo "the test instance is not answering on :8081 — make up"; \
+		exit 1; \
+	}
+	@cd $(AGENT_BROWSER) && ./node_modules/.bin/playwright test --reporter=json | node report-failures.mjs
+
+# M50.6's reopening grows the logo box until a code stops decoding, and says the
+# size is "measured by simulated scanning ... the check is kept, not run once —
+# it gates the fraction". This is the gate. Two halves: internal/qr renders the
+# corpus off the shipping path, and tools/qr-scan decodes it at several
+# pixels-per-module, because Go has no QR decoder and D25 puts one in tooling
+# rather than in the require block — which is also what keeps M49's
+# no-new-dependency assertion true.
+#
+# Not a prerequisite of `check` or of any ci- target, for verify-render's reason:
+# it needs Node, and the shipped build does not.
+QR_SCAN := tools/qr-scan
+
+.PHONY: verify-scan
+verify-scan: ## Decode every logo'd code the product can draw, at simulated distance (needs Node)
+	@command -v node >/dev/null 2>&1 || { \
+		echo "node is not on PATH. See $(QR_SCAN)/README.md, and Plan.md D25 for why it is allowed to be needed."; \
+		exit 1; \
+	}
+	@test -d $(QR_SCAN)/node_modules || npm install --prefix $(QR_SCAN)
+	@dir=$$(mktemp -d -t linkctrl-qr-scan-XXXXXX); \
+	trap 'rm -rf "$$dir"' EXIT; \
+	QR_SCAN_CORPUS_DIR="$$dir" go test ./internal/qr -run TestWriteScanCorpus -count=1 >/dev/null && \
+	node $(QR_SCAN)/scan.mjs --corpus "$$dir" $(SCAN_ARGS)
 
 ## ---- ci -------------------------------------------------------------------
 
@@ -279,7 +350,7 @@ ci-test: ## Unit tests with the race detector, uncached — what CI runs
 	go test -race -count=1 ./...
 
 .PHONY: ci-build
-ci-build: verify-assets css build check-version-stamp vet ci-test openapi check-tidy check-generate ## The CI build job, end to end
+ci-build: verify-assets css build check-version-stamp vet ci-test openapi check-tidy check-generate check-links ## The CI build job, end to end
 	@echo "ci-build: every check passed"
 
 # golangci-lint is not here. It runs from a commit-pinned action in the workflow,
@@ -323,8 +394,24 @@ IMAGE         ?= linkctrl:ci
 IMAGE_VERSION ?= ci
 
 .PHONY: ci-image-smoke
-ci-image-smoke: ## Check a built container image runs and reports its version
+ci-image-smoke: single-instance ## Check a built image reports its version and serves everything on Postgres alone
 	@scripts/ci-image-smoke.sh "$(IMAGE)" "$(IMAGE_VERSION)"
+
+# The single-instance guarantee, as a gate rather than an intention (M57).
+#
+# It rides `ci-image-smoke` because that is the one CI job holding a Docker
+# daemon and no service containers, which is exactly what a one-container
+# conformance run needs — and because adding a *step* to the workflow needs the
+# owner while adding a check to a target reaches CI on the next push. The
+# comment at the head of this section is where that bargain is argued; this is
+# the second thing to take it.
+#
+# Prerequisite rather than a second recipe line, so a run that never reaches the
+# version check still runs this one: the version stamp is the cheaper failure and
+# the conformance is the one somebody's milestone will break.
+.PHONY: single-instance
+single-instance: ## One container, no Redis, no load balancer — the whole surface
+	@scripts/single-instance-check.sh "$(IMAGE)"
 
 .PHONY: workflow-proposals
 workflow-proposals: ## Which ci/proposed/ workflow proposals the owner has not applied yet
@@ -526,6 +613,19 @@ DEMO_URL = http://localhost$(addprefix :,$(shell sed -n 's/^LINKCTRL_HTTP_PORT=/
 # validated milestone, and building it from a tree with uncommitted work puts
 # something nobody has validated in front of the person judging the milestone.
 # Pass FORCE=1 when the point is to look at work in progress.
+#
+# **The app is recreated twice, and the second one is the load-bearing one.**
+# The first brings up the new image so the reseed runs against this milestone's
+# schema. The reseed then deletes and rewrites the `domains` rows — new ids for
+# `go.linkctrl.example` — while the app has held its verified-hostname set in
+# memory since boot, from before those rows existed. Nothing else puts the new
+# set in front of it: `lctl` runs on the host with no Redis, so it publishes no
+# invalidation; `internal/redirect/hosts.go` holds the whole set precisely so a
+# miss costs no query, so there is no lazy reload to fall back on; and the demo
+# runs `DOMAIN_VERIFY_INTERVAL=0`, which stops the periodic reload with the
+# verification pass. Without the second recreate a fresh demo serves nothing on
+# its custom hostname and a repeat serves a cached entry pointing at a deleted
+# domain id.
 .PHONY: demo-update
 demo-update: ## Rebuild the demo from the current commit and refresh its data
 	@test -f .env.demo || scripts/instance.sh init demo
@@ -544,6 +644,8 @@ demo-update: ## Rebuild the demo from the current commit and refresh its data
 		echo "then run make demo-update again."; \
 		exit 1; \
 	}
+	@echo
+	docker compose -p linkctrl-demo --env-file .env.demo up -d --force-recreate --wait app
 	@echo
 	@echo "demo updated to $(VERSION) at $(DEMO_URL)"
 

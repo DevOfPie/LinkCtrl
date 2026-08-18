@@ -1,0 +1,126 @@
+# agent-browser
+
+Two tools, one pinned manifest, added by
+[M46.5](../../docs/build-notes/phase-details/m46.5.md):
+
+- **`@playwright/cli` 0.1.18** — a browser an agent drives from a terminal:
+  open, snapshot, click, fill, eval. Sessions persist between commands.
+- **`@playwright/test` 1.62.1** — the runner for the kept specs in
+  [`specs/`](specs/), which assert what no template scan can: what the
+  browser *refused* — a CSP violation appears in no markup diff and no HTTP
+  status; it appears in a console — and what a page *looks like* rendered,
+  which is what M46.6's workspace spec exists for.
+
+Before this directory, five browser harnesses had been written here and
+discarded — three deliberately, on the argument that a check nobody can re-run
+protects nothing between the two occasions somebody ran it; two more without
+even a discard note. The kept spec is the deliverable; the exploration that
+produces one never is.
+
+```sh
+make browse                          # open a session on the test instance
+make browse ARGS="snapshot"          # any playwright-cli command
+make verify-ui                       # the kept spec, failures only
+```
+
+After `make browse`, the session persists — drive it directly:
+
+```sh
+tools/agent-browser/node_modules/.bin/playwright-cli snapshot
+tools/agent-browser/node_modules/.bin/playwright-cli click e11
+tools/agent-browser/node_modules/.bin/playwright-cli close
+```
+
+## The config file
+
+`cli-config.json` names the **bundled chromium**. Without it the CLI launches
+branded Chrome at `/opt/google/chrome/chrome`, which is not on this machine and
+is not among `--browser`'s values (chrome, firefox, webkit, msedge — chromium
+is reachable only through a config file). It is passed once, to
+`open --config=`; the session keeps it, and later commands take no flag.
+
+## Two Playwright versions, on purpose
+
+The CLI at 0.1.18 bundles `playwright-core` **1.63.0-alpha** (chromium-1237).
+The spec runs on stable **1.62.1** — the same pin, and therefore the same
+engines, as [`tools/render-verify`](../render-verify/README.md)
+(chromium-1234, firefox-1538, webkit-2336). Measured on 2026-08-11: no stable
+1.63 exists, and **every** published `@playwright/cli` version bundles an alpha
+core, so aligning the two means pinning verification evidence to an alpha.
+Declined; the cost — ~700MB of duplicate engines (the cache went 1.2G → 1.9G
+when the CLI's chromium was installed) and two versions to reason about — is
+recorded in
+[decisions.md](../../docs/build-notes/decisions.md#2026-08-11--m465-a-browser-an-agent-can-drive),
+with the instruction to revisit when a stable 1.63 ships.
+
+Because of that split, `node_modules` holds both: the alpha `playwright` is
+hoisted to the top and the runner resolves its own nested 1.62.1. The tracked
+`package-lock.json` is what makes that layout — and the bin shims —
+reproducible, which is the same argument render-verify's README makes for its
+lockfile.
+
+## Setup
+
+```sh
+npm install --prefix tools/agent-browser
+npm run --prefix tools/agent-browser install-browsers        # spec engines (1.62.1)
+node tools/agent-browser/node_modules/playwright/cli.js install chromium   # CLI engine (1.63-alpha)
+```
+
+Engines live in `~/.cache/ms-playwright`, outside the repository. Both `make`
+targets run the npm install for you; **neither downloads an engine silently** —
+that is several hundred megabytes, and a target that quietly spends it is a
+target nobody runs twice. A missing engine fails red, naming the install
+command (verified: an empty `PLAYWRIGHT_BROWSERS_PATH` fails with *"run npx
+playwright install"*, downloading nothing).
+
+## The traps, so nobody rediscovers them
+
+Each was found by driving the running test instance on 2026-08-11:
+
+| Trap | What happens | Handle it |
+| --- | --- | --- |
+| Origin CSRF | `http.NewCrossOriginProtection` refuses a form POST without a matching `Origin` — but a browser navigating same-origin satisfies it. Proved: the sign-in POST returned **401, not 403** — evaluated, not refused | Nothing. No exemption is needed and none is added |
+| htmx swaps kill element refs | `e11` became `f1e12` after a swap, and a fill against the old ref went nowhere, silently | Re-snapshot after every swap, or target by role and name |
+| The product classifies the driver as a bot | `internal/analytics/useragent.go` lists `playwright`, `headlesschrome`, `puppeteer`, `selenium` | Only the redirect path's analytics care. A spec touching that path must say how it handles this; the kept spec does not touch it |
+| An unstyled page is the default failure | `app.css` is generated and gitignored | Both targets drive the Docker instance, whose image builds its own stylesheet — the trap cannot bite there. Driving a locally-run server instead needs `make css` first |
+| A failed sign-in charges a real lockout counter | Credentials also do not belong in a committed spec | The clean-console spec stays on `/login`, where layout, stylesheet, CSP and htmx are all live without a session. The other five specs — every file in `specs/` except that one — assert the signed-in shell, which no spec can do sessionless: each reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falls back to parsing the account table in [`docs/dev-notes/instances.md`](../../docs/dev-notes/instances.md) — the file a rebuild already updates, so no committed second copy — and makes exactly one attempt (retries are 0). **Sign-ins are counted, because the limit is real**: `LOGIN_RATE_PER_MIN` defaults to 10 and the suite runs in well under a minute from one address, so the whole run performs **8** — one each from workspace-control, link-tabs and qr-logo, three from qr-codes-list, two from qr-tab-controls, which shares one signed-in page across its scripted cases for exactly this reason. Two spare, and a spec adding a third fails *every* file at sign-in with a message naming the credentials. [F242](../../docs/build-notes/deferred-findings.md#open) is the row for that headroom |
+
+## Opt-in, with a cadence
+
+`verify-ui` is reachable from no other target — not `check`, not `ci-*`, not
+`release-check` — for render-verify's reason: engines CI does not have and a
+download no other target wants. What is different is that this check now has a
+schedule: **every `X.9` review must answer it**, per
+[phase-loop.md](../../docs/build-notes/phase-loop.md#two-milestones-that-do-not-end-like-the-others)'s
+review section. That cadence, not CI, was the owner's choice (2026-08-11) over
+four CI shapes offered and declined.
+
+## Failure is the point
+
+The spec was born red: run before the F206 fix was deployed, it failed on the
+config assertion, and — with that assertion inverted once, as sabotage — on the
+console assertion, printing the exact CSP refusal (*"Applying inline style
+violates the following Content Security Policy directive 'style-src 'self''"*).
+Restored by counter-edit, fix deployed, green: one line.
+
+Green costs one line because `make verify-ui` reads the runner through
+`--reporter=json` and [`report-failures.mjs`](report-failures.mjs) prints only
+failures; a run in which **no test ran at all is red**, because "nothing
+failed" and "nothing was checked" must not share an exit code.
+
+## Files
+
+| | |
+| --- | --- |
+| `cli-config.json` | the bundled-chromium session config `make browse` passes to `open` |
+| `playwright.config.mjs` | test dir, base URL (`LINKCTRL_BASE_URL` overrides :8081), chromium only |
+| `specs/clean-console.spec.mjs` | kept spec: `/login` renders, htmx runs configured, console clean |
+| `specs/workspace-control.spec.mjs` | kept spec (M46.6): signed in at 360px, the workspace switcher's closed face shows no text and the header does not overflow |
+| `specs/link-tabs.spec.mjs` | kept spec (M47, reopened): signed in at 360px, the link page's tab strip stays on one row instead of wrapping, the document does not scroll sideways, and a tab click swaps its panel in and pushes `?tab=` |
+| `specs/qr-logo.spec.mjs` | kept spec (M50.5, reopened): signed in, choosing a file in the QR panel posts it over htmx with no submit button, a refused file comes back through the `#qr` swap instead of a 4xx nothing renders, the pressed state is on the pointer path only, and — added at M50.8's fourth reopening — an **accepted** upload returns the reader to the offset they stood at, this being the only accepted htmx write in the suite and therefore where D205's `HX-Redirect` guard is enforced |
+| `specs/qr-codes-list.spec.mjs` | kept spec (M50.7): signed in, a code's whole row is one click target with its controls held off it, each row's download menu anchors to its own row rather than to the last one that declared the name, and clicking an empty default icon leaves exactly one filled — on the row that was clicked |
+| `specs/qr-tab-controls.spec.mjs` | kept spec (M50.8, reopened four times): signed in, **eleven cases**, in the file's own order — the size slider and the number follow each other while they move; the slider draws a visible mark at each stop; a style save comes back to where the reader was; a save is never shown a position the reader did not stand at, asserted across the whole interval from the document's first script to the frames after `load` rather than at the endpoint; a refused upload leaves no position behind for a later load; a selection whose request fails leaves none either, the refusal driven from the spec because a request that produces no swap is what F250 turned on; the tab's own tooltip shows anywhere on the button and on focus where a disabled button refuses a pointer; the row controls answer the pointer on the selected row; selecting a code redraws the tab without leaving the page; the add prompt opens beside the counter and adds a code; and with scripts off the size control still saves. The count is stated so that a list which has drifted fails arithmetic rather than a reading — and it had drifted by three when the fourth reopening read it, two of them from reopenings that added a case without coming back here |
+| `report-failures.mjs` | JSON-reporter filter: green in one line, red at exactly the assertion |
+| `package.json` | both pins, exact, the way every vendored version here is pinned |
+| `package-lock.json` | tracked, so the two-version layout and bin shims reproduce |

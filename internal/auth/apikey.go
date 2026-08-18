@@ -280,10 +280,37 @@ type APIKeyInfo struct {
 	// (D90). The qualifier is here because leaving it out cost two readers a
 	// high-severity misfiling — F122, and this field is one of the sites F139
 	// found still saying it short.
-	OrgWide    bool       `json:"org_wide"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	ExpiresAt  *time.Time `json:"expires_at"`
-	RevokedAt  *time.Time `json:"revoked_at"`
+	OrgWide bool `json:"org_wide"`
+	// OrganizationID is the key's **reach** (M54): the organization it is pinned
+	// to, or null for a key that reaches every organization its owner holds an
+	// organization-wide membership in.
+	//
+	// Reported rather than derived, because a null and a set value are two
+	// different credentials and nothing else in this struct distinguishes them.
+	// OrgWide above answers a different question one tier down — whether the key
+	// is pinned to a *workspace* — and the two are not redundant: a
+	// workspace-bound key is pinned to an organization by construction, so
+	// OrgWide false implies this is set, while OrgWide true says nothing about
+	// it either way.
+	OrganizationID *uuid.UUID `json:"organization_id"`
+	// RevokedOrganizations are the organizations an administrator has cut this
+	// key out of, and it closes F178 — the seeing half of M54's reach
+	// revocation, whose acting half shipped without it.
+	//
+	// A credential that has silently stopped resolving into one tenant read on
+	// this page exactly as it did the day before, and the audit record that says
+	// why is written in the administrator's organization, which the owner may
+	// hold no audit.read in. The support question that produced the row is *why
+	// does my key work in Acme and not in Beta*, and until this field there was
+	// no answer anywhere the owner could reach.
+	//
+	// Always an array, never null, and empty for every pinned key: an
+	// organization is a pinned key's whole reach, so cutting it is an outright
+	// revoke and RevokedAt is where that shows.
+	RevokedOrganizations []APIKeyOrgRevocation `json:"revoked_organizations"`
+	LastUsedAt           *time.Time            `json:"last_used_at"`
+	ExpiresAt            *time.Time            `json:"expires_at"`
+	RevokedAt            *time.Time            `json:"revoked_at"`
 	// RotatedAt, GraceExpiresAt and SuccessorID describe a key that has been
 	// replaced. All three are set together, on the predecessor, and all three
 	// are nil on a key that has not been rotated. GraceExpiresAt is the moment
@@ -292,6 +319,25 @@ type APIKeyInfo struct {
 	GraceExpiresAt *time.Time `json:"grace_expires_at"`
 	SuccessorID    *uuid.UUID `json:"successor_id"`
 	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// APIKeyOrgRevocation is one organization cut out of an account-wide key's
+// reach, as the key's owner sees it.
+//
+// The name is carried and not only the id, because the question this answers is
+// asked in words — *why does my key work in Acme and not in Beta* — and a uuid
+// answers it in none of them. It discloses nothing the owner did not already
+// have: a bar can only exist on a key whose owner held an organization-wide
+// membership there when it was written.
+//
+// Who did it is deliberately absent. api_key_org_revocations carries revoked_by,
+// and naming an administrator of another organization to a credential's holder
+// is a disclosure this field was not asked for; the audit record in that
+// organization is where the actor is recorded, for the people who may read it.
+type APIKeyOrgRevocation struct {
+	OrganizationID   uuid.UUID `json:"organization_id"`
+	OrganizationName string    `json:"organization_name"`
+	RevokedAt        time.Time `json:"revoked_at"`
 }
 
 // CreatedAPIKey is the response to creating a key: the record, plus the only
@@ -316,6 +362,22 @@ type CreateAPIKeyInput struct {
 	// because somebody left a field blank, and the check behind it is not the
 	// ordinary permission check — see MayCreateOrgWide.
 	OrgWide bool
+	// OrganizationID pins the key to one organization instead of leaving it
+	// account-wide (M54). Nil is account-wide, and it is the default for an
+	// unpinned key: a key is minted by an *account* and reaches the organizations
+	// that account belongs to, the way a personal access token does.
+	//
+	// The only value accepted is the organization the caller is acting in.
+	// Minting into another one would need authority there that nothing has
+	// checked, and the caller can switch organization and mint again — which is
+	// the same act with the authorization visible.
+	//
+	// Ignored, not refused, when OrgWide is false: a workspace-bound key is
+	// pinned to the workspace's organization by construction, and the check
+	// constraint added in 04200 refuses any other combination outright. Naming
+	// the caller's own organization there is therefore a no-op rather than a
+	// contradiction, and naming a different one is still a validation error.
+	OrganizationID *uuid.UUID
 }
 
 // APIKeyConfig configures the key service.
@@ -433,12 +495,28 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 	}
 	errs = append(errs, scopeErrs...)
 
+	// A key an organization other than the caller's own would be minted into is
+	// refused before either choice below is made, so the message is about the
+	// field somebody filled in rather than about a consequence of it.
+	if in.OrganizationID != nil && *in.OrganizationID != actor.OrgID {
+		errs = append(errs, domain.FieldError{
+			Field: "organization_id", Code: "not_yours",
+			Message: "a key can only be pinned to the organization you are acting in; " +
+				"switch organization and create it there",
+		})
+	}
+
 	// The workspace choice (M44). By default a key is scoped to the workspace
 	// its creator was acting in, which is what every key issued before M44 got
 	// and what the 00500 column comment always allowed for. Leaving workspace_id
 	// NULL means "every workspace in the organization", so it is asked for
 	// explicitly and granted only to somebody whose own reach is that wide.
-	var workspaceID *uuid.UUID
+	//
+	// The reach choice (M54) sits on top of it and only exists for an unpinned
+	// key. A workspace belongs to exactly one organization, so a workspace-bound
+	// key is pinned to that organization by construction — asking for anything
+	// else is refused by the check constraint rather than by convention.
+	var workspaceID, organizationID *uuid.UUID
 	if in.OrgWide {
 		may, err := s.MayCreateOrgWide(ctx, actor)
 		if err != nil {
@@ -451,9 +529,16 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 					PermAPIKeysWrite + "; a role held in one workspace can issue a key for that workspace",
 			})
 		}
+		// Nil stays nil, and that is the model change: an unpinned key is
+		// account-wide unless its creator asks for the snapshot. Pinning is the
+		// opt-in because it is the choice that cannot be undone — a key pinned to
+		// one tenant can never widen, and there is no way back from a key that
+		// widened when its owner joined a second.
+		organizationID = in.OrganizationID
 	} else {
 		ws := actor.WorkspaceID
-		workspaceID = &ws
+		org := actor.OrgID
+		workspaceID, organizationID = &ws, &org
 	}
 
 	if len(errs) > 0 {
@@ -469,7 +554,7 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 		row, err := s.q.CreateAPIKey(ctx, dbgen.CreateAPIKeyParams{
 			ID:             uuid.Must(uuid.NewV7()),
 			UserID:         actor.UserID,
-			OrganizationID: actor.OrgID,
+			OrganizationID: organizationID,
 			WorkspaceID:    workspaceID,
 			Name:           name,
 			Prefix:         prefix,
@@ -487,7 +572,10 @@ func (s *APIKeyService) Create(ctx context.Context, actor *Identity, in CreateAP
 			return nil, fmt.Errorf("create api key: %w", err)
 		}
 
-		return &CreatedAPIKey{APIKeyInfo: keyInfo(row), Key: token}, nil
+		// No bars, and here it is a fact rather than a shortcut: this id was
+		// allocated a statement ago, and a bar names an id. Rotation is the case
+		// that cannot say this — see keyInfo.
+		return &CreatedAPIKey{APIKeyInfo: keyInfo(row, nil), Key: token}, nil
 	}
 	return nil, errors.New("auth: could not allocate an unused api key prefix")
 }
@@ -529,6 +617,20 @@ func (s *APIKeyService) MayCreateOrgWide(ctx context.Context, actor *Identity) (
 // Own, not the workspace's: a key is a personal credential acting as its
 // owner, and showing one user another's credentials serves no purpose that
 // listing memberships does not serve better.
+//
+// **Own, and not the organization's either** (M54, closing F75). The list used
+// to be scoped by owner *and* organization while Revoke was scoped by owner
+// alone, so a key issued elsewhere was invisible here and revocable there — a
+// 204-versus-404 oracle over guessed ids. The fix is not a filter on the revoke:
+// that would make a key unrevokable from the organization somebody is signed
+// into, which F75's own severity called worse than the defect. It is that both
+// statements now ask the one question a personal credential admits, and an
+// account-wide key has no organization to be filtered by in the first place.
+//
+// The cost, stated because it is a real change in what this page shows: somebody
+// who belongs to two organizations sees every key they own from either, rather
+// than the current organization's. That is what a personal access token list
+// looks like everywhere else, and the reach column is what tells them apart.
 func (s *APIKeyService) List(ctx context.Context, actor *Identity) ([]APIKeyInfo, error) {
 	if err := requireSessionActor(actor, "listing API keys"); err != nil {
 		return nil, err
@@ -537,20 +639,45 @@ func (s *APIKeyService) List(ctx context.Context, actor *Identity) ([]APIKeyInfo
 		return nil, fmt.Errorf("%w: listing API keys requires %s", domain.ErrForbidden, PermAPIKeysRead)
 	}
 
-	rows, err := s.q.ListAPIKeysForUser(ctx, dbgen.ListAPIKeysForUserParams{
-		UserID:         actor.UserID,
-		OrganizationID: actor.OrgID,
-	})
+	rows, err := s.q.ListAPIKeysForUser(ctx, actor.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
 
+	// The reach revocations for the keys just listed, in one round trip keyed on
+	// their ids (F178). Second query rather than a join, because the relation is
+	// one-to-many and joining would multiply every key row by its bars and make
+	// the list's own shape depend on them. Skipped entirely when there are no
+	// keys, which is the common case on a fresh account.
+	bars := map[uuid.UUID][]APIKeyOrgRevocation{}
+	if len(rows) > 0 {
+		ids := make([]uuid.UUID, 0, len(rows))
+		for _, r := range rows {
+			ids = append(ids, r.ID)
+		}
+		// Asked for every listed key rather than only the account-wide ones.
+		// Nothing writes a bar for a pinned key — revokeInOrganization revokes
+		// those outright — and asking anyway costs nothing, while assuming it
+		// here would make this list quietly wrong if that ever stopped holding.
+		revocations, err := s.q.ListAPIKeyOrgRevocations(ctx, ids)
+		if err != nil {
+			return nil, fmt.Errorf("list api key reach revocations: %w", err)
+		}
+		bars = barsByKey(revocations)
+	}
+
 	out := make([]APIKeyInfo, 0, len(rows))
 	for _, r := range rows {
+		revoked := bars[r.ID]
+		if revoked == nil {
+			revoked = []APIKeyOrgRevocation{}
+		}
 		out = append(out, APIKeyInfo{
 			ID: r.ID, Name: r.Name, Prefix: r.Prefix, Scopes: r.Scopes,
-			OrgWide:    r.WorkspaceID == nil,
-			LastUsedAt: r.LastUsedAt, ExpiresAt: r.ExpiresAt,
+			OrgWide:              r.WorkspaceID == nil,
+			OrganizationID:       r.OrganizationID,
+			RevokedOrganizations: revoked,
+			LastUsedAt:           r.LastUsedAt, ExpiresAt: r.ExpiresAt,
 			RevokedAt: r.RevokedAt, RotatedAt: r.RotatedAt,
 			GraceExpiresAt: r.GraceExpiresAt, SuccessorID: r.SuccessorID,
 			CreatedAt: r.CreatedAt,
@@ -606,6 +733,17 @@ func (s *APIKeyService) Revoke(ctx context.Context, actor *Identity, id uuid.UUI
 // only person who could revoke a key was its owner. This arm breaks that
 // premise: the credential's owner was not present, may not know, and the
 // question afterwards is who stopped it.
+//
+// **Two writes since M54, and which one happens is a property of the key rather
+// than of the request.** A pinned key is revoked outright, exactly as before:
+// the actor's organization is that key's entire reach, so cutting the reach and
+// destroying the credential are the same act. An account-wide key belongs to an
+// account that also acts in tenants this administrator has no authority over, so
+// what they may cut is their own organization out of its reach — a row in
+// api_key_org_revocations, a distinct audit action, and a key that keeps working
+// everywhere else. Neither the endpoint nor the caller chooses between them;
+// offering the choice would be offering an administrator the outright revoke
+// they may not have.
 func (s *APIKeyService) revokeInOrganization(
 	ctx context.Context, actor *Identity, id uuid.UUID,
 ) error {
@@ -617,8 +755,27 @@ func (s *APIKeyService) revokeInOrganization(
 		return domain.ErrNotFound
 	}
 
+	reach, err := s.q.GetAPIKeyReach(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("load api key reach: %w", err)
+	}
+	if reach.OrganizationID != nil {
+		if *reach.OrganizationID != actor.OrgID {
+			return domain.ErrNotFound
+		}
+		return s.revokePinnedKey(ctx, actor, id)
+	}
+	return s.revokeReach(ctx, actor, reach)
+}
+
+// revokePinnedKey destroys a key issued into the actor's own organization.
+func (s *APIKeyService) revokePinnedKey(ctx context.Context, actor *Identity, id uuid.UUID) error {
+	org := actor.OrgID
 	row, err := s.q.RevokeAPIKeyInOrganization(ctx, dbgen.RevokeAPIKeyInOrganizationParams{
-		ID: id, OrganizationID: actor.OrgID,
+		ID: id, OrganizationID: &org,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -635,6 +792,46 @@ func (s *APIKeyService) revokeInOrganization(
 			KeyID: id, Prefix: row.Prefix, OwnerID: row.UserID,
 		}); err != nil {
 			s.log.Error("record api key revocation", "err", err, "key_id", id)
+		}
+	}
+	return nil
+}
+
+// revokeReach cuts the actor's organization out of an account-wide key (M54).
+//
+// The owner has to hold an organization-wide membership here, and that is the
+// authorization rather than a courtesy check: without one the key does not reach
+// this organization at all, so there is nothing to cut and the answer is
+// ErrNotFound — the same answer an unknown id gets, so the endpoint still
+// discloses nothing about ids the actor may not act on.
+//
+// This is the one place a key's authority is evaluated in an organization other
+// than the one the request is acting in, which is why it goes through
+// LoadMemberships rather than through the actor's own identity: Can and OrgID
+// both answer for where *this* request landed, and the question here is about
+// somebody else's reach into a tenant they are not currently in.
+func (s *APIKeyService) revokeReach(
+	ctx context.Context, actor *Identity, reach dbgen.GetAPIKeyReachRow,
+) error {
+	owner, err := LoadMemberships(ctx, s.q, reach.UserID, actor.OrgID)
+	if err != nil {
+		return err
+	}
+	if !owner.Reaches(nil) {
+		return domain.ErrNotFound
+	}
+
+	if _, err := s.q.RevokeAPIKeyReachInOrganization(ctx, dbgen.RevokeAPIKeyReachInOrganizationParams{
+		ApiKeyID: reach.ID, OrganizationID: actor.OrgID, RevokedBy: &actor.UserID,
+	}); err != nil {
+		return fmt.Errorf("revoke api key reach: %w", err)
+	}
+
+	if s.auditor != nil {
+		if err := s.auditor.RecordAPIKeyReachRevocation(ctx, actor, APIKeyRevocation{
+			KeyID: reach.ID, Prefix: reach.Prefix, OwnerID: reach.UserID,
+		}); err != nil {
+			s.log.Error("record api key reach revocation", "err", err, "key_id", reach.ID)
 		}
 	}
 	return nil
@@ -702,9 +899,18 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 	}
 
 	var wsID, orgID uuid.UUID
-	if row.WorkspaceID != nil {
-		wsID, orgID = *row.WorkspaceID, row.OrganizationID
-	} else {
+	// Empty for every branch but the account-wide one, which is the only branch
+	// where a bar can exist: a pinned key's organization is its whole reach, so
+	// cutting the reach and cutting the key are the same act and nothing writes
+	// a revocation row for one.
+	var barredOrgs []uuid.UUID
+	switch {
+	case row.WorkspaceID != nil:
+		// Pinned to a workspace, and therefore to that workspace's organization:
+		// the 04200 check constraint is what makes this dereference safe rather
+		// than a hope about which columns are written together.
+		wsID, orgID = *row.WorkspaceID, *row.OrganizationID
+	default:
 		// A NULL workspace means "every workspace in the organization the key
 		// belongs to" — a choice its creator made (M44) and one the column has
 		// permitted since 00500. Resolved the same way a login is, so the key
@@ -720,15 +926,47 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 		// a leak: what the key follows is the person, and where the person is
 		// acting is part of that.
 		//
-		// **Bounded to the key's own organization**, and that bound is
-		// load-bearing rather than tidy. The precedence filters on membership
-		// alone, and a person's pinned default is a property of the person: an
-		// owner who belongs to two organizations and last used the other one
-		// would otherwise have their organization-wide key resolve into a tenant
-		// it was never issued for, carrying its scopes with it. Unreachable
-		// before M44, because nothing had ever written a NULL here.
+		// **Bounded to an organization**, and that bound is load-bearing rather
+		// than tidy. The precedence filters on membership alone, and a person's
+		// pinned default is a property of the person: an owner who belongs to two
+		// organizations and last used the other one would otherwise have their
+		// unpinned key resolve into a tenant it may not reach, carrying its scopes
+		// with it. Unreachable before M44, because nothing had ever written a NULL
+		// workspace here.
+		//
+		// **Which organization is the M54 change, and it is the only one.** For a
+		// pinned key it is the key's own column, exactly as M44 wrote it. For an
+		// account-wide key there is no column, so the tenant is resolved first —
+		// by the person's own precedence, among the organizations they hold an
+		// organization-wide membership in and the key has not been barred from —
+		// and *that* answer is what M44's parameter is fed. The parameter survives
+		// the model change unaltered; what changed is where its value comes from.
+		//
+		// The resolution also answers what the key may *read* about, which is
+		// F183: it consults api_key_org_revocations to decide where the request
+		// lands, so the whole barred set comes back with the one organization it
+		// chose and Service.Workspaces bounds the listing without a query of its
+		// own.
 		keyOrg := row.OrganizationID
-		ws, err := s.auth.resolveWorkspace(ctx, row.UserID, nil, &keyOrg)
+		if keyOrg == nil {
+			resolved, err := s.q.ResolveOrganizationForAPIKey(ctx, dbgen.ResolveOrganizationForAPIKeyParams{
+				UserID: row.UserID, ApiKeyID: row.ID,
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					// Reachable in a way the ErrNoWorkspace branch below is not: the
+					// owner may hold memberships and still reach nothing with *this*
+					// credential, because every organization-wide one of theirs sits
+					// in a tenant an administrator cut this key out of. Same answer,
+					// because the credential resolves to no tenancy either way.
+					return nil, ErrAPIKeyInvalid
+				}
+				return nil, fmt.Errorf("resolve organization for api key: %w", err)
+			}
+			keyOrg = &resolved.ID
+			barredOrgs = resolved.BarredOrganizationIds
+		}
+		ws, err := s.auth.resolveWorkspace(ctx, row.UserID, nil, keyOrg)
 		if errors.Is(err, ErrNoWorkspace) {
 			// The one caller that does *not* get D36's empty identity. Belonging
 			// to nothing is a state a person is walked through — sign in, be
@@ -749,9 +987,20 @@ func (s *APIKeyService) Authenticate(ctx context.Context, token string) (*Identi
 	if err != nil {
 		return nil, err
 	}
+	// The intersection, and the sentence M54 is about: the identity carries the
+	// owner's authority **where this request landed** — identityFor asked
+	// GetUserPermissions for the resolved workspace, which is the union of the
+	// memberships covering it (D31) and therefore the role that applies in the
+	// resolved organization — and restrictTo narrows that to the key's stored
+	// scopes. Both halves are read on every request, neither is stored on the
+	// key, and the consequence is deliberate: the same account-wide key is more
+	// powerful in one organization than in another, and a demotion narrows it
+	// without the key being touched.
 	identity.restrictTo(row.Scopes)
 	keyID := row.ID
 	identity.APIKeyID = &keyID
+	identity.APIKeyOrgID = row.OrganizationID
+	identity.APIKeyBarredOrgIDs = barredOrgs
 
 	// Recorded, not written: the request must not wait on a database write to
 	// a column nothing reads on the hot path.
@@ -866,11 +1115,47 @@ func requireSessionActor(actor *Identity, action string) error {
 	return nil
 }
 
-func keyInfo(row dbgen.ApiKey) APIKeyInfo {
+// barsByKey groups reach revocation rows by the key each one names.
+//
+// Shared by the two readers of those rows — the owner's key list and the
+// rotation response — so that one cannot report a bar the other would have
+// spelled differently. Ordering inside a key is the query's, which is oldest
+// first.
+func barsByKey(rows []dbgen.ListAPIKeyOrgRevocationsRow) map[uuid.UUID][]APIKeyOrgRevocation {
+	bars := map[uuid.UUID][]APIKeyOrgRevocation{}
+	for _, x := range rows {
+		bars[x.ApiKeyID] = append(bars[x.ApiKeyID], APIKeyOrgRevocation{
+			OrganizationID:   x.OrganizationID,
+			OrganizationName: x.OrganizationName,
+			RevokedAt:        x.RevokedAt,
+		})
+	}
+	return bars
+}
+
+// keyInfo builds the record for a key that has just come into existence.
+//
+// **The bars are a parameter rather than an empty slice**, and the difference is
+// a defect this function used to carry. It read "nothing can have barred an id
+// that did not exist when the bar would have been written", which is true of
+// creation and false of rotation the moment [CarryAPIKeyReachRevocations]
+// exists: a successor is minted with its predecessor's bars copied onto it,
+// inside the same transaction, before anything here runs. Each caller therefore
+// states what it has rather than inheriting an answer that is right for one of
+// them.
+//
+// nil is normalized to an empty slice, because `revoked_organizations` is a
+// documented array on every key shape and `null` is not one.
+func keyInfo(row dbgen.ApiKey, revoked []APIKeyOrgRevocation) APIKeyInfo {
+	if revoked == nil {
+		revoked = []APIKeyOrgRevocation{}
+	}
 	return APIKeyInfo{
 		ID: row.ID, Name: row.Name, Prefix: row.Prefix, Scopes: row.Scopes,
-		OrgWide:    row.WorkspaceID == nil,
-		LastUsedAt: row.LastUsedAt, ExpiresAt: row.ExpiresAt,
+		OrgWide:              row.WorkspaceID == nil,
+		OrganizationID:       row.OrganizationID,
+		RevokedOrganizations: revoked,
+		LastUsedAt:           row.LastUsedAt, ExpiresAt: row.ExpiresAt,
 		RevokedAt: row.RevokedAt, RotatedAt: row.RotatedAt,
 		GraceExpiresAt: row.GraceExpiresAt, SuccessorID: row.SuccessorID,
 		CreatedAt: row.CreatedAt,

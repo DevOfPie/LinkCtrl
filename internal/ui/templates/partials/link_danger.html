@@ -1,0 +1,35 @@
+{{define "link_danger"}}
+{{- /* Last on the page, and the only section whose position M47 did not have to
+       derive: a link is archived or deleted once, and it is the one section
+       whose accidental use cannot be undone from the dashboard. */ -}}
+<div class="rounded-lg border border-danger-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-danger-ink">Danger zone</h2>
+  {{/* Says what deletion actually does. "Restorable for 30 days" described a
+       trash view that does not exist in Phase 1: GetLink filters soft-deleted
+       rows, so the link's own page 404s the moment it is deleted, and
+       RestoreLink only un-archives. The alias reservation is real and is the
+       part worth stating. */}}
+  <p class="mb-4 text-sm text-muted">Archiving keeps the alias but stops redirecting, and can be undone here. Deleting stops the redirect immediately and holds the alias for 30 days before purging it &mdash; recovery inside that window is a database operation, not a button.</p>
+  <div class="flex gap-3">
+    {{if eq (printf "%s" .Link.Status) "archived"}}
+    <form method="post" action="/links/{{.Link.ID}}/restore">
+      <button type="submit" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-surface">Restore</button>
+    </form>
+    {{else}}
+    <form method="post" action="/links/{{.Link.ID}}/archive">
+      <button type="submit" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-surface">Archive</button>
+    </form>
+    {{end}}
+    {{/* hx-post as well as the native action: htmx only honours hx-confirm on
+         requests it issues itself, so on a plain form the prompt never
+         appeared and the button deleted on the first click. The action stays
+         so the form still works with htmx unavailable, and the handler's
+         seeOther already answers both dialects. */}}
+    <form method="post" action="/links/{{.Link.ID}}/delete"
+          hx-post="/links/{{.Link.ID}}/delete"
+          hx-confirm="Delete /{{.Link.Alias}}? It stops redirecting immediately, and its alias stays reserved for 30 days before it is purged.">
+      <button type="submit" class="rounded-md bg-danger px-4 py-2 text-sm font-medium text-on-accent hover:bg-danger-hover">Delete</button>
+    </form>
+  </div>
+</div>
+{{end}}

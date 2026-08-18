@@ -37,6 +37,33 @@ type Querier interface {
 	// get their queue delivered. Only the caller decides when this applies: it runs
 	// on the no-mailer path and nowhere else.
 	AbandonUnsendableMail(ctx context.Context, maxAgeDays int32) (int64, error)
+	// The replay guard, applied as a write rather than as a check.
+	//
+	// `mfa_last_step < @step` is the whole mechanism. A code from a step already
+	// accepted updates no rows, and the caller reads zero as *refused*, so two
+	// requests presenting the same code race each other into the same statement and
+	// exactly one wins. Doing it as a read-then-write would leave a window in which
+	// both saw the old value, which for a replay guard is the only window that
+	// matters.
+	//
+	// `mfa_last_step IS NULL` is the first acceptance after an enrolment that
+	// pre-seeded nothing, and is kept for completeness — `EnableUserMFA` stamps the
+	// enrolling step, so in practice the column is never NULL while a secret exists.
+	AcceptMFAStep(ctx context.Context, arg AcceptMFAStepParams) (int64, error)
+	// Record the answer given at the first administrative sign-in after an upgrade
+	// (D164).
+	//
+	// **Conditional on the question still being open**, so this is a first answer
+	// and never a change of one. Two things fall out of that and both are the point:
+	// two browser tabs racing produce one answer and one no-op rather than
+	// last-write-wins, and the route cannot become the instance-settings page D161
+	// refused to build — there is no second answer to give through it.
+	//
+	// Row count 1 means this caller's answer is the one that landed. Zero means the
+	// question was already answered, by them or by somebody else holding
+	// `instance.admin`, and the caller's own read has already established that the
+	// row exists.
+	AnswerUpdateCheck(ctx context.Context, enabled bool) (int64, error)
 	ArchiveLink(ctx context.Context, arg ArchiveLinkParams) (Link, error)
 	//
 	// The archive an automation performs. Idempotent: a link already archived comes
@@ -55,6 +82,51 @@ type Querier interface {
 	// arranged to make impossible.
 	ArchiveLinkByAutomation(ctx context.Context, arg ArchiveLinkByAutomationParams) (ArchiveLinkByAutomationRow, error)
 	AttachTag(ctx context.Context, arg AttachTagParams) error
+	// The predecessor's bars, carried onto its successor inside the rotation
+	// transaction.
+	//
+	// **Without this a reach revocation is escapable by the credential it was aimed
+	// at.** A bar names an `api_key_id`; rotation mints a new id; nothing copied the
+	// rows. So the holder of a key an administrator had cut out of an organization
+	// sent `POST /api/v1/api-keys/rotate` — authenticated by the key's own token,
+	// with no session and no permission anywhere — and the successor resolved back
+	// into that organization and was told about it again. Driven through the product
+	// 2026-08-09, both halves: it acted there and it read there. That is the case the
+	// whole mechanism exists for, because the credential a reach revocation is aimed
+	// at is the one that is *not* in legitimate hands, and it is exactly the holder
+	// of that credential who has a reason to rotate.
+	//
+	// **Both columns are copied rather than rewritten**, and that is the substance of
+	// the statement rather than a detail of it.
+	//
+	//   * `revoked_at` is the predecessor's. It is when the reach was cut, and
+	//     rotating does not move that moment. `now()` would date an administrator's
+	//     act by the clock of whoever rotated, make an old bar read as this
+	//     morning's, and hand the owner's key list (F178) a date that resets every
+	//     time the credential is replaced — which is precisely the reading somebody
+	//     evading the bar would want it to have.
+	//   * `revoked_by` is the predecessor's. The bar is that administrator's
+	//     statement and they are who answers for it; attributing it to the rotating
+	//     actor would name a credential's holder as the author of a bar against
+	//     itself. NULL is carried unchanged and is already a state the schema means:
+	//     `revoked_by` is `ON DELETE SET NULL` exactly so a bar outlives the
+	//     administrator's account.
+	//
+	// **The two cases that copy nothing do so by data, not by a branch here.** A
+	// **pinned predecessor** has no rows to select — nothing writes a bar for a key
+	// whose organization is its whole reach, because cutting that reach and revoking
+	// the key are the same act (`revokeInOrganization` sends it to
+	// `revokePinnedKey`). And a **pinned successor** is excluded by the join, which
+	// reads the reach off the row `insertSuccessor` has just written rather than off
+	// a parameter that could disagree with it: an account-wide key may rotate into a
+	// pinned one, and copying bars onto that would leave rows no resolution path
+	// reads and put *cut out of Acme* on a key pinned to Beta. It would also break
+	// 04200's stated invariant that a pinned key never carries one.
+	//
+	// Nothing is re-derived. Which organizations are barred is not recomputed from
+	// memberships or from anything else — the rows are the record, and a copy is the
+	// only operation that cannot disagree with them.
+	CarryAPIKeyReachRevocations(ctx context.Context, arg CarryAPIKeyReachRevocationsParams) error
 	//
 	// The compare-and-set that fires a rule. **This is the loop guard.**
 	//
@@ -127,6 +199,85 @@ type Querier interface {
 	// the drainer needs both for every claimed delivery, and N+1 round trips to
 	// assemble a batch of network calls is the wrong shape.
 	ClaimDueWebhookDeliveries(ctx context.Context, arg ClaimDueWebhookDeliveriesParams) ([]ClaimDueWebhookDeliveriesRow, error)
+	// Take the day's update check, if it is available to take.
+	//
+	// **The daily bound is this statement, not a ticker.** One UPDATE decides
+	// whether the check may run and records that it did, so the bound is a property
+	// of the instance rather than of one process's uptime: a replica restarted
+	// every ten minutes reads a row that says the check already happened and
+	// declines, where a bare timer would ask GitHub on every boot.
+	//
+	// It writes the timestamp *before* the request rather than after it, which is
+	// what makes a failure cost one attempt instead of one per tick. The milestone
+	// forbids a retry storm and this is where that is enforced; a check that fails
+	// waits out the same day a check that succeeded does.
+	//
+	// **`IS TRUE` rather than a bare test, because the column has three states**
+	// (D164). A bare `AND update_check_enabled` would already decline on NULL —
+	// unknown is not true — so the behaviour is the same and the spelling is not:
+	// *off while unanswered* is a decision this statement enforces, and a reader
+	// should not have to recover it from SQL's three-valued logic to be sure it was
+	// meant.
+	//
+	// Row count 1 means the caller holds the check. Zero means the operator turned
+	// it off, or has not been asked yet, or somebody has already run it today, and
+	// the caller does not need to know which — all three are "do nothing".
+	ClaimUpdateCheck(ctx context.Context, arg ClaimUpdateCheckParams) (int64, error)
+	// Moving the flag an untagged scan resolves through takes two statements and one
+	// transaction (M50's reopening, D183).
+	//
+	// **Two rather than one, and the reason is the index rather than taste.**
+	// `UPDATE … SET is_default = (id = $3)` over the whole link reads as the obvious
+	// single statement, and `qr_codes_link_default_key` is a plain unique index,
+	// which Postgres checks as each row version is written rather than at the end of
+	// the statement. Such an update collides with itself whenever the scan reaches
+	// the incoming default before the outgoing one — the same failure
+	// `UPDATE t SET n = n + 1` has on a unique column. A partial index cannot be
+	// declared DEFERRABLE, because only a constraint can and a constraint cannot be
+	// partial, so the ordering is made explicit instead: clear, then set, inside the
+	// transaction the service opens.
+	//
+	// The window between them holds a link with no default at all. It is invisible:
+	// the transaction has not committed, so no reader outside it sees either write,
+	// and inside it the only reader is the second statement.
+	// The first half. Takes the flag off whichever row holds it, or off nothing.
+	ClearDefaultQRCode(ctx context.Context, arg ClearDefaultQRCodeParams) (int64, error)
+	// The orphan sweep, run hourly by the maintenance pass.
+	//
+	// **What is orphaned under a column, and what is not.** Removing a code, a
+	// workspace or an organization takes its logos by cascade, and replacing one is
+	// the single UPDATE above, so none of those can leave bytes behind. Deleting a
+	// *link* can, and does: a link is soft-deleted with a purge deadline, so its
+	// `qr_codes` rows survive the whole trash window while every read in this file
+	// filters them out with `l.deleted_at IS NULL`. Those bytes are unreachable
+	// through the product — the endpoint that would clear them answers 404 for a
+	// deleted link — and they sit in the row and in every `pg_dump` until the purge
+	// fires, which for a large backlog is several hourly runs away and for a row
+	// the purge skips is longer still.
+	//
+	// This is what makes m50.5.md's claim *deleting the link removes its artefacts*
+	// true rather than merely intended. The row itself is left alone: the trash
+	// window exists so a link can be brought back by hand, and the artefact is the
+	// thing deletion was asked to remove.
+	//
+	// Idempotent by construction — a second run matches nothing, because `logo IS
+	// NOT NULL` is the predicate. Bounded like every other pass in that job, and
+	// SKIP LOCKED so it can never block, or be blocked by, a concurrent write to
+	// the same code.
+	ClearOrphanedQRCodeLogos(ctx context.Context, batchSize int32) (int64, error)
+	// Removes the image, and the row stays: a code without a logo is a code.
+	//
+	// NULL rather than an empty bytea, because the schema has one spelling for "no
+	// logo" and two would disagree the first time somebody wrote a zero-length one.
+	//
+	// **The style goes with it, in this statement rather than a second one**
+	// (M50.6's second reopening). The upload forces error correction to H and the
+	// removal puts it back, which is a style write — and a style write of its own
+	// would be an upsert, so a `DELETE` landing between the two would find no row to
+	// conflict with and **insert a fresh code**, slug and all. One statement keyed on
+	// the id cannot do that: a row that is gone updates nothing. The caller passes
+	// the style it read, unchanged, for a code that had no logo to begin with.
+	ClearQRCodeLogo(ctx context.Context, arg ClearQRCodeLogoParams) (int64, error)
 	// Spend one click of a one-time or max-click link's durable budget.
 	//
 	// **One statement, and that is the whole of the concurrency argument.** Two
@@ -151,6 +302,27 @@ type Querier interface {
 	// two when both are set. A limit below one can never match, which is correct: a
 	// link nobody may follow.
 	ConsumeClickBudget(ctx context.Context, arg ConsumeClickBudgetParams) (ConsumeClickBudgetRow, error)
+	// Spend it. Single use, decided by the statement rather than by the caller, for
+	// the third time in this file and for the same reason.
+	ConsumeMFAPendingLogin(ctx context.Context, id uuid.UUID) (int64, error)
+	// Spends every unconsumed token for one account.
+	//
+	// **One statement, called from both ends of the flow**, because the two needs
+	// are the same statement and writing it twice would be two places for the
+	// predicate to drift.
+	//
+	// Requesting a reset calls it to supersede whatever was outstanding, so a fresh
+	// request takes the slot and the previous link stops working at the same
+	// moment — the shape DeleteOutstandingRegistration has for registrations,
+	// except consumed rather than deleted: a superseded reset is evidence somebody
+	// asked to recover this account twice, and the purge is what removes it later.
+	//
+	// Completing a reset calls it to spend the token just used *and its siblings*,
+	// because a recovery that leaves a second live token behind has recovered
+	// nothing: whoever else requested one — including whoever the person is
+	// recovering from — would still hold a working link to the account whose
+	// password just changed.
+	ConsumePasswordResets(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Spends a registration. Conditional on it still being unspent, so this could
 	// not succeed twice even without the lock above; zero rows rolls the
 	// transaction back.
@@ -197,6 +369,23 @@ type Querier interface {
 	// failure.
 	CountMembershipsForEmail(ctx context.Context, arg CountMembershipsForEmailParams) (int64, error)
 	CountMembershipsForUser(ctx context.Context, arg CountMembershipsForUserParams) (int64, error)
+	//
+	// The other re-notify guard, and it is keyed on the thing rather than on the
+	// clock (M55).
+	//
+	// CountRecentNotificationsOfKind above suppresses a warning that is *still
+	// true* — the audit log is still too big — so it asks "was this said lately".
+	// A release is a different shape: the answer is not that it was said lately, it
+	// is that this exact version has already been reported and reporting it again
+	// says nothing new. So the version is the key, and there is no window: an
+	// operator who was told about 0.4.0 a year ago is not told again, and 0.5.0 is
+	// a new fact that arrives once.
+	//
+	// Reading `data->>'version'` rather than a column of its own is deliberate. The
+	// notification is the record that the operator was told; a column beside it
+	// would be a second place for the same fact, and the two would disagree the
+	// first time one write succeeded and the other did not.
+	CountNotificationsAboutVersion(ctx context.Context, arg CountNotificationsAboutVersionParams) (int64, error)
 	// What the queue's heading says there is to do. Served by the partial unique
 	// index, whose predicate this matches exactly.
 	CountOpenDestinationDisputes(ctx context.Context) (int64, error)
@@ -218,6 +407,9 @@ type Querier interface {
 	CountOrganizationWorkspaces(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	CountPendingMail(ctx context.Context) (int64, error)
 	CountPendingWebhookDeliveries(ctx context.Context) (int64, error)
+	// What domain.MaxQRCodesPerLink is checked against, the way campaign creation
+	// checks CountCampaigns.
+	CountQRCodes(ctx context.Context, arg CountQRCodesParams) (int64, error)
 	//
 	// The re-notify guard. A threshold that is still crossed is still crossed on
 	// the next run an hour later, and a notification per hour forever is how an
@@ -242,6 +434,9 @@ type Querier interface {
 	// the badge and the list it previews disagree while one of them stops using the
 	// index.
 	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
+	// What the account page shows. A number somebody acts on: three left is a prompt
+	// to regenerate, and zero with a lost phone is a conversation with the operator.
+	CountUnusedMFARecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Whether an account belongs to anything at all.
 	//
 	// Read by exactly one caller: the first-organization path (D36). An account with
@@ -402,8 +597,19 @@ type Querier interface {
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error)
 	// Links, destinations and tags.
 	CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error)
+	// The credential the browser holds between a right password and a session.
+	//
+	// Returned in full so the caller can assert the expiry it asked for rather than
+	// recompute it from its own clock — the TTL m53.md wants a test to hold is the
+	// one the database wrote.
+	CreateMFAPendingLogin(ctx context.Context, arg CreateMFAPendingLoginParams) (MfaPendingLogin, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	// Account recovery: the reset tokens a forgotten password is repaired with
+	// (M51). The account's own row is written through query/auth.sql's
+	// UpdateUserPassword, so there is one password-writing statement in the product
+	// and not two.
+	CreatePasswordReset(ctx context.Context, arg CreatePasswordResetParams) (PasswordReset, error)
 	// Self-serve signup: the registrations waiting on an address to be proven
 	// (M29). The mode itself is `LINKCTRL_SIGNUP_MODE` and is never read from the
 	// database (D38), so nothing here answers what the instance admits.
@@ -476,6 +682,38 @@ type Querier interface {
 	// no-rows, rather than a last-writer-wins that leaves the audit record and the
 	// blocklist disagreeing about what happened.
 	DecideDestinationDispute(ctx context.Context, arg DecideDestinationDisputeParams) (DestinationDispute, error)
+	// Everything hanging off the account that must not outlive it, removed in one
+	// statement and counted.
+	//
+	// **Written out because a soft delete fires no foreign key.** All eight tables
+	// below declare `ON DELETE CASCADE` against `users`, and every one of those
+	// clauses triggers on `DELETE`; the account row is kept — that is what
+	// `anonymized_at` marks and what the partial `users_email_key` is shaped for —
+	// so the cascade never runs and these statements are what stands in for it.
+	//
+	// Four of them are the tables M52 enumerates: `memberships`, `sessions`,
+	// `api_keys`, `notifications`. Four more are here because leaving them would
+	// falsify a claim the schema already makes:
+	//
+	//   * `password_resets`, whose own comment (03900) says *"there is no route by
+	//     which a reset for a deleted account could still be consumed, because the
+	//     row is gone with the account"*. Under a soft delete the row is not gone,
+	//     and it is the one credential in this schema that sets a password.
+	//   * `instance_grants`, whose own comment (03400) says a grant naming a user
+	//     who does not exist *"is not a record worth keeping, it is a permission
+	//     nobody can hold"*. The instance principal cannot reach this statement at
+	//     all — deleting it is refused — but a delegated dispute reviewer can.
+	//   * `mfa_recovery_codes` and `mfa_pending_logins` (04100), added by M53 and
+	//     added *by* M53 rather than deferred, because M53 is what creates them: a
+	//     recovery code is a standing credential that admits somebody to an account
+	//     with no password, and a pending login is one that mints a session. Both
+	//     are the `password_resets` defect in a new table, and shipping the tables
+	//     without the statements would have reintroduced it in the same phase that
+	//     closed it.
+	//
+	// The counts come back so the caller can log what went, and so a test can assert
+	// the statement reached each table rather than assert it did not error.
+	DeleteAccountDependents(ctx context.Context, accountID uuid.UUID) (DeleteAccountDependentsRow, error)
 	DeleteAutomationRule(ctx context.Context, arg DeleteAutomationRuleParams) (int64, error)
 	// Removes one host from the low-confidence runtime list.
 	//
@@ -506,6 +744,21 @@ type Querier interface {
 	// NULL. Nothing here touches `links`, and nothing here may: the moment this
 	// statement grows a link delete, deleting a container starts deleting content.
 	DeleteFolder(ctx context.Context, arg DeleteFolderParams) (int64, error)
+	// Every outstanding pending login for an account.
+	//
+	// Two callers. A fresh password post supersedes whatever was outstanding, so there
+	// is never more than one live prompt per account and somebody who abandoned a tab
+	// is not sharing their window with it. And disabling the second factor takes them
+	// all, because a prompt that outlives the factor it was prompting for is a
+	// credential with nothing left to check.
+	DeleteMFAPendingLoginsFor(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Every code for an account, spent ones included.
+	//
+	// Both callers want exactly this. Regenerating voids the previous set in full, so
+	// keeping the spent rows would leave a count of leftovers from a set that no
+	// longer opens anything. Disabling removes the account's last credential of this
+	// kind, and m53.md names it in the same breath as clearing the secret.
+	DeleteMFARecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (int64, error)
 	// A real delete, not a soft one, and everything in 00200/00300/00500/01200 that
 	// references it cascades: workspaces and everything under them, memberships,
@@ -544,9 +797,18 @@ type Querier interface {
 	// working at the same moment, which is what makes this safe: there is never
 	// more than one live link per address.
 	DeleteOutstandingRegistration(ctx context.Context, email string) (int64, error)
-	// Returns the link's code to the default style. A hard delete, because a style
-	// row holds nothing but the preference being withdrawn.
-	DeleteQRCode(ctx context.Context, arg DeleteQRCodeParams) (int64, error)
+	// Removes one code. Scoped by workspace rather than by link, because the id is
+	// already unique and the service has resolved the link before it gets here; the
+	// workspace column is the tenancy check.
+	//
+	// **`AND slug <> ''` is gone** (D183). It was what refused to delete the default
+	// code, back when the default *was* the empty slug; the refusal that replaces it
+	// is the service's, and it is about arithmetic rather than identity — a link's
+	// last code cannot be removed, whichever one it is.
+	//
+	// The logo goes with the row, which is the whole of what D134 bought: no second
+	// statement, and no way for the two to come apart.
+	DeleteQRCodeByID(ctx context.Context, arg DeleteQRCodeByIDParams) (int64, error)
 	// Reaper. Kept long enough to be visible in the key list after revocation, and
 	// long enough for the audit question above to be answerable.
 	DeleteRevokedAPIKeys(ctx context.Context) (int64, error)
@@ -586,6 +848,33 @@ type Querier interface {
 	// the delete is honest about what it does.
 	DeleteWorkspace(ctx context.Context, arg DeleteWorkspaceParams) (int64, error)
 	DetachAllTags(ctx context.Context, linkID uuid.UUID) error
+	// Taking the second factor away.
+	//
+	// Everything at once, because m53.md asks for exactly that: *clearing
+	// `mfa_enabled_at` clears the secret and every unused recovery code in the same
+	// transaction*. The codes are the caller's second statement — this one is the
+	// account row — and both are in one transaction, which is what makes "the account
+	// has no second factor" a state with no intermediate.
+	//
+	// `mfa_last_step` goes too. It is meaningless without a secret, and leaving it
+	// would mean a later enrolment inherited a replay floor from a secret that no
+	// longer exists — an account that re-enrolled would find its first codes refused
+	// until the clock caught up.
+	DisableUserMFA(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Enrolment, committed.
+	//
+	// **`mfa_enabled_at` and `mfa_secret` are written together and only together**,
+	// which is m53.md's *half-enrolled is not a state this product has* stated as a
+	// single UPDATE. The secret is not parked on the row while the person fetches
+	// their phone: it is held by the enrolment session and reaches the database only
+	// in the statement that also says the second factor is on, and only after a code
+	// computed from it has verified.
+	//
+	// `mfa_enabled_at IS NULL` in the predicate rather than checked beforehand, so
+	// enrolling an account that is already enrolled affects no rows instead of
+	// silently replacing a working secret with a different one. Two tabs finishing the
+	// same enrolment is the ordinary way that happens.
+	EnableUserMFA(ctx context.Context, arg EnableUserMFAParams) (int64, error)
 	// The mail outbox. Queued on the request path, drained by the scheduler.
 	//
 	// The message is stored rendered. Nothing here re-renders from a template, so a
@@ -616,6 +905,138 @@ type Querier interface {
 	// caller generates the candidate bytes, because a random source belongs in the
 	// application rather than in an extension this schema does not require.
 	EnsureWorkspaceSigningSecret(ctx context.Context, arg EnsureWorkspaceSigningSecretParams) ([]byte, error)
+	// The erasure pass. One batch, one statement, one transaction.
+	//
+	// **What it scrubs is what deletion could not reach**, and there are two ways a
+	// row gets there. Two tables carry an address snapshot and **no** foreign key to
+	// `users` at all, because a record of the past that vanishes with its subject is
+	// not a record: `audit_logs` and `destination_disputes`. Two more do have one and
+	// are still out of reach — `notifications` (`00600:127`) and `invitations`
+	// (`01200:62`) — because the row belongs to a *different* person, so ending this
+	// account was never going to remove it and no retention window expires it.
+	//
+	// *No foreign key* was the criterion when this pass scrubbed two tables. It is
+	// not the criterion now and saying so was wrong for a while: what finds all four
+	// is **a record about this person that ending the account does not remove**.
+	//
+	//   * `audit_logs.actor_label` (`00600:137,150`). An audit trail that vanishes
+	//     with its actor is not an audit trail.
+	//   * `destination_disputes.created_by_label` **and** `decided_by_label`
+	//     (`01600:64,68`). Two snapshots, not one: an account is as identifiable as
+	//     the moderator of a dispute as it is as the filer of one, and F44 names this
+	//     as the second table with no deletion path of any kind.
+	//   * `audit_logs.metadata`'s `"email"` key (F177). **Seven** writers, counted
+	//     against the tree on 2026-08-09 rather than recalled: `invite.go:437`
+	//     (`invitation.created`) and `:860` (`invitation.redeemed`),
+	//     `team/member.go:197`, `:258` and `:386` (`member.role_changed`,
+	//     `member.removed`, `member.added`), and `instance/instance.go:642`
+	//     (`instance.principal_moved`) and `:677` (the review grants). The address
+	//     there is usually the *subject* of somebody else's action, so scrubbing it
+	//     edits a record whose actor is still here — weighed and taken, because an
+	//     erasure that reaches the label and stops at the detail one column over has
+	//     not erased the person.
+	//
+	//     Matched on the value, because there is no foreign key to match on: the
+	//     column is jsonb and the address in it is a snapshot. Case-folded on both
+	//     sides, since `invitation.created` stores what the administrator typed and
+	//     that need not be the case the account was registered in. The accepted cost
+	//     is a sequential scan of a partitioned table — the largest thing in this
+	//     schema after analytics — paid once per batch, and only when there is a
+	//     batch: see `HAVING count(*) > 0` on `batch` below, which is what makes an
+	//     idle pass free rather than hourly.
+	//
+	//     Written by the **same** UPDATE as `actor_label` rather than by a second
+	//     one, and that is not a tidiness choice — see the note on `batch`.
+	//   * `audit_logs.metadata`'s `"from"` **array** (F189). One writer:
+	//     `instance/instance.go:642` puts the outgoing principals' addresses in an
+	//     array beside the `"email"` key it also writes, so a prior instance
+	//     principal who later deletes their account kept an address one key over
+	//     from the one that was scrubbed. The scalar predicate above is the only
+	//     shape F177 specified and an array is a different one, which is why this
+	//     was a second finding rather than an oversight in the first.
+	//
+	//     Rewritten element by element rather than dropped: the array says how many
+	//     principals the role moved away from, and losing a member of it loses that
+	//     count. Order is held by `WITH ORDINALITY`, because the addresses are the
+	//     record of a single act and the sequence is part of what it says. A `from`
+	//     that is not an array is left alone rather than erroring, so a record
+	//     written by hand cannot fail the whole batch.
+	//   * `notifications.data`'s `"email"` key **and the title beside it** (F188).
+	//     `invite/invite.go:973` tells the inviter that their invitation was
+	//     accepted, and both the detail and the sentence carry the address of the
+	//     person who accepted. The row belongs to the *inviter*, so deleting the
+	//     erased account's own notifications never reached it and nothing expires
+	//     it — notifications are scoped to a reader, not swept by age.
+	//
+	//     The title is rewritten by `replace` against `data->>'email'` rather than
+	//     against the batch, and that is what keeps this out of the business of
+	//     knowing how the sentence is worded: the two came from one value at one
+	//     call site, so the address in the title is exactly the string the detail
+	//     holds. Both CASEs read the pre-update row, so the title still finds the
+	//     address after the same statement has replaced it in `data`.
+	//
+	//     An **outstanding** invitation is left alone for the reason stated below,
+	//     and this is deliberately the other answer: a notification is a record
+	//     *about* a person delivered to somebody else, which is the same thing
+	//     `audit_logs.metadata` is, and it gets the same treatment.
+	//   * `invitations.email`, on the invitations the erased account **redeemed**
+	//     (F181). `ListInvitations` carries no state predicate, so `/invites`
+	//     renders every invitation an organization ever issued — redeemed ones
+	//     included — and the address each was sent to. Nothing deletes those rows
+	//     and no setting expires them, so an account deleted, erased and tombstoned
+	//     everywhere else was still named in full on an ordinary dashboard page.
+	//
+	//     `redeemed_by` is the join, not the address. What is scrubbed is the row
+	//     this account *joined by*, which is a record about them; an **outstanding**
+	//     invitation addressed to the same text is deliberately left alone, because
+	//     it is an offer to an address rather than a record of a person, the address
+	//     became reusable the moment the account was deleted, and blanking it would
+	//     break the redemption comparison for whoever takes it next.
+	//
+	//     Empty string rather than the tombstone, for the reason `users.email` is
+	//     one: redemption compares a redeeming account's address against this
+	//     column, and a placeholder that reads like a label is a value that
+	//     comparison would then have to rule out. `invitations_outstanding_email_key`
+	//     cannot collide on the blanks — it excludes redeemed rows, which is every
+	//     row this reaches.
+	//
+	// **The label is a constant and the ids survive** — D148, owner-set 2026-08-08.
+	// Nothing is derived from anything, so there is no derivation to reverse.
+	// Correlating one erased actor's entries is `audit_logs_actor_idx`, which is
+	// keyed on `actor_user_id` and never reads the label. The accepted cost is that a
+	// surviving uuid is pseudonymous rather than anonymous data, which
+	// `docs/SECURITY.md` states in those words.
+	//
+	// **Re-entrant, because the two-leader window during a rolling deploy is a
+	// stated property of this scheduler** (`cmd/linkctrl/jobs.go:117-127`).
+	// `FOR UPDATE SKIP LOCKED` means a second leader takes a disjoint batch instead
+	// of waiting for the first, and the guard on each id-matched scrub makes a second
+	// pass over the same row a no-op rather than a rewrite. Three of those four
+	// compare against the tombstone they write; `invitations` blanks its column
+	// instead of labelling it, so its guard is an emptiness test on `i.email` beside
+	// `i.redeemed_at IS NOT NULL` — the same claim in the vocabulary that column
+	// uses. Running the pass twice and diffing is what the test asserts. The
+	// **three** value-matched scrubs are re-entrant for a different reason and it is
+	// worth stating: after the first pass the address they matched on no longer
+	// exists in the column, so the second pass finds nothing to rewrite.
+	//
+	// Ordered by `deleted_at`, oldest first, which is the order
+	// `users_pending_erasure_idx` stores and the order the requests arrived in.
+	//
+	// `pending` carries the address as well as the id, because two of the scrubs
+	// below have nothing else to match on and the final UPDATE blanks it. That is
+	// safe rather than lucky: every CTE in a statement reads one snapshot, so the
+	// value here is the pre-erasure one no matter which order the executor runs them
+	// in.
+	// The account row itself, scrubbed in place. It survives, which is the whole
+	// difference between `anonymized_at` and `deleted_at`: foreign keys and audit
+	// records go on pointing at a row that identifies nobody.
+	//
+	// `email` becomes the empty string rather than a placeholder address. No live
+	// query can reach it — every read of `users` filters `deleted_at IS NULL` — and
+	// the partial unique index excludes the row, so the address it held was already
+	// reusable the moment the account was deleted.
+	EraseDeletedAccounts(ctx context.Context, arg EraseDeletedAccountsParams) ([]uuid.UUID, error)
 	// The verification lookup, on the unique prefix index, joined with the user so
 	// authentication is one round trip. Revoked and expired keys are returned
 	// rather than filtered out: the caller distinguishes them so the response can
@@ -631,8 +1052,18 @@ type Querier interface {
 	// with — so the credential is invalid rather than merely powerless. The
 	// predicate matches GetUserPermissions exactly: an organization-wide membership
 	// covers every workspace, a workspace-scoped one covers its own, and an
-	// organization-wide key is covered only by an organization-wide membership,
-	// because NULL = NULL is not true.
+	// unpinned key is covered only by an organization-wide membership, because
+	// NULL = NULL is not true.
+	//
+	// **Which organization it asks about is no longer the key's column** (M54). A
+	// pinned key still asks about the organization it names, and that branch is
+	// unchanged. An account-wide one has no column to ask about: it asks whether
+	// the owner holds an organization-wide membership in *any* organization this
+	// key has not been barred from, which is the same question one step earlier —
+	// can this credential reach anywhere at all. Which organization it then lands
+	// in is ResolveOrganizationForAPIKey's, and the membership covering that one is
+	// guaranteed by the same join, so the precise test and this coarse one cannot
+	// disagree.
 	//
 	// Returned as a column rather than joined into the WHERE clause for the reason
 	// revoked and expired keys are returned rather than filtered: the caller decides
@@ -655,6 +1086,21 @@ type Querier interface {
 	// 'deleted' rather than NULL, so the one comparison at the call site covers it
 	// and no branch depends on a scan of an absent row.
 	GetAPIKeyForRotation(ctx context.Context, id uuid.UUID) (GetAPIKeyForRotationRow, error)
+	// The reach of a key named by id, for the administrator's arm of Revoke (M54).
+	//
+	// Read before the write because the write depends on the answer: a pinned key
+	// is revoked outright and an account-wide one has an organization cut out of
+	// it, and those are different statements against different tables. Returns the
+	// owner too, because whichever it turns out to be, the record has to name whose
+	// credential was stopped.
+	//
+	// No organization predicate, deliberately. Scoping the *read* would make an
+	// account-wide key unfindable by every administrator, since it matches none of
+	// them; the authorization is at the call site, which refuses unless the owner
+	// is a member of the organization the actor holds authority in. A key whose
+	// owner has never been in the actor's organization is ErrNotFound, exactly as an
+	// unknown id is.
+	GetAPIKeyReach(ctx context.Context, id uuid.UUID) (GetAPIKeyReachRow, error)
 	GetAutomationRule(ctx context.Context, arg GetAutomationRuleParams) (AutomationRule, error)
 	// Reads one entry by its exact host.
 	//
@@ -688,6 +1134,26 @@ type Querier interface {
 	// Not scoped by owner, like every other statement addressed by id in this
 	// schema. link.Service has already judged the actor against the row.
 	GetDefaultDomainSettings(ctx context.Context, domainID uuid.UUID) (GetDefaultDomainSettingsRow, error)
+	// The code an untagged scan resolves through (M50's reopening, D183).
+	//
+	// One flagged row at most, which `qr_codes_link_default_key` (04400) is what
+	// makes true: a partial unique index over `link_id WHERE is_default`. No rows
+	// means the link's default code has never been written down — the synthesised
+	// default D139 describes — and the service answers for it at the product style
+	// rather than reporting an absence.
+	//
+	// **The empty slug is a fallback rather than the answer, and it is the second
+	// half of what makes this migration safe.** 03700's identity was `slug = ''`,
+	// and a row can still arrive carrying it and not the flag: written by the
+	// previous release during a rolling deploy, when `is_default` is a column it
+	// does not know about, or written by hand. Reading the flag alone would report
+	// such a link as having no default at all, and the next style write would then
+	// insert a second unnamed row against `qr_codes_link_slug_key`. Preferring the
+	// flag and falling back to the empty slug costs one ORDER BY and makes both
+	// spellings of the same fact resolve to the same row. `LIMIT 1` because the two
+	// can name different rows only on a link that has more than one code, where the
+	// empty slug does not occur at all.
+	GetDefaultQRCode(ctx context.Context, arg GetDefaultQRCodeParams) (GetDefaultQRCodeRow, error)
 	GetDestinationDispute(ctx context.Context, id uuid.UUID) (GetDestinationDisputeRow, error)
 	// One domain's bot policy, by id.
 	//
@@ -771,6 +1237,28 @@ type Querier interface {
 	// snapshot the resolver already produced and re-deriving it from the alias would
 	// be a second lookup of a row we have already identified.
 	GetLinkPasswordHash(ctx context.Context, id uuid.UUID) (*string, error)
+	// The per-QR-code breakdown (M50).
+	//
+	// **A filter over GetLinkDimensions' rows, not a rollup of its own.** Every
+	// value here was written by RollupDimensionDaily's ordinary `referrer` pass,
+	// because a scan's code is stored *as* its referrer value — `qr:<slug>` for a
+	// scan that named a code, and the bare `qr` for one that named none, which the
+	// reader counts against whichever code is the default (D183). So this milestone
+	// added no pass over click_events, no column and no dimension name: the thing
+	// that made a per-campaign rollup too expensive to include in this phase is the
+	// thing this does not do.
+	//
+	// It is a separate statement rather than a reuse of GetLinkDimensions because
+	// that one is bounded at twenty rows ordered by clicks, and a link whose busiest
+	// referrers are twenty real hostnames would lose its own codes off the end of
+	// its own breakdown. Same table, same index, same shape — only the predicate and
+	// the bound differ, and the bound is domain.MaxQRCodesPerLink + 1 because the
+	// default code is one more than the cap counts.
+	//
+	// `value = 'qr' OR value LIKE 'qr:%'` cannot collide with a real referrer. The
+	// column otherwise holds hostnames and the `direct` sentinel, and a colon is not
+	// a character a hostname may contain.
+	GetLinkQRDimensions(ctx context.Context, arg GetLinkQRDimensionsParams) ([]GetLinkQRDimensionsRow, error)
 	// Reads the rollup, never the raw events. This is what keeps analytics under
 	// the 2s target as click_events grows into the tens of millions.
 	GetLinkStats(ctx context.Context, arg GetLinkStatsParams) ([]GetLinkStatsRow, error)
@@ -783,6 +1271,15 @@ type Querier interface {
 	// two administrators acting at once could each read a state the other is
 	// changing — the check-then-act that the last-owner refusal exists to prevent.
 	GetMembership(ctx context.Context, arg GetMembershipParams) (GetMembershipRow, error)
+	//
+	// One row of the actor's own inbox, scoped by user_id like every statement
+	// around it: somebody else's notification is "no rows" rather than a 403 that
+	// confirms the id exists.
+	//
+	// Read by the click-through (M48). Where a notification leads is computed from
+	// its `kind` and its `data`, and both have to come off the row — a destination
+	// carried on the request would be a redirect target the caller chose.
+	GetNotification(ctx context.Context, arg GetNotificationParams) (Notification, error)
 	// The organization being deleted, read after LockOrganizations has locked it.
 	//
 	// Its name and slug are read here because the audit record has to carry them:
@@ -808,15 +1305,54 @@ type Querier interface {
 	// path that is already writing a row, rather than carrying a name on every
 	// identity for the one surface that needs it.
 	GetOrganizationName(ctx context.Context, id uuid.UUID) (string, error)
+	// The reset lookup, inside the transaction that spends the row.
+	//
+	// FOR UPDATE, so two submissions of the same link serialize and the second sees
+	// the row the first consumed. The join is what makes the account's own state
+	// reachable in one round trip: `status` and `password_hash` are both refusals
+	// this path has to make, and reading them separately would leave a gap between
+	// the check and the write.
+	GetPasswordResetByTokenHash(ctx context.Context, tokenHash []byte) (GetPasswordResetByTokenHashRow, error)
 	// Verification's lookup, inside the transaction that spends the row.
 	//
 	// FOR UPDATE, so two clicks on the same link serialize and the second sees the
 	// row the first consumed.
 	GetPendingRegistrationByTokenHash(ctx context.Context, tokenHash []byte) (PendingRegistration, error)
-	// The stored style for a link's code, or no rows for a link that has never been
-	// styled. No rows is not an error: it means the default style, which is what
-	// every link's code is drawn with until somebody changes it.
-	GetQRCode(ctx context.Context, arg GetQRCodeParams) (QrCode, error)
+	// **`q.*` is gone from the four reads below, and that is M50.5 rather than
+	// style.** *(Three when M50.5 wrote this; `GetDefaultQRCode` is D183's, and it
+	// carries the same explicit list for the same reason.)* `qr_codes` now carries a `logo bytea` (03800, D134) bounded at
+	// qr.MaxLogoStoredBytes — a little over a megabyte a row — and a link may hold
+	// domain.MaxQRCodesPerLink of them. A star projection would fetch every one of
+	// those bytes to draw a list of names, so the reads carry an explicit column
+	// list and report the logo as the one fact a reader of the list needs:
+	// **whether there is one**. `logo IS NOT NULL` is answered from the row's TOAST
+	// pointer without detoasting the value, so asking costs nothing.
+	//
+	// The bytes themselves are read by nothing here. Nothing in M50.5 serves a
+	// stored logo back — the two operations are set and clear — and M50.6, which
+	// composites one into a picture, is where a query that reads them belongs.
+	// One code of a link's, by slug. No rows means the code does not exist, and the
+	// service reports that.
+	//
+	// **The default code is not reachable here and that is the point** (D183). It
+	// used to be `slug = ''`; it is now whichever row carries `is_default`, which is
+	// GetDefaultQRCode's job, because a caller that wanted "the default" and passed
+	// the empty string would silently match nothing at all now that no row holds it.
+	GetQRCode(ctx context.Context, arg GetQRCodeParams) (GetQRCodeRow, error)
+	// The bytes, for the one thing they are for (M50.6).
+	//
+	// **The only read in this file that projects the column**, and it is separate
+	// from GetQRCode rather than folded into it for exactly the reason the three
+	// reads above stopped saying `q.*`: drawing a list of twenty names must not
+	// fetch twenty images. This is called once, by a surface that is about to
+	// composite one code's logo into one picture, and only for a code whose
+	// `has_logo` already said there is something to fetch.
+	//
+	// NULL comes back for a code with no logo, which the service reads as "nothing
+	// to draw" rather than as an error: `has_logo` and this can disagree by exactly
+	// one concurrent clear, and the honest answer to that race is the picture
+	// without the logo.
+	GetQRCodeLogo(ctx context.Context, arg GetQRCodeLogoParams) ([]byte, error)
 	// The live-activity feed. Bounded and index-backed on (link_id, occurred_at).
 	GetRecentClicks(ctx context.Context, arg GetRecentClicksParams) ([]GetRecentClicksRow, error)
 	GetRoleBySlug(ctx context.Context, slug string) (Role, error)
@@ -833,6 +1369,21 @@ type Querier interface {
 	// accidentally do a case-sensitive lookup and create a duplicate account.
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// A second factor (M53): TOTP, enrolment, recovery codes, and the step between
+	// a right password and a session.
+	//
+	// Three groups of statements. The enrolment pair writes `users.mfa_secret` and
+	// `users.mfa_enabled_at` — the columns `00200_identity.sql` has carried since the
+	// first migration and only M52's erasure sweep has ever touched. The recovery-code
+	// statements are a hashed single-use credential, the fifth thing in this schema
+	// shaped that way. And the pending-login statements are the state machine that
+	// makes "no session token exists until the second factor is verified" a property
+	// of the database rather than of a handler's control flow.
+	// Everything the second factor needs about one account, and nothing else.
+	//
+	// Not `SELECT *`: the enrolment and challenge paths have no business holding a
+	// password hash, and a narrow row is what keeps that true as columns are added.
+	GetUserMFA(ctx context.Context, id uuid.UUID) (GetUserMFARow, error)
 	// The RBAC evaluator's source of truth. Returns every permission a user holds
 	// in a workspace, via their organization membership and its role.
 	//
@@ -941,6 +1492,11 @@ type Querier interface {
 	// list, and the second index skips those: every one of them would carry the same
 	// key, and one open homograph dispute must not lock out every other.
 	InsertDestinationDispute(ctx context.Context, arg InsertDestinationDisputeParams) (DestinationDispute, error)
+	// One code of a set. Called ten times inside the transaction that issues them,
+	// rather than as one multi-row insert, because the hashes are computed one at a
+	// time and a loop over a prepared statement is what sqlc gives without a bespoke
+	// array parameter for a fixed ten rows.
+	InsertMFARecoveryCode(ctx context.Context, arg InsertMFARecoveryCodeParams) error
 	// Notifications. The table shipped dormant in 00600; nothing here adds a
 	// column, per the rule that a dormant table's structure goes in its jsonb until
 	// the feature that needs a column arrives. `data` carries whatever a kind needs.
@@ -954,14 +1510,45 @@ type Querier interface {
 	// (it ignores trashed rows), so this check is the enforcement and the index
 	// remains the guarantee against live-row races only.
 	IsAliasTaken(ctx context.Context, arg IsAliasTakenParams) (bool, error)
+	// Which organizations have been cut out of which of these keys (F178).
+	//
+	// The other half of the reach revocation M54 built. An administrator can bar an
+	// account-wide key from their organization and the key's owner had no way to
+	// learn it: the list above reports one reach — pinned or account-wide — and a
+	// credential that had silently stopped resolving into one tenant read exactly as
+	// it did the day before. The audit record that says why is written in the
+	// administrator's organization, which the owner may hold no `audit.read` in.
+	//
+	// Keyed on the ids already listed rather than on the owner, so it is one round
+	// trip after the list and not one per key, and so it cannot return a bar on a
+	// key the caller was not shown.
+	//
+	// The organization's name is joined because an id answers nobody's support
+	// question, and it discloses nothing new: a bar only ever exists on a key whose
+	// owner held an organization-wide membership there when it was written.
+	//
+	// Soft-deleted organizations are not filtered out. The bar is a fact about the
+	// key, it outlives the tenant, and hiding the row would make a key look
+	// unrestricted when it is not.
+	ListAPIKeyOrgRevocations(ctx context.Context, apiKeyIds []uuid.UUID) ([]ListAPIKeyOrgRevocationsRow, error)
 	// Revoked keys are included. "Which keys existed and when were they revoked"
 	// is the question asked after an incident, so they are listed until the reaper
 	// removes them.
 	//
 	// workspace_id is selected because NULL is a state the owner chose (M44): a key
 	// bound to one workspace and a key valid across the organization look identical
-	// without it.
-	ListAPIKeysForUser(ctx context.Context, arg ListAPIKeysForUserParams) ([]ListAPIKeysForUserRow, error)
+	// without it. organization_id is selected for the same reason one tier up
+	// (M54): NULL there is account-wide and non-NULL is pinned, and a list that
+	// omitted it would show two credentials with different reach as one row shape.
+	//
+	// **Owner alone, no organization predicate** (M54, closing F75). It used to
+	// carry `AND organization_id = $2` while RevokeAPIKey carried only the owner,
+	// and the two statements disagreeing about which keys an actor reaches was the
+	// whole of that finding: a key listed nowhere still revoked, so 204-versus-404
+	// answered "is this id one of mine, elsewhere". They agree now because the
+	// question they both ask is the same one — whose key is this — and an
+	// account-wide key has no organization to filter on in the first place.
+	ListAPIKeysForUser(ctx context.Context, userID uuid.UUID) ([]ListAPIKeysForUserRow, error)
 	//
 	// Newest first, keyed on (occurred_at, id) so the cursor is a position rather
 	// than an offset: an event written while a reader is paginating shifts every
@@ -1209,6 +1796,36 @@ type Querier interface {
 	// The scope vocabulary. Scopes are validated against the permissions table
 	// rather than a list in Go, so RBAC and API keys cannot drift apart.
 	ListPermissionSlugs(ctx context.Context) ([]string, error)
+	// Every code a link carries (M50), in alphabetical order by name.
+	//
+	// Unpaginated, and bounded instead by domain.MaxQRCodesPerLink, which is the
+	// same trade ListCampaigns makes: the cap is small enough that a page of them is
+	// the whole set, and a pager over a list that cannot exceed it would be a
+	// control nobody ever operates.
+	//
+	// **The default no longer leads, and that reverses what this comment argued**
+	// (M50.8). The key was `NOT (is_default OR slug = '')` — false before true, so
+	// the flag-holder led whatever order the rest were created in — and the defence
+	// written here was that *"the list re-orders when the reader moves it, which is
+	// the visible half of what setting a default does"*. The owner reported the
+	// other half of that: *"Selecting a different default code re-orders the list of
+	// codes which can make it seem like the selection didn't change."* The argument
+	// is answered rather than withdrawn. M50.7 put a filled icon on the row that
+	// holds the flag, so being visible is now the icon's job; the sort was carrying
+	// it as a side effect, and carrying it was what made the change look like
+	// nothing had happened.
+	//
+	// `lower(q.label)` with `q.id` behind it, which is exactly `ORDER BY
+	// lower(c.name), c.id` at ListCampaigns above: one collation for one product,
+	// and a tie-break so two codes sharing a name have a stable order rather than
+	// whatever the plan returns. An unnamed code sorts first, which is where the
+	// default of a link nobody has named codes on already was.
+	//
+	// **Nothing may read position 0 as the default any more.** link.ListQRCodes and
+	// analytics.qrCodeSplit both did — `!rows[0].IsDefault && rows[0].Slug != ""`
+	// as the test for "no row holds the flag" — and both scan every row since this
+	// milestone. The flag is a column; it was never a position.
+	ListQRCodes(ctx context.Context, arg ListQRCodesParams) ([]ListQRCodesRow, error)
 	// The management list: every rule on a link, enabled or not, in the order the
 	// redirect path would evaluate them.
 	//
@@ -1396,6 +2013,20 @@ type Querier interface {
 	// adding one here would be a second tenancy check in a statement whose job is
 	// serialization.
 	LockLink(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// The pending login behind a presented token, locked.
+	//
+	// Joined to `users` because every consumer needs both halves and the alternative
+	// is two round trips with the account's state changing between them. `FOR UPDATE
+	// OF p` locks the pending row and not the user row: the user row is locked
+	// separately by the paths that write it, and locking it here would serialise every
+	// second-factor attempt against every other write to the account.
+	//
+	// Nothing is filtered out. Expired, consumed, an account that stopped being active
+	// while the prompt was open — each is a refusal the caller makes, and each is the
+	// same refusal to whoever is looking at the form. Filtering here would collapse
+	// them into not-found, which is the same answer, and would cost the tests their
+	// ability to tell the five apart.
+	LockMFAPendingLogin(ctx context.Context, tokenHash []byte) (LockMFAPendingLoginRow, error)
 	// The organization's owner memberships, locked.
 	//
 	// Organization-wide only: a workspace-scoped owner membership grants ownership
@@ -1441,6 +2072,54 @@ type Querier interface {
 	// the target is inside this set, so it is already locked by the time anything
 	// else touches it.
 	LockOrganizations(ctx context.Context) ([]uuid.UUID, error)
+	// The organizations this account owns alone, locked before they are counted.
+	//
+	// The refusal M28.5 makes from the other side. `team.guardOwnerSet` blocks
+	// removing or demoting an organization's last owner; this blocks deleting the
+	// *account* that is one, because otherwise the rule is bypassable by leaving
+	// through a different door.
+	//
+	// **Organization-wide owner memberships only**, the sentence
+	// `LockOrganizationOwners` states and for the same reason: a workspace-scoped
+	// owner membership is ownership of one workspace, so counting it would either
+	// hide a sole owner or invent one.
+	//
+	// The owner rows are locked before the count is taken, so this is a rule rather
+	// than a check-then-act — a second administrator promoting or removing an owner
+	// blocks until this transaction ends. Ordered by membership id inside the
+	// locking CTE so two accounts deleting themselves at once take the rows in the
+	// same order and cannot deadlock. MATERIALIZED because the lock has to be taken
+	// once, on the rows this counts, rather than folded into the outer query by the
+	// planner.
+	LockOrganizationsSolelyOwnedBy(ctx context.Context, userID uuid.UUID) ([]LockOrganizationsSolelyOwnedByRow, error)
+	// Account deletion and subject erasure (M52).
+	//
+	// Two operations that look like one and are deliberately kept apart. **Deletion**
+	// is interactive, immediate and one transaction: it ends every route into the
+	// account and releases the address. **Erasure** is the hourly sweep that scrubs
+	// what deletion could not reach — every record *about* this person that ending
+	// the account does not remove. *No foreign key to `users`* was that criterion
+	// while the sweep touched two tables and is not the criterion now: it reaches
+	// four, two of which do carry one. The enumeration lives on
+	// `EraseDeletedAccounts` below, beside the statement, and nowhere else.
+	//
+	// The statements below are the whole of the database side. `04000` adds the one
+	// index the sweep reads and nothing else; the columns have existed, unwritten,
+	// since `00200_identity.sql`.
+	// The account being deleted, locked for the rest of the transaction.
+	//
+	// `deleted_at IS NULL` is in the predicate rather than checked afterwards, so a
+	// second deletion of the same account is not-found instead of a second pass over
+	// rows the first one already took. Two browsers pressing the button at once is
+	// the ordinary way that happens.
+	LockUserForDeletion(ctx context.Context, id uuid.UUID) (User, error)
+	// The same row, locked for the rest of the transaction.
+	//
+	// Every write below reads through this first. Enrolment, disabling and accepting
+	// a code all read a column and then write it, and two of those are the difference
+	// between a second factor existing and not — a check-then-act on `mfa_enabled_at`
+	// is how an abandoned enrolment and a live one end up in the same account.
+	LockUserMFA(ctx context.Context, id uuid.UUID) (LockUserMFARow, error)
 	//
 	// Every folder in a workspace, locked, for a decision made over the whole tree.
 	//
@@ -1489,6 +2168,9 @@ type Querier interface {
 	// would park it at the head of the queue forever, which is F83 again with a
 	// different cause.
 	MarkAutomationRulesChecked(ctx context.Context, arg MarkAutomationRulesCheckedParams) error
+	// The second half, and never run on its own: without the clear before it, it is
+	// the collision the comment above describes.
+	MarkDefaultQRCode(ctx context.Context, arg MarkDefaultQRCodeParams) (int64, error)
 	// Caddy asked whether to obtain a certificate for this hostname and was told
 	// yes. Guarded on 'pending' so it is one write per verification rather than one
 	// per handshake: the ask endpoint is public and unauthenticated, and a statement
@@ -1598,6 +2280,20 @@ type Querier interface {
 	// double click.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (int64, error)
 	//
+	// `read_at` back to NULL, which is the whole of "unread": 00600 declared the
+	// column nullable and the inbox has always used NULL for it, so putting one
+	// back is an UPDATE and never a migration (M48).
+	//
+	// **Deliberately not the mirror image of MarkNotificationRead.** That statement
+	// refuses to touch an already-read row so that "when did you first see this"
+	// survives a double click. This one carries no such guard: it exists because the
+	// click-through M48 adds marks a notification read as a side effect of opening
+	// it, and somebody undoing that is saying they have not dealt with it — which is
+	// as true of a row read last week as of one read by accident a second ago. The
+	// first-seen timestamp is what is being discarded, on purpose, by the person it
+	// belongs to.
+	MarkNotificationUnread(ctx context.Context, arg MarkNotificationUnreadParams) (int64, error)
+	//
 	// Retry exhausted. Terminal, and deliberately not deleted: a row saying what was
 	// attempted, how many times, and what the receiver said is the whole reason this
 	// is a table rather than an in-memory retry loop.
@@ -1695,6 +2391,40 @@ type Querier interface {
 	// destination here: it means the root. A partial-update idiom would make
 	// "move to the top level" unexpressible.
 	MoveFolder(ctx context.Context, arg MoveFolderParams) (Folder, error)
+	// Gives a slug to the one code that may not have one (M50's reopening, D183).
+	//
+	// A link's only code carries no slug: there is nothing to tell it apart from,
+	// and handing one out while writing a style would change what a picture says.
+	// When a second code appears the first one needs a tag, and this is the
+	// statement that writes it.
+	//
+	// **`AND slug = ''` is what makes it structurally incapable of a rename.** A
+	// slug is printed, so moving one breaks every copy already in the world —
+	// UpdateQRCodeLabel says so above and this is the same rule enforced by the
+	// WHERE clause rather than by the caller. Naming a code that has no name is not
+	// moving anything: nothing printed carries the value being replaced, because
+	// there was no value.
+	//
+	// **`is_default = true` goes with the slug, and it is the one statement in this
+	// file that sets the flag without clearing another.** The row this reaches is
+	// whichever row GetDefaultQRCode answered with, and that read falls back to the
+	// empty slug for a row the flag never reached — one written by the previous
+	// release during a rolling deploy, where `is_default` is a column it does not
+	// know about. Taking the empty slug off such a row without putting the flag on
+	// it would leave the link matching neither half of `(is_default OR slug = '')`:
+	// no default at all, a phantom code synthesised into every list and breakdown,
+	// and the untagged `qr` bucket no longer folding onto the code every already-
+	// printed picture of this link resolves through. The empty slug and the flag are
+	// two spellings of the same fact, so the statement that removes one writes the
+	// other.
+	//
+	// Against `qr_codes_link_default_key` this is safe by the same read: it runs
+	// only on a row carrying the empty slug, and GetDefaultQRCode orders the flag
+	// first, so a link with some *other* row flagged never returns this row to be
+	// named. What the read cannot rule out is the flag moving between it and this
+	// write, which is a unique violation and is the caller's to answer — CreateQRCode
+	// re-reads the winner rather than failing over it.
+	NameQRCode(ctx context.Context, arg NameQRCodeParams) (int64, error)
 	// The next free position above the primary. COALESCE so the first rule on a
 	// link lands at 1 rather than at NULL.
 	NextRuleDestinationPosition(ctx context.Context, linkID uuid.UUID) (int32, error)
@@ -1719,6 +2449,25 @@ type Querier interface {
 	// sequential arm, which is the cost D8 accepts and the reason every other link
 	// keeps the unchanged fast path.
 	NextVariantRotation(ctx context.Context, arg NextVariantRotationParams) (int64, error)
+	// The code that has existed longest, which is what a removed default promotes to
+	// (M50's reopening).
+	//
+	// `created_at, id` is the order ResolveAliasForRedirect enumerates codes in, and
+	// the oldest code is the one whose pictures have been in the world longest —
+	// which is what makes it the right one to inherit every untagged scan.
+	//
+	// **The rule is unchanged and the sentence that explained it is** (M50.8). This
+	// comment used to add *"so the promoted code is the one at the top of the list
+	// the reader is looking at"*, which was true while ListQRCodes ordered by
+	// creation. That list is alphabetical now, so the promoted code is wherever its
+	// name puts it. D183 chose the oldest and nothing here reverses that; what went
+	// is a claim about where the reader's eye lands, which had stopped being true.
+	//
+	// Excluding a row by id rather than filtering on
+	// `is_default`, because the caller runs this *after* deleting the flag-holder in
+	// the same transaction and inside it that row is already gone — the exclusion is
+	// what makes the statement correct if it is ever called before one.
+	OldestQRCode(ctx context.Context, arg OldestQRCodeParams) (OldestQRCodeRow, error)
 	// The same lookup without the lock, for rendering the redemption page.
 	//
 	// A GET must not take a row lock: the page is served to anybody holding the
@@ -1760,6 +2509,15 @@ type Querier interface {
 	// The de-identification step. Once the salt is gone the day's hashes cannot be
 	// linked back to an address.
 	PurgeExpiredSalts(ctx context.Context) (int64, error)
+	// The sweep. Lapsed rows and spent ones, in bounded batches, from the hourly
+	// maintenance pass that already purges finished registrations and password
+	// resets.
+	//
+	// No retention window, unlike those two. A spent pending login is evidence of
+	// nothing — the session it minted is the record, and the audit trail carries the
+	// rest — where a spent registration and a spent reset are each the only trace that
+	// an address was proven.
+	PurgeFinishedMFAPendingLogins(ctx context.Context, batch int32) (int64, error)
 	//
 	// Sent and failed rows past the retention window. The outbox is a record of
 	// what was attempted, not an archive: without this the table is the one thing
@@ -1770,6 +2528,13 @@ type Querier interface {
 	// their bodies when they finished; this is what stops the record of *that* piling
 	// up. Lowering it would not shorten any credential's exposure.
 	PurgeFinishedMail(ctx context.Context, maxAgeDays int32) (int64, error)
+	// The sweep. Removes tokens nobody used past their expiry, and spent rows past
+	// the same short window a spent registration gets.
+	//
+	// Both, because neither is a record of anything a reader needs: the audit log
+	// carries that the reset happened, and the password itself is the durable
+	// evidence. This table is a waiting room, not an archive.
+	PurgeFinishedPasswordResets(ctx context.Context, arg PurgeFinishedPasswordResetsParams) (int64, error)
 	//
 	// Delivered and abandoned rows past the retention window. The delivery log is a
 	// record of what was attempted, not an archive; without this it is a table that
@@ -1927,6 +2692,44 @@ type Querier interface {
 	// click_events.destination_id — and the weight is the arm's share; both have to
 	// be in the snapshot because reading either at request time would be the query
 	// this design exists to avoid.
+	//
+	// The second lateral is M50's, and it is the same bargain a third time. A link
+	// may carry several QR codes, each printing a slug in its payload, and a scan
+	// may only be attributed to a slug this link actually has — otherwise the
+	// parameter is an open write surface into `link_dimension_daily`, reachable by
+	// anybody who can read a URL. Checking that at request time would be a query on
+	// the hot path; checking it against the snapshot is a scan of a slice bounded by
+	// domain.MaxQRCodesPerLink. So the slugs ride home in the round trip that was
+	// happening anyway, on `qr_codes_link_idx` — the index 03700 restored — and find
+	// nothing at all for the overwhelming majority of links, because a link with no
+	// named codes is the default and always will be.
+	//
+	// Slugs only, never labels or styles. The redirect path has no use for either: a
+	// label is what a person reads in the dashboard and a style is how the picture
+	// is drawn, and putting them in the snapshot would serialize workspace free text
+	// into every cached entry for nothing.
+	//
+	// **`q.slug <> ''` stays, and what it excludes has shrunk to one row** (D183).
+	// It used to leave the whole default code out, because the default *was* the row
+	// with no slug. The flag carries that identity now and the row it used to be
+	// gains a slug the moment a second code appears beside it, so a link's default
+	// rides home like every other code and a payload naming it is matched. What is
+	// still left out is a link's *only* code, which keeps the empty slug and the
+	// untagged payload — and it is left out because there is nothing to match it
+	// with: `Snapshot.CodeSlug` returns before it scans when the parameter is empty
+	// or absent, so an empty string in this array could never be compared against
+	// anything. Carrying it would serialize a byte no request can reach into every
+	// cached entry for the majority of links, and falsify what `Snapshot.Codes`
+	// promises about the payload a link with no named codes carries — which is the
+	// premise CacheKeyVersion was not bumped on.
+	//
+	// **`is_default` deliberately does not.** A request carrying no `qrc` still
+	// records the bare `qr` it has always recorded — the value on every row this
+	// product has written since M41 — and which code that belongs to is a question
+	// the breakdown answers when somebody reads it, from the flag as it stands then.
+	// Resolving it here instead would put the answer in `link_dimension_daily`,
+	// where moving the flag afterwards could not reach it, and would rewrite what
+	// every pre-reopening scan is stored as for no gain a reader can see.
 	ResolveAliasForRedirect(ctx context.Context, arg ResolveAliasForRedirectParams) (ResolveAliasForRedirectRow, error)
 	// Read once at boot and cached. The default domain is matched on the flag
 	// rather than on a hostname string, so it never has to agree with
@@ -1935,6 +2738,46 @@ type Querier interface {
 	// PHASE 2: custom domains. Present now because the cache key is already
 	// host-scoped, so enabling it later needs no key change.
 	ResolveDomainByHostname(ctx context.Context, lower string) (ResolveDomainByHostnameRow, error)
+	// Which organization an **account-wide** key's request lands in (M54).
+	//
+	// One tier above ResolveWorkspaceForUser, and deliberately not a second copy of
+	// it. That statement answers "which workspace, given a person and optionally a
+	// bound"; this one answers "which tenant", and the answer then becomes M44's
+	// organization_id bound so the workspace precedence stays stated exactly once.
+	// Feeding it the organization the request resolved to is the whole of M44's
+	// parameter surviving a key that has no organization column to feed it from.
+	//
+	// The rungs are the person's, for the reason D90 gives: what an unpinned key
+	// follows is the person, and where the person is acting is part of that. Their
+	// pinned default's organization wins, then the one they last used, then the
+	// oldest they belong to. There is no session rung because there is no session.
+	//
+	// **Organization-wide memberships only.** An unpinned key has always required
+	// one — GetAPIKeyByPrefix's predicate refuses a workspace-NULL key covered by a
+	// workspace-scoped membership, and MayCreateOrgWide refuses to mint one without
+	// it. Carrying that rule across the tenancy boundary is what stops an
+	// account-wide key widening into an organization where its owner is scoped to a
+	// single workspace: a key minted under organization-wide authority must not
+	// acquire reach its owner could not have granted it there.
+	//
+	// Barred organizations are excluded here as well as in the coarse check, and
+	// both matter: the coarse one decides whether the credential authenticates at
+	// all, this one decides where it lands, and an administrator who cut their
+	// tenant out must not be reachable by a key that simply had nowhere else to go.
+	//
+	// **The bar comes back with the answer** (F183). Cutting an organization out of
+	// an account-wide key's reach stopped it *acting* there and not *reading about*
+	// it: `auth.Service.Workspaces` bounded a key by pinned-or-not, and an
+	// account-wide key is by definition not pinned, so the barred organization's
+	// name, slug and workspace ids went on being listed to the revoked credential.
+	// Closing that needs the whole barred set rather than the one organization this
+	// request landed in, and this statement is the only place an account-wide key's
+	// reach is already being resolved — so the set rides back with it as an array
+	// and the read bound costs no query of its own. `barred` is aggregated in its
+	// own CTE so it is computed once rather than per candidate organization, and the
+	// exclusion below reads it instead of repeating the subquery: one expression of
+	// the fact, which is what a reader of a security predicate should have to check.
+	ResolveOrganizationForAPIKey(ctx context.Context, arg ResolveOrganizationForAPIKeyParams) (ResolveOrganizationForAPIKeyRow, error)
 	// The workspace a request acts in, and the only place that question is
 	// answered. Every identity — session, API key, CLI — comes through here.
 	//
@@ -2002,7 +2845,26 @@ type Querier interface {
 	// is audited and the record has to name whose credential was stopped. No row
 	// means an id from another organization or none at all, and both answer the same
 	// way at the call site.
+	//
+	// **Pinned keys only** since M54, and by the predicate rather than by a new
+	// clause: `organization_id = $2` is never true of a NULL. That is the right
+	// refusal rather than a gap. This statement destroys a credential outright, and
+	// for a pinned key that is proportionate — the organization is the key's entire
+	// reach, so cutting the reach and cutting the key are the same act. An
+	// account-wide key belongs to an account that acts in tenants this administrator
+	// has no authority over, and RevokeAPIKeyReachInOrganization below is what they
+	// get instead.
 	RevokeAPIKeyInOrganization(ctx context.Context, arg RevokeAPIKeyInOrganizationParams) (RevokeAPIKeyInOrganizationRow, error)
+	// An administrator cutting their organization out of an account-wide key.
+	//
+	// Idempotent for the reason RevokeAPIKey is: the second call reports a row and
+	// keeps the original timestamp, so repeating it is a success rather than a 404,
+	// while an id nobody may act on is still distinguishable.
+	//
+	// ON CONFLICT rather than a prior existence check, because two administrators
+	// reacting to the same incident is the normal case and neither should see an
+	// error about the other.
+	RevokeAPIKeyReachInOrganization(ctx context.Context, arg RevokeAPIKeyReachInOrganizationParams) (int64, error)
 	// Used on password change. Anyone who had the old password must be logged out,
 	// which is the entire point of changing it.
 	// keep_session is optional: pass NULL to revoke everything, or the current
@@ -2136,12 +2998,59 @@ type Querier interface {
 	// for existence.
 	SetLastWorkspaceForUser(ctx context.Context, arg SetLastWorkspaceForUserParams) (int64, error)
 	SetPrimaryDestination(ctx context.Context, arg SetPrimaryDestinationParams) error
+	// --- QR logos (M50.5) --------------------------------------------------------
+	// Stores the re-encoded image against one code.
+	//
+	// **One statement, so setting and replacing are the same operation and neither
+	// has a gap in it.** A logo that replaced another leaves nothing behind to
+	// collect: the previous value is overwritten by this write rather than deleted
+	// by a second one, which is the property the storage decision was chosen for
+	// (D134) and the reason "replacing removes the artefact it replaced" needs no
+	// code of its own.
+	//
+	// The bytes are already bounded — the request body by http.MaxBytesReader, the
+	// decode by qr.MaxDecodedLogoPixels, and this value by qr.MaxLogoStoredBytes,
+	// which internal/qr enforces rather than assumes. Since D180, qr.MaxLogoPixels
+	// bounds the *stored* artefact alone and refuses nothing: an image above it is
+	// resampled down to it before it reaches this statement.
+	SetQRCodeLogo(ctx context.Context, arg SetQRCodeLogoParams) (int64, error)
 	// Moves one session, and only the session that asked.
 	//
 	// Scoped by user_id as well as id so a session id from elsewhere cannot be
 	// repointed, and revoked sessions are excluded because moving one would be
 	// writing to a credential that no longer authenticates.
 	SetSessionWorkspace(ctx context.Context, arg SetSessionWorkspaceParams) (int64, error)
+	// Instance-level settings: the answers an operator gives about the box rather
+	// than about a tenant in it (M55). One row, guaranteed by 04300's primary key,
+	// so every statement here is written against `id` and returns or touches
+	// exactly one.
+	//
+	// **The column is nullable and NULL means unanswered** (D164). Three statements
+	// rather than two because that third state has to be readable — the prompt an
+	// upgraded instance gets at its first administrative sign-in is drawn from
+	// exactly one fact, *has anybody answered this yet*, and there is nowhere else
+	// to read it from. A `GetInstanceSettings` returning the whole row was written,
+	// generated unused into the Querier interface, and removed: nothing renders
+	// these settings, and a read of everything is the shape a settings API grows out
+	// of before anything has asked for one.
+	//
+	// Two statements write the answer, and the difference between them is which
+	// state they are allowed to leave. Setup may rewrite, because nothing has been
+	// committed to until the instance is claimed; the principal answers once.
+	// Record the operator's answer to the first-run prompt, at setup (D149).
+	//
+	// **Unconditional, which is deliberate and is the difference from
+	// AnswerUpdateCheck below.** The instance is unclaimed — `SetUpdateCheckAtSetup`
+	// has just counted the users to be sure of it — so an answer already sitting in
+	// the row is a previous setup attempt whose `Register` failed, and the operator
+	// retrying with the box unticked must be able to replace a yes with a no. A
+	// conditional write here would make the first attempt's answer the permanent one.
+	//
+	// The row count is the check: the row is inserted by migration 04300, so zero
+	// means the settings row is missing and the answer went nowhere. The setup path
+	// reads it rather than assuming, because the failure it guards against is an
+	// operator declining the update check and being checked on anyway.
+	SetUpdateCheckEnabled(ctx context.Context, enabled bool) (int64, error)
 	// Soft, unlike a folder. A domain is the namespace its links' aliases live in
 	// and `links.domain_id` is NOT NULL with no cascade, so a hard delete is refused
 	// by the database the moment one link exists; a soft delete keeps the row that
@@ -2151,6 +3060,31 @@ type Querier interface {
 	// a link someone deleted by accident is a common request, and the alias stays
 	// reserved while the row exists.
 	SoftDeleteLink(ctx context.Context, arg SoftDeleteLinkParams) (SoftDeleteLinkRow, error)
+	// The deletion itself: the first writer `status` and `deleted_at` have ever had.
+	//
+	// `status = 'deleted'` and `deleted_at` are set together and only together. The
+	// timestamp is what every query in this product filters on and what releases the
+	// address through the partial unique index; the status is what a person reading
+	// the row sees. Setting one without the other would make the two disagree about
+	// the same fact, which is the state the CHECK constraint cannot catch.
+	//
+	// `password_hash` is **not** cleared here. Scrubbing is the erasure pass's, and
+	// clearing it early would take the one field that makes a mistaken deletion
+	// recoverable by an operator inside the sweep's window, while ending no access
+	// that the session and key rows going in the same transaction have not already
+	// ended.
+	SoftDeleteUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Match a presented code and spend it, in one statement.
+	//
+	// Scoped by `user_id` as well as by the hash. The pending login already names the
+	// account, and matching on the hash alone would make this table a global lookup —
+	// correct today, because the hash index is unique, and one refactor away from a
+	// code minted for one account opening another.
+	//
+	// `used_at IS NULL` is in the predicate for the reason the replay guard's
+	// comparison is: single use has to be decided by the statement that spends it, or
+	// two simultaneous presentations of the same code both pass their check.
+	SpendMFARecoveryCode(ctx context.Context, arg SpendMFARecoveryCodeParams) (int64, error)
 	// Batch write of last_used_at, from the coalescing tracker rather than from the
 	// request path: authenticating a key must not cost a synchronous write.
 	//
@@ -2201,6 +3135,13 @@ type Querier interface {
 	// and "this campaign no longer ends" are different requests and one nullable
 	// parameter cannot express both.
 	UpdateCampaign(ctx context.Context, arg UpdateCampaignParams) (Campaign, error)
+	// Has anybody answered the update-check question on this instance?
+	//
+	// The whole of what the prompt needs, and deliberately not the value: whether
+	// the check is *on* is decided inside ClaimUpdateCheck, and a second reader of
+	// that fact is a second place for it to be got wrong. This answers only *is the
+	// question still open*, which is what decides whether an administrator is asked.
+	UpdateCheckAnswered(ctx context.Context) (bool, error)
 	// The trigger on destinations mirrors this into links.primary_url, so the hot
 	// path never joins.
 	//
@@ -2223,6 +3164,9 @@ type Querier interface {
 	// Scoped by organization as well as id, so the authorization decision the
 	// service made cannot be applied to a row in another tenant.
 	UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) (int64, error)
+	// Renames one code. The slug is untouched on purpose: it is printed, and a
+	// rename that moved it would break every copy already in the world.
+	UpdateQRCodeLabel(ctx context.Context, arg UpdateQRCodeLabelParams) (int64, error)
 	// Partial update, same COALESCE-with-narg shape as UpdateLink. The destination
 	// is not here: changing where a rule points is a write to its `destinations`
 	// row, so that the URL, its host and the tier check that accepted it stay in
@@ -2255,9 +3199,21 @@ type Querier interface {
 	// that never happened. created_at is left alone, because the entry is the same
 	// entry it was before the restart.
 	UpsertEnvBlockedDestination(ctx context.Context, arg UpsertEnvBlockedDestinationParams) error
-	// One row per link, which qr_codes_link_key (02700) is what makes true. Without
-	// the unique index this is two concurrent inserts and a link with two styles.
-	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (QrCode, error)
+	// One row per (link, slug), which qr_codes_link_slug_key (03700) is what makes
+	// true. Without the unique index this is two concurrent inserts and a link with
+	// two codes answering to one name.
+	//
+	// The label is not in the DO UPDATE list. This statement is how a *style* is
+	// written, and a style write must not silently rename the code it is drawn for;
+	// UpdateQRCodeLabel is the operation that renames one. **Nor is the logo**, for
+	// the same reason and with more at stake: restyling a code must not throw away
+	// the image somebody uploaded to it, and the insert branch leaves the column at
+	// its NULL default because a code that has just come into being has no logo.
+	// `is_default` is not in the DO UPDATE list either, and for the strongest of the
+	// three reasons: which code an untagged scan resolves through is not something a
+	// style write may move. ClearDefaultQRCode and MarkDefaultQRCode are the pair
+	// that moves it, and they are the only pair that does.
+	UpsertQRCode(ctx context.Context, arg UpsertQRCodeParams) (UpsertQRCodeRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

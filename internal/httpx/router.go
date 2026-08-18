@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/DevOfPie/LinkCtrl/internal/account"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -15,6 +16,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/link"
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/redirect"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
@@ -52,6 +54,22 @@ type Deps struct {
 	// public signup pages unregistered and every registration refused, which is
 	// the direction a missing dependency has to fail in.
 	Signup *signup.Service
+	// Recovery repairs a forgotten password (M51). Nil leaves the two endpoints
+	// and the two public pages unregistered, which is what the parity test
+	// against openapi.yaml compares itself to — and which is the state F141
+	// describes: no route back into an account whose password was lost.
+	Recovery *recovery.Service
+	// Accounts ends an account's life and erases what ending it leaves behind
+	// (M52). Nil leaves the endpoint and the dashboard's delete section
+	// unregistered, which is what the parity test against openapi.yaml compares
+	// itself to — and which is the state F44 describes: no account deletion of
+	// any kind, for anybody.
+	Accounts *account.Service
+	// MFA owns the second factor (M53). Nil leaves its endpoints, its enrolment
+	// page and the code prompt unregistered, which is what the parity test
+	// against openapi.yaml compares itself to — and which is the state every
+	// instance was in before this milestone.
+	MFA *auth.MFAService
 	// Disputes serves the blocked-attempt appeal path and the review queue. Nil
 	// leaves both the endpoints and the dashboard page unregistered, which is
 	// what the parity test against openapi.yaml compares itself to — and which
@@ -154,7 +172,7 @@ func (m *appMux) HandleFunc(pattern string, h func(http.ResponseWriter, *http.Re
 // it. TestReservedListCoversRegisteredRoutes enforces that.
 func registerAppRoutes(d Deps, app *appMux) {
 	if d.Auth != nil {
-		authAPI := &AuthAPI{Auth: d.Auth, Signup: d.Signup, Config: d.Config}
+		authAPI := &AuthAPI{Auth: d.Auth, Signup: d.Signup, Instance: d.Instance, Config: d.Config}
 		// Credential endpoints carry the login limit rather than the API one.
 		// Per-account lockout already exists and is not enough on its own: it
 		// answers "many guesses at one account", while this answers "many guesses
@@ -169,6 +187,59 @@ func registerAppRoutes(d Deps, app *appMux) {
 		// credential too — and the lockout does not cover it.
 		app.Handle("POST "+APIPrefix+"/auth/password",
 			guard(RequireAuth(http.HandlerFunc(authAPI.ChangePassword))))
+
+		// Account recovery (M51). Unauthenticated, necessarily — the caller has
+		// lost the only credential they had — and under the same `guard` as
+		// login and registration, so recovery and credential guessing draw on
+		// one budget. That sharing is why the milestone adds no limiter of its
+		// own: a per-route bucket would let an attacker burn one without
+		// touching the other.
+		if d.Recovery != nil {
+			rec := &RecoveryAPI{Recovery: d.Recovery}
+			app.Handle("POST "+APIPrefix+"/auth/forgot", guard(http.HandlerFunc(rec.Forgot)))
+			app.Handle("POST "+APIPrefix+"/auth/reset", guard(http.HandlerFunc(rec.Reset)))
+		}
+
+		// The second factor (M53).
+		//
+		// The challenge is under `guard` with login and recovery, so guessing six
+		// digits and guessing a password draw on one budget — the reasoning the
+		// recovery block above states, applied to the surface that sits between
+		// the password and the session.
+		//
+		// The four management endpoints are behind RequireAuth and not behind
+		// `guard`, and the asymmetry is deliberate: two of them verify a
+		// credential and would belong in the bucket on that reasoning, but they
+		// are reachable only with a session already in hand, so an attacker
+		// spending that budget has already got in. What bounds them is the
+		// account's own lockout, which every failed code charges.
+		if d.MFA != nil {
+			mfaAPI := &MFAAPI{MFA: d.MFA, Config: d.Config}
+			app.Handle("POST "+APIPrefix+"/auth/mfa/challenge",
+				guard(http.HandlerFunc(mfaAPI.Challenge)))
+			app.Handle("GET "+APIPrefix+"/auth/mfa", RequireAuth(http.HandlerFunc(mfaAPI.Status)))
+			app.Handle("POST "+APIPrefix+"/auth/mfa/enrol", RequireAuth(http.HandlerFunc(mfaAPI.Enrol)))
+			app.Handle("POST "+APIPrefix+"/auth/mfa/confirm", RequireAuth(http.HandlerFunc(mfaAPI.Confirm)))
+			app.Handle("POST "+APIPrefix+"/auth/mfa/recovery-codes",
+				RequireAuth(http.HandlerFunc(mfaAPI.RegenerateRecoveryCodes)))
+			app.Handle("DELETE "+APIPrefix+"/auth/mfa", RequireAuth(http.HandlerFunc(mfaAPI.Disable)))
+		}
+
+		// Account deletion (M52). Under the same `guard` as the credential
+		// endpoints above, because the confirmation is the account's own
+		// password and this is therefore a third surface on which one can be
+		// guessed — sharing the bucket is what stops an attacker doubling their
+		// budget by alternating between it and /login.
+		//
+		// **Not under `signedIn`'s web equivalent, and RequireAuth is the whole
+		// gate.** Handing over every organization on the way out is exactly how
+		// somebody arrives at deletion, so the caller belonging to nothing (D36)
+		// is the ordinary case here rather than the exception.
+		if d.Accounts != nil {
+			acct := &AccountAPI{Accounts: d.Accounts, Config: d.Config}
+			app.Handle("DELETE "+APIPrefix+"/account",
+				guard(RequireAuth(http.HandlerFunc(acct.Delete))))
+		}
 
 		// The switcher. On the auth service because which workspace a request
 		// acts in is identity, not a feature of one.
@@ -226,22 +297,56 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// seeing the code is links.read and styling it is links.update — see
 			// internal/link/qr.go and decisions.md, D75.
 			//
-			// The `.svg` sibling is the picture and is the one non-JSON response
-			// this API has besides the spec document. A second path rather than
-			// Accept negotiation, because an <img> and a download both send an
-			// Accept header nobody chose.
+			// The `.svg` and `.png` siblings are the picture and are the only
+			// non-JSON responses this API has besides the spec document. Paths
+			// rather than Accept negotiation, because an <img> and a download
+			// both send an Accept header nobody chose. `.png` is M49, and it is
+			// the one endpoint here that rasterises — internal/qr's MaxSize is
+			// the bound that lets it.
 			//
 			// PUT rather than PATCH: an omitted style field means its default,
 			// which is what makes "back to plain black on white" an empty object.
-			"GET " + APIPrefix + "/links/{id}/qr":            api.GetQR,
-			"GET " + APIPrefix + "/links/{id}/qr.svg":        api.GetQRSVG,
-			"PUT " + APIPrefix + "/links/{id}/qr":            api.SetQR,
-			"DELETE " + APIPrefix + "/links/{id}/qr":         api.DeleteQR,
-			"GET " + APIPrefix + "/folders":                  api.ListFolders,
-			"POST " + APIPrefix + "/folders":                 api.CreateFolder,
-			"PATCH " + APIPrefix + "/folders/{folderID}":     api.UpdateFolder,
-			"DELETE " + APIPrefix + "/folders/{folderID}":    api.DeleteFolder,
-			"POST " + APIPrefix + "/folders/{folderID}/move": api.MoveFolder,
+			//
+			// **The five above stayed the link's *default* code (M50).** A link
+			// may now carry several, and the choice m50.md required be made and
+			// recorded was between growing these an identifier and leaving them
+			// as the shorthand. They are the shorthand: the default code is what
+			// every untagged picture resolves through, so a client calling
+			// `GET /links/{id}/qr` today goes on getting the same code tomorrow,
+			// which is exactly what the contract test exists to hold.
+			//
+			// **What they answer for can now move, and the five paths cannot say
+			// so** (D183). The default became a flag, and `PUT
+			// …/qr/codes/{slug}/default` moves it — so a caller that wants the
+			// code rather than the role addresses it by its slug in the
+			// collection, which is the address that does not move. The shorthand
+			// keeps meaning *the role*, which is what it has always meant and
+			// what an untagged picture resolves through.
+			//
+			// The `/qr/codes` collection below is where several are addressed. Its
+			// members are keyed by slug rather than by id because the slug is what
+			// is printed on the code and therefore the identity somebody has in
+			// hand, and its `.svg`/`.png` siblings are one path segment deeper for
+			// a mechanical reason: ServeMux wildcards match a whole segment, so
+			// `{slug}.svg` is not a pattern that exists.
+			"GET " + APIPrefix + "/links/{id}/qr":                        api.GetQR,
+			"GET " + APIPrefix + "/links/{id}/qr.svg":                    api.GetQRSVG,
+			"GET " + APIPrefix + "/links/{id}/qr.png":                    api.GetQRPNG,
+			"PUT " + APIPrefix + "/links/{id}/qr":                        api.SetQR,
+			"DELETE " + APIPrefix + "/links/{id}/qr":                     api.DeleteQR,
+			"GET " + APIPrefix + "/links/{id}/qr/codes":                  api.ListQRCodes,
+			"POST " + APIPrefix + "/links/{id}/qr/codes":                 api.CreateQRCode,
+			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}":           api.GetQRCode,
+			"PUT " + APIPrefix + "/links/{id}/qr/codes/{slug}":           api.SetQRCode,
+			"DELETE " + APIPrefix + "/links/{id}/qr/codes/{slug}":        api.DeleteQRCode,
+			"PUT " + APIPrefix + "/links/{id}/qr/codes/{slug}/default":   api.SetDefaultQRCode,
+			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}/image.svg": api.GetQRCodeSVG,
+			"GET " + APIPrefix + "/links/{id}/qr/codes/{slug}/image.png": api.GetQRCodePNG,
+			"GET " + APIPrefix + "/folders":                              api.ListFolders,
+			"POST " + APIPrefix + "/folders":                             api.CreateFolder,
+			"PATCH " + APIPrefix + "/folders/{folderID}":                 api.UpdateFolder,
+			"DELETE " + APIPrefix + "/folders/{folderID}":                api.DeleteFolder,
+			"POST " + APIPrefix + "/folders/{folderID}/move":             api.MoveFolder,
 			// Campaigns (M41). A sibling collection rather than a subresource of
 			// a link, exactly as folders are: a campaign exists whether or not
 			// anything carries it, and which links do is a question the links
@@ -323,6 +428,38 @@ func registerAppRoutes(d Deps, app *appMux) {
 		for pattern, h := range protected {
 			app.Handle(pattern, RequireAuth(h))
 		}
+
+		// The upload surface (M50.5), registered apart from the map above
+		// because it carries a second limit.
+		//
+		// **A bucket of its own, and it is on the write rather than on both.**
+		// Everything else under `/api/v1` is a JSON body capped at 256 KiB;
+		// this one accepts up to qr.MaxLogoUploadBytes and hands them to an
+		// image decoder, so what a request costs is set by its content rather
+		// than by its shape and `API_RATE_PER_MIN` is a number nobody chose for
+		// it. Both limits apply — the API limiter still wraps the whole tree at
+		// the mount — and `UPLOAD_RATE_PER_MIN` is the narrower of the two.
+		//
+		// The clear is not limited beyond the API's own bound: it accepts no
+		// body, decodes nothing, and throttling it would only make it harder to
+		// remove a logo somebody regrets.
+		//
+		// **Four routes, two capabilities.** The `/qr/logo` pair is the default
+		// code's, on exactly the shape D133 gave `/qr.svg` and `/qr.png`: the
+		// shorthand answers for whichever code holds the default flag, which was
+		// the code with no slug when this was written (D130, reversed by D183).
+		// The owner overruled D136 on 2026-08-07 to add it — without it a link
+		// nobody had added a second code to, which is nearly every link, could
+		// carry no logo at all.
+		upload := RateLimit(d.Limits.Upload, "upload", d.Metrics, nil)
+		app.Handle("PUT "+APIPrefix+"/links/{id}/qr/logo",
+			upload(RequireAuth(http.HandlerFunc(api.SetQRLogo))))
+		app.Handle("DELETE "+APIPrefix+"/links/{id}/qr/logo",
+			RequireAuth(http.HandlerFunc(api.DeleteQRLogo)))
+		app.Handle("PUT "+APIPrefix+"/links/{id}/qr/codes/{slug}/logo",
+			upload(RequireAuth(http.HandlerFunc(api.SetQRCodeLogo))))
+		app.Handle("DELETE "+APIPrefix+"/links/{id}/qr/codes/{slug}/logo",
+			RequireAuth(http.HandlerFunc(api.DeleteQRCodeLogo)))
 	}
 
 	if d.Keys != nil {
@@ -432,6 +569,10 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"GET " + APIPrefix + "/notifications/unread":     n.Unread,
 			"POST " + APIPrefix + "/notifications/read":      n.ReadAll,
 			"POST " + APIPrefix + "/notifications/{id}/read": n.Read,
+			// Marking one unread is a DELETE of the read state rather than a
+			// second verb on the same noun: `read_at` is a column with a value
+			// or without one, and removing it is what this does (M48).
+			"DELETE " + APIPrefix + "/notifications/{id}/read": n.MarkUnread,
 		} {
 			app.Handle(pattern, RequireAuth(h))
 		}
@@ -480,6 +621,19 @@ func registerAppRoutes(d Deps, app *appMux) {
 		app.HandleFunc("POST /theme", web.ThemeSet)
 		app.Handle("POST /setup", guard(http.HandlerFunc(web.SetupSubmit)))
 		app.Handle("POST /account/password", guard(signedIn(web.PasswordChange)))
+		// Account deletion (M52), on the same limiter as the password change
+		// beside it and for the same reason: both verify the account's own
+		// password, so both are surfaces one can be guessed on.
+		//
+		// Under `signedIn` like its sibling, which means an account belonging to
+		// nothing (D36) reaches it through the API rather than through this
+		// page. That is the existing shape of `GET /account` rather than a
+		// choice this route makes — every dashboard page but two requires an
+		// organization — and changing it would be a decision about the
+		// dashboard, not about deletion.
+		if web.Accounts != nil {
+			app.Handle("POST /account/delete", guard(signedIn(web.AccountDelete)))
+		}
 		app.Handle("POST /account/domain", signedIn(web.DomainUpdate))
 		app.Handle("POST /account/bots", signedIn(web.BotBlockingUpdate))
 
@@ -511,14 +665,54 @@ func registerAppRoutes(d Deps, app *appMux) {
 			app.Handle("POST /verify/{token}", guard(http.HandlerFunc(web.VerifySubmit)))
 		}
 
+		// Account recovery (M51). Public for the reason redemption and signup
+		// are — somebody who has lost their password has no session — and under
+		// the same login limiter, so a reset sweep and a credential sweep draw
+		// on one budget rather than two.
+		//
+		// Registered whether or not a relay is configured, so a mail-free
+		// instance answers the refusal these handlers write rather than the
+		// alias catch-all's 404. "This instance cannot send mail" and "there is
+		// no such page" are different answers and only one of them is true —
+		// the same reason the signup pages are registered on a closed instance.
+		if web.Recovery != nil {
+			app.HandleFunc("GET /forgot", web.ForgotPage)
+			app.Handle("POST /forgot", guard(http.HandlerFunc(web.ForgotSubmit)))
+			app.HandleFunc("GET /reset/{token}", web.ResetPage)
+			app.Handle("POST /reset/{token}", guard(http.HandlerFunc(web.ResetSubmit)))
+		}
+
+		// The second factor's public half (M53): the prompt that stands between a
+		// right password and a session.
+		//
+		// Public for the reason the recovery pages are — there is no session yet,
+		// which is the whole point — and under the same login limiter, so a sweep
+		// of six-digit guesses and a sweep of passwords draw on one budget.
+		if web.MFA != nil {
+			app.HandleFunc("GET /login/code", web.MFAChallengePage)
+			app.Handle("POST /login/code", guard(http.HandlerFunc(web.MFAChallengeSubmit)))
+		}
+
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
 		for pattern, fn := range map[string]http.HandlerFunc{
-			"GET /dashboard":   web.Dashboard,
-			"GET /links":       web.LinksPage,
-			"POST /links":      web.LinkCreate,
-			"GET /links/{id}":  web.LinkDetail,
-			"POST /links/{id}": web.LinkUpdate,
+			"GET /dashboard": web.Dashboard,
+			// The answer to the question an upgraded instance is asked at its
+			// first administrative sign-in (M55, D164). Under `signedIn` like
+			// everything else here, and gated a second time in the service on
+			// `instance.admin` — the session only says who is asking.
+			//
+			// `/instance/` rather than `/dashboard/` or `/settings/`: the thing
+			// being written belongs to the box, and naming it after the page that
+			// happens to draw the prompt would make the next instance-level
+			// answer either misfiled or a third prefix. It cost one line in
+			// internal/alias/reserved.txt, which is the reserved-list guard doing
+			// its job rather than an obstacle to route around.
+			"POST /instance/update-check": web.UpdateCheckAnswer,
+			"GET /links":                  web.LinksPage,
+			"POST /links":                 web.LinkCreate,
+			"GET /links/{id}":             web.LinkDetail,
+			"POST /links/{id}":            web.LinkUpdate,
 			// Folders (M38). Four POSTs and no JavaScript: creating, renaming,
 			// moving and deleting are each a form that submits on its own, so the
 			// page works with scripting off. htmx swaps the tree in place when it
@@ -534,12 +728,18 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"POST /campaigns":                     web.CampaignCreate,
 			"POST /campaigns/{campaignID}":        web.CampaignUpdate,
 			"POST /campaigns/{campaignID}/delete": web.CampaignDelete,
-			"POST /links/{id}/qr":                 web.LinkQRStyle,
-			"GET /folders":                        web.FoldersPage,
-			"POST /folders":                       web.FolderCreate,
-			"POST /folders/{folderID}":            web.FolderRename,
-			"POST /folders/{folderID}/move":       web.FolderMove,
-			"POST /folders/{folderID}/delete":     web.FolderDelete,
+			// The QR panel's own route (M48), and the POST that has always
+			// written the style. The GET is what makes the panel a panel: its
+			// contents render as an ordinary page when opened directly, and the
+			// popover on the link page is the same block drawn over the surface
+			// it belongs to.
+			"GET /links/{id}/qr":              web.LinkQRPage,
+			"POST /links/{id}/qr":             web.LinkQRStyle,
+			"GET /folders":                    web.FoldersPage,
+			"POST /folders":                   web.FolderCreate,
+			"POST /folders/{folderID}":        web.FolderRename,
+			"POST /folders/{folderID}/move":   web.FolderMove,
+			"POST /folders/{folderID}/delete": web.FolderDelete,
 			// Registered hostnames (M39). Three POSTs and no JavaScript, like
 			// the folder page: registering, renaming and removing are each a
 			// form that submits on its own. The page exists to say what the API
@@ -599,9 +799,14 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"GET /notifications":                     web.NotificationsPage,
 			"POST /notifications/read":               web.NotificationReadAll,
 			"POST /notifications/{id}/read":          web.NotificationRead,
-			"POST /keys":                             web.KeyCreate,
-			"POST /keys/{id}/revoke":                 web.KeyRevoke,
-			"GET /account":                           web.AccountPage,
+			// Where a notification leads, and the undo for the read it performs
+			// on the way (M48). Both POST: opening one changes state, and
+			// unreading one is the correction for having done so by accident.
+			"POST /notifications/{id}/open":   web.NotificationOpen,
+			"POST /notifications/{id}/unread": web.NotificationUnread,
+			"POST /keys":                      web.KeyCreate,
+			"POST /keys/{id}/revoke":          web.KeyRevoke,
+			"GET /account":                    web.AccountPage,
 			// Read-only, and registered GET-only on purpose: a POST to /feeds
 			// must be refused by the mux rather than by a handler somebody
 			// could add one to. D40, and TestTheDisclosurePageAcceptsNoWrite.
@@ -610,6 +815,39 @@ func registerAppRoutes(d Deps, app *appMux) {
 			"POST /workspace/default": web.WorkspaceDefault,
 		} {
 			app.Handle(pattern, signedIn(fn))
+		}
+
+		// The dashboard's own upload (M50.5), registered apart from the map
+		// because it carries the same second limit the API's does.
+		//
+		// **The same limiter object, not a second one with the same number.** The
+		// reasoning is the login guard's, one bucket above: a budget an attacker
+		// can double by alternating between the API and the dashboard is not the
+		// budget an operator configured. What differs is the refusal — a page
+		// rather than a problem document, because a browser is what posts here.
+		//
+		// Removing a logo posts to `POST /links/{id}/qr` under its own button
+		// name, the way reset and remove already do: it carries no body worth
+		// limiting, and one action attribute per surface is what keeps a refusal
+		// coming back to the form it was made from.
+		app.Handle("POST /links/{id}/qr/logo",
+			RateLimit(d.Limits.Upload, "upload", d.Metrics, web.tooManyRequests)(
+				signedIn(web.LinkQRLogo)))
+
+		// The second factor's signed-in half (M53). Its own page rather than a
+		// section on /account, because enrolment is a sequence — scan, confirm,
+		// write the recovery codes down — and a sequence sharing a page with six
+		// unrelated panels is one people abandon halfway. /account keeps the
+		// summary and the link.
+		if web.MFA != nil {
+			for pattern, fn := range map[string]http.HandlerFunc{
+				"GET /account/mfa":                 web.MFAPage,
+				"POST /account/mfa":                web.MFAEnrol,
+				"POST /account/mfa/recovery-codes": web.MFARegenerate,
+				"POST /account/mfa/disable":        web.MFADisable,
+			} {
+				app.Handle(pattern, signedIn(fn))
+			}
 		}
 
 		if web.Invites != nil {
@@ -639,6 +877,12 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// posting into a 404.
 			if web.Instance != nil {
 				for pattern, fn := range map[string]http.HandlerFunc{
+					// The roster's own route (M48), the panel pattern's second
+					// caller. Registered beside the writes rather than with the
+					// queue for the reason the writes are: without web.Instance
+					// the section is not drawn, and a page with no service
+					// behind it would render a form posting into a 404.
+					"GET /disputes/reviewers":              web.DisputeReviewersPage,
 					"POST /disputes/reviewers":             web.DisputeReviewerGrant,
 					"POST /disputes/reviewers/{id}/revoke": web.DisputeReviewerRevoke,
 				} {

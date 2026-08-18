@@ -182,7 +182,8 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 		// It also starts the grace window on a *serving* hostname, which is
 		// correct: a failed check is a failed check, and D70's clock does not
 		// care who asked for it.
-		if _, ferr := s.q.MarkDomainVerificationFailed(ctx, failedWrite(row, reason)); ferr != nil {
+		failed, ferr := s.q.MarkDomainVerificationFailed(ctx, failedWrite(row, reason))
+		if ferr != nil {
 			if errors.Is(ferr, pgx.ErrNoRows) {
 				// The row changed under the check, so this failure is about a name
 				// it no longer carries. Answered as the conflict it is rather than
@@ -196,12 +197,41 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 		// A validation error rather than a 500: nothing went wrong here, the
 		// record is not there yet. The message carries the name and the value so
 		// the page that shows the refusal shows what to publish.
+		//
+		// **Which sentence, though, depends on whether the hostname is still
+		// being served (F161).** The write above deliberately leaves `verified_at`
+		// alone, so a serving hostname goes on serving through D70's grace window
+		// — which means that on a serving row *"is not verified"* is simply false,
+		// and the page renders it directly above a badge that re-reads the same
+		// column and says *Verified — links are served here*. One response
+		// asserting both is the page contradicting itself on the exact action its
+		// reader took to resolve the doubt.
+		//
+		// The `unverified` code is kept on both arms because it is the documented
+		// API contract for this endpoint (`api/openapi.yaml`, *"Failure is 422
+		// with hostname/unverified"*). What was wrong is the prose a human reads,
+		// not the token a client branches on.
+		//
+		// **Asked of the write, not of the read**, for the reason the verified
+		// branch below states in full: `row` was read before this call's DNS
+		// lookup, and the hourly pass can unverify inside that gap. Branching on
+		// it would put *"Links on it are still served"* beside a badge that
+		// re-reads the column and says the hostname stopped serving — F161
+		// inverted, by the same read-versus-write confusion F180 named.
+		// `failed` is the row the write returned and is already in hand.
+		publish := fmt.Sprintf("Publish a TXT record at %s with the value %s, then check again.",
+			domain.ChallengeRecordName(row.Hostname), derefString(row.VerificationToken))
+		if failed.VerifiedAt != nil {
+			return nil, domain.ValidationErrors{{
+				Field: "hostname", Code: "unverified",
+				Message: fmt.Sprintf("%s failed its DNS check: %s. Links on it are still "+
+					"served: %s %s", row.Hostname, reason, stillServedFor(failed, s.verifyGrace()),
+					publish),
+			}}
+		}
 		return nil, domain.ValidationErrors{{
 			Field: "hostname", Code: "unverified",
-			Message: fmt.Sprintf("%s is not verified: %s. Publish a TXT record at %s "+
-				"with the value %s, then check again.",
-				row.Hostname, reason, domain.ChallengeRecordName(row.Hostname),
-				derefString(row.VerificationToken)),
+			Message: fmt.Sprintf("%s is not verified: %s. %s", row.Hostname, reason, publish),
 		}}
 	}
 
@@ -215,7 +245,14 @@ func (s *Service) VerifyDomain(ctx context.Context, actor *auth.Identity, id uui
 	// Only when it *became* verified. Re-running the check on a domain that has
 	// been serving for a month is not an administrative change, and recording one
 	// every time somebody presses the button would bury the event that matters.
-	if row.VerifiedAt == nil {
+	//
+	// **Asked of the write, not of the read (F185).** `row` was read before this
+	// call's DNS lookup, so two people pressing *Verify* on one hostname at once —
+	// or one person double-clicking it — both find the row unverified and both
+	// record the event for a single verification. That is F180's defect at the
+	// second of its two sites, and it gets F180's answer rather than a second one:
+	// the row the write returned is current and says which call filled the NULL.
+	if newlyVerified(verified) {
 		s.recordDomainEvent(ctx, actor, audit.ActionDomainVerified, verified.ID, map[string]any{
 			// The name that was **checked**, taken from the row the challenge was
 			// resolved against rather than from the row the write returned. They
@@ -252,6 +289,34 @@ func verifiedWrite(row dbgen.Domain) dbgen.MarkDomainVerifiedParams {
 	}
 }
 
+// newlyVerified says whether the write that returned this row is the write that
+// verified it (F180, F185).
+//
+// **Both callers, because there are only two and they had drifted.** The job
+// family asks it at `:482` and the manual button at `:240`; F180 fixed the first
+// and F185 the second, and the reason the second was worth its own row is that
+// one site branching on the write's return while its twin branched on a stale
+// read teaches the next reader whichever pattern they open first.
+//
+// **The row a caller read before its DNS lookup cannot answer this and the row
+// the write returned can.** MarkDomainVerified sets `verified_at =
+// COALESCE(verified_at, now())` and `updated_at = now()` in one statement, so
+// the two hold the *same* transaction timestamp exactly when this call filled the
+// NULL; a row that was already verified comes back with a `verified_at` older
+// than the update that has just touched it. That is the whole discriminator, and
+// it is read out of what the database returned rather than out of what the caller
+// remembered, which is what makes it survive a second leader landing in the gap.
+//
+// **The residual is stated rather than claimed away**: `now()` is the
+// transaction's start time and is taken before the second writer blocks on the
+// first one's row lock, so two writes that began inside the same microsecond
+// would both see equality and both record. Closing that would take a column or a
+// `RETURNING (xmax = 0)` on the statement itself; what is left here is a window
+// of one microsecond against the ten-minute one this replaces.
+func newlyVerified(row dbgen.Domain) bool {
+	return row.VerifiedAt != nil && row.VerifiedAt.Equal(row.UpdatedAt)
+}
+
 // failedWrite is the same conditional write on the failure path (F131).
 //
 // The gap is identical — the same read, the same nameserver holding it open, the
@@ -267,6 +332,36 @@ func failedWrite(row dbgen.Domain, reason string) dbgen.MarkDomainVerificationFa
 		ID: row.ID, Hostname: row.Hostname, VerificationToken: row.VerificationToken,
 		VerificationError: reason,
 	}
+}
+
+// stillServedFor says, in a clause, how much of D70's grace window is left on a
+// hostname that has just failed a check and is still being served (F161).
+//
+// **Both timestamps come out of the write that just landed, so this needs no
+// clock of its own.** `verification_checked_at` is *this* check and
+// `verification_failing_since` is the check that started the run, and they are
+// written by the same statement — so the comparison is made entirely in database
+// time and cannot be skewed by an app server whose clock has drifted.
+//
+// The two arms exist because the window can already be spent when somebody
+// presses the button: the hourly pass is what stops serving, so between expiry
+// and the next pass — up to an hour — the deadline is in the *past* while links
+// are still being served, and a sentence that only knows how to say "stop at
+// <time>" reads as a promise the instance has already broken.
+func stillServedFor(failed dbgen.Domain, grace time.Duration) string {
+	since := failed.VerificationFailingSince
+	if since == nil {
+		// Cannot happen — the statement COALESCEs it — but a missing anchor must
+		// not be read as a window that has not started.
+		return "they stop at the next check unless the record comes back."
+	}
+	stops := since.Add(grace)
+	if failed.VerificationCheckedAt != nil && !stops.After(*failed.VerificationCheckedAt) {
+		return fmt.Sprintf("the grace window ran out at %s, so they stop at the next "+
+			"check unless the record comes back.", stops.UTC().Format(time.RFC1123))
+	}
+	return fmt.Sprintf("they stop at %s unless the record comes back.",
+		stops.UTC().Format(time.RFC1123))
 }
 
 // domainChangedUnderCheck is what the on-demand path answers when the write found
@@ -397,7 +492,15 @@ func (s *Service) ReverifyDomains(ctx context.Context, now time.Time, batch int3
 				errs = append(errs, fmt.Errorf("verify %s: %w", full.Hostname, err))
 				continue
 			}
-			if full.VerifiedAt == nil {
+			// **Asked of the write, not of the read (F180).** `full` was read
+			// before this pass's DNS lookup — seconds of it, against a nameserver
+			// the registrant runs — so two leaders that both read the row
+			// unverified both concluded they had verified it, and both wrote a
+			// `domain.verified` audit record for one verification. The idempotent
+			// UPDATE underneath hid nothing, because the state was never what was
+			// duplicated. What the write returns is current, and it says which
+			// call filled the NULL.
+			if newlyVerified(verified) {
 				sum.Verified++
 				changed = true
 				// Stamped with the name the check was made against, for the

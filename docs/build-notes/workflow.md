@@ -129,9 +129,13 @@ The trigger phrase **"Work on Phase"** still means `/work phase`.
 [phase-loop.md](phase-loop.md) holds the phase cycle: validate the next
 milestone, build it, land it, repeat until the phase ends. It sequences the gates
 below and never replaces them, and it stops at the phase's last milestone rather
-than starting the next one. It runs as two actors — an orchestrator that
-validates, accepts and commits, and a worker per milestone that builds and stops
-before the commit. The workflow loop is **not** delegated, and
+than starting the next one. It runs as three actors — an orchestrator that
+validates, accepts and commits, a worker per milestone that builds and stops
+before the commit, and a
+[reviewer](phase-loop.md#reviewer--between-33-and-acceptance) per milestone that
+reads the tree between the two and asks the question neither of them is asking:
+whether this diff makes a **shipped** milestone's claim false. The workflow loop
+is **not** delegated, and
 [work-loop.md](work-loop.md#the-workflow-loop) says why.
 
 ### The loop is being stopped

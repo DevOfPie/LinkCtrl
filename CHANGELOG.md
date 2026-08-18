@@ -10,11 +10,13 @@ whether an upgrade is safe:
 - **The REST API is `/api/v1`** and is a stable contract. A breaking change there
   becomes `/api/v2`, not a major version bump here.
 - **The product** is pre-1.0 while account lifecycle and identity are incomplete.
-  There is no account recovery — a forgotten password locks the account out
-  permanently — and no account deletion or erasure of any kind; MFA and SSO are a
-  later phase, and a dashboard redesign is planned for early Phase 3. Each of
-  those moves the product surface, so the version stays in the `0.x` range until
-  they have settled. `0.x` here means "the product surface may still move", not
+  SSO is a later phase, and a dashboard redesign is under way. Three entries left
+  this list at 0.3.0 because they were built: account recovery — a forgotten
+  password is recoverable by the person who forgot it, on an instance with a
+  mailer — account deletion with subject erasure, and two-factor authentication.
+  Each of the rest
+  moves the product surface, so the version stays in the `0.x` range until they
+  have settled. `0.x` here means "the product surface may still move", not
   "unfinished": everything documented as built is tested and exercised end to end.
   *(This read "pre-1.0 while Phase 2 is outstanding. Shared workspaces, folders
   and custom domains will change the dashboard and add tables" until 0.2.0 — all
@@ -25,7 +27,1165 @@ migrations run at boot.
 
 ## [Unreleased]
 
-Nothing yet.
+## [0.3.0] - 2026-08-18
+
+### Added
+
+- **A rolling deploy of every replica, under load, costs nothing — and a single
+  container is still a tested configuration.**
+
+  The multi-replica contract below is a promise. This is the measurement of it,
+  and the guarantee that it was not bought at the expense of the deployment
+  almost everybody actually runs.
+
+  **Three replicas behind a load balancer, every one destroyed and rebuilt while
+  2,000 requests a second went through it: zero requests failed, zero were
+  retried, cached p99 295µs against a 20ms target, and the whole replacement
+  took 35 seconds.** No request ever waited — the load generator never needed
+  more than three concurrent connections for the entire run.
+
+  **The drain delay is why, and it now has a price rather than a rationale.**
+  The same replacement performed with SIGKILL instead — no drain, no readiness
+  change, the listener simply gone — cost 905 retried requests of 239,833, four
+  response errors, and a worst case of a full second. Still no failures, and the
+  credit for that belongs to the load balancer retrying rather than to this
+  product: a balancer configured without retries answers 503 to all 905. If you
+  run several replicas, `LINKCTRL_SHUTDOWN_DRAIN_DELAY` is the number that
+  decides which of those two paragraphs describes your deploys.
+
+  **A single container remains a supported, tested configuration, and nothing in
+  the high-availability work is required to run it.** The release image is
+  started on a network carrying nothing but Postgres — no Redis, no load
+  balancer, no second replica — and the redirect path, the dashboard, the API,
+  the scheduler, cache invalidation and rate limiting are each driven over HTTP
+  until they answer. It runs in CI on every push. A future change that makes any
+  of them need a second component fails the build, which is the entire reason it
+  was written now rather than after something did.
+
+  **Two replicas can no longer both lead the same scheduled job during a
+  deploy.** Every binary from 0.2.0 on asks for the same per-family advisory
+  locks, so the old replica and the new one contend for one lock rather than
+  holding one each, and a test now freezes those assignments so a future rename
+  cannot quietly undo it. What remains is a leader that loses its database
+  connection while still working, which no deploy causes and every job is
+  written to survive being run twice.
+
+  Both runs were taken on the built image against the seeded 100,000-link
+  dataset; the figures, the method and what they cannot show are in
+  [docs/slo.md](docs/slo.md).
+
+- **Running more than one replica is now a supported configuration, because
+  there is finally a contract to support.**
+
+  Multi-replica operation already worked and was already documented. What did
+  not exist was a statement of what each health endpoint promises, what a load
+  balancer must do with it, and what happens to work in flight when a replica is
+  killed rather than shut down politely. Without those, running two containers
+  was something you did at your own risk.
+
+  **The load-balancer contract, in one rule.** Wire liveness to `/healthz` and
+  readiness to `/readyz`. Then act on the status **code**: 503 means take the
+  replica out of rotation, 200 means keep it — *including* `degraded`. A
+  `degraded` replica is one whose Redis is unreachable, and it still resolves
+  every link, because redirects fall through to Postgres. An operator who reads
+  `degraded` as *remove* takes their entire deployment out during a Redis
+  outage, which is the exact failure the word exists to prevent. `/healthz`
+  touches neither Postgres nor Redis, ever — a liveness probe that followed the
+  database would restart every replica at once during one blip.
+
+  **There is no startup probe, and that is now a stated choice** rather than
+  something you might notice missing. Migrations run before the listener binds,
+  so *not yet ready* and *not yet listening* are the same observable state.
+
+  **What a killed replica loses: at most its buffered click events, and nothing
+  else.** Scheduled jobs move to a follower within one tick of that job's family,
+  because a Postgres advisory lock is released the instant the session holding
+  it ends — nothing detects the death, the next follower simply finds the lock
+  free. Webhook deliveries and outbox mail are claimed under a 60-second lease,
+  so a dead replica's claims come back on their own and are completed elsewhere.
+  Delivery is at-least-once and now says so: dedupe on the `X-LinkCtrl-Delivery`
+  uuid.
+
+  **`LINKCTRL_SHUTDOWN_DRAIN_DELAY` gets arithmetic instead of a
+  recommendation.** It must exceed your load balancer's health-check interval
+  times its failure threshold, plus a check's worth of slack. The shipped `5s`
+  is sized for having no balancer at all and is explicitly not a
+  recommendation — and because the drain delay and `SHUTDOWN_TIMEOUT` are spent
+  in sequence under a 25-second ceiling, raising one trades against the other.
+
+  **No component was added for any of this.** No coordinator, no external lock
+  service, no second Postgres, no session affinity. A one-container deployment
+  is unaffected: with one replica the holder of every lock is the only
+  candidate. The contract is in `docs/operations.md`, and every clause of it
+  that is a promise rather than an instruction has a test behind it.
+
+- **This instance can now tell you when a new LinkCtrl is released — and it asks
+  you first. Read this one even if you read nothing else here.**
+
+  Once a day the instance asks GitHub whether a newer version exists and, if
+  there is one, puts a notification in the instance principal's inbox. Nobody
+  else is told: upgrading is the operator's, and a workspace member can only be
+  made anxious by it.
+
+  **What the request carries, in full.** This server's source address, and the
+  version it is running, in the `User-Agent`. Nothing else — no instance
+  identifier, no deployment size, no link counts, no configuration, nothing
+  about the people using it. There is no request body, no query string and no
+  credential. The response is read for a version number and discarded.
+
+  **Nothing leaves your instance until somebody here has been asked and said
+  yes.** On a fresh instance the question is on the setup page that claims it,
+  ticked. **On an instance you are upgrading, it is put to the first
+  administrator who signs in afterwards, and the check does nothing until they
+  answer** — an upgrade cannot consent on your behalf, and neither can this
+  release note. The consequence is worth stating: an instance nobody signs into
+  never asks, and never tells you a release exists.
+
+  Either way it is asked once. `LINKCTRL_UPDATE_CHECK=false` on the deployment
+  is the answer given from the other side, it overrides whatever was said in a
+  browser, and it cannot be overridden from one; air-gapped and
+  egress-restricted deployments want it, and `docs/deployment.md` says what
+  leaving it on costs them. A client claiming an instance through
+  `POST /api/v1/auth/setup` can send `update_check`; omitting it leaves the
+  question for whoever signs in.
+
+  **`docs/SECURITY.md` no longer says there is no phone-home in the default
+  configuration**, because there is one. That sentence was part of why somebody
+  would self-host this, so it is edited rather than qualified: the *Egress* row
+  now enumerates **five** outbound connections instead of four, and this is the
+  only one of them that an ordinary instance turns on by agreeing to a question
+  rather than by being configured.
+
+  A failed check is silent — one debug line, no retry until the next day, and
+  never a startup failure or anything a user sees. **So no notification is not
+  evidence of being up to date:** GitHub's unauthenticated API is rate-limited
+  per source address, and a throttled check looks exactly like a check that
+  found nothing.
+
+- **An API key belongs to your account, not to one organization.** A key used to
+  be minted *into* the organization you were standing in and could never leave
+  it. It is now minted by your account and reaches the organizations your account
+  belongs to, the way a personal access token does elsewhere.
+
+  **Nothing about the keys you already have changed.** Every key issued before
+  this release stays pinned to the organization it was created in, and the
+  upgrade writes no rows. What changed is what a *new* key is.
+
+  **Three reaches, and the page names each.** *Workspace* is the default and is
+  unchanged — the key acts where you made it. *Organization* pins the key to one
+  tenant for its whole life. *Account* is the new one, and it is what an unpinned
+  key now is unless you pin it: each request resolves one organization the way a
+  sign-in does, following where you are working.
+
+  **The same key is more powerful in one organization than in another, and that
+  is deliberate.** A key's permissions are its scopes intersected with your role
+  *there*, worked out on every request. Own an organization and the key can do
+  what an owner can; be a viewer in the next one and the identical key can only
+  read. Being demoted narrows every key you hold in that organization at once,
+  without touching any of them.
+
+  **An account key reaches an organization you join later.** That is what account
+  means, and the alternative would be a key whose reach is a snapshot of a
+  membership list nobody can see or correct. If you want the snapshot, pin the
+  key. Pinning is irreversible: a rotation may narrow a key's reach and never
+  widen it, so an account key can rotate into a pinned one and a pinned key
+  cannot rotate back.
+
+  **Your key list is your account's, not the current organization's.** It used to
+  show only keys from the organization you were signed into while revoking
+  reached every key you owned — so a key you could not see, you could still
+  delete. Both now answer the same question.
+
+  **`GET /api/v1/workspaces` answers an account key with every organization it
+  reaches**, which reverses what 0.2.0 changed. That release narrowed the
+  endpoint to one organization because a key was issued for one and reading
+  about the others disclosed tenants it could not act in. An account key acts in
+  them, so those are the tenants it is told about — minus any an administrator
+  has cut it out of. A **pinned** key still sees one, for the original reason.
+
+  **An administrator can stop an account key in their organization without
+  destroying it.** Holding `apikeys.write` organization-wide, deleting somebody
+  else's account key cuts your organization out of its reach: the key keeps
+  working for its owner everywhere else, and the record is `apikey.reach_revoked`
+  rather than `apikey.revoked`. A key pinned to your organization is still
+  revoked outright, because your organization is all it ever reached.
+
+  An account key needs an **organization-wide** membership wherever it lands. If
+  your role in an organization is scoped to a single workspace, an account key
+  does not act there — mint a key in that workspace instead.
+
+  For API clients: `POST /api/v1/api-keys` takes an optional `organization_id`
+  which pins the key, `POST /api/v1/api-keys/rotate` takes an optional `reach`,
+  and every key representation gained a nullable `organization_id`. `lctl apikey
+  create` gained `--pin`. The audit log gained `apikey.reach_revoked`.
+
+- **Two-factor authentication, with recovery codes that make it survivable.**
+  TOTP — the six digits an authenticator app shows — on top of the password.
+
+  **It is off until an operator turns it on, and then off until each person turns
+  it on.** Set `LINKCTRL_MFA_SECRET_KEY` to at least 32 bytes
+  (`openssl rand -base64 48`) and the account page offers enrolment; leave it
+  unset and nothing changes, which is what every instance was before this. The
+  variable encrypts each account's secret at rest, and it is deliberately **not**
+  `LINKCTRL_API_KEY_PEPPER`: sharing one value would mean rotating an API-key
+  secret also locked every account out of its authenticator.
+
+  Enrolling shows a QR code and the secret in text beside it — a phone cannot
+  photograph its own screen — and nothing is written to the account until a code
+  from that secret verifies. An enrolment you abandon leaves the account exactly
+  as it was.
+
+  **Ten single-use recovery codes** are issued at the same time and shown once.
+  They are the answer to a lost phone, and they are why this shipped after account
+  recovery rather than before it: a second factor makes being locked out strictly
+  more likely. Using one is recorded and notifies the account, because it means
+  either the phone is gone or somebody else has your codes. You can issue a new
+  set at any time, which stops the old one working.
+
+  Signing in gains a step: the password, then the code. Wrong codes count against
+  the same lockout a wrong password does, so getting the password right does not
+  buy an unlimited supply of guesses at six digits. A code that has just worked
+  cannot work again inside its own window. Clocks are allowed to be thirty seconds
+  out in either direction, and no more.
+
+  **A password reset does not skip the code.** Proving you can read an email is
+  one factor; letting it stand in for the other would make this worth exactly the
+  mailbox. If you have lost the password *and* the phone, a recovery code is the
+  way in; if you have lost all three, whoever runs the instance can help.
+
+  Turning it off needs the password **and** a code — an authenticator code or a
+  recovery code — and removes the authenticator entry and every recovery code
+  together. An API key cannot do it: a key is not a person.
+
+  Nothing new is downloaded and nothing new is dialled. The algorithm is RFC 6238
+  over the Go standard library, the QR code is the generator the link pages
+  already use, and a source scan now fails the build if anything on the
+  authentication path grows an outbound connection.
+
+  **What is not here, and was considered:** WebAuthn, passkeys, SMS and push, each
+  a separate credential model with its own recovery story; and any way for an
+  organization to *require* a second factor of its members, which needs a
+  permission, an enforcement point and an answer for members who cannot enrol.
+
+  For API clients: `POST /api/v1/auth/login` now answers `401` with an
+  `mfa-required` problem document carrying `mfa_token` when the account has a
+  second factor, and `POST /api/v1/auth/mfa/challenge` completes the sign-in. A
+  client that has not been updated gets no session and an error it does not
+  recognise, rather than believing it signed in.
+
+- **An account can be deleted, and what it leaves behind is erased.** Until now
+  nothing in this product removed a user. The schema had said otherwise since the
+  first migration — `users.anonymized_at` carried the comment *"set by the GDPR
+  erasure routine"* and had no writer — and by 0.2.0 five separate places
+  described erasure in the present tense while none of it existed. Those
+  sentences were corrected then. This is the feature.
+
+  **`DELETE /api/v1/account`, and a section on the account page.** Both act on
+  the calling account and nothing else: there is no administrative
+  delete-somebody-else, because who may end another person's account is a
+  permission question this release does not answer. Confirmation is the
+  account's own password, and an API key is refused — a leaked credential must
+  not be able to delete the person who owns it.
+
+  **Two refusals, each naming what to do about it.** The account that
+  administers the instance cannot be deleted; move the principal first with
+  `lctl instance principal move --to <email>`. Nor can the sole owner of an
+  organization that still exists — hand it over or delete it first, and the
+  refusal says which organizations are blocking. Being left belonging to no
+  organization at all is *not* refused: it is the ordinary way to arrive here.
+
+  **What happens at once, in one transaction.** Sessions, API keys,
+  memberships, notifications, outstanding password-reset links and any
+  instance-level grants are removed. The account is marked deleted, and the
+  address becomes available for a new account. When the call returns, no
+  credential reaches the account.
+
+  **What happens within the hour.** The audit log and the destination-dispute
+  queue keep their rows — they are records of what happened, and one that
+  vanishes with its subject is not a record — and an hourly pass replaces the
+  name and address in them with the fixed label `deleted account`, then clears
+  the account row's own fields. It reaches two more tables for the same reason:
+  the invitations you redeemed and the notification your inviter received when
+  you accepted, both of which belong to somebody else and so were never yours to
+  delete. Access does not wait for that pass; only the residue does.
+
+  **Two consequences worth knowing before you rely on it.** The surviving actor
+  id is what keeps an erased person's entries correlated with each other, and
+  that makes it pseudonymous rather than anonymous data: the residue identifies
+  nobody from inside this instance, and anybody holding an external
+  id-to-person mapping can still re-identify the actor. And **two addresses are
+  deliberately left**: an *outstanding* invitation addressed to you, because
+  that is an offer to an address rather than a record of a person and the
+  address became reusable the moment the account was deleted; and a queued mail
+  message not yet purged, which is bounded by the mail retention schedule but
+  can outlive the account on an instance whose relay is down. An address in the
+  **detail** of an audit record *is* reached — this paragraph said it was not
+  while the release note below said it was, and the code is what settles it.
+  `docs/SECURITY.md` states all of it.
+
+  **Reusing a deleted address is correct, and will look wrong the first time.**
+  A new account can be created at an address that appears in old audit entries
+  under a tombstone. They are different people, and nothing about the old
+  account carries over.
+
+  Your links are not deleted. They belong to the workspace, which outlives you
+  leaving it.
+
+- **A forgotten password stops being permanent.** Until now the only route back
+  into an account whose password was lost was an operator editing an argon2 hash
+  in the database on somebody's behalf — true of every account on every instance,
+  including the one that administers the box. There is now a *forgot your
+  password?* link on the sign-in page, a `GET/POST /forgot` form behind it, and a
+  `GET/POST /reset/{token}` page that the emailed link lands on. The API has the
+  same pair: `POST /api/v1/auth/forgot` and `POST /api/v1/auth/reset`. Both are
+  unauthenticated, necessarily, and both share the sign-in rate limit rather than
+  getting one of their own.
+
+  **It needs a mailer, and with none it refuses out loud instead of pretending.**
+  `SMTP_HOST` unset is the shipped default. On such an instance the sign-in page
+  draws no link at all, `/forgot` says the instance cannot send mail and names
+  the operator's route, and the API answers `503`. Every other optional-mailer
+  feature in this product degrades to a lesser behaviour; this one cannot,
+  because the mail *is* the mechanism — being told to check an inbox nothing was
+  sent to is worse than being told there is no reset here.
+
+  **The form never says whether an address has an account.** Same page, same
+  status, same body and the same argon2 cost whatever you type. The answer goes
+  to the address: an address that cannot be recovered — no account, a suspended
+  one, or one that signs in some other way — receives a message saying no link
+  was created and pointing at the operator, which is what registration already
+  does for an address that is taken. The cost is stated: this sends mail to
+  addresses that never registered.
+
+  **What a completed reset does, in one list.** The link works once and lapses
+  after an hour; asking again replaces it. Every session on the account is
+  signed out, including any you did not open, and every other outstanding reset
+  link stops working. **API keys are not revoked** and keep working — a key is a
+  separate credential with its own rotation, and taking them out would turn a
+  recovery into an outage. No session is started: you sign in with the password
+  you just set. The reset is written to the instance-wide audit log as
+  `password.reset`, with the account as the actor and a network prefix rather
+  than an address.
+
+  A link that has been used, has lapsed, or names an account that cannot be
+  recovered is answered `404` — the same answer for all of them, so the endpoint
+  cannot be asked which.
+
+- **This product now accepts a file.** One kind of file, for one thing: an image
+  uploaded against a QR code, over `PUT /api/v1/links/{id}/qr/logo` for the
+  link's default code and `PUT /api/v1/links/{id}/qr/codes/{slug}/logo` for a
+  code named by its slug, with a `multipart/form-data` body, and removed with a `DELETE` at
+  the same path. It needs `links.update` — the permission that already changes
+  how a code is drawn — and an API key that holds it may use it. **The QR panel
+  on a link's page does it too**, so a logo is not an API-only feature.
+
+  **And it is drawn into the middle of the code** — in the panel, in the
+  thumbnail, and in both downloads, so the picture on the page is the picture in
+  the file. Nothing already printed changes: a code only gains a logo when
+  somebody uploads one to it, and what the code *says* is untouched either way.
+
+  **Two things change about a code the moment it carries one, and both are
+  visible.** The image covers a centred square **three tenths of the code's
+  width** — 9% of its area — and error correction goes to **level H**, the
+  level that lets a reader recover a code with part of it covered. H packs the
+  code tighter, so the picture is a little denser than it was and can come out
+  larger at the same setting. The fraction is not a taste and not a guess: the
+  arithmetic bounds it — at most three quarters of what level H can recover, the
+  rest left for print, paper, lighting and camera angle — and the size inside
+  that bound was chosen by decoding every combination this product can draw, at
+  simulated distance, through two independent decoders. There is no control for
+  the size or the position of the logo, because the derivation only holds for a
+  centred square and a control this product cannot bound is one it will not
+  offer.
+
+  **`level` is therefore not yours to set while a code has a logo.** A request
+  naming another one is accepted and answered with `H` rather than refused —
+  `{}` means "the defaults" in this API, and refusing would fail a request that
+  only changed a colour. The response and every later `GET` report what was
+  applied. **Removing the logo returns the code to the rule below** rather than
+  to a remembered level: the payload is unchanged, so a picture already on a
+  poster still resolves, and holding `H` on a code with nothing covering it packs
+  in modules it does not need. *(It stayed at `H` until this release.)*
+
+  **Whether a logo'd code scans is measured, and the measurement is kept.**
+  There is no QR decoder in this product and adding one would be a dependency,
+  so the decoding lives in the repository's verification tooling instead:
+  `make verify-scan` renders every symbol size this product produces, four logo
+  shapes, and the smallest, default and largest stored size of each — and then
+  the same range again with **no logo at all**, as a control, so that a picture
+  that will not read can be told from a decoder that will not read it — then
+  shrinks every picture to 8, 6, 4, 3 and 2 pixels per module, standing in for
+  reading it from further away, and decodes all of it through two independent
+  engines.
+  That is what the three tenths above was chosen against, and it fails if the
+  fraction grows past what still reads. **It is still a measurement and not a
+  guarantee**: it is not part of the build, and no test that ships with this
+  product will tell you if a logo'd code stops scanning on some particular
+  reader. One older engine, ZBar, is stricter than both and loses some of the
+  densest codes once the picture is shrunk to the furthest distance the check
+  simulates — recorded rather than hidden, because the larger logo is what
+  bought it. It reads every one of the codes with no logo, which is what says
+  the losses are the logo's doing and not the engine's age.
+
+  **PNG and JPEG, decided by what is in the file** rather than by what it is
+  called or what your client says it is — so a `.png` holding a JPEG works and a
+  file that is neither is refused whatever its extension. **An SVG is refused,
+  and the refusal says why**: an SVG is a document that can carry script and
+  fetch other files, and this product will not serve markup it did not write.
+
+  **What is stored is a PNG this server encoded from your image, never the file
+  you sent.** That is deliberate and has a consequence worth knowing: metadata
+  does not survive, so this is not somewhere to keep an original.
+
+  Three limits, each a number, each answering `422` and naming which one and what
+  your image measured: the request body stops at 1,048,576 bytes, the image at
+  1024 pixels a side, and the stored result at 1,060,000 bytes. **An image bigger
+  than a stored logo holds is resized, not refused.** A stored logo is at most
+  262,144 pixels in total; anything over that is scaled down to fit with its
+  shape kept, and you are told what you uploaded and what was stored — in the
+  panel, and in the API response as a `resampled` object that is there only when
+  it happened. **Uploads have a rate limit of their own**,
+  `LINKCTRL_UPLOAD_RATE_PER_MIN`, thirty a minute by default and applied on top
+  of the API limit rather than instead of it.
+
+  **Choosing a file uploads it.** There is no second button: the image applies
+  the moment you pick it, and clicking the browse control leaves it looking
+  pressed while the file dialog opens rather than looking like nothing happened.
+  Reaching it by keyboard shows the ordinary focus ring instead, because a
+  pressed look keyed on focus would stay on for anybody merely tabbing past.
+
+  **For operators: the image lives in the database, in `qr_codes.logo`.** No
+  volume to mount, no object store to run, nothing new in a backup procedure —
+  and, in exchange, binary in the row and in every `pg_dump`, bounded at about a
+  megabyte a code and 20 MiB for a link carrying the maximum twenty. Removing a
+  code, a workspace or an organization removes its images with it. Deleting a
+  *link* is a soft delete, so its images are cleared by the hourly maintenance
+  pass rather than immediately.
+
+  **The link's original code carries one too**, and it is reached the way
+  `qr.svg` and `qr.png` reach it — at `…/qr/logo`, without naming a code. That
+  shorthand answers for whichever code is the link's default.
+
+- **More than one QR code per link, told apart in the analytics.** A print run
+  and a shop-window card against the same short link used to be the same picture,
+  and their scans were the same number. Each code now carries a name you choose
+  and an identity it prints, so the breakdown on the link page shows you which
+  one people actually scanned.
+
+  **Every code already printed keeps counting exactly as it did.** A picture
+  that carries no code identity — which is every copy of your original code
+  printed before this release — is counted against whichever code is the link's
+  **default**, and that starts as the code it always was. There is nothing to
+  reprint and nothing to reconcile.
+
+  **Any code can be removed, and any code can be made the default.** The default
+  is the role that decides where those untagged pictures land. Removing the code
+  that holds it hands the role to the oldest code left and tells you which one,
+  because that is where your old posters start being counted; a link's last code
+  cannot be removed, since a link always has one. Your original code gains a
+  printed identity of its own at the moment you add a second code — the moment
+  there is something to tell it apart from — and until then it carries the
+  picture it always had.
+
+  **Adding a code keeps every size exact, and says so on the one occasion it
+  cannot.** A printed identity makes what your original code encodes a little
+  longer, and a longer payload sometimes needs a bigger grid of squares. Both
+  codes are re-measured against what they now encode: almost always the size you
+  set is kept and only the squares behind it change, and there is nothing worth
+  saying. When that size is too small to hold the bigger grid with a margin
+  anything can read — which takes a code sitting at the very bottom of the size
+  control — it is raised to the smallest size that does, and you are told, with
+  both numbers. What is never allowed is a code that says one size and produces
+  another.
+
+  A link carries up to twenty codes. Twenty is the number that keeps the panel a
+  list and the analytics a chart rather than a wall.
+
+  What a code is not: it has no destination of its own, no expiry of its own and
+  no gate of its own. Those belong to the link, which is what makes changing the
+  link's destination change every printed code at once — the point of the product.
+  A code that pointed somewhere else would be a second link.
+
+  **Removing a code keeps what it already recorded, and stops it growing.** Scans
+  from a picture printed with a code you have since removed are counted as the
+  link's default code from then on, rather than being credited back to the code
+  that is gone. That will look like an interrupted line to somebody reading a
+  chart across the removal, so it is worth knowing before you remove one.
+
+  Over the API: `GET`/`POST /api/v1/links/{id}/qr/codes`, and
+  `GET`/`PUT`/`DELETE /api/v1/links/{id}/qr/codes/{slug}` with
+  `.../{slug}/image.svg` and `.../{slug}/image.png` for the pictures. **The
+  existing five `/qr` endpoints are unchanged and answer for the link's default
+  code**, so nothing written against 0.2.0 has to move — with the caveat that the
+  default is a role that can be moved, by `PUT .../{slug}/default`, and a client
+  that wants a particular code rather than the role names its slug. `DELETE
+  /api/v1/links/{id}/qr` restores the default code's style and no longer deletes
+  its row: the row now carries the code's printed identity.
+
+  The new identity is a second reserved query parameter, `qrc`, beside `src`.
+  Like `src` it is **forwarded** to your destination when a link has query
+  forwarding on, and like `src` it is not evidence of anything: anybody can type
+  one. A value that is not one of that link's codes is counted as the link's
+  default code and is never stored, which is what stops the parameter being a
+  way for a stranger to write rows into your analytics.
+
+- **Clicking a notification goes to what it is about, and marks it read.** In the
+  bell and on `/notifications` alike. Until now an item was a sentence and
+  nothing else — "an automation rule fired", with no way to reach the rule — and
+  the destination is now derived from the notification's own kind and data: a
+  filing opens the review queue at the row that is waiting, a firing opens
+  `/automation`, a domain warning opens `/domains`, an accepted invitation opens
+  `/invites`, and a dispute allowed on appeal opens `/links`, where the refused
+  link can now be created.
+
+  **Two kinds lead nowhere and say so** rather than sending you back to the list
+  you were reading: an audit-growth warning, because the audit log has no
+  dashboard page and what to do about it is a configuration variable; and a
+  dispute whose refusal was upheld, because no page shows a refusal that stands.
+  Those two render without anything to click. Every kind the code declares has an
+  answer of one sort or the other, and a test reads the vocabulary out of the
+  source rather than from a list, so a kind added later fails the build instead
+  of quietly becoming unclickable.
+
+  Opening one is a form submit rather than a link, because it changes state and a
+  state change behind a `GET` is one any prefetch can fire.
+
+- **A read notification can be marked unread**, which is the undo for having
+  opened one by accident — and this release is what makes the accident common.
+  `DELETE /api/v1/notifications/{id}/read` over the API. No schema change: unread
+  has always meant the read timestamp is absent, so putting one back is removing
+  a value.
+
+- **`/links/{id}/qr` and `/disputes/reviewers`** — the two on-demand panels
+  below, each also served as an ordinary page. Bookmark one, open it in a second
+  tab, or share the URL.
+
+- **A QR code can be downloaded as a PNG.** `GET /api/v1/links/{id}/qr.png`, and
+  a PNG entry in the QR panel's download menu beside the SVG one. Until now the
+  only file you could get was vector text, and turning it into something most
+  programs open meant finding a converter. *(It was a worded **Download the PNG**
+  button until the QR tab was relaid out later in this release; the file and the
+  endpoint are unchanged.)*
+
+  **It is the same picture as the SVG, and that is asserted rather than
+  intended.** Both are drawn from one grid at one size with one offset, and a
+  test walks every square of the code checking that the pixel at its centre in
+  the PNG carries the colour the SVG's shapes put there. What is *not* claimed:
+  that a browser's rendering of the SVG is byte-identical to the PNG. No two
+  rasterisers agree to the byte, and the claim is about the squares.
+
+  **Output stops at 2048 pixels.** The image is two colours at one byte a pixel,
+  so the largest buffer a request can cause is 4,194,304 bytes; a size above the
+  cap is refused rather than quietly shrunk. Nothing joined this program's
+  dependency list for it — the encoder is Go's own `image/png`.
+
+### Changed
+
+- **A link's page shows one section at a time, behind tabs.** It was every
+  section in one column — the edit form, the QR code, routing rules, the split
+  test, signed links, analytics, recent activity and the danger zone, stacked —
+  and finding anything below the fold meant scrolling past everything above it.
+  A tab strip now selects one panel: Edit, QR, Routing, Split, Signed,
+  Analytics and Danger, with recent activity folded into Analytics since it is
+  the same data one row at a time. The strip scrolls sideways on narrow
+  screens rather than wrapping. Each tab is a real URL (`?tab=`), so
+  bookmarks, refresh and the back button keep working, and a save made in any
+  section returns to the tab that section lives on. No section's behaviour,
+  permissions or form fields changed.
+
+- **A link's QR settings live on the QR tab, and the small code beside the
+  heading opens it.** The popup that used to hold the style form and the
+  downloads is gone: with the page behind tabs, everything it held is one
+  click away on the QR tab, so the codes list, the full drawing, both
+  downloads, the style form and the logo controls now render there directly.
+  Clicking the thumbnail — from any tab — switches to the QR tab. Nothing
+  else moved: `/links/{id}/qr` still serves the same contents as their own
+  page for bookmarks and second tabs, every saved link and permission is
+  unchanged, and the reviewer panel on the dispute queue keeps working as it
+  did.
+
+- **Every tab on a link's page now says what its section holds, on the tab
+  itself.** Tabs answered where a section went and not what is configured in
+  it; reading a link's setup meant opening seven panels in turn. Each tab now
+  carries a badge: QR counts the link's codes, Routing its rules, and
+  Analytics shows the clicks in the selected window. Split shows which kind of
+  test is running — unequal shares for weighted, equal shares for sequential —
+  and Signed shows a check when the link requires signed access, the one badge
+  with colour. An empty section shows a muted `0` or a small cross rather than
+  nothing, so every tab keeps its width and two links compare position by
+  position; the cross always means the section is empty, never "off". The edit
+  form and the danger zone carry no badge: editing is always available and
+  deleting is a permission, so neither has state worth a chip.
+
+- **The QR tab asks for less attention.** It carried the four explanatory
+  paragraphs the owner named, six download buttons for two pictures, two save
+  buttons for one row and a sentence stating a limit nothing counted against. Nothing on it was
+  broken; all of it cost more reading than it returned.
+
+  **A code's row is one click target.** Clicking anywhere in a row selects that
+  code, where before only its name was clickable while the whole row painted as
+  selectable. The controls at the end of the row are held off that area by a
+  real gap, so reaching for a download no longer risks the remove beside it.
+
+  **One download control per code, with a menu.** The two worded buttons on each
+  row and the pair repeated below the picture — four controls for two files —
+  are one icon that offers **PNG** and **SVG**; a format added later is an entry
+  rather than a fifth button. **Remove is a `−`**, and both carry accessible
+  names saying which code they act on.
+
+  **Which code is the default is now visible without reading.** Every row
+  carries a filled or empty icon instead of a *Make default* button on the rows
+  that are not the default and nothing on the one that is. Exactly one is filled;
+  clicking an empty one moves the fill and every icon in the list follows. The
+  icons are drawn for anybody who may see the codes, not only for somebody who
+  may change them — which code is the default is a fact about the link, and the
+  button it replaced was the only thing about it a reader could not see.
+
+  **One button saves.** *Rename* is gone and **Save** writes the name along with
+  the style, so changing a colour and a name together is one press instead of
+  two. **Restore defaults** is always drawn, disabled with a reason when there is
+  nothing stored, rather than absent — a control you cannot find is not the same
+  as one that has nothing to do. Nothing about what any of them writes changed,
+  and `PUT /api/v1/links/{id}/qr/codes/{slug}` still replaces a code's label and
+  style exactly as it did.
+
+  **A `N/20` counter sits above the list**, and the sentences that carried the
+  limit in prose are gone. The URL printed under the picture is gone with them:
+  it is the link's own short URL, which the page already states twice.
+
+  All of the tab's prose — those four paragraphs and the three shorter ones
+  beside them — went from about 1900 characters to under 900, measured rather
+  than judged, and a test holds it there; by the end of this release a later
+  read of the same tab takes it under 300. What survives is what a reader cannot
+  work out from the control beside it, which by then is two sentences: keep a
+  code's two colours far apart, because a light code on a dark field is refused
+  by many readers, which is why the picture paints its own background whatever
+  the page theme is; and restyling never changes what the code says, so a code
+  already in print still resolves to the same URL after its colours move.
+
+- **The QR tab, after a third read of it: the list holds still, the size control
+  tells the truth while you drag it, and a save keeps your place.**
+
+  **The codes list is alphabetical by name** and stays put. It used to lead with
+  whichever code was the default, so choosing a different one re-ordered the
+  list under you and the change read as nothing having happened. Which code is
+  the default is the filled dot on its row — that is what says it now, and the
+  list does not move. The same order comes back from
+  `GET /api/v1/links/{id}/qr/codes`, where it was default-first before.
+
+  **Dragging the size slider moves the number beside it, and typing a number
+  moves the slider.** The two are one setting and until now neither followed the
+  other, so the box said one thing while the slider was about to save another.
+  This is the first piece of interactive JavaScript this dashboard carries: a
+  single file this server serves, with the Content-Security-Policy unchanged and
+  nothing added to the build. **With scripts off nothing is lost but the live
+  echo** — both inputs still carry their values, the form still saves, and a size
+  outside the range is still refused with a sentence rather than quietly
+  clamped.
+
+  **Saving no longer throws you back to the top of the page.** Every write on the
+  tab now returns to the position you were reading at, and you are never shown a
+  different one on the way. A browser cannot be scrolled before it has laid the
+  page out, so what happens instead is that the page is held back for the moment
+  between the two: on the load after a save, and on no other load anywhere in the
+  product, the page appears at your position rather than appearing at the top and
+  moving. *(Two earlier attempts in this release got you to the right place while
+  still showing you the wrong one first — the second only on a connection slower
+  than a local one, which is why it took a report from outside to see it.)*
+
+  **The remove button stays on a link's only code, grayed out**, with *Every link
+  must have at least 1 QR code.* on it — where before it simply was not there and
+  a sentence under the list explained why. **Adding a code is a `+` beside the
+  count**, opening a small prompt with a name field, in place of the label, box
+  and button that stood under the list; at twenty of twenty it grays out with
+  its reason instead of disappearing.
+
+  **The default control's tooltip is the page's own**, shown anywhere over the
+  button rather than only over the twelve-pixel glyph inside it, and shown to a
+  keyboard as well as to a pointer. It reads **Default QR Code** and **Make
+  Default QR Code**. The `+` button and the grayed-out remove button carry the
+  same kind of tooltip, which is what lets a disabled control explain itself at
+  all — the browser's own tooltips never appear on one. The download button and
+  a remove button that is not grayed out are unchanged: their tooltip is still
+  the browser's, inside the glyph. Hovering a download or remove button on the
+  row you have selected now shows, which it did not: the highlight was the same
+  colour as the selected row itself.
+
+  **The logo upload has moved into the style form**, between the two colour
+  pickers and the size control, with the **Remove the logo** button beside it, so
+  that everything which writes a logo is in one place and in the order the rest
+  of the form reads. Its own heading and panel are gone. Nothing about what a
+  logo does changed, only where its controls sit — the file is still sent on its
+  own, the moment you choose it, and **Save** still posts exactly the fields it
+  posted before.
+
+  **The size slider draws a mark at each size it stops at.** The sizes were
+  already named in the control and no browser was drawing them, because the
+  slider is themed and the marks come with the appearance the theme replaced.
+  They are drawn now, and only the sizes the code in front of you can actually
+  take: a dense code needs more pixels before its quiet zone reads, so its lowest
+  marks are not there to be offered.
+
+  **Five explanatory paragraphs went with all of this**, and the tab's prose is
+  now under 300 characters against 900 before and about 1900 two releases ago.
+  The last three to go: the note that scans appear under `qr` in the referrers
+  breakdown, which the Analytics tab shows and `docs/usage.md` states; the
+  sentence on the default code's row explaining that untagged scans are counted
+  against it, which the API reference and `docs/usage.md` still state and which
+  the filled dot and its **Default QR Code** tooltip already identify; and the
+  logo's size limits, which an upload that exceeds them reports with your own
+  image's dimensions in the message.
+
+  **Picking a code from the list no longer leaves the page.** It opened the QR
+  settings at their own URL — a page with no link heading row, arriving at the
+  top — so selecting a code cost you the small preview beside the link's name and
+  your place on the tab in the same click. The tab is redrawn where you are
+  standing now: nothing scrolls, the preview stays, and the address bar still
+  names the code, so a refresh, a bookmark and the back button all work as they
+  did. A save on the code you picked comes back to that code rather than to the
+  link's default. It is still an ordinary link, so with scripts off it loads the
+  link's page on that code instead of redrawing part of it; `/links/{id}/qr` is
+  unchanged and still serves the settings as their own page for anybody holding
+  that URL.
+
+  **Not done, and stated rather than left to be noticed**: there is still no
+  automatic warning when a code's two colours are too close together. The
+  advisory sentence stays until this product has a contrast measure it can
+  defend, which is a choice rather than a control to draw.
+
+- **The header's workspace label and workspace switcher read as one control.**
+  They were two adjacent fragments — a name, then an unlabelled dropdown beside
+  it — and nothing said the two were one claim. They now share a single
+  bordered container: the current organization and workspace, a hairline
+  divider, and the switcher, whose closed face is a chevron alone. The chevron
+  opens the dashboard's own menu — hanging off the control it belongs to,
+  styled like the rest of the header, listing exactly the workspaces you can
+  move to with no blank row — rather than the browser's native dropdown, which
+  ignored the control's position, opened on an unselectable empty row, and
+  flashed the chosen name into the closed face while the switch was landing.
+  With one membership the box holds the name by itself — no divider, no dead
+  control — and an account with no workspace gets no box at all. Nothing
+  behavioural changed: switching is still one action, still returns you to the
+  page you were on, and the list still never offers the workspace you are
+  already in. The switcher's accessible name is unchanged — a screen reader
+  hears "Switch workspace" on the button, then a menu of workspaces, each a
+  real button.
+
+- **A link's QR code stops being a section and becomes a panel.** What is on the
+  page is a small rendered code beside the link's name, at the top; clicking it —
+  or **Settings and download** in the QR section further down — opens the full
+  code, the style form and the download over the page you are on. An owner given
+  the task of retrieving a QR code spent about twenty-six seconds finding it, and
+  the note asked for exactly this shape. *(Superseded later in this release: with
+  the page behind tabs there is no popup and no QR section further down. The
+  thumbnail beside the link's name switches to the QR tab, which holds the full
+  code, the style form and the downloads directly.)*
+
+  **The download control keeps its text and gains an icon.** The note named "the
+  download button being text instead of an icon"; an unlabelled icon is a guess
+  for anybody who does not already know what it does, so it is both. *(Superseded
+  later in this release: there is one download control per code now, an icon with
+  a menu offering PNG and SVG, and what tells you what it does is its accessible
+  name rather than a word beside it.)*
+
+- **The QR control is a slider with a number beside it, and asks how big you
+  want the code in pixels.** It used to ask for a quiet zone in modules and a
+  module size in pixels, which is two numbers nobody printing a poster knows.
+  Both are still the arithmetic behind the one control. The slider stops at 128,
+  256, 300, 512, 600, 1024, 1200 and 2048 — powers of two plus the three that
+  matter at 300dpi — and slides freely between the ends; the box beside it takes
+  a typed number for anything the marks do not cover.
+
+  **The size you set is the size you get, exactly.** Ask for 500 pixels and the
+  file is 500 pixels. A code is a grid of squares and an arbitrary pixel size
+  does not divide into it, so something has to absorb the remainder: it is the
+  empty margin around the code, which is white space and can be any number of
+  pixels. The squares themselves stay whole, which is what keeps the SVG and the
+  PNG the same picture.
+
+  **The margin aims at four squares and never goes under three.** Four is what
+  the specification asks for; three is the low end of a quarter either side of
+  it, and it is measured rather than assumed — every size and version this
+  product draws is decoded at five simulated viewing distances through two
+  independent decoders before the number is allowed to stand. On a large code in
+  a small picture there may be no scale that lands in that band at all, and the
+  margin then comes out *wider* than five rather than narrower than three: extra
+  white costs nothing to read, and a thin margin costs a scan. A size too small
+  for the code to have any margin at all is refused, with the smallest size that
+  code can be drawn at in the message.
+
+  **Error correction moved to the API.** It is a tradeoff between how much damage
+  a printed code survives and how tightly it packs, and there is no way to judge
+  it from a dashboard; `PUT /api/v1/links/{id}/qr` still sets it, and saving the
+  form afterwards keeps whatever it was set to rather than resetting it.
+
+  **And every code now takes the strongest level it can get for free.** A QR
+  symbol steps between sizes of grid, and correction below the next step costs
+  nothing — so a code is drawn at the strongest level that does not make the grid
+  any bigger, which for an ordinary short URL is `Q` where the default of `M`
+  bought a level of damage tolerance less at **exactly the same density**. The
+  picture is the same size to the pixel and scans from the same distance; what
+  changes is how much of it can be smudged, torn or covered and still read.
+  `GET /api/v1/links/{id}/qr` reports the level a code is drawn at, as it always
+  did. No picture changes size, with one bounded exception: a style that named
+  `L` was fitted against `L`'s smaller symbol, and `L` is now a floor rather
+  than a choice, so such a code draws about a tenth larger than the size stored
+  on it. Storing a size is itself new in this release, so no instance upgrading
+  from `v0.2.0` can hold that pair.
+
+  **The `level` you set is a floor rather than an instruction**: it is honoured
+  upward and ignored downward. Asking for `H` still gets `H`, at whatever grid
+  size that costs — that is how a logo works. Asking for `L`, or for `M` on a
+  code where `Q` is free, gets the free level instead, because there is no
+  saving to be had from less correction at the same density. `L` is accepted and
+  is now a level nothing draws. Nothing was migrated and no stored style was
+  rewritten: the rule reaches a row that names `M` exactly as it reaches one that
+  names nothing.
+
+  **The preview keeps its own size.** The frame beside the form is a fixed
+  square, and a code bigger than it is drawn scaled down to fit, so setting
+  2048px changes the file rather than the page. The size itself is in the
+  control below it — in the box and on the slider — which is where somebody
+  setting it is looking.
+
+  **The reset button says *Restore defaults*.** It used to say *Back to black on
+  white*, which named the colours — it clears the size too. *(It is drawn whether
+  or not a style is stored since the QR tab was relaid out later in this release;
+  with nothing stored it is disabled and says why.)*
+
+  **Codes styled before this release are untouched.** Their stored settings are
+  read forward to the size they already produced, so nothing anybody has printed
+  changed shape. Re-saving one stores the size it was already drawing, to the
+  pixel, whatever margin it was written with.
+
+  **`PUT /api/v1/links/{id}/qr` gains `style.size`**, a size in pixels, and it is
+  what the form writes. Give it and the picture is exactly that across, with the
+  code centred and the margin taking the remainder; leave it out and `margin` and
+  `scale` decide the size the way they always did. A `size` the code will not fit
+  inside — smaller than the symbol at your `scale` plus a margin anything can
+  read — is **refused**, the way the form refuses it, rather than quietly served
+  at some other size; the message names the smallest size that works at that
+  `scale` and the smallest that works at any. `scale` accepts up to 75,
+  where it stopped at 32 and then 68 — the ceiling is the 2048px raster bound
+  divided by the smallest code plus the narrowest margin, so every size the form
+  can resolve to is a style the API accepts. A large `scale` with a large
+  `margin` still draws past 2048px, and the image endpoints refuse that as they
+  always have.
+
+- **Managing dispute reviewers moves off the review queue.** The queue still says
+  who reviews it — that is context for a page whose decisions are instance-wide —
+  and appointing or withdrawing somebody is behind **Change who reviews**.
+  Permissions are unchanged: the roster is `instance.admin` in both places, and
+  the queue is `destinations.review` as it was.
+
+  Both panels are the same mechanism, and its defining property is that the
+  contents are a route first: the popup is what the browser does with the same
+  markup when it can, and a browser too old for it renders the panel inline
+  rather than hiding it. No modal library, no CDN and no new script — the
+  dashboard's stylesheet and content-security policy are unchanged.
+
+
+- **The dashboard shell says where you are, at every membership count.** The
+  header now names the current organization and workspace on every page. With one
+  membership — which is every account that has not accepted an invitation — the
+  shell previously named neither: the workspace switcher is drawn only when there
+  is somewhere to switch to, and the workspace's name appeared nowhere else. An
+  owner given the task *"confirm which workspace you are in"* could not complete
+  it.
+
+  The switcher itself now offers **the workspaces you can move to and not the one
+  you are already in**, with the current workspace named beside it instead. It
+  still does not appear at all with a single membership: a dropdown with one
+  entry is a control that cannot do anything, and what fills that gap is a label.
+
+- **API keys moved from the top-level navigation into the identity menu.** Two
+  destinations remain up there, Dashboard and Links. Nothing changed about who
+  can reach `/keys` or what it does; a key is minted once and then not thought
+  about, which is the same reason Members, Domains, Webhooks and Automation are
+  in that menu, and the first place an owner looked for it.
+
+- **Campaigns and Folders are navigation.** They were two text links in the
+  corner of the links page and are now a bar under the header, on every page of
+  the links area.
+
+- **The links list stops trapping the first click.** The search box is the first
+  control on the page. The *Create a link* form sat above it, so the first text
+  box on a page whose subject is a list was the one that made a new link — it is
+  now a panel one click away, directly under the filters, that opens on its own
+  when a creation was refused so the reason and what you typed are still there.
+
+  Five of the six filter controls — status, folder, campaign, hostname and sort —
+  are behind one **Filters** panel, which opens by itself whenever any of them is
+  set. Search stays on the page. **No route, form field or query parameter
+  changed**, and the no-JavaScript submit still applies every filter at once.
+
+- **A link's page opens on the link, not on its analytics.** The destination and
+  the alias are the first two things you can type into, in view without
+  scrolling: at 1280×800 the destination box's top edge is 327px from the top of
+  the window, where it used to be 1883px — a screen and a half down, behind three
+  statistic tiles, a chart, a world map and six breakdowns. Changing where a link
+  points took about thirty-five seconds in a blind task, and the note was
+  *"scrolling, which is worse when not looking for the massive QR code"*.
+
+  The eight sections are re-ordered by how often somebody needs them: edit, QR
+  code, routing rules, split test, signed links, analytics, recent activity,
+  danger zone. Nothing was removed and no section changed what it does — the
+  analytics are the same analytics, further down the same page, at the same URL.
+  **No route, form field or query parameter changed.** *(Superseded later in
+  this release: the one scrolling column described here is a tab strip, and the
+  eight sections are seven tabs with recent activity folded into Analytics. The
+  order above is the order the tabs are in; what changed is that you no longer
+  scroll past one section to reach the next.)*
+
+- **The click limit says what it is a limit on.** It read *Click limit (empty =
+  none)* with *"416 used so far"* in a separate line beneath it, and an owner
+  setting a limit could not tell whether the box wanted the extra clicks or the
+  total. It wanted the total. It now says so in one sentence, naming both
+  numbers: *"A total and not an allowance on top of what has gone before: 416 of
+  the 466 are already spent, and past the limit the link answers 410."* The gate
+  is unchanged — a limit has always been absolute, and making it anything else
+  would silently redefine every limit already set.
+
+### Fixed
+
+- **The analytics world map drew two grey bands across its full width** — one
+  along the top, one just below the equator. Fiji and Russia cross the
+  antimeridian, and the map generator emitted each of their outlines as a
+  single ring wrapping from one edge of the frame to the other, so the fill
+  swept the map at that latitude. The generator now splits any
+  antimeridian-crossing ring at ±180° before projecting; Fiji, Russia and
+  Wrangel Island render as their shapes, every other country's geometry is
+  unchanged, and a Russia with clicks shades its own outline rather than a
+  stripe through Scandinavia. The bands were faint at typical laptop widths
+  and obvious on wide screens, which is how they went unnoticed.
+
+- **Every dashboard page loaded with a Content-Security-Policy violation in the
+  browser console.** htmx injects a stylesheet for its request-indicator feature
+  at load, and the dashboard's `style-src 'self'` blocked it — on every page, in
+  every browser. Nothing visible was wrong, because no page uses that feature;
+  the costs were a console that could never be clean, and that the first
+  template to adopt `hx-indicator` would have gotten a loading state that
+  silently did nothing. The layout now tells htmx not to inject
+  (`includeIndicatorStyles: false`); a template that starts using indicators
+  ships the rules in the stylesheet instead. The policy itself is unchanged.
+
+- **A link's country map and country list now follow the data instead of the
+  GeoIP setting.** An instance that had accumulated country history and then
+  removed — or had never configured — a GeoIP database was shown *"Geographic
+  data is unavailable: no GeoIP database is configured"* over rows that were
+  present and correct, on both surfaces, because each was suppressed on the
+  setting rather than on whether anything had resolved. 0.2.0's note that the
+  map is not drawn at all without a database was true of 0.2.0 and is not true
+  now.
+
+  The sentence is reached only when nothing resolved **for that link, in the
+  window on screen** and nothing can resolve. The test is per link and per
+  window rather than per instance: a link whose countries all fall outside the
+  selected window meets the sentence until the window is widened. Configuration
+  still counts on its own, so a database with no clicks yet keeps the ordinary
+  *no data yet* rather than a claim about the instance. **A geographic routing rule is deliberately
+  unchanged**: whether one can ever match is a genuine question about the
+  database, and the rule form still says so.
+
+- **An unreachable mail relay no longer keeps the whole server dark at every
+  boot.** With `LINKCTRL_SMTP_HOST` set to something that does not answer, the
+  reachability probe ran before the HTTP listener bound, so nothing was
+  served — redirects included — for the whole of `LINKCTRL_SMTP_TIMEOUT`.
+  Measured at **10.05 seconds** on the shipped default; at a raised timeout the
+  container never became healthy at all and `docker compose up --wait` gave up.
+  The code's own comment said "the relay being down is not a reason for a link
+  shortener to stop serving redirects", and it was not true.
+
+  The probe now runs in a goroutine. Nothing between it and the listener ever
+  read its result, and the outbox retries regardless of what it finds, so
+  waiting bought only the order of two log lines: `smtp relay reachable` now
+  arrives after `http server listening` rather than before it. A rolling deploy
+  is where this bit hardest — every new replica was unready for the timeout at
+  every start, and a health check with a shorter start period failed it
+  outright.
+
+- **No dashboard page scrolls sideways on a phone.** At 360px, sixteen of the
+  twenty-three pages did: the header could not fit the workspace switcher on one
+  line and dragged every page with it, and six tables were as wide as their
+  columns with nothing to scroll them. The header is two lines below the `sm`
+  breakpoint and every table now scrolls inside its own box. Measured in Chromium
+  at 360, 640 and 1280px, before and after, and held by a test that renders every
+  page and fails any `<table>` or `<pre>` that nothing scrolls.
+
+- **Erasing an account now reaches four places it did not.** The hourly pass
+  already replaced the actor's name everywhere it was snapshotted. It now also
+  removes the address from the **detail** of audit records that name the erased
+  person as the subject of somebody else's action — the invitation lifecycle, the
+  three membership actions and the two instance-level ones — from the **list** of
+  outgoing principals on an instance-principal move, which is the one record that
+  stored addresses as an array rather than a single value; blanks the address on
+  the invitations that account **redeemed**; and clears it from the
+  **notification the inviter received** when the account accepted their
+  invitation, in the sentence as well as in the detail. The invitation one
+  mattered most: `/invites` lists every invitation an organization ever issued,
+  redeemed included, so an account deleted, erased and tombstoned everywhere else
+  was still named in full on an ordinary dashboard page, behind no special
+  permission and expired by no setting. The notification is the same shape one
+  table over — it belongs to the person who sent the invitation, so removing the
+  erased account's own notifications never touched it, and nothing expires it. An
+  **outstanding** invitation to the same address is deliberately left alone — it
+  is an offer to an address, which became reusable the moment the account was
+  deleted.
+
+- **A key cut out of an organization is no longer told about it, and its owner
+  now is.** Revoking an account-wide key's reach into one organization stopped it
+  *acting* there and not *reading* about it: `GET /api/v1/workspaces` went on
+  listing that organization's name, slug and workspace ids to the very credential
+  it had been barred from. It no longer does. And the key's owner, who could
+  previously watch a credential stop working in one tenant with no page saying
+  why — the audit record explaining it is written in an organization they may not
+  be able to read — now sees which organizations a key has been cut out of, on
+  their own key list. **The API responses for a key gained
+  `revoked_organizations`**, which is additive.
+
+- **A key cut out of an organization can no longer rotate its way back in.**
+  Reach revocations were keyed to the key's id and nothing carried them to a
+  successor, so the holder of a barred credential could call the rotation
+  endpoint — which authenticates with the key's own token and needs nobody signed
+  in — and get a replacement that reached the tenant they had been cut out of,
+  acting and reading. Bars now travel with the rotation, inside the same
+  transaction, keeping the date and the administrator who set them rather than
+  being restamped by whoever rotated. The rotation's own response reports them —
+  `revoked_organizations` on `POST /api/v1/api-keys/rotate` is the successor's
+  bars, not an empty array — so a caller learns what its new credential cannot
+  reach from the call that minted it. **This was found while fixing the two rows
+  above and was not one of them**; it is named here because an administrator who
+  cut a key out before upgrading was relying on something that did not hold.
+
+- **The domains page no longer says a hostname is verified and unverified in one
+  response.** Pressing *Check DNS* on a domain inside its grace window answered
+  *"is not verified"* directly above a badge reading *"Verified — links are
+  served here"*. Both were describing something real — the check had failed and
+  the hostname was still being served — and the page now says that instead: the
+  check failed, links are still served, and here is when they stop. A second,
+  narrower case is gone with it: between grace expiry and the next hourly pass
+  the page read *"stop being served at"* a time in the past.
+
+- **A verification recorded once is recorded once.** Two replicas running the
+  domains pass at the same moment could both write a `domain.verified` audit
+  record for one verification. Reproduced five runs of five, now zero. The same
+  was true of the *Verify* button on the Domains page — two administrators
+  pressing it at once, or one double-click — and both paths now decide from what
+  the write returned rather than from a row read a DNS round trip earlier. The
+  hostname was always correctly verified; what was wrong was the count.
+
+- **Every bar chart said its peak was the top of its axis.** The dashboard read
+  *peak 5,000/day* on a series whose true maximum was 2,351 — the axis is rounded
+  up to a readable number, and that rounded number was being presented as an
+  observation. It now reports the reading. The gridlines also carry their values
+  now, which is what the space under every chart in this product has been
+  reserved for since it was written.
+
+- **Granting somebody a role they already outrank says so.** The confirmation
+  read *"Access granted. It adds to whatever they already had"* even when the
+  added role's permissions were a subset of what the person already held, so
+  nothing was added. The grant still happens — an org editor who is also a
+  workspace admin is a real and useful arrangement — but the message now
+  distinguishes the two, and the form warns before you press it rather than
+  after.
+
+- **Neither form that hands out access starts on the most powerful role.** The
+  invitation form and *give somebody access* both rendered their roles strongest
+  first with none marked, so a browser selected the first one: filling in an
+  address and pressing the button, without touching the select, sent an **owner**
+  invitation. Both now start on the lowest role. Nothing about what an actor may
+  offer has changed; the least deliberate path through the form is no longer the
+  most powerful one.
+
+- **The password-reset page no longer promises mail it is about to refuse.** On
+  an instance with no relay it read *"We send a link to your address"* directly
+  above *"This instance cannot send mail"*.
+
+- **A refused QR style leaves you where you were typing.** Opening the QR panel
+  at its own address and entering a size out of range answered with the link page
+  instead of the panel, so the reader had to find their way back to the form they
+  were using. The refusal is unchanged — same message, same status, nothing
+  stored — and it now arrives on the page it was typed on.
+
+- **Uploading a logo no longer breaks a code's PNG download.** A logo forces
+  error correction to level H, which makes the symbol bigger; the stored size was
+  carried over unchanged, so a code already near the raster ceiling was pushed
+  past it and its PNG started refusing. The size is now re-fitted to the larger
+  symbol, so the picture stays exactly the size you asked for — unless the bigger
+  symbol will not fit inside that size at all, and then the code grows rather
+  than being drawn with a margin nothing can read. The payload does not change,
+  so a code already printed still scans.
+
+- **`/account/mfa` no longer scrolls sideways on a phone.** The enrolment QR was
+  emitted at a fixed pixel width and overflowed a 360px viewport by 174px — the
+  one dashboard page that still did.
+
+### Notes for operators
+
+- **One new secret, and it is optional.** `LINKCTRL_MFA_SECRET_KEY`, at least 32
+  bytes, encrypts each account's TOTP secret at rest. **Unset means this instance
+  has no second factor at all** — nobody can enrol and the account page does not
+  offer it, which is exactly what every instance before this release was, so
+  omitting it is a supported configuration rather than a broken one. It is not
+  the API-key pepper and must not be the same value. Losing it locks every
+  enrolled account out of its authenticator and no further: recovery codes are
+  SHA-256 hashes and this key is not involved in them, so the route back is a
+  recovery code, then turn the second factor off and enrol again.
+- **The update check is on by default, and it does nothing until somebody is
+  asked and says yes.** A fresh instance is asked on the setup form. **An
+  instance upgrading into 0.3.0 has no first run to be asked at, so it is asked
+  on the dashboard at the first sign-in by an account holding `instance.admin`,
+  once.** Until that is answered no request is made. `LINKCTRL_UPDATE_CHECK=false`
+  refuses it outright and wins over the answer; so does never answering. What
+  leaves is a daily `GET` to GitHub's releases API carrying this server's source
+  address and the running version in the `User-Agent` and nothing else. This is
+  the fifth thing that leaves a LinkCtrl instance and `docs/SECURITY.md`
+  enumerates all five.
+- **An API key with no pin is now account-wide, and that is a behaviour change
+  for one request shape.** `api_keys.organization_id` becomes nullable: NULL is
+  account-wide, non-NULL is pinned. **A caller sending `org_wide: true` and
+  nothing else got an organization-scoped key in 0.2.0 and gets an account-wide
+  one in 0.3.0.** No issued key changed reach — dropping NOT NULL writes no rows,
+  and every key that exists today keeps the organization it was issued for. An
+  administrator can now cut *their own* organization out of somebody's
+  account-wide key without destroying a credential that is not theirs; that is a
+  separate action from a revoke, separately audited.
+- **Deleting an account is immediate; erasing it takes up to an hour.** Access
+  ends inside the deleting transaction. The hourly housekeeping pass then scrubs
+  the identifying fields and **keeps the row**, so foreign keys and audit records
+  go on pointing at something and the actor's name becomes a constant tombstone.
+  The surviving `user_id` is pseudonymous rather than absent. Logged as
+  `deleted accounts erased` with a count and no identifier; restarting the app
+  runs the pass immediately rather than waiting.
+- **Account recovery needs `SMTP_HOST` and says so out loud.** With no relay a
+  reset request answers `503 no-mailer` from the API and states the operator's
+  route on the page. It does not queue and there is nothing else to switch on.
+- **`/readyz` is now a contract you can configure a load balancer against.**
+  `503` means take this replica out of rotation, `200` means keep it, and
+  `degraded` is a `200` — the word is diagnostic and the code is the instruction.
+  If you run several replicas, `LINKCTRL_SHUTDOWN_DRAIN_DELAY` (default `5s`)
+  must outlast your balancer's check interval × threshold, and it is the number
+  that decides whether a deploy costs nothing or costs retries.
+- **A single container is still tested on every push.** Nothing in the
+  high-availability work is required to run one, and `make single-instance`
+  drives the whole surface on Postgres alone to keep that true.
+- **Eight additive migrations**, run at boot as usual: several QR codes per link,
+  the QR logo column, password-reset tokens, account erasure, the second factor,
+  the API key's account reach, the instance's update-check setting, and the QR
+  default-code flag. No destructive step and no new permission. **One of them
+  writes data**: the default-code flag is set on the row that already held that
+  role, links carrying more than one code have their default named, and a link
+  with codes but no row for its default gains one at the style it was already
+  being drawn at. Nothing already printed changes what it counts as, and no
+  recorded click is touched.
+- **`LINKCTRL_UPLOAD_RATE_PER_MIN`** (default 30) is a new bucket for the one
+  endpoint that now accepts a file. It is *on top of* `API_RATE_PER_MIN` rather
+  than instead of it, and shared through Redis like the others.
+- **One log line changed order.** The SMTP relay probe moved into a goroutine, so
+  `smtp relay reachable` now arrives after `http server listening` rather than
+  before it. Nothing between the two ever read its result; what this buys is that
+  an unreachable relay no longer keeps the whole server dark for the length of
+  `SMTP_TIMEOUT` at every boot.
 
 ## [0.2.0] - 2026-08-06
 
@@ -1997,6 +3157,7 @@ all in [Plan.md](Plan.md#known-limitations) with their consequences:
   and a registration creates a new isolated workspace rather than adding a member
   to yours. Invitations, and a signup form worth having, are Phase 2.
 
-[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.1.0
