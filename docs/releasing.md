@@ -122,8 +122,16 @@ tag.
    is cut, and that is where they belong. Nothing in CI runs
    `scripts/release-check.sh`.
 2. **Image.** `linux/amd64` and `linux/arm64`, pushed to
-   `ghcr.io/DevOfPie/LinkCtrl` tagged with the exact version, the `major.minor`
-   series, and `latest`. Provenance and an SBOM are attached.
+   `ghcr.io/devofpie/linkctrl` tagged with the exact version, the `major.minor`
+   series, and `latest`. Provenance and an SBOM are attached. **Lowercase, and
+   the tags carry no `v`**: a registry reference must be lowercase — `docker
+   pull ghcr.io/DevOfPie/LinkCtrl:0.3.0` is refused as an invalid reference
+   before it reaches the network — and `docker/metadata-action`'s `{{version}}`
+   strips the prefix, so the tag beside `v0.3.0` is `0.3.0`. This line said
+   `ghcr.io/DevOfPie/LinkCtrl` until 0.3.0's post-release check;
+   [release.yml](../.github/workflows/release.yml)'s own comment had already
+   named the hazard, which is why the notes it generates were always right and
+   only this sentence was wrong.
 3. **Binaries.** `linkctrl` and `lctl` cross-compiled for linux (amd64, arm64),
    macOS (arm64, amd64) and Windows (amd64), each archive carrying `LICENSE`,
    `README.md`, `CHANGELOG.md` and `.env.example`, with a `SHA256SUMS` file.
