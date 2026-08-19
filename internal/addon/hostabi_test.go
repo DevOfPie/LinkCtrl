@@ -193,8 +193,8 @@ func TestTheProbeFixtureGetsEveryClassOfAnswer(t *testing.T) {
 		"probe: config_declared=ok",
 		"probe: config_empty=ok",
 		"probe: config_undeclared=ok",
-		"probe: declared_but_refused=ok",
-		"probe: storage_exec_refused=ok",
+		"probe: storage_query_no_database=ok",
+		"probe: storage_exec_no_database=ok",
 		"probe: http_request_refused=ok",
 		"probe: http_response_refused=ok",
 		"probe: template_refused=ok",
@@ -217,8 +217,10 @@ func TestTheProbeFixtureGetsEveryClassOfAnswer(t *testing.T) {
 			refused++
 		}
 	}
-	// declared_but_refused ends in _refused=ok too, which is what makes this count
-	// the whole set rather than the set minus the one named differently.
+	// Every refused check is named `<something>_refused=ok`, so counting the suffix
+	// counts the set. The two storage checks are deliberately named differently —
+	// M63 implemented those functions, and this host has no database rather than no
+	// implementation — which is what keeps this count honest as limbs land.
 	if reported := strings.Count(logs, "_refused=ok"); reported != refused {
 		t.Errorf("the ABI declares %d refused functions and the probe reported %d", refused, reported)
 	}
@@ -687,7 +689,7 @@ func TestALogMessageIsBounded(t *testing.T) {
 //
 // **Denied, not NotAvailable, including for the functions no host implements
 // yet.** That ordering is the claim worth a test of its own: the same
-// `storage_query` call from probe — whose manifest declares the grant — answers
+// `template_render` call from probe — whose manifest declares the grant — answers
 // NotAvailable, so a module that declared nothing cannot use the ABI's own
 // availability status to enumerate which limbs a host has. Both halves are
 // exercised here, against one host, from one module's bytes.
@@ -799,12 +801,14 @@ func TestDeclaringAGrantChangesTheRefusalOfAnUnimplementedFunction(t *testing.T)
 		t.Fatalf("loaded %d add-ons, want 2", h.Len())
 	}
 	logs := sink.String()
-	// storage_query is the one function both fixtures call and neither host
-	// implements, so the two answers differ only by what the manifest declared.
-	if !strings.Contains(logs, "probe: declared_but_refused=ok") {
-		t.Errorf("the declaring module did not get ErrNotAvailable from storage_query\n%s", logs)
+	// template_render is the function this stands on now that storage is
+	// implemented: both fixtures call it, no host implements it, so the two answers
+	// differ only by what the manifest declared. It was storage_query until M63 made
+	// that pair live — the property is the ordering, not the function.
+	if !strings.Contains(logs, "probe: template_refused=ok") {
+		t.Errorf("the declaring module did not get ErrNotAvailable from template_render\n%s", logs)
 	}
-	if !strings.Contains(logs, "undeclared: storage_query_denied=ok") {
-		t.Errorf("the non-declaring module did not get ErrDenied from storage_query\n%s", logs)
+	if !strings.Contains(logs, "undeclared: template_render_denied=ok") {
+		t.Errorf("the non-declaring module did not get ErrDenied from template_render\n%s", logs)
 	}
 }

@@ -45,9 +45,11 @@ type Metrics struct {
 	webhookDeliveries *prometheus.CounterVec
 	automationFirings *prometheus.CounterVec
 
-	addonLoads    *prometheus.CounterVec
-	addonInfo     *prometheus.GaugeVec
-	addonRefusals *prometheus.CounterVec
+	addonLoads        *prometheus.CounterVec
+	addonInfo         *prometheus.GaugeVec
+	addonRefusals     *prometheus.CounterVec
+	addonSchemaBytes  *prometheus.GaugeVec
+	addonLargeObjects *prometheus.GaugeVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -204,9 +206,9 @@ func NewMetrics() *Metrics {
 		// because installing an add-on is an operator action against a directory
 		// and not something a tenant can do.
 		//
-		// `outcome` is addon.Outcome and is six words: loaded, manifest_invalid,
+		// `outcome` is addon.Outcome and is seven words: loaded, manifest_invalid,
 		// abi_unsupported, checksum_mismatch, module_unreadable,
-		// instantiate_failed. No error
+		// instantiate_failed, storage_failed. No error
 		// string ever reaches a label. `addon` comes from the validated manifest
 		// on the loaded path and from the *directory entry* on the refusal path,
 		// where there is no manifest to take it from — bounded there by the host,
@@ -217,7 +219,8 @@ func NewMetrics() *Metrics {
 		addonLoads: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "linkctrl_addon_loads_total",
 			Help: "Add-on load attempts by add-on and outcome (loaded, manifest_invalid, " +
-				"abi_unsupported, checksum_mismatch, module_unreadable, instantiate_failed).",
+				"abi_unsupported, checksum_mismatch, module_unreadable, instantiate_failed, " +
+				"storage_failed).",
 		}, []string{"addon", "outcome"}),
 
 		// The identity series, modelled on linkctrl_build_info: always 1, and the
@@ -246,6 +249,60 @@ func NewMetrics() *Metrics {
 			Help: "ABI calls refused because the add-on did not declare the permission " +
 				"the function requires, by add-on and permission.",
 		}, []string{"addon", "permission"}),
+
+		// How much disk each add-on's own schema holds (M63). One series per add-on
+		// that declared storage, so it is the narrowest of the four and bounded the
+		// same way.
+		//
+		// **It is the whole of this product's answer to add-on storage quotas**, and
+		// that is deliberate rather than unfinished: there is no cap on how large an
+		// add-on's schema may grow, for the same reason there is none on the audit
+		// log, and a default that permits unbounded growth is only defensible if the
+		// growth is visible. An operator who installs a module that writes a row per
+		// redirect should find that out from a graph rather than from a full disk.
+		//
+		// **What is visible is data an add-on has stored**, this gauge and the one
+		// below between them, and the qualifier is load-bearing rather than
+		// cautious. It is also a claim of completeness over stored data, which held
+		// only after D254: this gauge summed a *list* of relation kinds, and a
+		// sequence — `relkind 'S'`, in the add-on's own schema, 8192 bytes from
+		// creation and outside `pg_total_relation_size` of the table that owns it —
+		// was not on the list. It now sums every kind except the ones already
+		// counted inside another, and a `serial` column's sequence is 8192 bytes the
+		// number was quietly short by for a well-behaved add-on all along.
+		//
+		// Transient disk an add-on's session holds is a different thing and remains
+		// neither gauge's subject, with no gauge covering it: a `WITH HOLD` cursor
+		// materialized at commit keeps a temporary file in `base/pgsql_tmp` for the
+		// life of the session — 553
+		// MB measured for one cursor inside the add-on's five-second statement timeout
+		// — and both of these read zero throughout. It is not stored data and it is
+		// freed when the backend ends, so it is a residual rather than a gap in the
+		// quota answer; F279 carries it, and an operator told *the growth is visible*
+		// while watching a flat gauge and a filling disk would have been told
+		// something untrue.
+		//
+		// Measured on the maintenance job's schedule and by every replica, like
+		// linkctrl_audit_log_bytes and for the same reason: a gauge the followers
+		// never set reads as zero, and which replica answered the scrape is not
+		// something an operator's alert should depend on.
+		addonSchemaBytes: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "linkctrl_addon_schema_bytes",
+			Help: "On-disk size of each add-on's own Postgres schema: every relation in " +
+				"it with storage — tables, sequences, materialized views — with their " +
+				"indexes and TOAST. Nothing caps it; this is what makes the growth visible.",
+		}, []string{"addon"}),
+
+		// The other half of that answer, and the reason it is a count rather than a
+		// size: a large object is in no schema, so the gauge above cannot see one,
+		// and its bytes live in pg_largeobject, which only a superuser may read.
+		// Nothing in this product creates one, so any value but zero here is an
+		// add-on writing outside its schema.
+		addonLargeObjects: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "linkctrl_addon_large_objects",
+			Help: "Large objects each add-on's database role owns. Always 0 unless an " +
+				"add-on created one, which is data outside its schema.",
+		}, []string{"addon"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -264,7 +321,8 @@ func NewMetrics() *Metrics {
 		m.feedChecks,
 		m.webhookDeliveries,
 		m.automationFirings,
-		m.addonLoads, m.addonInfo, m.addonRefusals,
+		m.addonLoads, m.addonInfo, m.addonRefusals, m.addonSchemaBytes,
+		m.addonLargeObjects,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -649,4 +707,33 @@ func (m *Metrics) ObserveAddonRefusal(addon, permission string) {
 		return
 	}
 	m.addonRefusals.WithLabelValues(addon, permission).Inc()
+}
+
+// SetAddonSchemaBytes records the on-disk size of one add-on's own schema (M63) —
+// every relation in it that has storage, not a list of the kinds somebody thought
+// of, which is store.AddonSchemaBytes's own argument and D254's.
+//
+// Set by every replica, like SetAuditLogBytes and for the reason given there: a
+// gauge the followers never set reads as zero. The add-on's name comes from a
+// validated manifest, so the label is bounded whatever the module was written to
+// do.
+func (m *Metrics) SetAddonSchemaBytes(addon string, n int64) {
+	if m == nil {
+		return
+	}
+	m.addonSchemaBytes.WithLabelValues(addon).Set(float64(n))
+}
+
+// SetAddonLargeObjects records how many large objects one add-on's role owns
+// (M63).
+//
+// Zero for every add-on that behaves, which is why it is published at all: a large
+// object is outside every schema, so SetAddonSchemaBytes cannot see one and an
+// add-on's growth would otherwise be invisible between loads. Same replica rule as
+// the gauge above.
+func (m *Metrics) SetAddonLargeObjects(addon string, n int64) {
+	if m == nil {
+		return
+	}
+	m.addonLargeObjects.WithLabelValues(addon).Set(float64(n))
 }

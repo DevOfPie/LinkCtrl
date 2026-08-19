@@ -85,6 +85,14 @@ columns, and a rollback after real traffic loses whatever those columns held.
 The server does all of this at boot unless `LINKCTRL_MIGRATE_ON_START=false`,
 which is the setting to use if you want migrations to be a deliberate step.
 
+**It reaches the product's migrations and not an add-on's.** An installed add-on
+that declares storage has its own DDL applied by the host at every boot, whatever
+this variable says, and no `lctl` command applies it out of band. So on an instance
+with a storage add-on, migrations are a deliberate step for the product and an
+automatic one for the add-on. Recorded as F282 in the build notes; whether the flag
+should gate add-on DDL is a scheduling decision, because gating it would mean a
+`required` storage add-on cannot load at all under `false`.
+
 **The prefix is not optional.** Every variable this product reads carries
 `LINKCTRL_`, applied by the loader rather than written into each name, so an
 unprefixed `MIGRATE_ON_START` is read by nothing and is not in the removed-variable

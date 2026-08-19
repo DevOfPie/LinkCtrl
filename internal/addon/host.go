@@ -11,11 +11,23 @@
 // runtime asked to instantiate it.
 //
 // The imports it may resolve are the ABI, which is authored in
-// internal/addon/abi and registered by hostabi.go. Three of them do something —
-// abi_version, log and config_get — and the rest are declared and refused with a
-// status a module can branch on, because the contract crosses a repository
-// boundary one milestone before the behaviour behind it exists. Storage, routes,
-// templates, the session hook and redirect observation are M63 to M66's.
+// internal/addon/abi and registered by hostabi.go. Five of them do something —
+// abi_version, log, config_get, storage_query and storage_exec — and the rest are
+// declared and refused with a status a module can branch on, because the contract
+// crosses a repository boundary before the behaviour behind it exists. Routes,
+// templates, the session hook and redirect observation are M64 to M66's.
+//
+// # An add-on's own tables
+//
+// A module that declares `storage.own_schema` gets a Postgres schema of its own,
+// `addon_<name>`, and a login role of the same name that reaches nothing else. Its
+// migrations arrive with it — a `migrations/` directory, each file named in the
+// manifest with its digest — and the *host* applies them, at load, before the
+// listener opens, as the add-on's own role. That last clause is the confinement:
+// DDL naming another schema is refused by Postgres rather than by a parser here,
+// and a SECURITY DEFINER function the DDL creates is owned by a role that can
+// reach nothing. internal/store/addons.go is the whole of it, and its header says
+// why `SET ROLE` on the application's own session is not a boundary.
 //
 // What a module may *call* is narrower still: every function names the permission
 // it costs, the manifest is where an add-on declares the ones it needs, and an
@@ -80,12 +92,14 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
 // StartFunction is what wazero is told to call at instantiation.
@@ -98,7 +112,7 @@ const StartFunction = "_initialize"
 
 // Outcome is the closed vocabulary of load results, and it is a metric label.
 //
-// Six values, so the series count is the number of installed add-ons times six
+// Seven values, so the series count is the number of installed add-ons times seven
 // however many times the instance restarts. No error string is ever a label, and
 // the only filename that can become one is bounded by nameRe or collapsed to
 // InvalidName — see labelFor, which is what keeps the sentence above true of the
@@ -117,6 +131,13 @@ const (
 	// host, and the operator's fix is a version rather than a syntax error.
 	OutcomeABIUnsupported    Outcome = "abi_unsupported"
 	OutcomeInstantiateFailed Outcome = "instantiate_failed"
+	// OutcomeStorageFailed is the add-on's schema, role or migrations (M63). Its
+	// own label rather than instantiate_failed, because the module is fine and the
+	// operator's fix is a database one: a privilege the application's user does not
+	// hold, a migration the add-on's author wrote wrongly, or DDL that reached
+	// outside the schema the add-on owns. Which of those it was is in the log; the
+	// label is what tells an operator where to look.
+	OutcomeStorageFailed Outcome = "storage_failed"
 )
 
 // InvalidName is the addon label for a directory whose name could never be an
@@ -183,6 +204,26 @@ type Options struct {
 
 	Logger  *slog.Logger
 	Metrics *observability.Metrics
+
+	// DB is the application's own pool, used for the two things an add-on's
+	// storage needs the *product's* privileges for: creating the schema and the
+	// role an add-on is confined to, and reading the catalogue to enumerate and
+	// measure them. No add-on's statement ever runs on it — that is what the
+	// per-add-on pool in store.AddonDB is for, and the separation is the boundary
+	// rather than a tidiness.
+	DB *pgxpool.Pool
+	// DSN is the same database, as a connection string, because an add-on's own
+	// pool authenticates as a different role and a pool cannot be re-pointed at
+	// one. Everything else about the connection — host, port, database, TLS — is
+	// inherited from it, so there is no second connection string to configure.
+	//
+	// Empty means no storage: the schema is not created, the migrations are not
+	// applied, and a call to a storage function answers StatusInternal after
+	// saying so in the log. That is a host constructed without a database, which
+	// in this product is a test and never an instance — cmd/linkctrl opens the
+	// pools before it opens the host, and both of these come from the same place
+	// the migrations did.
+	DSN string
 }
 
 // Loaded is one add-on that instantiated.
@@ -190,9 +231,16 @@ type Loaded struct {
 	Manifest Manifest
 	// Dir is the absolute directory the add-on was loaded from.
 	Dir string
+	// Schema is the Postgres schema this add-on owns, or "" for one that did not
+	// declare storage.own_schema. It is derived from the name rather than recorded
+	// anywhere — store.AddonSchema is the derivation — which is what makes two
+	// add-ons contending for one schema impossible rather than merely unlikely: the
+	// directory *is* the name and loadOne refuses a manifest that disagrees.
+	Schema string
 
-	module api.Module
-	grants Grants
+	module  api.Module
+	grants  Grants
+	storage *store.AddonDB
 }
 
 // Grants is what this add-on holds, which is not the same as what its manifest
@@ -228,6 +276,12 @@ type Host struct {
 	// from an ABI call and not from Open. Nil-safe on every method, which is what
 	// lets a test open a host without a registry.
 	metrics *observability.Metrics
+
+	// db and dsn are Options.DB and Options.DSN, held because a schema is created
+	// per add-on inside the discovery loop and measured again long after it, from
+	// the maintenance job.
+	db  *pgxpool.Pool
+	dsn string
 
 	// states is what an ABI call is answered against, keyed by the calling
 	// module's name — see hostabi.go. Guarded because a host function is called
@@ -274,7 +328,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// the guarantee is what makes the log diffable across restarts.
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
-	h := &Host{log: log, metrics: opts.Metrics}
+	h := &Host{log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
 	// because it is what lets M66 interrupt a module that will not return: a
@@ -346,7 +400,22 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			slog.String("failure_class", string(loaded.Manifest.FailureClass)),
 			slog.Any("permissions", loaded.grants.Names()),
 			slog.Int("declared_settings", len(loaded.Manifest.Settings)),
+			slog.String("schema", loaded.Schema),
+			slog.Int("migrations", len(loaded.Manifest.Migrations)),
 			slog.Uint64("guest_memory_bytes", uint64(loaded.MemorySize())))
+	}
+
+	// Said at boot rather than only when somebody opens the manager, because an
+	// orphan is data an operator is paying for and does not know about — a module
+	// whose file was deleted takes its page row with it, and the schema stays. M68
+	// is the surface that offers to purge one; this is the line that stops the
+	// question from waiting for it.
+	if orphans, err := h.OrphanSchemas(ctx); err != nil {
+		log.Debug("could not look for orphaned add-on schemas", slog.Any("error", err))
+	} else if len(orphans) > 0 {
+		log.Warn("add-on schemas with no loaded module; their data is still on disk and "+
+			"nothing here deletes it",
+			slog.Any("schemas", orphans))
 	}
 
 	log.Info("add-on host started",
@@ -437,12 +506,24 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 			slog.String("addon", m.Name),
 			slog.Any("permissions", withheld))
 	}
+	// The schema, the role, the migrations and the confined pool — all of it before
+	// instantiation, and for the same reason the state registration below is: package
+	// initialization runs *during* InstantiateModule, so a module whose init writes a
+	// row has to find its tables already there. It is also the ordering the failure
+	// classes need: a `required` add-on whose migration will not apply must stop the
+	// instance before anything is listening, which is what M60's class rule means and
+	// what m63.md's third risk names as the accepted cost.
+	storage, err := h.openStorage(ctx, m, dir, grants)
+	if err != nil {
+		return fail(OutcomeStorageFailed, m.FailureClass, err)
+	}
+
 	// Registered before instantiation, and this is not tidiness. Package
 	// initialization runs *during* InstantiateModule — that is what makes a
 	// load-time failure expressible at all — so a module whose init calls a host
 	// function does so before this call returns. State registered afterwards would
 	// mean every add-on's first ABI call answered StatusInternal.
-	deregister := h.registerState(m, grants)
+	deregister := h.registerState(m, grants, storage)
 	// The compiled form is owned by the runtime and closed with it. Closing it
 	// here would invalidate the instance below.
 	mod, err := h.runtime.InstantiateModule(ctx, compiled,
@@ -460,10 +541,91 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		// `degrade` failure leaves the instance serving, and a stale entry here
 		// would be state for a module that is gone.
 		deregister()
+		// The schema and its data stay — that is the point of an orphan being
+		// detectable rather than cleaned up behind an operator's back — but the
+		// connections do not. A `degrade` failure leaves the instance serving for
+		// however long it runs, and four idle connections per module that would not
+		// start is a pool leak with a schedule.
+		storage.Close()
 		return fail(OutcomeInstantiateFailed, m.FailureClass, err)
 	}
 
-	return Loaded{Manifest: m, Dir: dir, module: mod, grants: grants}, nil
+	schema := ""
+	if storage != nil {
+		schema = storage.Schema()
+	}
+	return Loaded{
+		Manifest: m, Dir: dir, Schema: schema,
+		module: mod, grants: grants, storage: storage,
+	}, nil
+}
+
+// openStorage gives one add-on the schema it owns, applies the DDL it shipped, and
+// opens the confined connection its queries run on.
+//
+// Nil is the ordinary answer for an add-on that did not declare
+// storage.own_schema: no schema is created, no role exists, and every storage call
+// is already refused one layer up by the permission check. Creating a schema for a
+// module that did not ask for one would be the host granting a capability nobody
+// requested, which is the thing the permission model exists to prevent.
+func (h *Host) openStorage(ctx context.Context, m Manifest, dir string, grants Grants) (*store.AddonDB, error) {
+	if !grants.Has(abi.PermissionStorage) {
+		// Migrations without the grant are refused by Manifest.Validate, so there is
+		// no case here where DDL exists and is quietly being skipped.
+		return nil, nil
+	}
+	if h.db == nil || h.dsn == "" {
+		// A host constructed without a database, which in this product is a test and
+		// never an instance: cmd/linkctrl opens the pools before it opens the host.
+		// Loud rather than fatal, because the add-on itself is fine and the storage
+		// functions answer StatusInternal — the status that means the host failed at
+		// something that is not the guest's fault.
+		h.log.Error("an add-on declared storage and this host has no database; every "+
+			"storage call it makes will fail",
+			slog.String("addon", m.Name),
+			slog.String("permission", abi.PermissionStorage))
+		return nil, nil
+	}
+
+	// The bytes are verified before a schema exists, so a manifest that disagrees
+	// with its own migrations directory costs nothing in the database.
+	source, err := readMigrations(dir, m)
+	if err != nil {
+		return nil, err
+	}
+	password, err := store.EnsureAddonSchema(ctx, h.db, m.Name, h.log)
+	if err != nil {
+		return nil, err
+	}
+	if source != nil {
+		if err := store.MigrateAddon(ctx, h.dsn, m.Name, password, source, h.log); err != nil {
+			return nil, err
+		}
+	}
+	// The post-condition on somebody else's DDL. Privileges are what confine it,
+	// and this asks the catalogue whether they did — once per load, in one query —
+	// because *refuses DDL that names any other schema* is a claim about the
+	// outcome, and the mechanism is the part a later change could weaken without
+	// anybody noticing.
+	//
+	// **Outside the migrations branch, because DDL is not the only way out.** A
+	// large object and a temp relation are both owned by the role that created them
+	// and live outside its schema, and an add-on makes either from a *query* rather
+	// than from a migration — so an add-on that shipped no `.sql` file at all can
+	// still own something out there. It also asks the other direction, which no
+	// migration causes and a restore does: a table inside the add-on's schema owned
+	// by the application, because `pg_dump` carries no roles. An operator whose
+	// add-on is refused has docs/operations.md's purge for the first and
+	// docs/deployment.md's role restore for the second.
+	violations, err := store.AddonConfinementViolations(ctx, h.db, m.Name)
+	if err != nil {
+		return nil, err
+	}
+	if len(violations) > 0 {
+		return nil, fmt.Errorf("its confinement to %s does not hold: %v",
+			store.AddonSchema(m.Name), violations)
+	}
+	return store.OpenAddonDB(ctx, h.db, h.dsn, m.Name, password, h.log)
 }
 
 // Addons is what loaded, in discovery order. The slice is a copy; the instances
@@ -485,10 +647,118 @@ func (h *Host) Len() int {
 	return len(h.loaded)
 }
 
+// Schemas is the Postgres schema every loaded add-on owns, in discovery order.
+//
+// Only the add-ons that declared storage have one, so this is shorter than
+// [Host.Addons] whenever a module asked for none. It is what
+// [Host.OrphanSchemas] subtracts and what the maintenance job measures.
+func (h *Host) Schemas() []string {
+	if h == nil {
+		return nil
+	}
+	var out []string
+	for _, l := range h.loaded {
+		if l.Schema != "" {
+			out = append(out, l.Schema)
+		}
+	}
+	return out
+}
+
+// OrphanSchemas is every `addon_*` schema in the database that no loaded add-on
+// owns.
+//
+// m63.md's *an orphan is detectable*, and it is detectable because the schema
+// name is derived from the add-on's name rather than recorded: removing a
+// module's directory removes the only thing that would have claimed the schema,
+// and what is left over is exactly the set this returns. Nothing here deletes
+// anything — a purge is an operator's explicit act, and [M68]'s flow.
+//
+// Nil host, or a host with no database, answers nil and no error: an instance
+// that configured no add-ons has no orphans to have, and saying so with an error
+// would make every caller ask first.
+func (h *Host) OrphanSchemas(ctx context.Context) ([]string, error) {
+	if h == nil || h.db == nil {
+		return nil, nil
+	}
+	all, err := store.AddonSchemas(ctx, h.db)
+	if err != nil {
+		return nil, err
+	}
+	live := make(map[string]bool, len(h.loaded))
+	for _, schema := range h.Schemas() {
+		live[schema] = true
+	}
+	var out []string
+	for _, schema := range all {
+		if !live[schema] {
+			out = append(out, schema)
+		}
+	}
+	return out, nil
+}
+
+// ObserveSchemaSizes publishes how much disk each loaded add-on's schema holds.
+//
+// The metric is the whole of m63.md's answer to quotas: there is no cap on how
+// large an add-on's schema may grow, for the reason there is no cap on the audit
+// log, and the default is only defensible if the growth it permits is visible.
+// Measured on a schedule from the maintenance job — see cmd/linkctrl/jobs.go, and
+// the audit log's own gauge beside it for why every replica measures rather than
+// only the leader.
+//
+// Catalogue arithmetic per add-on, so the cost is two cheap queries times the
+// number of installed modules. A failure is logged at debug and skipped: a
+// measurement that could not be taken is not an operational event.
+//
+// **Two, because a schema is not everything an add-on can fill.** A large object
+// belongs to the role that created it and to no schema, so it is absent from the
+// first measurement by construction; the second counts them, which is what keeps
+// *stored growth is visible by metric* true for the kind of stored growth the
+// schema's size cannot show. It is *the* kind only because the first measurement now
+// sums every relation kind in the schema that has storage rather than a list of
+// them: a sequence was a second kind, inside the schema and invisible to the list,
+// which is D254. See store.AddonLargeObjects for why this one is a count and not a
+// size — and for the qualifier: transient disk an add-on's session holds is neither
+// gauge's subject, which is F279.
+func (h *Host) ObserveSchemaSizes(ctx context.Context) {
+	if h == nil || h.db == nil {
+		return
+	}
+	for _, l := range h.loaded {
+		if l.Schema == "" {
+			continue
+		}
+		bytes, err := store.AddonSchemaBytes(ctx, h.db, l.Manifest.Name)
+		if err != nil {
+			h.log.Debug("could not measure an add-on's schema",
+				slog.String("addon", l.Manifest.Name),
+				slog.Any("error", err))
+		} else {
+			h.metrics.SetAddonSchemaBytes(l.Manifest.Name, bytes)
+		}
+		los, err := store.AddonLargeObjects(ctx, h.db, l.Manifest.Name)
+		if err != nil {
+			h.log.Debug("could not count an add-on's large objects",
+				slog.String("addon", l.Manifest.Name),
+				slog.Any("error", err))
+			continue
+		}
+		h.metrics.SetAddonLargeObjects(l.Manifest.Name, los)
+	}
+}
+
 // Close shuts the runtime down, which closes every module in it.
 func (h *Host) Close(ctx context.Context) error {
 	if h == nil || h.runtime == nil {
 		return nil
+	}
+	// Before the runtime, so nothing can be executing a statement on a pool that is
+	// closing underneath it. The schemas themselves are untouched: closing a host is
+	// not an uninstall, and an add-on's data outliving the process is the whole
+	// point of it being in Postgres.
+	for _, l := range h.loaded {
+		l.storage.Close()
 	}
 	err := h.runtime.Close(ctx)
 	h.runtime = nil

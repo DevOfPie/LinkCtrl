@@ -15,10 +15,10 @@ package abi
 // deliberately rather than by accident, since a module's stdout and stderr are
 // discarded and it is the only way out.
 //
-// Six capability groups, one per limb the phase's remaining milestones land:
-// logging and config are this milestone's and work; storage is M63's, routes and
-// templates M64's, the session hook M65's, redirect observation M66's, and each
-// of those is **declared here and refused at runtime** with
+// Six capability groups, one per limb the phase's milestones land: logging and
+// config are M61's, storage is M63's, and all three work. Routes and templates are
+// M64's, the session hook M65's, redirect observation M66's, and each of those is
+// **declared here and refused at runtime** with
 // StatusNotAvailable. That order is deliberate — a module written against the
 // whole contract compiles today, and the milestone that implements a limb turns
 // a refusal into behaviour without changing a signature. m61.md's second risk is
@@ -83,8 +83,8 @@ var Functions = []Function{
 			"answer is a declared default.",
 	},
 	{
-		Name: "storage_query", Go: "StorageQuery", Since: "0.1.0", BackedBy: "M63",
-		Requires: "storage.own_schema",
+		Name: "storage_query", Go: "StorageQuery", Since: "0.1.0", BackedBy: "M63", Live: true,
+		Requires: PermissionStorage,
 		Params: []Param{
 			{Name: "sql", Kind: String, Doc: "a statement against this add-on's own schema"},
 			{Name: "args", Kind: Bytes, Doc: "positional arguments, as a JSON array", GuestShaped: true},
@@ -93,12 +93,19 @@ var Functions = []Function{
 		Doc: "StorageQuery runs a read against the Postgres schema this add-on owns. " +
 			"The schema boundary is the whole of the permission: an add-on names no " +
 			"database, no connection and no search_path, and a statement that reaches " +
-			"outside its own schema is refused rather than executed. A host that does not " +
-			"implement it yet answers ErrNotAvailable.",
+			"outside its own schema is refused rather than executed — ErrDenied, which " +
+			"is distinguishable from ErrInvalid so that a module can tell confinement " +
+			"from its own mistake. One statement per call: the host parses through the " +
+			"extended protocol, so a payload carrying two is refused. The read is a " +
+			"read at the server, in a READ ONLY transaction, so this function cannot be " +
+			"used to write. Arguments are a JSON array of strings, numbers, booleans " +
+			"and nulls; pass JSON as a string and cast it. Rows come back as a JSON " +
+			"array of objects keyed by column name, and a result with two columns of " +
+			"one name is refused rather than collapsed.",
 	},
 	{
-		Name: "storage_exec", Go: "StorageExec", Since: "0.1.0", BackedBy: "M63",
-		Requires: "storage.own_schema",
+		Name: "storage_exec", Go: "StorageExec", Since: "0.1.0", BackedBy: "M63", Live: true,
+		Requires: PermissionStorage,
 		Params: []Param{
 			{Name: "sql", Kind: String, Doc: "a statement against this add-on's own schema"},
 			{Name: "args", Kind: Bytes, Doc: "positional arguments, as a JSON array", GuestShaped: true},
@@ -106,7 +113,11 @@ var Functions = []Function{
 		Doc: "StorageExec runs a write against the Postgres schema this add-on owns. " +
 			"Migrations are not this function: the host runs an add-on's migrations, which " +
 			"is what keeps *DDL is additive within a minor version* a promise somebody can " +
-			"keep. A host that does not implement it yet answers ErrNotAvailable.",
+			"keep — the add-on ships them in its own `migrations/` directory and names " +
+			"each with its digest in the manifest, and the host applies them at load " +
+			"inside the same schema this function writes to. Everything StorageQuery " +
+			"says about the boundary, the single statement and the arguments applies " +
+			"here too; what differs is that the transaction is not read-only.",
 	},
 	{
 		Name: "http_request_read", Go: "HTTPRequestRead", Since: "0.1.0", BackedBy: "M64",

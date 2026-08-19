@@ -73,15 +73,20 @@ func ConfigGet(key string) (string, error) {
 // StorageQuery runs a read against the Postgres schema this add-on owns.
 // The schema boundary is the whole of the permission: an add-on names no
 // database, no connection and no search_path, and a statement that reaches
-// outside its own schema is refused rather than executed. A host that does
-// not implement it yet answers ErrNotAvailable.
+// outside its own schema is refused rather than executed — ErrDenied,
+// which is distinguishable from ErrInvalid so that a module can tell
+// confinement from its own mistake. One statement per call: the host parses
+// through the extended protocol, so a payload carrying two is refused. The
+// read is a read at the server, in a READ ONLY transaction, so this
+// function cannot be used to write. Arguments are a JSON array of strings,
+// numbers, booleans and nulls; pass JSON as a string and cast it. Rows come
+// back as a JSON array of objects keyed by column name, and a result with
+// two columns of one name is refused rather than collapsed.
 //
 // sql is a statement against this add-on's own schema; args is positional
 // arguments, as a JSON array.
 //
-// ABI: linkctrl.storage_query, since 0.1.0; declared, and not implemented
-// by every host: a host without it answers ErrNotAvailable, which a module
-// may branch on.
+// ABI: linkctrl.storage_query, since 0.1.0; implemented since this version.
 //
 // Requires the storage.own_schema permission, declared in this add-on's
 // manifest. A module that did not declare it gets ErrDenied, whether or not
@@ -93,15 +98,17 @@ func StorageQuery(sql string, args []byte) ([]byte, error) {
 // StorageExec runs a write against the Postgres schema this add-on owns.
 // Migrations are not this function: the host runs an add-on's migrations,
 // which is what keeps *DDL is additive within a minor version* a promise
-// somebody can keep. A host that does not implement it yet answers
-// ErrNotAvailable.
+// somebody can keep — the add-on ships them in its own `migrations/`
+// directory and names each with its digest in the manifest, and the host
+// applies them at load inside the same schema this function writes to.
+// Everything StorageQuery says about the boundary, the single statement and
+// the arguments applies here too; what differs is that the transaction is
+// not read-only.
 //
 // sql is a statement against this add-on's own schema; args is positional
 // arguments, as a JSON array.
 //
-// ABI: linkctrl.storage_exec, since 0.1.0; declared, and not implemented by
-// every host: a host without it answers ErrNotAvailable, which a module may
-// branch on.
+// ABI: linkctrl.storage_exec, since 0.1.0; implemented since this version.
 //
 // Requires the storage.own_schema permission, declared in this add-on's
 // manifest. A module that did not declare it gets ErrDenied, whether or not

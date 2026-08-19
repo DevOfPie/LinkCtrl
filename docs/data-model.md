@@ -182,6 +182,45 @@ because a reader finding the column otherwise concludes the feature is there.
   at that header for the list until 0.3.0, and the header had never carried
   one.)*
 
+## What is not in this document: an add-on's tables
+
+Everything above is in the `public` schema and is this product's. An installed
+add-on that declared `storage.own_schema` also has tables, in a schema of its own
+called `addon_<name>`, and **none of them are described here or anywhere else in
+this repository** — they are the add-on author's, they arrive with the module, and
+the host applies their DDL without understanding it.
+
+Three consequences worth reading before you meet one:
+
+- **`pg_dump` of the database includes them**, because they are schemas in the
+  same database — but **not the roles that own them**, and that half is
+  load-bearing. `pg_dump` carries no roles at all; `pg_dumpall --roles-only` is
+  what does, which is the command
+  [deployment.md](deployment.md#5-back-it-up)'s backup runs — `--globals-only`
+  carries them too, along with tablespaces and database-level grants a
+  single-database restore does not need. Restore a whole-database dump into a cluster whose roles were not
+  restored first and the `ALTER … OWNER TO` lines fail, the next boot repairs the
+  *schema*'s owner and nothing re-owns the tables, so the add-on's own role is
+  refused on its own rows — measured, and the load says so rather than failing
+  inside a migration. So a backup is whole only if it is two files;
+  [deployment.md](deployment.md) has both and the order to restore them in.
+  `pg_dump --schema=addon_<name>` is the per-add-on form, and that
+  is the whole of this release's backup story for add-ons — there is no tooling
+  beyond what `pg_dump` already is, stated rather than implied. What that per-schema
+  form does **not** carry is a **large object**, which belongs to no schema at all:
+  nothing in LinkCtrl creates one and an add-on's role can, so
+  [operations.md](operations.md#add-ons) carries the gauge that says whether any
+  exist and the purge that removes them. A whole-database dump does carry them, so
+  this is a bound on `--schema=` and not on the backup story.
+- **Nothing this document says about column counts, foreign keys or partitioning
+  covers them.** An add-on's schema has whatever its author wrote.
+- **A schema can outlive its add-on.** Removing a module leaves its schema and its
+  rows; the boot log names one nothing claims. [operations.md](operations.md#add-ons)
+  has what to do about it.
+
+The boundary between the two is a database role rather than a convention, and
+[SECURITY.md](SECURITY.md) is where that is argued.
+
 ## Keeping this true
 
 Nothing generates this file, and that is a gap rather than a decision — the

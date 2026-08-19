@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/automation"
@@ -115,7 +116,16 @@ type jobRunner struct {
 	// is inside the service, in the statement that claims the day, because that
 	// is a row somebody may change after boot.
 	updates *update.Service
-	cancel  context.CancelFunc
+	// addons is the add-on host (M63), held for one thing: measuring how much disk
+	// each add-on's own schema holds. Nil is the shipped default — an instance with
+	// no LINKCTRL_ADDONS_DIR has no host at all — and every method on it is
+	// nil-safe, so the pass needs no guard.
+	//
+	// The host is held rather than a list of schema names, because which add-ons are
+	// loaded is a fact that changes: M67 admits one at runtime, and a list captured
+	// here would then describe the boot rather than the instance.
+	addons *addon.Host
+	cancel context.CancelFunc
 	// wg accounts for every family goroutine start launches; stop waits on it,
 	// so shutdown never leaves a pass mid-flight against a pool that is about
 	// to close. The single scheduler goroutine had a done channel doing this
@@ -198,6 +208,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 	links *link.Service,
 	webhooks *webhook.Service, automations *automation.Service, hosts *redirect.HostCache,
 	updates *update.Service,
+	addons *addon.Host,
 	domains config.DomainsConfig,
 	analyticsRetentionDays, auditRetentionDays int, auditSizeWarnBytes int64,
 ) *jobRunner {
@@ -225,6 +236,7 @@ func newJobRunner(pool *pgxpool.Pool, salts *analytics.SaltCache, roller *analyt
 		automation:           automations,
 		hosts:                hosts,
 		updates:              updates,
+		addons:               addons,
 	}
 }
 
@@ -802,8 +814,15 @@ func (j *jobRunner) runMaintenance(ctx context.Context) {
 		j.metrics.SetAuditLogBytes(auditBytes)
 	}
 
-	// Warning the owner about that size is work, not measurement, so it does
-	// run under leadership: three replicas each writing the same notification
+	// Each add-on's schema, and the large objects its role owns, on the same terms
+	// as the audit log above and for the same reasons: a measurement rather than
+	// work, so it runs on every replica and outside leadership. It is the whole of
+	// m63.md's answer to schema quotas — there is no cap, and the growth an operator
+	// agreed to is visible instead.
+	j.addons.ObserveSchemaSizes(runCtx)
+
+	// Warning the owner about the audit log's size is work, not measurement, so it
+	// does run under leadership: three replicas each writing the same notification
 	// would put three copies in one inbox.
 	if err == nil && j.notifier != nil {
 		j.withLeadership(runCtx, advisoryLockKeyMaintenance, "audit-growth-warning", func(ctx context.Context) error {

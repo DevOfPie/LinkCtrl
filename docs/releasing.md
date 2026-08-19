@@ -24,7 +24,8 @@ whole release.)*
 
 The database schema only changes additively within a minor version. Migrations run
 at boot, and `LINKCTRL_MIGRATE_ON_START=false` makes them a deliberate step for
-change-controlled deployments.
+change-controlled deployments — **the product's own, not an installed add-on's**,
+whose DDL the host applies at every boot regardless (F282).
 
 ## Cutting a release
 

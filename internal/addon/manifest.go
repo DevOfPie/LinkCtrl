@@ -78,6 +78,22 @@ type Setting struct {
 	Default string      `json:"default,omitempty"`
 }
 
+// MigrationsDir is the directory inside an add-on's own directory that holds its
+// DDL. Fixed rather than configurable, for the reason [ManifestFile] is: the host
+// has to be able to find it without being told, and a name is the cheapest test.
+const MigrationsDir = "migrations"
+
+// MigrationFile is one migration this add-on ships, and the digest of it.
+type MigrationFile struct {
+	// File is a bare filename inside the add-on's `migrations/` directory. The
+	// same refusal the module gets: a separator, a dot entry or a name that is not
+	// `.sql` is a manifest that should not load rather than a path to clean up.
+	File string `json:"file"`
+	// SHA256 is the digest of that file, lowercase hex — byte-identical to what
+	// `sha256sum` prints, for the reason [Manifest.SHA256] is lowercase.
+	SHA256 string `json:"sha256"`
+}
+
 // Manifest is an add-on's identity and its intent, read before its code is.
 //
 // Every field is consumed by a later milestone and none is decorative:
@@ -120,6 +136,26 @@ type Manifest struct {
 
 	Settings []Setting `json:"settings,omitempty"`
 
+	// Migrations is the DDL this add-on ships, one entry per file, each with the
+	// digest of the file it names.
+	//
+	// **Enumerated with a digest each rather than summarised**, and both halves
+	// earn their place. The digest extends M60's answer from the module to the
+	// DDL: the host runs these statements, an operator did not write them, and
+	// the manifest is what makes them *the add-on author's* rather than whatever
+	// is on disk. Enumerating closes the set — a `.sql` file present in the
+	// directory and absent here refuses the add-on, so nothing can be added to
+	// what the host will execute without editing the manifest that describes it.
+	// A publisher computes these with the same `sha256sum` they already used for
+	// the module, which is why it is a digest per file and not one aggregate over
+	// a canonical ordering nobody could reproduce by hand (D247).
+	//
+	// Files live in the add-on's own `migrations/` directory and are goose SQL:
+	// the host applies them at load, inside the schema the add-on owns, with the
+	// add-on's own role. An add-on that lists any of these must also declare
+	// `storage.own_schema`; validation refuses the pair being incoherent.
+	Migrations []MigrationFile `json:"migrations,omitempty"`
+
 	// CookiePrefixes is the cookie namespace this add-on owns: the request record
 	// M64 hands it carries the cookies whose names begin with one of these and no
 	// others, and the cookies it may set are bounded the same way.
@@ -154,6 +190,12 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,30}$`)
 // redirect.inline, until the milestone that admits an add-on onto the redirect
 // path — is a different case and loads: see resolveGrants.
 var permissionRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
+
+// migrationFileRe is the filename shape goose reads a version out of: digits, an
+// underscore, then anything. Checked here rather than left to goose, because a
+// file goose cannot version is one it silently ignores — and a migration that
+// silently never ran is the worst available failure for DDL.
+var migrationFileRe = regexp.MustCompile(`^[0-9]+_[^\n]*\.sql$`)
 
 // cookiePrefixRe bounds a declared cookie prefix to the shape a cookie name can
 // have here. Narrower than RFC 6265's token, and deliberately the same alphabet
@@ -315,6 +357,53 @@ func (m Manifest) Validate() error {
 			add("permissions: %q is declared twice", p)
 		}
 		seenPerm[p] = true
+	}
+
+	seenMigration := make(map[string]bool, len(m.Migrations))
+	for _, f := range m.Migrations {
+		switch {
+		case f.File == "":
+			add("migrations: an entry must name the .sql file it describes")
+		case strings.ContainsRune(f.File, '/'), strings.ContainsRune(f.File, '\\'),
+			f.File == ".", f.File == "..":
+			// The same refusal `module` gets, and for the same reason: a manifest
+			// naming ../../anything is not a path with a fix.
+			add("migrations: %q must be a bare filename inside %s/", f.File, MigrationsDir)
+		case !strings.HasSuffix(f.File, ".sql"):
+			// `.go` migrations are goose's other form and are not reachable here: the
+			// host builds the migration filesystem from this list, so a Go migration
+			// could not be compiled into the host anyway. Refused by name so a
+			// publisher finds out from the manifest rather than from a migration that
+			// silently never ran.
+			add("migrations: %q must end in .sql", f.File)
+		case !migrationFileRe.MatchString(f.File):
+			add("migrations: %q must begin with a version number and an underscore, "+
+				"as in 00001_initial.sql — the number is what orders it", f.File)
+		case seenMigration[f.File]:
+			add("migrations: %q is listed twice", f.File)
+		}
+		seenMigration[f.File] = true
+
+		switch {
+		case len(f.SHA256) != 64:
+			add("migrations %q: sha256 %q must be 64 hex characters", f.File, f.SHA256)
+		case strings.ToLower(f.SHA256) != f.SHA256:
+			add("migrations %q: sha256 %q must be lowercase", f.File, f.SHA256)
+		default:
+			if _, err := hex.DecodeString(f.SHA256); err != nil {
+				add("migrations %q: sha256 %q is not hex: %v", f.File, f.SHA256, err)
+			}
+		}
+	}
+	if len(m.Migrations) > 0 && !seenPerm[abi.PermissionStorage] {
+		// The host runs this DDL inside the schema `storage.own_schema` is the grant
+		// for. An add-on shipping migrations without declaring it has described a
+		// capability it did not ask for, and the safe direction to guess in does not
+		// exist: creating the schema anyway grants what was not requested, and
+		// skipping the migrations leaves a module whose tables silently do not exist.
+		add("migrations: %d file(s) are listed and %q is not declared; the host runs "+
+			"an add-on's DDL inside the schema that permission grants",
+			len(m.Migrations), abi.PermissionStorage)
 	}
 
 	seenPrefix := make(map[string]bool, len(m.CookiePrefixes))

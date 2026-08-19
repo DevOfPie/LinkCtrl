@@ -20,6 +20,40 @@ future version will do.
 Postgres 17 and Redis 7 come from the compose file. Nothing else is required —
 no Node, no Python, no build toolchain.
 
+**One extra database privilege, and only if you install an add-on that stores
+data.** An add-on declaring `storage.own_schema` gets a Postgres schema of its own
+and a **role** of its own, and the role is what confines it — see
+[SECURITY.md](SECURITY.md). Creating that role needs `CREATEROLE`, and the role
+needs to be able to authenticate with a password, because the host opens a
+connection *as* it rather than issuing `SET ROLE` on its own. The compose file's
+database user is a superuser, so both are already true there. On a managed Postgres
+where LinkCtrl connects as a restricted user, or on a deployment authenticating by
+`peer` or by a cloud IAM token, such an add-on will not load and the boot log says
+so. There is no weaker fallback on purpose: the only one available is not a
+boundary, and an instance quietly running an unconfined add-on is worse than one
+that refuses to run it. Everything else in this product needs neither.
+
+**One database-wide change, and it is worth knowing if this database has another
+tenant.** Installing a storage add-on revokes `TEMPORARY` on the database from
+`PUBLIC` and grants it back to LinkCtrl's own user, because a temporary table is a
+place an add-on's role could otherwise put data outside its schema. Postgres has no
+per-role deny for that privilege, so `PUBLIC` is the only lever and every other role
+on this database loses temporary tables with it — if another application shares this
+database and uses one, do not install a storage add-on. LinkCtrl itself uses none.
+The revoke needs LinkCtrl's user to **own** the database; where it does not, the
+statement is a no-op, the boot log says so at warn, and nothing else changes — an
+add-on that creates a temporary relation is still refused at its next load, which is
+what the boundary actually rests on. Nothing carries the revoke through a restore
+either, so it is re-applied at the next load of a storage add-on.
+
+**Running more than one replica needs nothing extra**, and one detail is worth
+knowing before you read a log line about it: each replica mints that role's password
+for itself at boot, so the newest replica's boot invalidates the credential the
+others hold. They re-mint on their next connection and log
+`credential had been rotated by another replica` at warn. In a single-replica
+deployment that line means two processes are pointed at one database, which is worth
+looking into.
+
 ## 1. Get the code and set the secrets
 
 ```sh
@@ -459,14 +493,37 @@ consequence; the app is a stateless image.
 ```sh
 docker compose exec -T postgres \
   pg_dump -U linkctrl -Fc linkctrl > linkctrl-$(date -u +%Y%m%d).dump
+docker compose exec -T postgres \
+  pg_dumpall -U linkctrl --roles-only > linkctrl-roles-$(date -u +%Y%m%d).sql
 ```
 
-Restore into an empty database:
+Restore the roles first, then the database:
 
 ```sh
 docker compose exec -T postgres \
+  psql -U linkctrl -d postgres -f - < linkctrl-roles-20260730.sql
+docker compose exec -T postgres \
   pg_restore -U linkctrl -d linkctrl --clean --if-exists < linkctrl-20260730.dump
 ```
+
+**The second file is only needed if you install an add-on that stores data, and
+then it is not optional.** Such an add-on gets a Postgres role of its own and owns
+its tables as that role. `pg_dump` carries **no roles** — measured: restoring
+without them fails every `ALTER … OWNER TO` line with *role does not exist*, the
+next boot repairs the schema's owner and nothing re-owns the tables, and the
+add-on's role is then refused on its own rows. A `required` add-on stops the
+instance in that state and a `degrade` one serves with its storage failing; the
+boot log names the tables. Recovering after the fact means restoring the roles and
+re-owning by hand (`REASSIGN OWNED BY linkctrl TO addon_<name>` is wrong — it would
+move the product's tables too; `ALTER TABLE addon_<name>.<table> OWNER TO
+addon_<name>` per table is right), which is why the two dumps are taken together.
+
+Two things about the roles file. Restoring it into a cluster that already has these
+roles prints *role "linkctrl" already exists* and carries on, which is correct and
+not a failure — the file is written to be replayed into an empty cluster. And **it
+contains password hashes**, this instance's database user among them, so protect it
+exactly as you protect the dump. An add-on role's own password is not worth
+protecting: LinkCtrl mints a fresh one at every boot and stores it nowhere.
 
 Two notes specific to this schema:
 
@@ -535,7 +592,9 @@ configuration from the environment and needs Postgres reachable. `linkctrl
 --check-config` validates a configuration before you wire up a unit file.
 
 For change-controlled environments, set `LINKCTRL_MIGRATE_ON_START=false` and run
-migrations deliberately:
+migrations deliberately. **This governs the product's schema only** — a storage
+add-on's migrations are applied by the host at every boot whatever the flag says, and
+no command applies them out of band (F282):
 
 ```sh
 docker compose run --rm --entrypoint /lctl app migrate up

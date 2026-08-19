@@ -121,13 +121,19 @@ numbers larger has to raise `stop_grace_period` first.
 
 Nothing here needs a coordinator, an external lock service, or a second
 Postgres. Running one container is unaffected by all of it: with one replica the
-holder of every advisory lock is always the only candidate.
+only *replica* competing for an advisory lock is that replica. An installed add-on
+is the one other session that can hold one — the keys are constants in a public
+repository and `pg_advisory_lock` is executable by any role — so the host releases
+every advisory lock an add-on's connection holds before that connection is reused,
+which bounds the hold to the add-on's own call. `docs/SECURITY.md` states the
+residual: one statement, five seconds at most, and a job that finds the lock taken
+skips its tick exactly as a follower does.
 
 ### What happens when a replica dies
 
 | Work | On a replica that is killed | Bound |
 | --- | --- | --- |
-| **Scheduled jobs** | A Postgres advisory lock is released the instant the session holding it ends — killed or not. Nothing detects the death; the next follower to tick simply finds the lock free. | One tick of that family. The fastest family ticks every 60s; the hourly ones every hour. |
+| **Scheduled jobs** | A Postgres advisory lock is released the instant the session holding it ends — killed or not. Nothing detects the death; the next follower to tick simply finds the lock free, unless an installed add-on's own statement is holding it at that moment, which is bounded by the paragraph above. | One tick of that family. The fastest family ticks every 60s; the hourly ones every hour. |
 | **Webhook deliveries** | Claimed with `FOR UPDATE SKIP LOCKED` under a **60-second lease**, in the same statement that spends the attempt. A replica killed after claiming leaves a row that comes back on its own rather than one stuck pending. | 60s, then another replica delivers it. |
 | **Mail outbox** | The same claim, the same lease, the same recovery. | 60s. |
 | **Buffered click events** | Lost. The queue is in-process and bounded by design (D77); a graceful shutdown flushes it, a kill does not. | Whatever was in the queue — `linkctrl_analytics_queue_depth` is the number. |
@@ -240,9 +246,11 @@ scrape_configs:
 | `linkctrl_destination_feed_checks_total{result}` | Third-party reputation checks: `clean`, `malicious`, `error`, `skipped`. **Absent entirely unless `LINKCTRL_FEED_URL` is set**, which makes the series itself the answer to "is this instance sending destinations anywhere". |
 | `linkctrl_webhook_deliveries_total{outcome,status}` | Outbound webhook deliveries. `outcome` is `delivered`, `retry` or `abandoned`; `status` is the HTTP class — `2xx`, `3xx`, `4xx`, `5xx` — or **`none`** when there was no response at all: a refused connection, a timeout, or this instance declining to open the socket because the name resolved to a private address. Deliberately not labelled by URL: registrations are chosen by users, so a label per endpoint is a series count anybody with a workspace could grow. |
 | `linkctrl_automation_firings_total{trigger,outcome}` | Automation rules that fired (M43). `trigger` is one of the three names in the closed vocabulary; `outcome` is `fired`, or `partial` when at least one action failed. Counted once per **firing**, not per subject and not per evaluation — a rule that matched forty links did one thing, and a counter that ticked for every run would measure the scheduler rather than the automation. Deliberately not labelled by rule: rules are named by users, so a label per rule is a series count anybody with a workspace could grow. Which rule fired is in that workspace's audit log, as `automation.fired`. |
-| `linkctrl_addon_loads_total{addon,outcome}` | Add-on load attempts, one per add-on per boot. `outcome` is `loaded`, `manifest_invalid`, `abi_unsupported`, `checksum_mismatch`, `module_unreadable` or `instantiate_failed`. **`abi_unsupported` is the one whose fix is a version rather than a file**: the manifest is well-formed and names an ABI generation this build does not serve, so either LinkCtrl or the add-on is the wrong one and the boot log names both numbers — see [addon-abi.md](addon-abi.md). **Absent entirely unless `LINKCTRL_ADDONS_DIR` is set**, so the series itself answers "is this instance running any add-ons". The refusals are counted and not only logged, because an operator whose add-on is quietly not there needs something a scrape can see. `addon` is the add-on's own name, except on a refusal that never got as far as reading one: there the label is the directory, and a directory whose name is not a usable add-on name is published as **`<invalid>`** rather than verbatim — so if you see that, the fault is the directory's name and the boot log names it in full. |
+| `linkctrl_addon_loads_total{addon,outcome}` | Add-on load attempts, one per add-on per boot. `outcome` is `loaded`, `manifest_invalid`, `abi_unsupported`, `checksum_mismatch`, `module_unreadable`, `instantiate_failed` or `storage_failed`. **`storage_failed` is the one whose fix is in the database rather than in the directory**: the add-on asked for a schema of its own and something about it did not work — a privilege your database user does not hold, a migration its author wrote wrongly, DDL that reached outside the schema it owns, or a manifest that does not describe the `.sql` files beside it. The boot log names which. **`abi_unsupported` is the one whose fix is a version rather than a file**: the manifest is well-formed and names an ABI generation this build does not serve, so either LinkCtrl or the add-on is the wrong one and the boot log names both numbers — see [addon-abi.md](addon-abi.md). **Absent entirely unless `LINKCTRL_ADDONS_DIR` is set**, so the series itself answers "is this instance running any add-ons". The refusals are counted and not only logged, because an operator whose add-on is quietly not there needs something a scrape can see. `addon` is the add-on's own name, except on a refusal that never got as far as reading one: there the label is the directory, and a directory whose name is not a usable add-on name is published as **`<invalid>`** rather than verbatim — so if you see that, the fault is the directory's name and the boot log names it in full. |
 | `linkctrl_addon_info{addon,version,abi_version,failure_class,permissions}` | Always 1 per add-on that **loaded**; the labels are the point, as with `linkctrl_build_info`. An add-on that was refused has no series here — this is what the instance is running, not what it was asked to run — so comparing this against the directory's contents is how you notice one missing. `permissions` is the sorted, comma-separated list of grants the module **holds**, which is not always what its manifest asked for: a permission this build publishes and grants to nobody — `redirect.inline` today — is declarable, is not held, and is absent here. The boot log names the difference. Sorted so that a manifest listing the same grants in another order does not change the series' identity. |
 | `linkctrl_addon_refusals_total{addon,permission}` | ABI calls an add-on made and did not have the permission for. **Non-zero means a module is asking for something its manifest does not declare**, which is either an add-on shipped with an incomplete manifest or one whose author expected a capability this build does not grant — either way it is the add-on's author's to fix, and the add-on's own log lines at debug name the function. Bounded at six series per add-on, because the permission vocabulary is closed ([addon-abi.md](addon-abi.md)). It counts *undeclared* calls only: a call refused because this build has not implemented the function yet is not counted, since probing for a capability is what the ABI invites, and neither is a settings key outside the add-on's own manifest. |
+| `linkctrl_addon_schema_bytes{addon}` | On-disk size of one add-on's own Postgres schema: **every relation in it that has storage** — tables, sequences, materialized views — with their indexes and TOAST. It sums the kinds it does *not* exclude rather than a list of the kinds somebody thought of, and that is a correction: until 2026-08-19 it summed ordinary and materialized tables only, so a **sequence** — 8192 bytes in the schema from the moment it is created, and outside `pg_total_relation_size` of the table that owns it — was invisible. 24,000 of them, 188 MB of `pg_database_size`, and this gauge read **0** throughout. It was never only an adversary's case either: the host's own `goose_db_version` table in that schema declares an identity column, so every storage add-on has always held at least 8192 bytes this number reported as nothing. One series per add-on that declared `storage.own_schema`; absent for one that did not, and absent entirely on an instance with no add-ons. **Nothing caps it** — that is the same answer the audit log gets, so an add-on that writes a row per redirect is visible here. It is not *everything* an add-on can fill: a **large object** belongs to no schema, so it is absent from this number by construction, and `linkctrl_addon_large_objects{addon}` below is the other half of the *stored* data. **Neither gauge covers disk an add-on's session holds transiently**, and one case is measured: a `WITH HOLD` cursor materialized at commit keeps a temporary file in the cluster's `pgsql_tmp` until the connection ends — 553 MB for one cursor inside the add-on's five-second statement timeout, with both gauges reading zero throughout. It is not stored data and it is freed with the backend, so nothing here reports it; the only bound is `ALTER ROLE addon_<name> SET temp_file_limit`, which needs a superuser, after which the cursor fails with *temporary file size exceeds temp_file_limit* and the add-on cannot raise or reset it — measured both ways. Measured hourly by the maintenance pass on **every** replica rather than only the leader, for the reason `linkctrl_audit_log_bytes` is: a gauge the followers never set reads as zero and your alert would depend on which replica answered the scrape. It is catalogue arithmetic, not a scan. Removing an add-on removes its series and not its data — the schema stays, and the boot log names it as an orphan. |
+| `linkctrl_addon_large_objects{addon}` | How many Postgres **large objects** an add-on's database role owns, and it should be **0** for every add-on forever. Nothing in LinkCtrl creates one; the ABI gives an add-on no way to ask for one; and a large object is in no schema, so `linkctrl_addon_schema_bytes` cannot see it. A role confined to its own schema can still create one — `EXECUTE` on `lo_from_bytea` belongs to `PUBLIC` and Postgres has no per-role deny — and 40 MB in a single statement was measured. A count rather than a size, because the bytes live in `pg_largeobject`, which only a superuser may read: as superuser, `SELECT count(*), pg_size_pretty(sum(length(data))) FROM pg_largeobject` is the size. **Any value above zero is an add-on writing outside its schema**, the add-on is refused at its next load, and the purge below is what removes the data. Measured hourly, on every replica, like the gauge above. |
 
 Plus the standard `go_*` and `process_*` collectors.
 
@@ -300,6 +308,8 @@ rate(linkctrl_db_pool_acquire_waits_total{pool="redirect"}[5m]) > 0
 | Rows in a default partition | see [below](#partitions) | Silent data misrouting; next month's partition will fail to attach. |
 | An add-on is not loaded | `(count(linkctrl_addon_info) or vector(0)) < <however many you installed>` | A `degrade`-class add-on refused to load and the instance is serving without it. **`or vector(0)` is load-bearing, not defensive**: a refused add-on publishes no `linkctrl_addon_info` series at all, so if every add-on you installed is `degrade`-class and every one of them refuses, a bare `count()` returns an empty vector, the comparison yields nothing, and the alert is silent in exactly the case it is written for — [F102](build-notes/deferred-findings.md) was this same shape in this same table. Which one, and why, is in `linkctrl_addon_loads_total{outcome!="loaded"} > 0`, which names the add-on and stays above zero for the life of the process; alert on that instead if you would rather not maintain a count by hand, and keep this one as well if you also want to hear about an add-on that has gone missing from the directory entirely, which produces no load attempt and therefore no counter. A `required`-class add-on cannot produce either — the instance would not be up. |
 | An add-on is asking for what it did not declare | `rate(linkctrl_addon_refusals_total[1h]) > 0` | The module is calling a host function whose permission is not in its manifest, and the host is refusing it. Not a fault of yours: report it to whoever publishes the add-on, with the permission from the label and the function from the instance's debug log. Worth alerting on because the module may be degrading silently — the refusal is a status its author has to have handled. |
+| An add-on owns a large object | `linkctrl_addon_large_objects > 0` | Zero is the only correct value; see the metric's own row. It means the add-on wrote data outside its schema, that data is invisible to the size gauge, and the add-on will be refused at its next load until an operator purges it. Nothing about it is normal, so alert on any nonzero value rather than on a rate. |
+| An add-on's schema is growing | `rate(linkctrl_addon_schema_bytes[24h]) > 0` on a module you did not expect to grow, or an absolute ceiling of your own | Nothing caps an add-on's schema, so this is the only thing that will tell you it is growing. **Alert on the filesystem as well**: this gauge and `linkctrl_addon_large_objects` between them cover data an add-on has *stored* — every catalogued relation in the schema since the 2026-08-19 correction, sequences included — and a session holding a `WITH HOLD` cursor fills `pgsql_tmp` without moving either, see this gauge's own row. Pick the shape by what the add-on is: a configuration store should be flat and a rate above zero is news, while an analytics add-on grows by design and only an absolute threshold means anything. There is no product-side remedy — the add-on's author decides what it keeps — so the action is theirs to take or yours to uninstall. |
 
 One caveat on local numbers: **on a Windows host, latency measures as exactly
 zero** because Go's monotonic clock there cannot resolve intervals this short.
@@ -481,6 +491,117 @@ click ingester holds one on every batch. Failing is cheap — it runs again in a
 hour — and the timeout exists so a housekeeping job can never stall the write
 path while it waits.
 
+## Add-ons
+
+Only relevant with `LINKCTRL_ADDONS_DIR` set. An instance without it constructs no
+WASM runtime, creates no schema and publishes none of the series above.
+
+### A required add-on that will not load holds the instance down
+
+This is designed behaviour and it has a cost worth knowing before you meet it. An
+add-on declares its own failure class, and `required` means *the instance is not
+this product without me*. So a `required` add-on that fails to load is an exit with
+the reason, before the listener opens — which is right for an authentication
+provider, because the alternative is an instance that boots with sign-in silently
+missing, and wrong to discover during an incident.
+
+Since add-on migrations run at boot, a **bad add-on release can hold an instance
+down without any of your configuration changing**. The DDL is the add-on author's;
+what you control is which version is in the directory.
+
+What it looks like: the process exits, the last log line names the add-on, the
+outcome and the reason, and `linkctrl_addon_loads_total{addon,outcome}` never gets
+scraped because nothing is serving. Read the exit, not the metrics.
+
+Recovery, in the order that costs least:
+
+1. **Roll the add-on back.** Put the previous version's directory back and restart.
+   Its migrations are versioned in a goose table inside its own schema, so a
+   version already applied is not re-applied and a rollback of the module alone is
+   safe unless the add-on's own release notes say otherwise. Nothing rolls DDL
+   *back* — `down` migrations are not run at load — so a release that added a
+   column leaves the column.
+2. **Remove the directory and restart.** The instance comes up without the add-on,
+   its schema and its data untouched. Whatever the add-on did for you stops; if
+   that was sign-in, make sure you have another way in first.
+3. **Change the failure class.** Editing `failure_class` to `degrade` in a manifest
+   you did not write is a decision, not a fix: it converts "the instance stops" into
+   "the instance serves with this missing", which for an authentication add-on is
+   the outcome the class exists to prevent. Nothing stops you or records that you
+   did: the manifest is the trust root and is not itself hashed — the digests in it
+   are of the `.wasm` and of each `.sql`, and editing a field beside them
+   invalidates none of them. So the only account of the change is yours. Prefer 1
+   or 2.
+
+`storage_failed` as the outcome narrows it further: the module is fine and the
+database is the problem. Five causes, in the order they occur:
+
+- **Your database user cannot create a role.** The host makes one role per add-on,
+  and that role is the confinement. `CREATEROLE` or superuser is required, and
+  password authentication has to be available for the new role — the host connects
+  *as* it. A deployment authenticating by `peer` or by a cloud IAM token cannot
+  offer that and such an add-on will not load there.
+- **The manifest does not describe the `.sql` files beside it.** A file it does not
+  list, or one whose bytes it describes wrongly, refuses the add-on before any
+  schema exists. Report it to whoever published the add-on; do not edit the
+  manifest to match, which is deleting the check rather than passing it.
+- **The DDL reached outside the add-on's own schema.** Postgres refuses it and the
+  host also asks the catalogue afterwards whether anything landed elsewhere. This
+  one is an add-on bug and possibly worse; it is the add-on's author's to answer
+  for. The refusal reads `it owns <what>, which is not in addon_<name>` and names
+  the object, whether it is a table in another schema, a large object or a
+  temporary relation. The purge below is what removes what it names.
+- **The add-on gave its own schema away.** The refusal reads `it has granted
+  <privilege> on <what> to <whom>`, and `PUBLIC` is a possible *whom*. An add-on
+  owns its schema, so it can grant on it, and another add-on can then read those
+  tables — the host cannot prevent that and does not pretend to; it reports it at
+  the next load and declines to run the module. Usually an add-on bug or a
+  deliberate integration its author did not document, and the operator's part is one
+  `REVOKE` of what the message names. It reads the same way if *you* granted it: a
+  reporting role with `SELECT` on an add-on's schema stops that add-on from loading,
+  which is a cost of the check stated rather than hidden.
+- **The add-on's tables are owned by somebody else, and you restored a backup.**
+  The refusal reads `it does not own <what>, which is in addon_<name>`. This is not
+  an add-on bug: `pg_dump` carries no roles, so a restore into a cluster whose roles
+  were not restored first leaves an add-on's tables owned by LinkCtrl's own user.
+  Fix it by restoring the roles and re-owning the tables — the procedure and the
+  reason are in [deployment.md](deployment.md#5-back-it-up) — not by dropping the
+  schema, which drops the add-on's data.
+
+### Removing an add-on leaves its schema
+
+Deleting a module's directory does not delete its data. The next boot warns:
+
+```
+add-on schemas with no loaded module; their data is still on disk and nothing here deletes it
+```
+
+That is deliberate. Purging an add-on's schema destroys rows nothing else can
+recreate, and doing it because a file went missing would make an accidentally
+unmounted volume into data loss. The schema is `addon_<name>`, it still costs disk,
+and it still holds whatever the add-on stored.
+
+To purge one, having decided that is what you want:
+
+```sql
+DROP SCHEMA addon_<name> CASCADE;
+DROP OWNED BY addon_<name>;
+DROP ROLE addon_<name>;
+```
+
+Back up first — this is not recoverable — and do it with the add-on's directory
+already removed, or the next boot recreates the schema empty and re-runs its
+migrations.
+
+**All three statements, in that order.** `DROP SCHEMA … CASCADE` does not touch a
+**large object**, because a large object belongs to no schema; `DROP ROLE` then
+fails with *cannot be dropped because some objects depend on it*, whose DETAIL
+names the large object, and the disk stays allocated with no schema left to
+attribute it to. `DROP OWNED BY` is the statement that drops one. The middle line
+is a no-op for an add-on that behaved, which is every add-on that has never made
+`linkctrl_addon_large_objects` nonzero, and it costs nothing to run anyway.
+
+
 ## Troubleshooting
 
 | Symptom | Likely cause and fix |
@@ -497,6 +618,8 @@ path while it waits.
 | `/docs` renders as plain text | Its CSP relaxes `style-src` only; a proxy overriding `Content-Security-Policy` breaks it. Stop overriding it — LinkCtrl sets its own security headers. |
 | API keys all rejected after a config change | `API_KEY_PEPPER` changed. Every hash is keyed with it. Restore the old value or reissue every key. |
 | Login always fails, no obvious reason | A CRLF in `.env` gave Postgres or a secret a trailing carriage return. Also check whether the account is locked: five failures triggers a 15-minute lockout, and **the response does not say so** — every sign-in refusal is the same 401, deliberately, because a distinct answer for a lockout tells a stranger which addresses are registered. `SELECT email, locked_until FROM users WHERE locked_until > now();` is how you find out, and `UPDATE users SET locked_until = NULL WHERE email_lower = '…';` is how you lift one early. |
+| The instance exits at boot naming an add-on | A `required`-class add-on will not load. The exit line names the outcome; `storage_failed` means the database rather than the directory. See [Add-ons](#add-ons) for the recovery order. |
+| An add-on's tables are missing after an upgrade | Its migrations did not run, and if the add-on is `degrade`-class the instance came up anyway. `linkctrl_addon_loads_total{outcome="storage_failed"}` names it and the boot log says why. |
 | Cannot claim a fresh instance | `/setup` is single-use and returns 404 once a user exists. Invite the person instead, or set `SIGNUP_MODE` and restart. |
 | `/signup` answers 403 with `SIGNUP_MODE=open` | No `LINKCTRL_SMTP_HOST`. Public registration confirms the address by email before the account exists, so with no relay the effective mode is `invite`. The boot log says so; set a relay and restart. |
 | Nobody can see `/disputes` after upgrading to 0.2.0 | The dispute queue moved off the owner role and onto the instance-level principal. The upgrade conferred it on the **earliest surviving account**, which on any instance that went through `/setup` is the setup account — sign in as that account and appoint whoever should review, at the bottom of `/disputes`. If that account is gone or was never yours, see *Moving the instance principal* below. |

@@ -58,6 +58,47 @@ who needs to support both hosts probes with
 The version the ABI is at right now is in the generated table below, and
 `sdk.ABIVersion` carries the same string into the module.
 
+### The `migrations` field, and why every file is named
+
+An add-on that declares `storage.own_schema` may ship DDL, in a `migrations/`
+directory beside its module, in goose SQL. The **host** runs it — at load, before
+the listener opens, inside the schema the add-on owns and as the add-on's own
+database role. That is what keeps *DDL is additive within a minor version* a
+promise somebody can keep rather than one every publisher re-implements.
+
+The manifest names each file with its own digest:
+
+```json
+"permissions": ["storage.own_schema"],
+"migrations": [
+  { "file": "00001_initial.sql", "sha256": "…" },
+  { "file": "00002_add_index.sql", "sha256": "…" }
+]
+```
+
+Three rules, and each is a refusal rather than a warning:
+
+- **a file listed here and not on disk** refuses the add-on;
+- **a `.sql` file on disk and not listed here** refuses the add-on. The set is
+  closed for the same reason the `permissions` vocabulary is: DDL an operator did
+  not write and the manifest does not describe is DDL nobody agreed to;
+- **a file whose bytes are not the digest** refuses the add-on, which is the
+  `module` field's rule applied to the DDL beside it.
+
+Filenames are goose's: a version number, an underscore, and `.sql`. A name goose
+cannot read a version out of is refused here rather than silently ignored, because
+a migration that never ran is the worst way to find out. `.go` migrations are not
+available — the host cannot compile a publisher's Go.
+
+Compute the digests with the same tool the module's uses:
+
+```console
+$ sha256sum addon.wasm migrations/*.sql
+```
+
+`down` migrations are never run by the host. Write them if you like; nothing calls
+them, and rolling a release back does not roll its DDL back.
+
 ## What counts as breaking
 
 The point of writing this down is that *is this minor or major* stops being a
@@ -224,11 +265,14 @@ is `ErrDenied`, counted in
 beside it.
 
 **The refusal comes before the availability status.** A module that declared
-nothing gets `ErrDenied` from `storage_query`, not `ErrNotAvailable` — so probing
+nothing gets `ErrDenied` from `template_render`, not `ErrNotAvailable` — so probing
 for a capability, which this page invites you to do, only tells you about
 capabilities you asked for. A module that *did* declare the grant gets
 `ErrNotAvailable` from the same call until the release that implements it, which
-is the whole of the difference between the two statuses.
+is the whole of the difference between the two statuses. The example was
+`storage_query` until the release that implemented it; which functions are live is
+the **Status** column of the table below, and it is generated, so it is the one
+place worth reading for that.
 
 **The vocabulary is closed.** A `permissions` entry that is not one of the tokens
 in [the permission table](#permissions) refuses the add-on at load, for the same
@@ -292,6 +336,83 @@ it, rather than anything a role or a credential confers. The comparison with thi
 product's own permission model, and why the two are parallel mechanisms rather
 than one, is in
 [build-notes/decisions.md](build-notes/decisions.md).
+
+## What a storage statement may and may not do
+
+`storage_query` and `storage_exec` are one grant, `storage.own_schema`, and the
+schema boundary is the whole of it. There is no row-level or column-level form, and
+nothing here reaches another add-on's schema or this product's tables — unless that
+add-on granted you the reach itself, which it can, because it owns its schema and
+the host reports the grant rather than preventing it.
+
+What holds, and it is enforced by Postgres rather than by a parser here:
+
+- **the schema is yours and nothing else is.** Your add-on's role owns
+  `addon_<name>` and holds no privilege on any table outside it, so
+  `SELECT * FROM public.links` is `ErrDenied` — not because a search path failed to
+  resolve, which it never would, but because the role may not read it. The same
+  answer for another add-on's schema. `pg_catalog` and `information_schema` stay
+  readable, because Postgres does not make them revocable; you can see that the
+  product's tables exist and not a row of one;
+- **`ErrDenied` and `ErrInvalid` mean different things.** `ErrDenied` from a
+  statement is the boundary — you reached outside your schema — and `ErrInvalid` is
+  your statement: a syntax error, a column that is not there, an argument the ABI
+  does not carry. The error text never crosses, deliberately: a Postgres message
+  names tables and constraints, and a module that could read one could print this
+  product's schema into somebody's page. The host logs the detail;
+- **one statement per call.** The host parses through Postgres's extended protocol,
+  so a payload carrying two commands is refused. Batch by calling twice;
+- **a query cannot write.** `storage_query` runs in a `READ ONLY` transaction, so
+  which of the two functions you called is a fact rather than a description;
+- **arguments are a JSON array** of strings, numbers, booleans and nulls, bound as
+  `$1`, `$2` and so on. An object or an array inside it is `ErrInvalid` — whether
+  you meant `jsonb` or a record is not knowable from the value — so pass JSON as a
+  string and cast it in the statement;
+- **rows come back as a JSON array of objects**, keyed by column name. Two columns
+  of one name are refused rather than collapsed, so alias them. A column type with
+  no JSON form is `ErrInvalid`; cast it to text if you want a shape you chose;
+- **there are bounds, and they are not configurable.** One statement gets five
+  seconds, a result gets a megabyte, and one add-on gets four connections. A
+  statement crossing into the host is bounded at 64 KiB like every other value;
+- **your search path is your own schema**, pinned per statement, so unqualified
+  names resolve to your tables. Re-pointing it inside a `DO` block is allowed and
+  buys nothing, because the search path was never the boundary.
+
+**Nothing caps how much you store.** An operator sees
+`linkctrl_addon_schema_bytes{addon}` and decides what to do about it, which is the
+same answer this product gives its own audit log. Growing without bound is
+something you should be able to defend.
+
+**Store it in your schema and nowhere else, and keep it to yourself; the host checks
+rather than trusts.** At every load it asks Postgres what your role owns, what is in
+your schema, and what you have granted on that schema to anybody but yourself — and
+refuses your add-on if any of the three answers is wrong. So anything of yours
+outside your schema works once and never boots again, and so does a `GRANT` on your
+own schema to another role or to `PUBLIC`. Two cases are worth naming because
+Postgres permits them and the check does not:
+
+- a **large object** is in no schema at all, and your role may create one. The host
+  also counts them and publishes the count. There is no ABI for large objects and
+  there is not going to be one: a `bytea` column in your own table is the shape this
+  product accounts for.
+- a **temporary table** is in `pg_temp`, which is not your schema either. On most
+  instances `CREATE TEMP TABLE` is refused outright, because installing a storage
+  add-on revokes the privilege from `PUBLIC`; where the instance's database user does
+  not own the database it is not refused, and then the load post-condition catches it
+  instead. Either way it is not a place to put anything. A `SELECT` with a CTE does
+  what a scratch table would, inside one statement, which is all you get anyway.
+
+**Inside your own schema you may do as you like to your own data**, including
+things the host's own *DDL is additive* rule forbids: drop a column, rewrite a
+table, change a type. The rule protects readers, and you have none you did not
+create yourself: the host gives no add-on a way to reach another's schema, and
+nothing of this product's reads yours. What the host cannot stop is *you* handing
+your data out — you own the schema, so `GRANT USAGE ON SCHEMA … TO PUBLIC` and a
+`GRANT SELECT` beside it work, and another add-on can then read your tables. It
+notices instead: the load post-condition reports every grant on your schema whose
+grantee is not your own role, and refuses to load you until an operator revokes
+it. So *no other reader* is yours to keep, and what stays additive is your
+**host-visible** contract within one ABI generation.
 
 ## Every function answers the same way
 
@@ -370,8 +491,8 @@ The ABI is **0.1.0**, generation **1**, and this host loads generation 1 or newe
 | `abi_version`<br>`sdk.HostABIVersion()` | 0.1.0 | — | **live** | HostABIVersion is the ABI version of the host this module is running in. A module's manifest declares the generation it was built against and the host refuses a mismatch before instantiation, so this is not how a module checks compatibility — it is how one logs what it is talking to, and how it decides whether a function added in a later patch is worth probing for. |
 | `log`<br>`sdk.Log(level string, message string)` | 0.1.0 | — | **live** | Log writes one line to the host's logger, attributed to this add-on. It is the only way out: a module's stdout and stderr are discarded, because routing them into an operator's log is a capability and the host grants none it was not asked for. The host adds the add-on's name; a message that repeats it is noise. An unknown level is ErrInvalid rather than a silent default, so a typo does not become a line nobody greps for. The message is neutralized before it is written and bounded at 4 KiB, and the rule is stated as what survives rather than as what is caught: a graphic character reaches the line as itself, in any script, and everything else becomes its escape — a newline, a control character, an ANSI escape, every format and bidirectional control, every unassigned or private-use code point, and the few characters that are graphic by category and render as nothing. So an invisible code point appears in the line rather than acting on whoever reads it, and a code point Unicode adds after the host was built is escaped rather than let through. One graphic character does not reach the line as itself: a backslash is doubled, so that the two characters \ and n cannot be mistaken for an escaped newline, and a module cannot spell the host's own truncation mark. The named exceptions run the other way: Unicode's prepended concatenation marks — the Arabic, Syriac and Kaithi signs that scope the digits after them — are left alone, read from Unicode's property rather than from a list, so a host built against a newer revision carries the marks it added. Nothing is refused for any of it, and a message that needed none arrives as it was written, backslashes aside. |
 | `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it, and ErrNotFound only when it declared none. Values are edited in the Add-on manager; until a host implements that, every answer is a declared default. |
-| `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | declared, refused | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed. A host that does not implement it yet answers ErrNotAvailable. |
-| `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | declared, refused | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep. A host that does not implement it yet answers ErrNotAvailable. |
+| `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed — ErrDenied, which is distinguishable from ErrInvalid so that a module can tell confinement from its own mistake. One statement per call: the host parses through the extended protocol, so a payload carrying two is refused. The read is a read at the server, in a READ ONLY transaction, so this function cannot be used to write. Arguments are a JSON array of strings, numbers, booleans and nulls; pass JSON as a string and cast it. Rows come back as a JSON array of objects keyed by column name, and a result with two columns of one name is refused rather than collapsed. |
+| `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep — the add-on ships them in its own `migrations/` directory and names each with its digest in the manifest, and the host applies them at load inside the same schema this function writes to. Everything StorageQuery says about the boundary, the single statement and the arguments applies here too; what differs is that the transaction is not read-only. |
 | `http_request_read`<br>`sdk.HTTPRequestRead()` | 0.1.0 | `routes.own_prefix` | declared, refused | HTTPRequestRead reads the request that reached one of this add-on's routes. It answers ErrNotFound outside a request, which is what a module calling it from package initialization gets. A host that does not implement it yet answers ErrNotAvailable. |
 | `http_response_write`<br>`sdk.HTTPResponseWrite(response []byte)` | 0.1.0 | `routes.own_prefix` | declared, refused | HTTPResponseWrite answers the request that reached one of this add-on's routes. Called twice for one request it is ErrInvalid: a response is one record, not a stream, because a module that can hold a connection open is a module that can hold every connection open. A host that does not implement it yet answers ErrNotAvailable. |
 | `template_render`<br>`sdk.TemplateRender(name string, data []byte)` | 0.1.0 | `routes.own_prefix` | declared, refused | TemplateRender renders one of this add-on's own templates through the host's renderer, so a page an add-on draws inherits the product's escaping, its theme tokens and its Content-Security-Policy. It is also how an add-on reaches the page without bringing a front-end toolchain: it renders nothing itself. A host that does not implement it yet answers ErrNotAvailable. |
@@ -385,7 +506,7 @@ An add-on declares what it needs in its manifest's `permissions` array, and the 
 | Permission | Grantable | Is |
 | --- | --- | --- |
 | `config.read` | yes | Read this add-on's own declared settings. It is the narrowest grant here and it is still a grant: the manifest's `settings` list says which keys exist, and this says whether the module may read any of them at all. |
-| `storage.own_schema` | yes | Read and write the Postgres schema this add-on owns, whole. The schema boundary is the whole of the grant — there is no row-level or column-level form of it, and no way to name another add-on's schema or this product's own tables. Migrations are the host's and are not this grant. |
+| `storage.own_schema` | yes | Read and write the Postgres schema this add-on owns, whole. The schema boundary is the whole of the grant — there is no row-level or column-level form of it, and nothing here names another add-on's schema or this product's own tables. It does not stop you giving your own schema away: a `GRANT` on what you own works, and the host reports it at your next load and refuses you until it is revoked. Migrations are the host's and are not this grant. |
 | `routes.own_prefix` | yes | Serve requests under the path prefix this add-on owns, and render its own templates through the host's renderer. One grant rather than two: a module renders a fragment in order to answer a request, and a template rendered for nobody is not a capability. |
 | `session.mint` | yes | Tell the host that somebody authenticated, and ask for a session. The highest-value grant in this vocabulary: a module holding it decides who is signed in, subject to the host's own judgement about whether an account exists and what the session may do. |
 | `redirect.observe` | yes | Observe redirects this instance served, out of band. What crosses is at most what click_events may carry — prefix-derived and country-level, and no client address in any form — so this grant cannot be widened into one by the host implementing it. |

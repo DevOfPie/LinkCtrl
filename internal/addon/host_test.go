@@ -89,23 +89,7 @@ func stale(t *testing.T, path, name string) bool {
 	if err != nil {
 		return true
 	}
-	var inputs []string
-	for _, pattern := range []string{
-		filepath.Join(fixtureSrc, name, "*.go"),
-		// The SDK. Every fixture imports it, and a generated SDK changes whenever the
-		// ABI does.
-		filepath.Join("..", "..", "sdk", "*.go"),
-	} {
-		found, err := filepath.Glob(pattern)
-		if err != nil {
-			t.Fatalf("the fixture input pattern %q is malformed: %v", pattern, err)
-		}
-		inputs = append(inputs, found...)
-	}
-	if len(inputs) == 0 {
-		t.Fatalf("the %s test module has no inputs, so staleness cannot be decided", name)
-	}
-	for _, in := range inputs {
+	for _, in := range fixtureInputs(t, name) {
 		info, err := os.Stat(in)
 		if err != nil {
 			t.Fatalf("a fixture input disappeared while being read: %v", err)
@@ -148,6 +132,47 @@ func buildFixture(t *testing.T, name, out string) {
 	}
 }
 
+// fixtureInputs is every file a test module is built from.
+//
+// Factored out of [stale] so that the test asserting staleness can measure against
+// the same set rather than against a second copy of it.
+func fixtureInputs(t *testing.T, name string) []string {
+	t.Helper()
+	var inputs []string
+	for _, pattern := range []string{
+		filepath.Join(fixtureSrc, name, "*.go"),
+		// The SDK. Every fixture imports it, and a generated SDK changes whenever the
+		// ABI does.
+		filepath.Join("..", "..", "sdk", "*.go"),
+	} {
+		found, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatalf("the fixture input pattern %q is malformed: %v", pattern, err)
+		}
+		inputs = append(inputs, found...)
+	}
+	if len(inputs) == 0 {
+		t.Fatalf("the %s test module has no inputs, so staleness cannot be decided", name)
+	}
+	return inputs
+}
+
+// newestFixtureInput is the most recent modification time across that set.
+func newestFixtureInput(t *testing.T, name string) time.Time {
+	t.Helper()
+	var newest time.Time
+	for _, in := range fixtureInputs(t, name) {
+		info, err := os.Stat(in)
+		if err != nil {
+			t.Fatalf("a fixture input disappeared while being read: %v", err)
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	return newest
+}
+
 // The F266 fix, asserted rather than assumed: fixture() consumes what is on disk,
 // so what stops it consuming yesterday's bytes is this comparison and nothing else.
 // The Makefile and the Taskfile carry the same input set; this is the third
@@ -161,7 +186,12 @@ func TestAFixtureOlderThanItsInputsIsStale(t *testing.T) {
 	// Older than every input, which is what a fixture built before an edit looks
 	// like — including an edit to the SDK, which is an input no fixture's own
 	// directory knows anything about.
-	old := time.Now().Add(-time.Hour)
+	//
+	// Relative to the newest input rather than to the clock. `time.Now().Add(-time.Hour)`
+	// asserted this only while something had been edited within the hour: the test
+	// passed for an hour after any edit to a fixture's source or to the SDK and then
+	// began failing on its own, with nothing in the tree having changed.
+	old := newestFixtureInput(t, "minimal").Add(-time.Second)
 	if err := os.Chtimes(artifact, old, old); err != nil {
 		t.Fatal(err)
 	}
@@ -760,7 +790,7 @@ func TestInstantiationCostIsMeasured(t *testing.T) {
 		name := fmt.Sprintf("minimal_%d", i)
 		m := manifestFor(name, ClassRequired, code)
 		grants, _ := resolveGrants(m)
-		direct.registerState(m, grants)
+		direct.registerState(m, grants, nil)
 
 		start = time.Now()
 		mod, err := rt.InstantiateModule(ctx, compiled,

@@ -68,16 +68,26 @@ func init() {
 	_, err = sdk.ConfigGet("some_other_addons_key")
 	check("config_undeclared", errors.Is(err, sdk.ErrDenied), "err "+errText(err))
 
-	// The one this fixture exists for. storage_query is declared by the ABI and
-	// implemented by no host yet, so it resolves as an import — the module links —
-	// and answers a status the module can branch on.
+	// Storage is implemented (M63) and this fixture is loaded by a host that was
+	// constructed **without a database**, which is what every test in
+	// internal/addon has. So the answer is neither the refusal a declared-but-
+	// unimplemented function gives nor a result: it is ErrInternal, the status that
+	// means the host failed at something that is not the module's fault. The
+	// confined, working form is asserted against a real Postgres by the `storage`
+	// fixture and test/integration.
+	//
+	// It is checked here rather than dropped because the alternative is a fixture
+	// that calls every ABI function except two, and the two it skipped are the two
+	// that changed.
 	_, err = sdk.StorageQuery("select 1", nil)
-	check("declared_but_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
-
-	// Every other unimplemented limb, so the refusal is the whole set's property
-	// and not one function's.
+	check("storage_query_no_database", errors.Is(err, sdk.ErrInternal), "err "+errText(err))
 	err = sdk.StorageExec("select 1", nil)
-	check("storage_exec_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+	check("storage_exec_no_database", errors.Is(err, sdk.ErrInternal), "err "+errText(err))
+
+	// The ones this fixture exists for. Each is declared by the ABI and implemented
+	// by no host yet, so it resolves as an import — the module links — and answers a
+	// status the module can branch on. That the refusal is the whole set's property
+	// and not one function's is why every one of them is here.
 	_, err = sdk.HTTPRequestRead()
 	check("http_request_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
 	err = sdk.HTTPResponseWrite(nil)

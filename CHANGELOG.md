@@ -29,6 +29,135 @@ migrations run at boot.
 
 ### Added
 
+- **An add-on can have tables of its own, in a schema of its own, that it cannot
+  leave.**
+
+  A module whose manifest declares `storage.own_schema` now gets a Postgres schema
+  called `addon_<name>`, and two host functions to read and write it. The schema
+  boundary is the whole of the permission: nothing the host offers names another
+  add-on's schema, and nothing reaches this product's tables. An add-on can still
+  hand *its own* schema to anybody, because it owns it — one `GRANT` does it — so the
+  host reads the schema's grants at every load and refuses an add-on that has given
+  them to anyone but itself, until an operator revokes. Storage lands before routes and
+  hooks deliberately — it is the first add-on capability with data to lose, and an
+  add-on that misbehaves here damages only what it owns.
+
+  **The boundary is a database role, not a search path**, and the distinction is the
+  substance of it. A search path decides where an *unqualified* name resolves and is
+  never consulted for `public.links`, so on its own it confines nothing; privileges
+  are what refuse the read. Privileges only bind if the session *is* the confined
+  role, so the host creates one login role per add-on and opens a connection
+  authenticated as it, with a credential generated at every boot and stored nowhere.
+  Issuing `SET ROLE` on the application's own connection was tried, measured against
+  Postgres 17 and rejected: a single `DO $$ BEGIN EXECUTE 'RESET ROLE'; … END $$`
+  escapes it, and `SET SESSION AUTHORIZATION` is checked against the *session* user
+  rather than the current role, so it succeeds whenever the application connects as
+  a superuser — which the shipped compose file does. Authenticated as the role, both
+  are refused, and so are schema-qualified reads, the same read hidden in a CTE, a
+  `SECURITY DEFINER` function the add-on's own DDL installed, `COPY … TO PROGRAM`,
+  and two commands in one payload. All of that is asserted from inside a real
+  wasm module compiled against the published SDK, which panics if any of them works.
+
+  One statement per call, because the host parses through Postgres's extended
+  protocol. A read runs in a `READ ONLY` transaction, so the read function cannot
+  write. Each statement gets five seconds and each result a megabyte, and one add-on
+  gets four database connections. Four bounds the add-on; it is not yet a promise to
+  the product, and the release notes say so rather than the opposite: the guard that
+  refuses `DB_MAX_CONNS + DB_REDIRECT_MAX_CONNS > 90` against the shipped
+  `max_connections = 100` does not count add-on pools, so several storage add-ons are
+  connections nothing checks. Configure with that in mind on an instance running
+  more than a couple.
+
+  **The host runs an add-on's migrations**, at load, before the listener opens, with
+  the same session lock that serializes the product's own across replicas. An add-on
+  ships them in a `migrations/` directory and the manifest names every file with its
+  own digest, which does two things: the DDL that runs is the add-on *author's*
+  rather than whatever is on disk, and the set is closed — a `.sql` file the manifest
+  does not list refuses the add-on, so DDL cannot be added to an installed module
+  without editing the artifact that describes it. The migrations are applied as the
+  add-on's own role, so DDL naming another schema is refused by Postgres rather than
+  by a parser, and a `SECURITY DEFINER` function it creates is owned by a role that
+  can reach nothing. The host then asks Postgres itself three questions and refuses the
+  add-on if any answer is not empty: what does this role own that is not in its
+  own schema, what is in its schema that this role does not own, and what has it
+  granted on that schema to anybody but itself. The first two are set
+  differences over the catalogues Postgres's own `DROP` statements consult —
+  `pg_shdepend` for `DROP OWNED BY`, `pg_depend` for `DROP SCHEMA` — rather than a
+  list of the places an add-on might have put something, because three earlier
+  versions of that list each turned out to be missing one. The third reads the
+  schema's own access list and the access lists of the relations in it, because a
+  grant is not an object and no catalogue of objects records one. Migration state
+  is a goose table inside the add-on's own schema, so re-loading a module applies
+  nothing twice and an add-on's state has no half in a table the product owns.
+
+  **Six costs, stated rather than implied.** The application's database user now
+  needs `CREATEROLE` — and password authentication has to work for the new role — for
+  an add-on that stores data; a deployment authenticating by `peer` or by a cloud
+  IAM token cannot load one, and it says so instead of running the add-on
+  unconfined. A `required` add-on whose migration fails stops the instance, so
+  somebody else's bad release can hold an instance down whose own configuration did
+  not change; `docs/operations.md` has the recovery order. And a confined role still
+  reads `pg_catalog`, which Postgres does not make revocable, so an add-on can
+  enumerate the names of tables it cannot read a byte of.
+
+  **A restore has to carry roles now, and the shipped procedure did not say so.**
+  `pg_dump` carries none of them — that is `pg_dumpall --roles-only` — so a restore
+  into a cluster whose roles were not restored separately leaves an add-on's tables
+  owned by the application. The add-on is then refused on its own rows, and the load
+  says which tables rather than failing somewhere inside a migration.
+  `docs/deployment.md`'s backup section carries the roles dump and the order to
+  restore in.
+
+  And **two capabilities are accounted for rather than closed, and a third is
+  narrowed**, each because closing it was measured and is not available. A confined
+  role can create a Postgres **large object**, which belongs to no schema —
+  `linkctrl_addon_large_objects{addon}` publishes the count, it should be zero
+  forever, an add-on owning one is refused at its next load, and the purge in
+  `docs/operations.md` grew the `DROP OWNED BY` line that removes one. It can take
+  one of the product's job **advisory locks**, which the host now releases before the
+  connection is reused, bounding the hold to the add-on's own statement. And it could
+  create a **temporary table**, which is outside its schema as much as a large object
+  is: installing a storage add-on now revokes `TEMPORARY` on the database from
+  `PUBLIC` and grants it back to the application, after which every spelling of it is
+  refused. That revoke is a narrowing and not the boundary — it does nothing unless
+  the application owns the database, and no dump carries it — so the post-condition
+  above is what holds, and it reports a temporary relation whether the revoke took or
+  not. An operator sharing this database with another application that uses temporary
+  tables loses them; `docs/deployment.md` says so rather than leaving it to be found.
+  A third narrowing has none of those conditions attached and is why the three are
+  described together: the confined role can set any user-settable Postgres parameter
+  on *its own role*, where it survives every boot and is inherited by every
+  connection the add-on's pool opens — `work_mem = '4GB'` was accepted and read back
+  by a fresh session — so each load now clears the role's settings before re-pinning
+  its search path. That one needs nothing more than the `CREATEROLE` this release
+  already asks for, and a restore does not undo it.
+
+  **Removing an add-on does not remove its data.** Delete a module's directory and
+  the schema stays; the next boot enumerates `addon_*` schemas nothing claims and
+  warns about them. Nothing deletes one — a purge is an operator's explicit act.
+  There is no quota on how large a schema may grow either, which is the same answer
+  the audit log gets: `linkctrl_addon_schema_bytes{addon}` makes the **stored** growth
+  visible, measured hourly by every replica, with `linkctrl_addon_large_objects{addon}`
+  beside it for the stored growth a schema's size cannot show. **The schema size counts
+  every relation in the schema that has storage** — tables, sequences, materialized
+  views — rather than a list of the kinds anybody thought of. That is a correction made
+  before release rather than after: the first version summed ordinary and materialized
+  tables, so a **sequence** in the add-on's own schema was 8192 bytes it reported as
+  nothing, and it read `0` for a schema holding 188 MB of them. It never needed a
+  misbehaving add-on either — the migration table the host creates in that schema
+  declares an identity column, and an identity column owns a sequence. The qualifier is
+  deliberate: both gauges, and the post-condition above, cover the objects Postgres
+  catalogues, and a session holding a `WITH HOLD` cursor keeps a temporary *file* on
+  disk that is in no catalogue and under no gauge — transient, freed when the
+  connection ends, and bounded only by a `temp_file_limit` a superuser must set. So
+  watch the filesystem as well as these two, which is what `docs/SECURITY.md` now
+  says.
+
+  **On more than one replica**, each mints the add-on role's password for itself, so
+  the newest replica's boot invalidates the credential the others hold; they re-mint
+  on their next connection and log it at warn. `docs/deployment.md` says what that
+  line means on a single-replica instance.
+
 - **An add-on gets what it named and nothing else.**
 
   A manifest's `permissions` array is now the whole of what a module may do, and
@@ -112,9 +241,10 @@ migrations run at boot.
   four places including the SDK's own Go `Deprecated:` markers, and what counts as
   breaking is a table rather than a judgement call.
 
-  **Three functions work; the rest are declared and refuse.** Logging, reading the
-  add-on's own declared settings, and asking the host its ABI version are live.
-  Storage, routes, templates, the authentication hook and redirect observation are
+  **Five functions work; the rest are declared and refuse.** Logging, reading the
+  add-on's own declared settings, asking the host its ABI version, and — since the
+  add-on storage entry below — the two storage calls are live. Routes, templates,
+  the authentication hook and redirect observation are
   declared — their names fixed, their signatures fixed enough to compile against —
   and answer a refusal a module can branch on until the release that implements
   them. So an add-on can be written against the whole contract now instead of being

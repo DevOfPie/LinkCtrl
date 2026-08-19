@@ -2,6 +2,16 @@ package abi
 
 import "slices"
 
+// PermissionStorage is the one entry in the vocabulary another file branches on
+// by name, so it is the one with a constant.
+//
+// The host's manifest validation needs it: an add-on that ships migrations has to
+// have declared this, because the schema those migrations run inside is what this
+// grant grants. A second spelling of a permission name is the drift a closed
+// vocabulary exists to prevent, and a test holds this constant against the slice
+// below.
+const PermissionStorage = "storage.own_schema"
+
 // Permissions is the add-on permission vocabulary: every grant an add-on may
 // declare, and the whole of what one can be trusted with.
 //
@@ -38,11 +48,14 @@ var Permissions = []Permission{
 			"exist, and this says whether the module may read any of them at all.",
 	},
 	{
-		Name: "storage.own_schema", Grantable: true, BackedBy: "M63",
+		Name: PermissionStorage, Grantable: true, BackedBy: "M63",
 		Doc: "Read and write the Postgres schema this add-on owns, whole. The schema " +
 			"boundary is the whole of the grant — there is no row-level or column-level " +
-			"form of it, and no way to name another add-on's schema or this product's " +
-			"own tables. Migrations are the host's and are not this grant.",
+			"form of it, and nothing here names another add-on's schema or this " +
+			"product's own tables. It does not stop you giving your own schema away: " +
+			"a `GRANT` on what you own works, and the host reports it at your next " +
+			"load and refuses you until it is revoked. Migrations are the host's and " +
+			"are not this grant.",
 	},
 	{
 		Name: "routes.own_prefix", Grantable: true, BackedBy: "M64",

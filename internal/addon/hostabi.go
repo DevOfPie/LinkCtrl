@@ -2,6 +2,7 @@ package addon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -13,6 +14,7 @@ import (
 	"github.com/tetratelabs/wazero/api"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
+	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
 // This file is the host half of the ABI. The guest half is the generated SDK in
@@ -21,7 +23,8 @@ import (
 //
 // # What is live, and what is declared
 //
-// Three functions work here — abi_version, log and config_get — and the rest are
+// Five functions work here — abi_version, log, config_get and the two storage
+// functions M63 turned on — and the rest are
 // registered and answer abi.StatusNotAvailable to an add-on that holds the
 // permission they cost, and abi.StatusDenied to one that does not. Which of the two
 // comes first is the next section's, and it is a decision rather than an accident.
@@ -132,6 +135,117 @@ var hostFuncs = map[string]hostFunc{
 		}
 		return writeOut(mod, stack[2], stack[3], []byte(s.Default))
 	},
+
+	// The two storage functions (M63). They share every line of their argument
+	// handling and differ in one thing that matters: a query runs in a READ ONLY
+	// transaction and an exec does not, so which of the pair a module called is a
+	// fact Postgres enforces rather than a description of intent.
+	"storage_query": func(ctx context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		statement, args, status := readStatement(mod, stack)
+		if status != 0 {
+			return status
+		}
+		if st.storage == nil {
+			return st.noStorage("storage_query")
+		}
+		rows, err := st.storage.Query(ctx, statement, args)
+		if err != nil {
+			return st.storageFailed("storage_query", err)
+		}
+		return writeOut(mod, stack[4], stack[5], rows)
+	},
+
+	"storage_exec": func(ctx context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		statement, args, status := readStatement(mod, stack)
+		if status != 0 {
+			return status
+		}
+		if st.storage == nil {
+			return st.noStorage("storage_exec")
+		}
+		if err := st.storage.Exec(ctx, statement, args); err != nil {
+			return st.storageFailed("storage_exec", err)
+		}
+		// Zero, not a row count. The ABI's convention is that a non-negative answer
+		// is a length, and this function has no out parameter for one to be the
+		// length of; inventing a meaning for the number here would be a second
+		// convention for one i32.
+		return 0
+	},
+}
+
+// readStatement reads the (sql, args) pair both storage functions begin with.
+//
+// The layout is abi.Function.Params expanded by hostSignature: the statement is
+// stack[0..1] and the JSON argument array is stack[2..3], which is the same for
+// both because both declare the same first two parameters. A test holds that
+// sentence to the ABI rather than leaving it as a comment.
+func readStatement(mod api.Module, stack []uint64) (string, []any, int32) {
+	statement, ok := readString(mod, stack[0], stack[1])
+	if !ok {
+		return "", nil, int32(abi.StatusInvalid)
+	}
+
+	if statement == "" {
+		return "", nil, int32(abi.StatusInvalid)
+	}
+	raw, ok := readBytes(mod, stack[2], stack[3])
+	if !ok {
+		return "", nil, int32(abi.StatusInvalid)
+	}
+	args, err := store.DecodeAddonArgs(raw)
+	if err != nil {
+		// The guest's fault and the guest's to fix, so nothing is logged: an add-on
+		// looping on a malformed argument list would otherwise decide how much an
+		// instance logs.
+		return "", nil, int32(abi.StatusInvalid)
+	}
+	return statement, args, 0
+}
+
+// noStorage is the answer when this add-on holds the grant and the host has no
+// database to honour it with — a host constructed without one, which in this
+// product is a test and never an instance. See Host.openStorage, which has already
+// said so once at load; this says it again per call at debug, because a module
+// branching on the status deserves the reason to be findable.
+func (s *hostState) noStorage(function string) int32 {
+	s.hostLog.Debug("an add-on called a storage function and this host has no database",
+		slog.String("addon", s.manifest.Name),
+		slog.String("function", function))
+	return int32(abi.StatusInternal)
+}
+
+// storageFailed turns a database error into the status the guest gets, and puts the
+// detail where an operator can read it.
+//
+// **The message never crosses**, which is the same rule StatusInternal is
+// documented with: a Postgres error names tables, columns and constraints, and an
+// add-on that can read one can print this product's schema into somebody's page.
+// What the guest gets is a number it can branch on.
+//
+// Denied is separated from Invalid on purpose. A privilege refusal is confinement
+// working, and it is the one failure the add-on's author cannot fix by editing
+// their statement — telling them apart is what lets a module report "that is not
+// mine to read" rather than "your SQL is wrong". It costs the module nothing it did
+// not already know: it knows which schema it owns.
+func (s *hostState) storageFailed(function string, err error) int32 {
+	status := abi.StatusInvalid
+	level := slog.LevelDebug
+	if errors.Is(err, store.ErrAddonDenied) {
+		status = abi.StatusDenied
+		// Warned rather than debugged, and this is the one storage failure worth
+		// waking somebody for: a module reaching outside its schema is either a bug
+		// its author has not noticed or an attempt. Either way an operator wants to
+		// know, and it is bounded — a module that keeps trying is a module whose log
+		// volume is already the smaller problem.
+		level = slog.LevelWarn
+	}
+	s.hostLog.Log(context.Background(), level,
+		"an add-on's statement failed",
+		slog.String("addon", s.manifest.Name),
+		slog.String("function", function),
+		slog.Any("error", err))
+	return int32(status)
 }
 
 // slogLevels maps the ABI's level vocabulary onto slog's. Keyed off
@@ -344,15 +458,24 @@ type hostState struct {
 	// log carries the add-on's name and marks the line as an add-on's own, so an
 	// operator reading a log can tell this product's words from a module's.
 	log *slog.Logger
+	// hostLog is the host's own voice about this add-on: it names the add-on and
+	// does not mark the line as the add-on's words. The distinction is the one
+	// dispatch already makes when it refuses a call — a refusal is the host
+	// speaking about a module, not the module speaking.
+	hostLog *slog.Logger
 	// settings is manifest.Settings by name, which is what config_get scopes to.
 	settings map[string]Setting
 	// grants is what this add-on holds, resolved once at load. Read on every call
 	// through the ABI and never rebuilt — see Grants, where the reason it has to be
 	// a lookup rather than a walk of the manifest is the redirect path's budget.
 	grants Grants
+	// storage is this add-on's confined connection to the schema it owns, or nil
+	// for one that declared no storage — and also for one that declared it on a
+	// host with no database, which noStorage answers.
+	storage *store.AddonDB
 }
 
-func newHostState(m Manifest, grants Grants, log *slog.Logger) *hostState {
+func newHostState(m Manifest, grants Grants, storage *store.AddonDB, log *slog.Logger) *hostState {
 	settings := make(map[string]Setting, len(m.Settings))
 	for _, s := range m.Settings {
 		settings[s.Name] = s
@@ -363,15 +486,17 @@ func newHostState(m Manifest, grants Grants, log *slog.Logger) *hostState {
 			slog.String("addon", m.Name),
 			slog.String("source", "addon"),
 		),
+		hostLog:  log,
 		settings: settings,
 		grants:   grants,
+		storage:  storage,
 	}
 }
 
 // registerState makes an add-on's state reachable from a host function before the
 // module that will call one exists. Returns the deregistration.
-func (h *Host) registerState(m Manifest, grants Grants) func() {
-	st := newHostState(m, grants, h.log)
+func (h *Host) registerState(m Manifest, grants Grants, storage *store.AddonDB) func() {
+	st := newHostState(m, grants, storage, h.log)
 	h.mu.Lock()
 	if h.states == nil {
 		h.states = make(map[string]*hostState)

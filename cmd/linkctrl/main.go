@@ -268,10 +268,21 @@ func run(cfg config.Config, _ io.Writer) error {
 	// The error is returned rather than logged, which is the whole of the
 	// `required` failure class: the reason travels with the exit, in the same
 	// shape as a failed migration.
+	// The database is handed over for M63's storage: the host creates a schema and
+	// a confined role per add-on that asked for one, applies that add-on's
+	// migrations inside it, and opens a pool authenticated as that role. Both are
+	// needed and they are not interchangeable — the pool carries the product's own
+	// privileges and is what creates the schema; the DSN is what an add-on's own
+	// pool re-points at its own role, which a pool cannot be made to do.
+	//
+	// This is still before the listener, which is what makes a `required` add-on's
+	// failed migration an exit rather than a request meeting a half-built schema.
 	addons, err := addon.Open(ctx, addon.Options{
 		Dir:     cfg.Addons.Dir,
 		Logger:  log,
 		Metrics: metrics,
+		DB:      pools.App,
+		DSN:     cfg.DB.URL.Reveal(),
 	})
 	if err != nil {
 		return fmt.Errorf("add-on host: %w", err)
@@ -929,7 +940,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
 		recoverySvc, accountSvc, mfaSvc,
-		linkSvc, webhookSvc, automationSvc, hostCache, updateSvc, cfg.Domains,
+		linkSvc, webhookSvc, automationSvc, hostCache, updateSvc, addons, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()

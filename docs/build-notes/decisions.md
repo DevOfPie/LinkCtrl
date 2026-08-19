@@ -406,6 +406,19 @@ file. Append a row when you append an entry.
 | [M62, the escape set is inverted rather than extended](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended) | D242 — [D241](#2026-08-19--m62-how-the-log-is-sanitized-and-the-carve-out-a-publisher-can-check)'s **enumerated** invisible list is replaced by a **default-deny**: what is not a graphic character is escaped, which is Cc, Cf, Cn, Co, Zl and Zp in one predicate. The enumeration was incomplete the day it was written — `U+061C`, `U+180E`, `U+FFF9`–`U+FFFB`, the musical and hieroglyphic format controls — and three documents called its set closed. Extending it was the alternative and was measured rather than assumed: default-deny leaves 22 scripts untouched, so the enumeration bought nothing. D241's Cf objection survives as a **named allowlist** — the Arabic, Syriac and Kaithi number signs — and two corrections run the other way: Unicode's graphic default-ignorables, and `U+2800`. The cost is that Cn means *unassigned to this Go*, so a newer code point is escaped until the host is rebuilt: legibility, failing closed, against a security hole failing open. The set is now asserted from Unicode's categories rather than from a second copy of the list |
 | [M62, the allowlist is Unicode's property, not a transcription of it](#2026-08-19--m62-the-allowlist-is-unicodes-property-not-a-transcription-of-it) | D243 — [D242](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended)'s own defect, one function down: the allowlist it left behind transcribed Unicode's **`Prepended_Concatenation_Mark`** property and carried **eleven** of its **thirteen** members, so `U+0890` and `U+0891` were escaped from the day it was written — the staleness `U+061C` was, in the mechanism that replaced it. It is now the property itself, read from the table Go ships, so a toolchain update carries it forward. The test hid it by hand-copying the same eleven; it now asserts the property, that every member is non-graphic and so a real carve-out, and that the set has not shrunk. Supersedes D242's mechanism, not its argument. Also corrects D242's *"nine"*, which described a list of eleven, and the three documents plus the generated `log` doc that overstated the carve-out. **No ABI version moves** |
 | [M62, the escaping is injective, so a reader can tell what was written](#2026-08-19--m62-the-escaping-is-injective-so-a-reader-can-tell-what-was-written) | D244 — `escapeLogRune` left `\` alone because it is graphic, so a module writing `\` and `n` produced the line a real newline produced, and a message could end with the truncation mark itself. Nothing was forged and no document overclaimed; it is fixed because a log read as **evidence** may not be ambiguous, which is why `strconv.Quote` doubles the backslash. Backslash is now the one graphic character escaped, which makes the mark `…\(truncated)` unforgeable for free — a module's copy arrives doubled. Cost is stated for publishers: a Windows path or a regex arrives with doubled backslashes. Asserted at the boundary, through the ABI at **four** backslashes against a real newline's two, and as a counted exception in the shape test. Same entry corrects `U+2800`'s rationale, which was equally true of the seventeen surviving `Zs` code points and read literally licensed escaping spaces |
+| [M63, an add-on's own schema is additive to nobody, because nobody else reads it](#2026-08-19--m63-an-add-ons-own-schema-is-additive-to-nobody-because-nobody-else-reads-it) | D245 — the inherited *DDL is additive within a minor version* rule collides with an add-on owning tables, and the collision is answered rather than waived: within one ABI **generation** an add-on's *host-visible* contract is additive, and inside its own schema it may do what it likes to its own data. The rule protects **readers**, and the schema boundary is what makes *there is no other reader* true rather than hoped — which is also why cross-add-on data access has no vocabulary at all and is not an omission |
+| [M63, a login role is a boundary and SET ROLE is not, measured both ways](#2026-08-19--m63-a-login-role-is-a-boundary-and-set-role-is-not-measured-both-ways) | D246 — confinement is a Postgres **login role per add-on** with its own pool, not a pinned `search_path` and not `SET ROLE` on the application's connection. Measured against Postgres 17.10: a search path is never consulted for a qualified name, and `SET ROLE` escapes twice in one statement each — a `DO` block running `RESET ROLE`, and `SET SESSION AUTHORIZATION`, which is checked against the *session* user and so succeeds from a superuser connection. Costs a new operator requirement (`CREATEROLE`, password auth for the role) and a pool per add-on; no weaker fallback, because the only one available is not a boundary |
+| [M63, the manifest names every migration file with its own digest](#2026-08-19--m63-the-manifest-names-every-migration-file-with-its-own-digest) | D247 — host-run DDL is bound to the add-on author by extending M60's digest to the migration source, as a **list with a digest per file** rather than one aggregate: it uses the `sha256sum` a publisher already ran, and it closes the set, so a `.sql` file the manifest does not list refuses the add-on. Also why the migration filesystem is built in memory from the verified bytes rather than handed to goose as an `os.DirFS` |
+| [M63, a large object is data outside every schema, and the capability is accounted for rather than closed](#2026-08-19--m63-a-large-object-is-data-outside-every-schema-and-the-capability-is-accounted-for-rather-than-closed) | D248 — a confining role can create a Postgres **large object**, which is in no schema and in no `pg_class` row, so the schema-size gauge could not see one and `DROP SCHEMA … CASCADE` did not remove one. Measured: 40 MB in a single statement, and `DROP ROLE` then fails. Revoking the `lo_` family from `PUBLIC` was preferred and is not available — it needs superuser, is a **silent no-op** for the database user this product documents, and does not survive a `pg_dump`/restore by that user. So it is accounted for: the load post-condition refuses an add-on that owns one, `linkctrl_addon_large_objects{addon}` publishes the count, and the purge grew `DROP OWNED BY` |
+| [M63, an add-on may take one of the product's advisory locks and may not hold one](#2026-08-19--m63-an-add-on-may-take-one-of-the-products-advisory-locks-and-may-not-hold-one) | D249 — `pg_advisory_lock` is `EXECUTE` to `PUBLIC`, the job leader-election keys are constants in a public repository, and a session-level lock survives the rollback both storage paths perform, on every replica at once. Revoking is unavailable for D248's reason and because goose's locker takes one *as the add-on's role*. The host releases every advisory lock **synchronously** before the connection is reused — pgxpool's `AfterRelease` runs in a goroutine and was measured to be too late — leaving a residual of one statement's hold, stated rather than closed |
+| [M63, a replica whose add-on credential another replica rotated mints a new one](#2026-08-19--m63-a-replica-whose-add-on-credential-another-replica-rotated-mints-a-new-one) | D250 — a fresh password per load means the newest replica invalidates every other replica's credential; the failure was 28P01 at the next connection, classified as the guest's bad SQL and logged at debug. Fixed by re-minting once on that code through `BeforeConnect`, logged at warn. Deriving the password from `API_KEY_PEPPER` and storing it in a product table were both rejected as design changes rather than repairs, with their costs named |
+| [M63, the confinement asks a shape rather than a list of places](#2026-08-19--m63-the-confinement-asks-a-shape-rather-than-a-list-of-places) | D251 — a **temp table** was the fourth place an add-on could own something the post-condition did not look for, and the exclusion added for TOAST hid it. The enumeration is replaced by a set difference over the catalogues Postgres's own `DROP` statements consult — `pg_shdepend` for what a role owns, `pg_depend` for what is in a schema, `pg_identify_object` to decide *inside* — asked in **both** directions, because `pg_dump` carries no roles and a restore leaves an add-on's tables owned by the application. Measured: TOAST appears in `pg_shdepend` nowhere, and `pg_shdepend` records nothing for the bootstrap superuser, which is what stops the inside direction from using it. `TEMPORARY` is also revoked from `PUBLIC` as a narrowing, with its three limits and its cost to a co-tenant database measured and stated |
+| [M63, a test that measured the clock rather than the claim](#2026-08-19--m63-a-test-that-measured-the-clock-rather-than-the-claim) | D252 — M61's fixture-staleness test set the artifact's mtime to an hour ago and compared against its inputs, so it asserted its claim only while the repo had been edited within the hour: it passed for its author and failed an hour later with nothing changed. Fixed because `make check` failing blocks every commit; recorded because it edits a shipped milestone's test. The rule: **a test asserting A is older than B derives one from the other, never from the clock** |
+| [M63, the load clears every role-level setting before pinning the search path](#2026-08-19--m63-the-load-clears-every-role-level-setting-before-pinning-the-search-path) | D253 — the confined role may `ALTER ROLE CURRENT_USER SET` any user-settable parameter on itself, and a role-level setting is in neither catalogue the post-condition asks and under no gauge. Measured: `work_mem = '4GB'` accepted, inherited by every connection the add-on's pool opens afterwards, one `READ ONLY` query then peaking at 1.37 GB resident against 31 MB at the default. Fixed by `ALTER ROLE … RESET ALL` **before** the search-path pin — the only narrowing in this family conditional on neither superuser nor database ownership, so the only one that holds on every documented deployment shape. The entry also records the two sentences this milestone overclaimed: the shape closes every *catalogued* way out, and the gauges cover *stored* growth (F279) |
+| [M63, the size gauge kept the denylist the confinement had stopped keeping](#2026-08-19--m63-the-size-gauge-kept-the-denylist-the-confinement-had-stopped-keeping) | D254 — `AddonSchemaBytes` summed `relkind IN ('r', 'm')`, which is exactly the enumeration [D251](#2026-08-19--m63-the-confinement-asks-a-shape-rather-than-a-list-of-places) replaced, left standing forty lines below the comment arguing against it. A **sequence** is `relkind 'S'`, in the add-on's own schema, 8192 bytes from creation and outside `pg_total_relation_size` of the table that owns it: 24,000 of them moved `pg_database_size` by 188 MB with the gauge reading **0**. Fixed as a shape — `relkind NOT IN ('i', 'I', 't')`, three exclusions each because it is already counted inside another relation — rather than by adding `'S'`. Measured before shipping against a schema holding every kind at once: the sum equals `sum(pg_table_size)` over every relation in the schema, a different decomposition of the same bytes, which agrees only if nothing with storage is missing and nothing is doubled. **Never only an adversary's case**: goose's version table, created by the host inside that schema, declares an identity column, so every storage add-on has always held 8192 bytes the gauge reported as nothing. Also **corrects D253's *stored* qualifier by append** — the gauges were incomplete on the stored side of the line it drew, which is not what F279 covers |
+| [M63, the schema boundary stops every other add-on and not the add-on itself](#2026-08-19--m63-the-schema-boundary-stops-every-other-add-on-and-not-the-add-on-itself) | D255 — [D245](#2026-08-19--m63-an-add-ons-own-schema-is-additive-to-nobody-because-nobody-else-reads-it) said *no other add-on can read it, and no amount of qualified SQL gets there*, and three other documents said the same. **Measured false**: two statements from the confined role — `GRANT USAGE ON SCHEMA … TO PUBLIC` and `GRANT SELECT, INSERT ON ALL TABLES … TO PUBLIC` — let another add-on read and write those tables, and the post-condition answered **0 rows**, because a grant is not an object and neither catalogue it asked records one. The *host* offers no vocabulary for sharing; the *capability* is the add-on's, over its own data. Corrected by append rather than edit, in seven sites counted rather than listed, and the additive-ness answer now rests on *no reader the add-on did not create itself*. The post-condition gains a **third direction** — `pg_namespace.nspacl` and `pg_class.relacl`, `aclexplode`d, any grantee but the add-on's own role — built rather than filed because it is two branches in a statement that already runs once per load. Not `pg_shdepend`, which records no `'a'` row for a grant to `PUBLIC`; two ACL columns and not five, because schema `USAGE` is necessary for every path and `NULL` in `proacl` means *the default*, which for a function is `EXECUTE` to `PUBLIC`. A narrowing rather than a boundary: an operator's own grant refuses the add-on too, and the remedy is one `REVOKE`. Also **amends m63.md's additive-ness bullet** and settles the roles dump on `--roles-only` across four prose sites |
+| [M63, the orchestrator confirms an amendment a worker made](#2026-08-19--m63-the-orchestrator-confirms-an-amendment-a-worker-made) | D256 — a worker amended m63.md's additive-ness bullet, which phase-loop.md reserves to the orchestrator, and disclosed it. **Confirmed rather than redone**: the three parts are recorded, the tree fact is a measurement, and it is fact-level — nobody could decide Postgres refuses an owner the right to grant. Third disclosed breach of this shape in the phase; the fix, if it recurs, is the **spawn contract saying what a worker does with a fact-level correction it has already proved**, which is a process change and the owner's |
+| [M63, a grant on an add-on's schema refuses the add-on, operator's or not](#2026-08-19--m63-a-grant-on-an-add-ons-schema-refuses-the-add-on-operators-or-not) | D257 — owner-answered: **refuse**, fail-closed and uniform with the check's two ownership directions, accepting that an operator's own deliberate grant breaks the add-on and is told exactly what to revoke. *Warn* would make this the only direction that does not refuse; *`PUBLIC` only* is defeated by one statement, since an add-on can read a sibling's role name from `pg_roles`. Also records the process fact: **an amendment that changes what the tree does carries a decidable half, and that half is a prompt** |
 
 ---
 
@@ -32688,3 +32701,906 @@ knows whitespace when they meet it and so does anything that trims, collapses or
 splits on it, while a run of `U+2800` is content that looks like blank. Recorded
 because the old rationale, read literally, licenses escaping the space characters,
 which would mangle every message this product logs.
+
+
+## 2026-08-19 — M63, an add-on's own schema is additive to nobody, because nobody else reads it
+
+**D245.** Phase 4 inherits *DDL is additive within a minor version*, and
+[phase-4-candidates.md](phase-4-candidates.md#what-this-collides-with-named-now-rather-than-discovered)
+named the collision at planning time rather than leaving it to be discovered:
+whose additive-ness is an add-on's? An add-on now owns tables. It ships its own
+migrations. It publishes on its own schedule, against an ABI generation rather
+than against a LinkCtrl minor. So the inherited rule either binds every add-on
+author to this product's release cadence, or it does not bind them at all, and
+neither reading is the one the rule was written for.
+
+**The answer, in two halves.**
+
+Within one ABI **generation**, an add-on's *host-visible* contract is additive.
+That is the half the inherited rule is actually about: the manifest fields it
+declares, the permissions it holds, the cookie prefixes it owns, the routes it
+serves — everything another party has to keep working against.
+
+Inside its own schema, an add-on may do what it likes to its own data. Drop a
+column. Rewrite a table. Change a type. Run a migration that is not additive by
+any reading of the word.
+
+**Why that is not a waiver.** The inherited rule protects **readers**. A column
+dropped from `links` breaks a query somebody else wrote, an index somebody else
+relies on, a replica mid-deploy still running the old binary. That is what makes
+additive-only worth its cost. An add-on's schema has exactly one reader — the
+add-on — and this milestone is what makes that sentence true rather than hoped:
+
+- the schema boundary is a database role, so no other add-on can read it, and no
+  amount of qualified SQL gets there (D246);
+- the product does not read it either. Nothing in `internal/store` knows an
+  add-on's tables exist, no sqlc query names one, and there is no host function
+  that hands one add-on another's rows;
+- **cross-add-on data access has no vocabulary at all**, which m63.md states as
+  deliberately not done. There is no permission for it, no ABI function, and no
+  syntax an add-on could use to ask. Two add-ons that want to share data are one
+  add-on, or a future decision somebody argues for on its own merits.
+
+So the rule is not weakened for add-ons. It is *satisfied vacuously* for the part
+of an add-on nobody else can see, and enforced normally for the part they can.
+The interesting consequence is the direction of the dependency: the answer holds
+only while the boundary holds, so anything that later widens it — a host function
+exposing one add-on's data to another, a shared schema, a read for the manager's
+sake — reopens this decision rather than inheriting it.
+
+**What the host-visible half means in practice**, since *additive* needs a
+referent: the ABI generation, not this product's minor version. An add-on
+published against generation 1 keeps working across every additive release of
+that generation, which is
+[docs/addon-abi.md](../addon-abi.md)'s promise and not a new one. An add-on's
+*own* version is its author's business — `versionRe` in the manifest is loose on
+purpose — so the additive-ness claim attaches to the contract rather than to
+their release numbering.
+
+## 2026-08-19 — M63, a login role is a boundary and SET ROLE is not, measured both ways
+
+**D246.** m63.md asks for an add-on's queries to run "with a role/search-path
+confined to its schema". Three mechanisms fit that sentence and only one of them
+is a boundary. They were run against the development cluster — Postgres 17.10 —
+rather than reasoned about, because m63.md's first risk says the confinement is
+to be verified against hostile SQL and not polite SQL.
+
+**A pinned `search_path` confines nothing on its own.** It decides where an
+*unqualified* name resolves and is never consulted for `public.links`. So a
+module writing one qualified name reads whatever the connection's privileges
+allow. This is not a subtle failure; it is the first thing anybody would try.
+
+**`SET ROLE` on the application's own connection escapes, twice, in one statement
+each.** It looks sufficient: the role has no privilege on the product's tables, a
+qualified read is refused, and a multi-statement payload carrying `RESET ROLE` is
+refused by the extended protocol. Both of these escape it anyway:
+
+    DO $$ BEGIN EXECUTE 'RESET ROLE'; PERFORM * FROM public.links; END $$
+
+    SET SESSION AUTHORIZATION linkctrl
+
+The first is **one statement**, so no multiple-command rule catches it, and it
+returns the session to whatever role the application authenticated as. The second
+is checked against the **session user** rather than against the current role, so it
+succeeds whenever the application connects as a superuser — which
+`docker compose up` does by default, since the Postgres image's `POSTGRES_USER`
+is one. Measured: both read the product's tables.
+
+**So the boundary is a login role per add-on, with its own pool.** `addon_<name>`
+is both the schema and the role. The host creates the role, gives it ownership of
+the schema, and opens a second `pgxpool` authenticated **as** it. Then
+`RESET ROLE` returns to the add-on's own role and `SET SESSION AUTHORIZATION` is
+refused for want of superuser — both measured the other way round, and both
+asserted from inside a wasm fixture that panics if either works.
+
+**The password is generated at every load and stored nowhere.** There is no
+credential for an operator to manage, nothing survives the process, and a
+restart rotates it. The cost is that `ALTER ROLE … PASSWORD` can appear in
+Postgres's own log under `log_statement = ddl`; it is worth one add-on's schema
+and it is replaced at the next boot, and `docs/SECURITY.md` states it rather than
+leaving it for somebody to find.
+
+**What this costs, stated because it is a new operator requirement and not a
+detail.** The application's database user needs `CREATEROLE` — superuser
+satisfies it — and password authentication has to be available for the new role,
+because the host connects as it. A deployment authenticating by `peer` or by a
+cloud IAM token cannot offer that, and an add-on declaring
+`storage.own_schema` will not load there. **There is deliberately no fallback**:
+the only weaker mechanism is `SET ROLE`, which the paragraphs above show is not a
+boundary, and an instance quietly running an unconfined add-on is a worse outcome
+than one that refuses to run it and says why.
+
+**Three things sit on top, and none of them is the boundary.** The pool parses
+through the extended protocol, which refuses a two-command payload *and* keeps a
+module's arbitrary statement text out of a per-connection prepared-statement
+cache that would otherwise grow without bound. A read runs in a `READ ONLY`
+transaction, so the ABI's two storage functions mean two different things at the
+server rather than by description. And the search path and a five-second
+statement timeout are pinned per transaction with `set_config(..., true)`, so
+nothing a previous statement left on a pooled connection changes what the next
+one means — `SET` was tried first and takes one parameter per statement, which is
+two statements and an interpolated identifier where the function form is one
+round trip and two bind parameters.
+
+**A post-condition on somebody else's DDL, and what it caught.** After migrating,
+the host asks the catalogue whether any relation the add-on's role owns landed
+outside the add-on's schema, and refuses the add-on if one did. Privileges are
+what confine the DDL; this asks whether they did. Its first form failed on every
+add-on with a `text` column, because a table with a variable-length column gets a
+TOAST relation in `pg_toast` owned by the table's owner — so schemas Postgres
+reserves for itself are excluded, which is not a loophole: creating a schema at
+all needs `CREATE` on the database, which this role does not have.
+
+## 2026-08-19 — M63, the manifest names every migration file with its own digest
+
+**D247.** m63.md's second risk says host-run migrations execute DDL an operator
+did not write, and that *the manifest hash (M60) makes it the add-on author's
+DDL*. That sentence was not true when the milestone started. M60's digest covers
+the `.wasm` and nothing else, so migration files shipped beside a module were
+covered by directory ownership alone — which is the trust boundary
+`docs/SECURITY.md` already names, and is not the same claim. Writing the risk's
+argument into that document without closing the gap would have been writing
+something false.
+
+**So the manifest grew a `migrations` field**: one entry per file, each with the
+file's own `sha256`. Additive to schema version 1, on the precedent D232 set when
+M61 added `cookie_prefixes` the commit after the schema was published — a manifest
+without the field parses and loads exactly as before.
+
+**A list with a digest each, rather than one digest over the set.** An aggregate
+would be fewer bytes and it fails the only test that matters: a publisher has to
+be able to produce it. An aggregate needs a canonical ordering and a framing rule
+documented well enough to reproduce by hand, and nobody reproduces one by hand —
+they run whatever tool the documentation names, which is a tool this project would
+then have to ship. A digest per file is `sha256sum migrations/*.sql`, which is the
+command a publisher already ran for the module.
+
+**Enumerating also closes the set, which is the half worth more than the digests.**
+A `.sql` file present in the directory and absent from the manifest refuses the
+add-on. Without that rule, DDL can be added to an installed add-on with no edit to
+the artifact that describes it — the digests would each verify and the host would
+run a statement nobody declared. Three refusals in total, and each is a different
+lie the directory can tell: a file listed and missing, a file present and unlisted,
+and a file whose bytes disagree.
+
+**The verified bytes become an in-memory filesystem, not an `os.DirFS`.** Two
+reasons, and the second is the one that decided it. The window between hashing a
+file and goose reading it is real but uninteresting — anybody who can write there
+can write the manifest too. What matters is that goose globs `*.sql` **and**
+`*.go` out of whatever filesystem it is handed, so pointing it at the directory
+would reopen the set the manifest just closed. Building the filesystem from the
+bytes that were verified makes *the host applies exactly what the manifest
+describes* structural rather than sequential, which is the same argument M60 makes
+for hashing the module before wazero is asked for anything.
+
+**One rule that is not about integrity at all.** A migration filename must carry a
+version number goose can read, checked here rather than left to goose, because a
+filename goose cannot version is one it **silently ignores** — and a migration that
+never ran is the worst available failure for DDL. `.go` migrations are refused by
+name for the same reason: the host cannot compile a publisher's Go, so a Go
+migration could only ever be a file that did nothing.
+
+## 2026-08-19 — M63, a large object is data outside every schema, and the capability is accounted for rather than closed
+
+**D248.** M63's confinement claim was *a role that reaches nothing else*, and its
+quota answer was *growth is visible by metric*. Both were false in the same way,
+and reading the code would not have found it: **a large object is not in
+`pg_class`**, so `AddonSchemaBytes` sums nothing of it and
+`AddonObjectsOutsideSchema` did not look for one. `EXECUTE` on `lo_from_bytea`
+belongs to `PUBLIC` and Postgres has no per-role deny, so the confining role can
+create them.
+
+Measured on Postgres 17.10, against a role built statement for statement the way
+`EnsureAddonSchema` builds one:
+
+```
+lo_from_bytea(0, repeat('x', 40000000))  -> 40 MB, ONE statement, 350 ms
+AddonSchemaBytes equivalent              -> 0
+AddonObjectsOutsideSchema equivalent     -> (empty)
+after DROP SCHEMA addon_loprobe CASCADE  -> large object still there
+DROP ROLE addon_loprobe                  -> ERROR, DETAIL: owner of large object
+```
+
+**Closing the capability was preferred and is not available.** Nothing in this
+product uses large objects — no `lo_` call anywhere in the tree, no migration, and
+`pg_largeobject_metadata` is empty on both the test and the demo instance — so
+revoking `EXECUTE` on the `lo_` family from `PUBLIC` would have removed the
+capability rather than accounted for it. Three measurements say not to ship it:
+
+- **it needs ownership of a `pg_catalog` function, which means superuser.** As a
+  non-superuser `CREATEROLE` role — the shape `docs/deployment.md` requires — the
+  statement is a **silent no-op**: `WARNING: no privileges could be revoked`, the
+  command reports `REVOKE`, and `lo_from_bytea` still produced 40 MB afterwards.
+  A security control that reports success and changes nothing is worse than none;
+- **`lo_import` and `lo_export` answer `ERROR: permission denied for function`**
+  for that same role, so a migration listing the family cannot even be written
+  uniformly;
+- **it does not survive a restore.** Applied as superuser it works — the role is
+  then refused, verified — and `pg_dump` carries the ACL change as `REVOKE ALL ON
+  FUNCTION pg_catalog.lo_… FROM PUBLIC` statements which, replayed by the
+  application's own role, warn and do nothing. So even where an operator applies
+  it once, an ordinary restore removes it silently.
+
+**So it is accounted for, in four places.** `AddonObjectsOutsideSchema` gained a
+`pg_largeobject_metadata` branch and reports `large object <oid>`, which refuses
+the add-on at its next load; that check moved **out** of the migrations branch,
+because a query is what creates a large object and an add-on shipping no `.sql`
+file at all can own one. `linkctrl_addon_large_objects{addon}` publishes the count
+per add-on. And the documented purge grew `DROP OWNED BY addon_<name>;` between
+the schema drop and the role drop — measured, that is what drops a large object and
+what makes `DROP ROLE` succeed afterwards.
+
+**A count and not a size, which is a real limit rather than a preference.**
+`pg_largeobject` holds the bytes and is superuser-only: as the application's role
+it answers *permission denied for table pg_largeobject*.
+`pg_largeobject_metadata` is readable, one row per object, so what this product can
+attribute per add-on is *how many*. `docs/operations.md` gives the superuser query
+for the bytes, and says so rather than implying the gauge is everything — which is
+the sentence this entry is correcting in the first place.
+
+**Five documented sentences were false and are now true**: m63.md's *growth is
+visible … by metric* (made true rather than amended — the metric now covers the
+case), `docs/operations.md`'s gauge row and its purge block, `docs/SECURITY.md`'s
+*reaches nothing else* and its claim that dropping the schema reclaims the disk,
+`docs/data-model.md`'s `pg_dump --schema=` backup form, and Plan.md's limitation
+row.
+
+## 2026-08-19 — M63, an add-on may take one of the product's advisory locks and may not hold one
+
+**D249.** `pg_advisory_lock` is `EXECUTE` to `PUBLIC`, this product's job
+leader-election keys are compile-time constants in a **public** repository, and a
+session-level advisory lock is **not** released by the rollback `AddonDB.Query` and
+`AddonDB.Exec` perform. Measured: as the add-on's role,
+`SELECT pg_advisory_lock(<advisoryLockKeyMaintenance>)`, then `pg_try_advisory_lock`
+on the same key from the application's role answers `f`, and it still answers `f`
+after the add-on's transaction has rolled back. The `READ ONLY` transaction the
+read path uses does not refuse the lock either. Every replica uses the same key, so
+one add-on could suppress rollup, dimension rollup, mail, webhooks, housekeeping,
+domain re-verification, automation and the update check on **all** of them, and
+retake the lock after each release.
+
+**Revoking the family from `PUBLIC` is not available**, for D248's reason and for
+one of its own: the same silent-no-op measurement applies —
+`REVOKE EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) FROM PUBLIC` as the
+application's role answers `WARNING: no privileges could be revoked` — and this
+product's own jobs use these functions, as does goose's session locker, which runs
+`pg_advisory_lock` **as the add-on's own role** while applying its migrations. A
+revoke that worked would break the add-on's migrations.
+
+**So the host releases them, synchronously, before the connection is reused.**
+`AddonDB.releaseLocks` runs `pg_advisory_unlock_all()` after the transaction ends
+and before the pooled connection goes back; a failure hijacks the connection out of
+the pool and closes it, because a connection that may still hold one of this
+product's locks must not be handed to the next caller. `pin` runs the same function
+alongside its two `set_config` calls as belt — sabotaged alone it leaves the test
+green, which is stated in the comment rather than claimed otherwise.
+
+**pgxpool's `AfterRelease` hook was the first implementation and is wrong for
+this**, which is worth recording because it reads like the natural place for it:
+`pgxpool.Conn.Release` runs that hook **in a goroutine**, so the release is
+unordered against the caller's next statement. The test caught it — the product
+asked for its own maintenance lock the moment the add-on's call returned and found
+it held.
+
+**The residual is stated rather than closed.** Within one call an add-on can hold a
+job's lock for up to `AddonStatementTimeout` — five seconds — and can retake it, so
+a job may skip ticks. That is the outcome a follower losing an election already
+has, and the same class of nuisance as an add-on holding its four connections,
+which it may also do. `docs/operations.md`'s two failover sentences and
+`docs/SECURITY.md` say so; the earlier *the next follower to tick simply finds the
+lock free* was M56's claim and was unqualified.
+
+## 2026-08-19 — M63, a replica whose add-on credential another replica rotated mints a new one
+
+**D250.** `EnsureAddonSchema` generates a fresh password on every load, which is
+what makes *the credential lives no longer than the process that uses it and
+nothing has to store it* true. On more than one replica it also means the newest
+replica's boot invalidates the credential every other replica is holding.
+Measured: after `ALTER ROLE … PASSWORD`, a connection with the old one is refused
+with `FATAL: password authentication failed`, SQLSTATE **28P01**, which pgx
+surfaces as a `*pgconn.PgError` reachable by `errors.As`.
+
+**The failure was late and quiet, which is what made it in spec.** The boot `Ping`
+had already passed, the pool holds `MinConns: 0` so nothing keeps a working
+connection alive, `classify` matches only `42501`, and the guest therefore got
+`StatusInvalid` — *your SQL is wrong* — while the host logged at debug. Multi-replica
+has been supported since 0.3.0 and this milestone's own bullet asks for the same
+across-replica serialization the product's migrations have.
+
+**Fixed by re-minting, not by making the credential shared.** `pgxpool`'s
+`BeforeConnect` reads the password from the add-on's own state rather than from the
+frozen config, and `AddonDB.acquire` re-runs `EnsureAddonSchema` and retries **once**
+on 28P01. The refresh is serialized and short-circuits when another call has already
+refreshed, so a burst of failures costs one `ALTER ROLE`. It is logged at **warn**,
+because on a single-replica instance that line means two processes are pointed at
+one database.
+
+Two shapes were rejected, and both are design changes rather than repairs:
+
+- **derive the password from a secret every replica already has** — `API_KEY_PEPPER`
+  is required and must match across replicas, so an HKDF of it would make every
+  replica compute the same credential and remove the rotation entirely. Rejected
+  because `MFASecretKey`'s own entry refuses the pepper by name for lifecycle
+  coupling, and adding a third consumer of it is the owner's call rather than a
+  worker's;
+- **store the generated password in a product table** so replicas share one. Cheap,
+  and it puts a live database credential in plaintext in the database it opens,
+  which is a `docs/SECURITY.md` claim somebody should agree to before it exists.
+
+The cost of what shipped is stated: in a multi-replica deployment each replica pays
+one `ALTER ROLE` and one retry per **new** connection that meets a rotated
+credential, which with `MinConns: 0` and pgxpool's default idle and lifetime
+ceilings is roughly one per replica per idle period rather than one per call. The
+boot window is not covered — two replicas cold-starting together can still have one
+fail its load, loudly, which is F277.
+
+## 2026-08-19 — M63, the confinement asks a shape rather than a list of places
+
+**D251.** `AddonObjectsOutsideSchema` enumerated the places an add-on could own
+something. Three times it was extended and three times a fourth place turned up: it
+began as *relations*, gained `NOT LIKE 'pg\_%'` because a TOAST relation is owned by
+the table's owner and every add-on with a `text` column read as a confinement
+failure, then gained a `pg_largeobject_metadata` branch (D248). The fourth was a
+**temporary table**, and the exclusion added for TOAST is what hid it: `pg_temp_N`
+matches `pg\_%`.
+
+Measured through a faithful reproduction of `AddonDB.Exec` — same pool config, same
+per-call transaction, same pinned search path and timeout, as the confined role over
+the mapped port:
+
+```
+has_database_privilege(role, 'linkctrl', 'TEMP')  -> t     <- PUBLIC holds it by default
+ACCEPTED  CREATE TEMP TABLE b3(x text)
+ACCEPTED  INSERT INTO pg_temp.b3 …                        -- 51 MB in one 5s statement
+ACCEPTED  SELECT count(*) FROM pg_temp.b3                <- survives ACROSS calls
+AddonSchemaBytes -> 0   AddonLargeObjects -> 0   AddonObjectsOutsideSchema -> (empty)
+```
+
+A list of places is a denylist. This is the same inversion D242 and D243 made to the
+log sanitizer, for the same reason, and the argument that a list is wrong does not
+improve by being made a fourth time.
+
+**Postgres already knows the answer, in the two catalogues its own `DROP`
+statements consult.** `pg_shdepend` is what `DROP OWNED BY` reads, so it is
+everything a role owns, of whatever kind and wherever it lives. `pg_depend`'s
+dependency on a namespace is what `DROP SCHEMA` reads, so it is everything in a
+schema. `pg_identify_object` renders either into a type, a schema and an identity,
+so *inside its own schema* is Postgres's judgement and not a string comparison of
+ours. `AddonConfinementViolations` is the two set differences over those, in one
+statement:
+
+- **outward** — what `pg_shdepend` says the role owns, minus what
+  `pg_identify_object` places inside the add-on's schema, minus the schema itself;
+- **inward** — what `pg_depend` says is in the schema, minus what `pg_shdepend` says
+  the role owns, plus the schema's own owner read from `pg_namespace`.
+
+Measured on Postgres 17.10 against a role built statement for statement the way
+`EnsureAddonSchema` builds one:
+
+```
+pg_shdepend for the role:  pg_class/addon_x.own63     table, in its schema     ok
+                           pg_class/pg_temp_53.tmp63  table, outside           FOUND
+                           pg_largeobject/996597      large object, no schema  FOUND
+                           pg_proc/addon_x.f63()      function, in its schema  ok
+                           pg_namespace/addon_x       its own schema           ok
+pg_toast relations in pg_shdepend, whole database:                      0
+```
+
+Zero is what lets the exclusion be **deleted** rather than widened, and it is the
+whole of why the shape is cheaper than the list: the case that forced the exclusion
+does not arise.
+
+**The two directions are not symmetric, and the asymmetry was measured rather than
+assumed.** `pg_shdepend` records no row for an object owned by the **bootstrap
+superuser**, and in the compose file's cluster the application *is* that role — 248
+relations in `public`, zero `pg_shdepend` rows for `linkctrl`. So the inward
+direction cannot ask *who owns this* through `pg_shdepend`: in this very cluster the
+answer would be empty for the case it exists to catch. It asks what is in the schema
+and subtracts what the role owns instead. Indexes appear in neither set and need
+not: `ALTER INDEX … OWNER TO` answers *cannot change owner of index*, and
+`ALTER TABLE … OWNER TO` carries the table's indexes and its owned sequences with
+it — measured both ways.
+
+**The inward direction is here because a restore needs it.** `pg_dump` carries no
+roles — that is `pg_dumpall --roles-only`, and `--globals-only` cannot even be
+combined with it. Measured: dump, drop role and schema, restore, and the three
+`ALTER … OWNER TO` lines fail with *role does not exist*, the next boot's
+`ALTER SCHEMA … OWNER TO` repairs the schema, and **nothing re-owns the tables**.
+The add-on's role is then refused on its own rows, `MigrateAddon` fails on
+`goose_db_version`, and a `required` add-on stops the instance. Asking only the
+outward direction passes that state cleanly. The documented procedure with the roles
+file restored first was then run end to end and every owner came back correct.
+
+**`TEMPORARY` is also revoked from `PUBLIC`, as a narrowing rather than as the
+boundary.** Doing both was available and is right, and the revoke's three limits are
+each measured:
+
+- it does nothing unless the application **owns** the database. As a non-superuser
+  `CREATEROLE` role that owns it, `has_database_privilege` goes `t` to `f` silently;
+  as a role that does not, `WARNING: no privileges could be revoked` and the
+  capability is intact — D248's silent no-op again. `docs/deployment.md` asks for
+  `CREATEROLE`, not ownership, so this cannot be relied on and the code logs at warn
+  when it did not take, detected by asking the catalogue rather than by reading a
+  warning pgx does not surface;
+- it does not survive the shipped restore. `pg_dump -Fc` without `--create` emits no
+  `CREATE DATABASE` and no `GRANT`/`REVOKE … ON DATABASE`;
+- it changes the database for every role — the objection `EnsureAddonSchema` already
+  states about `REVOKE ALL ON SCHEMA public`. A per-role revoke is **not available**:
+  `REVOKE TEMPORARY … FROM addon_x` leaves `has_database_privilege` at `t`, because
+  the privilege arrives through `PUBLIC` and Postgres has no per-role deny.
+
+So the cost is stated rather than hidden: an application sharing this database and
+using temporary tables loses them when a storage add-on is installed, which
+`docs/deployment.md` now says. LinkCtrl itself uses none — grepped rather than
+assumed — and the application grants itself the privilege back, so nothing here is
+prevented from using one later. What it buys is that the common case fails at the
+`CREATE` instead of at the next load: five spellings measured refused, `CREATE TEMP
+TABLE`, `CREATE TABLE pg_temp.x`, `CREATE TEMPORARY TABLE … AS`,
+`CREATE UNLOGGED TABLE pg_temp.x` and `SELECT … INTO TEMP`.
+
+The function is renamed to `AddonConfinementViolations`, because it now answers two
+questions and *outside schema* named only one of them. Its findings are sentences —
+`it owns table pg_temp_53.smuggled6, which is not in addon_x`, `it does not own
+table addon_x.notes, which is in addon_x` — so an operator reading a refusal knows
+which of the two failures they have and therefore which document to read.
+
+## 2026-08-19 — M63, a test that measured the clock rather than the claim
+
+**D252. An out-of-spec edit to a shipped milestone's test, made because the gate
+could not otherwise go green, and recorded because it changes
+[M61](phase-details/m61.md)'s artifact.**
+
+`TestAFixtureOlderThanItsInputsIsStale` — M61's assertion that the fixture builder
+rebuilds a `.wasm` when the SDK it was built against changes — set the artifact's
+mtime to one hour ago and compared it against its inputs' mtimes. That asserts the
+claim **only while something among the inputs has been edited within the hour**.
+M61's worker regenerated `sdk/` and the test passed; an hour later, with nothing in
+the tree having changed, it failed. Found by M63's third worker on arrival, with no
+input of that test touched.
+
+**It is not a false claim of M61's** — the fixture builder does what M61 says, and
+[F266](deferred-findings.md#closed)'s closure stands. The test simply did not test
+it: it tested whether the repository had been busy recently. So this is neither a
+reopening nor a deferred row, and it is not in M63's spec either. It is a **blocked
+gate**, and `make check` failing is the one condition under which nothing can be
+committed at all.
+
+Fixed minimally rather than rewritten: the artifact's mtime is now derived from the
+newest input rather than from `time.Now`, and the input glob is factored out of the
+staleness helper so the test and the code under test measure one set. The comparison
+was then sabotaged to confirm the test still bites.
+
+**Why this is recorded rather than merely disclosed.** Three reasons, and the third
+is the one that generalises. It edits a **shipped** milestone's test, which
+[D226](#2026-08-18--m60-the-shipped-milestone-file-this-diff-edited-and-what-d224-conceded-too-widely)
+says leaves a record. Filing a deferred row would have been the wrong shape — the
+row would describe something already fixed, and it had to be fixed to run the gate
+that gates the row. And a test whose result depends on **when it is run** is a class
+this project has not named before: it passes for its author, fails for the next
+actor, and reverting it re-reds `make check` on a schedule rather than on a change.
+That is worse than a test that never fails, because it also spends somebody's
+afternoon. The rule worth carrying forward: **a test asserting that A is older than
+B derives one of them from the other, never from the clock.**
+
+## 2026-08-19 — M63, the load clears every role-level setting before pinning the search path
+
+**D253.** `EnsureAddonSchema` issued `ALTER ROLE … SET search_path` and nothing
+else, so a setting the add-on's role had been given stayed given. A role-level
+setting is not an object, so neither catalogue `AddonConfinementViolations` asks
+records one, and no gauge measures one — it was the one thing in this milestone's
+confinement that nothing in it looked at.
+
+Measured through the write path as the confined role, over the mapped port:
+
+```
+ALTER ROLE CURRENT_USER SET work_mem = '4GB'   -> accepted
+rolconfig                                      -> {search_path=addon_x,work_mem=4GB}
+a fresh connection, SHOW work_mem              -> 4GB
+```
+
+`work_mem` is `PGC_USERSET`, and there is no per-role deny for that any more than
+for `EXECUTE` on `lo_from_bytea`. Every connection the add-on's pool opens
+afterwards inherits it, times `AddonMaxConns`, and it survived every boot because
+the load re-applied its own search path without clearing anything else. One
+`READ ONLY` query inside `AddonStatementTimeout` then peaked a backend at **1.37
+GB** resident — 1,434,768 kB of `VmRSS`, sampled from the backend's own pid —
+against **31 MB** for the same query at the 4 MB default, which spills to disk
+instead:
+`SELECT count(*) FROM (SELECT DISTINCT g, repeat('y',200) FROM
+generate_series(1,4000000) g) t`.
+
+**It is not an escalation route, and that was checked rather than assumed.**
+`NOLOGIN`, `CONNECTION LIMIT 0` and `temp_file_limit` are each refused to the
+role, and the two settings it *can* make that would otherwise matter —
+`search_path` and `statement_timeout` — are both beaten by `AddonDB.pin`'s
+`SET LOCAL`: role-level `statement_timeout = 0` plus a twenty-second `DO` loop was
+still cancelled at 5.022s.
+
+**The fix is one statement, `ALTER ROLE … RESET ALL`, before the search-path pin,
+and the order is the whole of it.** Reset after pinning and the pin goes with it —
+which is why the test asserts both halves and was sabotaged both ways: the reset
+removed, and the two statements swapped.
+
+**It is the only narrowing in this family conditional on neither superuser nor
+database ownership, which is why the family is now described as one.** D248's
+`REVOKE … ON FUNCTION pg_catalog.lo_…` needs ownership of a catalogue function,
+meaning superuser, and is a **silent no-op** without it. D251's `REVOKE TEMPORARY
+… FROM PUBLIC` needs ownership of the database, warns and does nothing without it,
+and no dump carries it. This one needs `CREATEROLE` over a role the application
+itself created, which is exactly what `docs/deployment.md` already asks for —
+measured as a NOSUPERUSER CREATEROLE role that does **not** own the database,
+against a role it had created and that had set `work_mem` on itself: `RESET ALL`
+emptied `rolconfig`, the re-pin put the search path back alone, and a fresh
+connection read `4MB`. It also survives a restore, since it is not a database ACL.
+So of the three, it is the only one that holds on every deployment shape this
+product documents, and `docs/SECURITY.md` says so where the other two state their
+conditions.
+
+**Two sentences this milestone wrote were false and are corrected in the same
+diff**, which is the other half of this entry. `internal/store/addons.go` said
+*the point of the shape is that nothing is left to be looked for later*, and
+`internal/observability/metrics.go`, `docs/SECURITY.md`, `docs/operations.md`,
+`CHANGELOG.md` and Plan.md's new row said the growth is visible by metric. What
+the shape actually closed is every **catalogued** way out, and what the gauges
+cover is data an add-on has **stored** — both real properties, and both narrower
+than what was written. A `WITH HOLD` cursor is the case that shows the difference:
+it holds a temporary *file*, which is an object in neither catalogue, so the
+post-condition is empty and both gauges read zero while 553 MB sits in
+`pgsql_tmp` for the life of a pooled connection. It is transient rather than
+stored, so no gauge is missing; the bound that would cap it needs superuser, which
+is D251's shape, and F279 carries it. Getting this right mattered more than the
+row does: an operator who reads *the growth is visible* and watches a flat gauge
+while a disk fills has been told something untrue by this project, and
+`docs/operations.md`'s alert row now says to watch the filesystem too.
+
+## 2026-08-19 — M63, the size gauge kept the denylist the confinement had stopped keeping
+
+**D254.** `AddonSchemaBytes` summed `relkind IN ('r', 'm')`. A **sequence** is
+`relkind 'S'`, lives in the add-on's own schema, holds an 8192-byte page from the
+moment it is created, and `pg_total_relation_size` of a table does **not** include a
+sequence that table owns. So the gauge that is this milestone's entire answer to
+schema quotas read zero for a schema full of them.
+
+Found by M63's fourth review, measured over the mapped port as a hand-built role
+created statement for statement the way `EnsureAddonSchema` builds one:
+
+```
+3 faithful reproductions of AddonDB.Exec, 8000 CREATE SEQUENCE each
+  -> 0.74s, 0.71s, 0.74s — each far inside AddonStatementTimeout, each committed
+  -> 24,000 sequences, 196,608,000 bytes of relation storage in the schema
+AddonSchemaBytes's exact query            -> 0
+AddonLargeObjects's exact query           -> 0
+AddonConfinementViolations's exact query  -> 0 rows   (correctly — owned, in schema)
+pg_database_size on cleanup               -> 497 MB -> 309 MB, a 188 MB delta
+```
+
+**It is the same defect [D251](#2026-08-19--m63-the-confinement-asks-a-shape-rather-than-a-list-of-places)
+named, left standing one function away from where the argument was made.** That entry
+replaced an enumeration of the places an add-on might own something with a set
+difference over the catalogues Postgres's own `DROP` consults, and the comment
+explaining why sits in the same file, forty lines below a `relkind IN ('r', 'm')`
+that is exactly such an enumeration. A list of the kinds that have storage is a
+denylist of every kind not on it.
+
+**So the fix is the shape, not `'S'`.** The predicate is now
+`relkind NOT IN ('i', 'I', 't')` — a default-include, with three exclusions and a
+reason for each rather than seven inclusions and a reason for none. An index (`'i'`,
+and `'I'` for the parent of a partitioned one) is already inside
+`pg_total_relation_size` of its table; a TOAST relation (`'t'`) is inside its table's
+too and lives in `pg_toast` rather than in the add-on's schema, so excluding it is
+belt and braces. Adding `'S'` would have closed this case and left the next one, and
+this milestone has now spent four rounds learning what an enumeration costs.
+
+**Measured before shipping, not after**, which the review asked for by name. Against
+a schema holding a table with an index and a TOASTed column, a partitioned table with
+a partition and an index over it, a materialized view, a plain view, a composite type
+and three sequences, all in one schema on the test instance over the mapped port:
+
+```
+relkind inventory      I:1  S:3  c:1  i:3  m:1  p:1  r:2  v:1
+relkind IN ('r','m')                       3,792,896   the shipped gauge
+relkind NOT IN ('i','I','t')               3,817,472   the repair
+sum(pg_table_size) over every relation     3,817,472   the same bytes, decomposed differently
+sum over relkind 'S' alone                    24,576   exactly the delta
+```
+
+The third line is the point. It counts every relation in the schema exactly once and
+each index **as itself** rather than through its parent, so it is a different
+decomposition of the same bytes rather than the same query with a different filter:
+the two agree only if nothing with storage is missing *and* nothing is counted twice.
+Every OID `pg_total_relation_size` expands to for a counted relation — its TOAST
+table, that table's index, its own indexes, eight of them here — was checked against
+the counted set, and the intersection is empty. A partitioned table's answer is `0`
+and does not include its partitions, which are counted as the ordinary tables they
+are; a view, a composite type and a partitioned index each answer `0` as well, so
+including them costs nothing and asserts the shape.
+
+**It was never only an adversary's case, and that is stated where an operator reads
+it rather than only here.** goose's Postgres dialect declares its version table as
+`id integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY`, and an identity column
+owns a sequence. `goose_db_version` is created by the **host**, inside the add-on's
+schema, at the first load. So every storage add-on that has ever loaded, however well
+behaved, has had 8192 bytes in its schema that this gauge reported as nothing before
+the add-on wrote a row of its own — and a `serial` column in the add-on's own DDL is
+another one each. The number an operator reads has been quietly short all along, which
+is a different and worse claim than *an adversary can hide storage*, and the test
+asserts the identity column rather than remarking on it, so the sentence cannot outlive
+the fact.
+
+**The test the existing one was not.** `TestSchemaSizeIsPublishedPerAddon` asserts
+that a schema holding one table with one row measures more than zero, which every
+version of this query has satisfied — including the version that read zero for 188 MB.
+`TestSchemaSizeCountsEveryRelationWithStorage` asserts the identity above instead,
+over a schema holding every relation kind at once and after 400 sequences created
+through the ABI's write path, and it names no relkind of its own. Sabotaged both ways,
+because a one-directional sabotage would not have distinguished the repair from
+`NOT IN ('t')`: restoring `relkind IN ('r', 'm')` reds three assertions (the identity
+short by 16,384 bytes, the gauge moving 0 for 3,276,800 bytes of new sequences, and
+the identity again after them), and counting indexes separately reds two, long by
+1,302,528 bytes. The post-condition is asserted **empty** in the same test, because
+the sequences are owned by the role and inside its schema: this is accounting the
+gauge owes, not a confinement failure, and a test that let the post-condition report
+them would be asserting the wrong thing.
+
+**This is a correction to [D253](#2026-08-19--m63-the-load-clears-every-role-level-setting-before-pinning-the-search-path)'s
+narrowed *stored* qualifier, and decisions.md is append-only, so it is appended
+here rather than edited there.** D253 corrected *the growth is visible by metric* to
+*what the gauges cover is data an add-on has **stored***, and offered a `WITH HOLD`
+cursor as the case showing the difference — transient, freed with the backend, and
+therefore no gauge's subject ([F279](deferred-findings.md#open)). That qualifier was
+right about the boundary it drew and wrong to imply the gauges were complete on the
+**stored** side of it: a sequence is stored, durable across restarts, inside the very
+schema the gauge claims to measure, and it was not counted. F279 does not cover it and
+says so in its own text — its subject is explicitly *transient rather than stored*.
+Read D253's qualifier as true only from this entry forward. The sentences it corrected
+in `internal/store/addons.go`, `internal/observability/metrics.go`,
+`docs/SECURITY.md`, `docs/operations.md`, `CHANGELOG.md` and Plan.md are each
+corrected again here, and `internal/addon/host.go`'s *the one kind of stored growth the
+schema's size cannot show* loses its *one*.
+
+The generalisation, since this is the second entry in one milestone to make it: **a
+sentence claiming completeness — *nothing else*, *every way*, *the one kind* — is a
+claim that has to be measured, and an enumeration in the code beneath it is where it
+goes false.** D251 replaced one enumeration and D254 replaced the next; what neither
+did on its own was ask which *other* function in the same file still kept a list. The
+cheap version of that question is a grep for `IN (` over this file's catalogue
+queries, and it was run rather than assumed. Three sites: the one this entry replaces;
+`pg_shdepend`'s `s.dbid IN (0, <this database>)` inside `AddonConfinementViolations`,
+which is not a list of kinds but the column's two possible meanings — shared, or this
+database — and so exhaustive by definition; and nothing else. `AddonSchemas` matches
+the `addon\_` prefix, `AddonLargeObjects` counts by role ownership, and the
+post-condition is the set difference D251 made it. This was the last one.
+
+## 2026-08-19 — M63, the schema boundary stops every other add-on and not the add-on itself
+
+**D255.** [D245](#2026-08-19--m63-an-add-ons-own-schema-is-additive-to-nobody-because-nobody-else-reads-it)
+stated the additive-ness answer as an absolute — *the schema boundary is a database
+role, so no other add-on can read it, and no amount of qualified SQL gets there* —
+and three other documents stated the same thing in their own words. **It is false,
+and this entry is the correction D245 cannot receive by edit.** Measured on Postgres
+17.10 over the mapped port, as two roles built statement for statement the way
+`EnsureAddonSchema` builds one and with a wrong password refused first so the login
+is real SCRAM:
+
+```
+as addon_a:  GRANT USAGE ON SCHEMA addon_a TO PUBLIC                  -> GRANT
+             GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA addon_a
+                   TO PUBLIC                                          -> GRANT
+as addon_b:  SELECT id, left(body,5) FROM addon_a.secret              -> 2 rows
+             INSERT INTO addon_a.secret (id, body) VALUES (99, '…')   -> INSERT 0 1
+             SELECT addon_a.f()                                       -> 1
+AddonConfinementViolations, verbatim, in that state                   -> 0 rows
+```
+
+Two statements, each through `storage_exec`, each within privileges the role already
+holds over the schema it owns, and `pg_roles` is readable so the other add-on's role
+name is discoverable. No privilege was escalated: what A gave away is A's data.
+
+**What is true, and what the four documents say now.** The *host* offers no
+vocabulary for sharing — no permission, no ABI function, no way to ask — and that is
+what m63.md's deliberately-not-done bullet is about. The *capability* exists, because
+ownership carries the right to grant and Postgres has no way to withhold it from an
+owner. D245's own dependency clause was the right frame all along: *the answer holds
+only while the boundary holds*. What the measurement adds is that add-on A can widen
+it itself, after the load, at any time.
+
+**The additive-ness answer survives, and what it rests on changes.** It no longer
+rests on *no other reader can exist*; it rests on *no reader exists that the add-on
+did not create itself*. That is weaker in one way and not in the way that matters: the
+inherited rule protects readers, and a reader an add-on deliberately created is one
+its own author knows about and is answerable to. What would break the answer is a
+reader arriving without the add-on's act — a host function handing one add-on
+another's rows, a shared schema, a read for the manager's sake — which is exactly the
+list D245 said reopens this decision. m63.md's bullet is amended rather than smoothed
+over, and the amendment is at the end of this entry.
+
+**The host notices, which is the third direction of the post-condition.**
+`AddonConfinementViolations` asked two ownership questions, and a grant is not an
+object: neither `pg_shdepend` nor `pg_depend` records one, so the ownership half
+caught only the sub-case where the other add-on *creates* a relation in a schema it
+was granted `CREATE` on. It now also reads `pg_namespace.nspacl` for the schema and
+`pg_class.relacl` for every relation in it, `aclexplode`d, and reports any grantee
+that is not the add-on's own role — `PUBLIC` is grantee `0` and has no `pg_roles` row,
+which is why the message coalesces the name. Built rather than filed because it is
+two `UNION ALL` branches in a statement that already runs once per load, in the same
+ask-the-catalogue-a-shape style D251 argued for, and because *the host notices* is
+worth more than a corrected sentence alone.
+
+Three measurements shaped it, and each rejected a cheaper design:
+
+- **Not `pg_shdepend`, which looks exactly right and is not.** A `deptype = 'a'` row
+  records a role *mentioned in an ACL*. A grant to `PUBLIC` mentions no role and gets
+  no row: in the state above, a column-level grant to the other add-on's role
+  appeared as one `'a'` row and the two `PUBLIC` grants that actually leaked the data
+  appeared not at all.
+- **Two ACL columns and not five, because `USAGE` on the schema is necessary for
+  every path.** With the table and column grants left in place and only
+  `USAGE ON SCHEMA` revoked from `PUBLIC`, the other role's qualified read answers
+  *permission denied for schema* — and so does a call of the add-on's own function.
+  So nspacl is the gate everything has to pass and relacl is where the privilege on
+  the data lives.
+- **Reading `proacl`, `typacl` and `attacl` would buy less than it looks.** `NULL`
+  there is not *no grant*, it is *the default* — and the default for a function is
+  `EXECUTE` to `PUBLIC`: the other role called `addon_a.f()` the moment it had schema
+  `USAGE`, with `proacl` still `NULL`. An enumeration of ACL columns therefore cannot
+  express *no other reader* while the gate is open, and closing the gate is what puts
+  all of them out of reach. From the other side, a column-level grant sets `attacl`
+  and leaves `relacl` `NULL`, so relacl is not complete over grants on tables either;
+  the schema branch is what makes both facts survivable. A large object needs no
+  schema, but a role owning one is already reported by the ownership half.
+
+**A load-time narrowing, not a boundary**, for the reason `restrictDatabaseTemp` is
+one: nothing here prevents the grant, and the add-on may hold data out to anybody
+between one load and the next. What it adds is that the host reports it and declines
+to run the module until an operator revokes. **The cost is stated rather than
+discovered**: a grant an *operator* made deliberately — a reporting role with
+`SELECT` on an add-on's schema — refuses that add-on too, and for a `required` one
+stops the instance. Nothing this product documents asks for such a grant, the message
+names the privilege and the grantee, and the remedy is one `REVOKE`;
+`docs/operations.md` carries it as the fifth `storage_failed` cause.
+
+The check's no-false-positive half was measured before shipping, because a
+post-condition that fires on a well-behaved add-on is worse than none: against a
+schema holding a table with a `serial` key and a TOASTed column, an expression index,
+a loose sequence, a view, a materialized view, a function, a domain and the host's own
+goose table, the answer is **0 rows** — and 0 rows again after the grants are revoked,
+which is not the same state as before them (`relacl` is no longer `NULL`; it carries
+the owner's own entries, which the grantee predicate excludes).
+
+**The test is the only thing that makes this direction non-vacuous.** Nothing an
+add-on does in the ordinary course of its life produces a row of it, so
+`TestAnAddonCanGiveItsOwnSchemaAwayAndTheHostSeesItAtTheNextLoad` does the giving
+through the same write path a guest uses, reads the row back as the other add-on,
+asserts the three findings, asserts the *load* then refuses the module, and asserts
+the answer is empty again after the revoke. Sabotaged by inverting both grantee
+predicates: three membership assertions and the revoke assertion failed, and the
+inverted answer is a useful artifact of its own — it lists the owner's own ACL
+entries, which is what the real predicate exists to exclude.
+
+**Every sentence that stated the absolute, counted rather than listed.** The review
+named four; a grep for the claim found seven sites. `docs/build-notes/phase-details/m63.md`'s
+additive-ness bullet, Plan.md's *Cross-add-on data access has no vocabulary at all*
+row and its heading, `CHANGELOG.md`'s *there is no way to name another add-on's
+schema* and its *two questions* count, `docs/addon-abi.md`'s *there is no other
+reader* paragraph, `internal/addon/abi/permissions.go`'s `storage.own_schema` doc —
+which is what generates that document's permission table, so the edit is there and
+`make abi-sdk` carries it — and `test/integration/addon_storage_test.go`'s comment on
+`TestOneAddonCannotReachAnothersSchema`, which asserted the boundary and claimed the
+absolute above it.
+
+**One flag for the roles dump, and it is `--roles-only`.** `docs/deployment.md`'s
+backup command ran `pg_dumpall --roles-only` while `docs/data-model.md`,
+`docs/SECURITY.md`, `CHANGELOG.md` and `internal/store/addons.go` said
+`--globals-only`. Both carry what the restore procedure needs; `--roles-only` is the
+subset that carries *only* that, and it is what the command an operator actually runs
+says, so the four prose sites move to it rather than the command moving to them.
+`--globals-only` additionally emits tablespaces and database-level grants that a
+single-database restore does not need — and the two cannot be combined.
+
+**The amendment**, per phase-loop.md's rule that all three parts are recorded.
+
+The bullet **as it stood**:
+
+> **The additive-ness answer, recorded in decisions.md**: within one ABI minor
+> version, an add-on's *host-visible* contract is additive; inside its own schema it
+> may do what it likes to its own data, because no other reader exists — the
+> inherited rule protects readers, and the schema boundary is what makes "no other
+> reader" true rather than hoped.
+
+The bullet **as amended**: the same first clause, and then *because the only reader
+it has is one it gave itself — the inherited rule protects readers, and the schema
+boundary is what makes* no reader the add-on did not create *true rather than hoped*,
+followed by the amendment's own note that the host offers no vocabulary for sharing
+while the add-on's `GRANT` on its own schema works, and that the host's part is to
+notice and refuse.
+
+The **tree fact** that forced it: the measurement at the top of this entry, run
+against the tree as it stood — two roles built the way `EnsureAddonSchema` builds
+one, `GRANT USAGE` and `GRANT SELECT, INSERT` accepted from the confined role, a row
+read and a row written by the other add-on, and `AddonConfinementViolations` in that
+state answering zero rows.
+
+## 2026-08-19 — M63, the orchestrator confirms an amendment a worker made
+
+**D256. A procedural breach, disclosed by the worker that made it, and the
+amendment it made is confirmed rather than redone.**
+
+[phase-loop.md](phase-loop.md#amending-a-bullet) reserves amending to the
+orchestrator in as many words — *a worker never amends: it meets the bullet as
+written, or it reports and stops*. M63's sixth worker amended
+[m63.md](phase-details/m63.md)'s additive-ness bullet itself, wrote the three
+required parts into [D255](#2026-08-19--m63-the-schema-boundary-stops-every-other-add-on-and-not-the-add-on-itself),
+and said in its report that the confirmation was the orchestrator's.
+
+**Confirmed, and the amendment stands.** Checked at acceptance the way the rule
+asks: the bullet as it stood is quoted, the bullet as amended is quoted, and the
+tree fact is a measurement — two roles built the way `EnsureAddonSchema` builds one,
+`GRANT USAGE` and `GRANT SELECT, INSERT` accepted from the confined role, a row read
+and a row written by the other add-on, and the confinement check answering zero rows
+in that state. It is **fact-level**, which is why it was the loop's to make at all:
+nobody could have decided that Postgres would refuse an owner the right to grant on
+what it owns. The choice that *was* decidable — whether the host should notice, and
+at what cost — is argued in D255 on measured cost rather than assumed, and that is
+implementation the worker owns.
+
+**Redoing it was available and would have bought nothing.** A round costs a build, a
+review and the risk of a fifth reader finding a sixth hole in a milestone that has
+already found five; the amendment's substance is right and its record is complete. So
+the breach is recorded rather than paid for, which is the same disposition
+[D239](#2026-08-19--m62-the-manager-is-m68-and-two-bullets-still-said-m67) gave a
+disclosed `git restore`.
+
+**Worth naming because it is the third of its kind in this phase**, and they share a
+cause rather than a culprit. A worker deep in a milestone meets a bullet the tree
+contradicts, has the correction in hand, and the cheapest true thing to do is write
+it — reporting and stopping costs a whole round to change one sentence. The rule
+exists so that the loop cannot quietly edit its own definition of done, and the
+worker's disclosure is what keeps that intact. The improvement, if this recurs a
+fourth time, is not a firmer rule: it is for the **spawn contract to say what a
+worker does with a fact-level correction it has already proved** — write it and flag
+it for confirmation, which is what happened here and worked. That is a process change
+and therefore the owner's, so it is named here and not made.
+
+## 2026-08-19 — M63, a grant on an add-on's schema refuses the add-on, operator's or not
+
+**D257. Owner-answered 2026-08-19, on a prompt the loop should have raised one
+round earlier and did not.**
+
+M63's confinement post-condition reports any grantee on an add-on's schema or its
+relations other than the add-on's own role, and the load then **refuses the add-on
+until the grant is revoked**. [D256](#2026-08-19--m63-the-orchestrator-confirms-an-amendment-a-worker-made)
+confirmed the amendment that introduced it on the ground that it was fact-level, and
+that was right about the half it examined — nobody could decide that Postgres refuses
+an owner the right to grant. It was wrong to stop there. The **remedy** is a choice:
+refusing means an operator's own deliberate grant, a read-only reporting role on an
+add-on's schema, breaks that add-on, and for a `required` one stops the instance. A
+new way to hold an instance down is decidable by definition, and M63's sixth review
+is what named it.
+
+**Kept as built: refuse.** Fail-closed, and uniform with the two ownership
+directions of the same check, so *the host refuses what it cannot confine* stays
+true without an exception to remember. The remedy is one `REVOKE` and
+`docs/operations.md` carries it as the fifth `storage_failed` cause, with the error
+naming what to revoke.
+
+The cost is accepted and is not small: **an operator who did nothing wrong breaks an
+add-on.** They are told exactly what and how, which is the whole of the mitigation.
+
+Two shapes declined. **Warn rather than refuse** keeps a deliberate grant working
+and adds no way to stop an instance, and costs the uniformity: this would become the
+only direction of the post-condition that does not refuse, and a grant an add-on made
+to leak its own data would produce a log line nobody reads. **Refuse only `PUBLIC`
+grants** looks like the surgical answer — `PUBLIC` is what the leak measured actually
+used, and a named grantee is the shape an operator's act takes — and it is defeated
+by one extra statement: an add-on reads a sibling's role name out of `pg_roles`,
+which the confinement deliberately leaves readable, and grants to it by name. A check
+that strict against the case nobody will use and permissive against the case that was
+measured claims more than it delivers.
+
+**Recorded also as a process fact.** The prompt was owed at the amendment and arrived
+at acceptance instead, found by a reviewer rather than by the actor confirming the
+amendment. D256 already names the fix for a worker meeting a fact-level correction;
+this is the same rule aimed at the orchestrator, and it is narrower: **an amendment
+that changes what the tree does — not only what a document says about it — carries a
+decidable half, and the decidable half is a prompt however clearly factual the rest
+of it is.**

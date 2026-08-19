@@ -185,3 +185,31 @@ func TestGrantableAndPermissionByNameAgreeWithTheSlice(t *testing.T) {
 		t.Errorf("PermissionNames returned %d of %d entries", len(got), len(Permissions))
 	}
 }
+
+// The one permission with a constant, held to the slice.
+//
+// It exists because internal/addon's manifest validation branches on it by name,
+// and a second spelling of a permission name is the drift a closed vocabulary is
+// for. A constant that stopped matching an entry would make that validation
+// silently stop firing.
+func TestPermissionStorageNamesAnEntryInTheVocabulary(t *testing.T) {
+	// The literal, spelled out. It is the one place in this repository a second
+	// spelling belongs: PermissionStorage is used *as* the slice entry's Name, so a
+	// lookup by the constant finds itself however the constant is misspelled — which
+	// is what the first version of this test did, and it stayed green when the
+	// constant was renamed.
+	if PermissionStorage != "storage.own_schema" {
+		t.Fatalf("PermissionStorage is %q, want storage.own_schema", PermissionStorage)
+	}
+	p, ok := PermissionByName(PermissionStorage)
+	if !ok {
+		t.Fatalf("PermissionStorage is %q, which the vocabulary does not carry: %v",
+			PermissionStorage, PermissionNames())
+	}
+	if !p.Grantable {
+		t.Errorf("%q is not grantable, and M63 implemented the functions it costs", p.Name)
+	}
+	if p.BackedBy != "M63" {
+		t.Errorf("%q is backed by %q, want M63", p.Name, p.BackedBy)
+	}
+}
