@@ -2,6 +2,7 @@ package observability
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +44,9 @@ type Metrics struct {
 
 	webhookDeliveries *prometheus.CounterVec
 	automationFirings *prometheus.CounterVec
+
+	addonLoads *prometheus.CounterVec
+	addonInfo  *prometheus.GaugeVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -190,6 +194,37 @@ func NewMetrics() *Metrics {
 				"destination.blocked) and outcome (fired, or partial when at least one " +
 				"action failed).",
 		}, []string{"trigger", "outcome"}),
+
+		// Add-ons (M60). Both labels are bounded by how many modules an operator
+		// installed — plus one, for the sentinel named below — which is the first
+		// metric in this file whose cardinality is set by the deployment rather
+		// than by a closed vocabulary in the code, and it is bounded all the same,
+		// because installing an add-on is an operator action against a directory
+		// and not something a tenant can do.
+		//
+		// `outcome` is addon.Outcome and is five words: loaded, manifest_invalid,
+		// checksum_mismatch, module_unreadable, instantiate_failed. No error
+		// string ever reaches a label. `addon` comes from the validated manifest
+		// on the loaded path and from the *directory entry* on the refusal path,
+		// where there is no manifest to take it from — bounded there by the host,
+		// which publishes addon.InvalidName rather than a raw entry its own
+		// regexp refuses. That bound is load-bearing twice: WithLabelValues
+		// below panics on a label value that is not valid UTF-8, and a directory
+		// name is not a name until something says so.
+		addonLoads: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_addon_loads_total",
+			Help: "Add-on load attempts by add-on and outcome (loaded, manifest_invalid, " +
+				"checksum_mismatch, module_unreadable, instantiate_failed).",
+		}, []string{"addon", "outcome"}),
+
+		// The identity series, modelled on linkctrl_build_info: always 1, and the
+		// labels are the answer. It exists only for add-ons that instantiated —
+		// a refusal is a counter increment above, not an add-on with an identity
+		// this instance is running.
+		addonInfo: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "linkctrl_addon_info",
+			Help: "Always 1 per loaded add-on; the labels carry its identity.",
+		}, []string{"addon", "version", "abi_version", "failure_class"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -208,6 +243,7 @@ func NewMetrics() *Metrics {
 		m.feedChecks,
 		m.webhookDeliveries,
 		m.automationFirings,
+		m.addonLoads, m.addonInfo,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -232,7 +268,9 @@ func (m *Metrics) Register(c prometheus.Collector) {
 //
 // This is mounted on the metrics listener, never on the public one: the series
 // below expose queue depths, pool saturation and the shape of traffic, which
-// is operational detail rather than something to publish.
+// is operational detail rather than something to publish — and, since M60, the
+// name and version of every installed add-on, which is an inventory of what this
+// instance runs. docs/SECURITY.md says the same thing to the operator.
 func (m *Metrics) Handler() http.Handler {
 	if m == nil {
 		return http.NotFoundHandler()
@@ -546,4 +584,27 @@ func (m *Metrics) ObserveAutomationFiring(trigger, outcome string) {
 		return
 	}
 	m.automationFirings.WithLabelValues(trigger, outcome).Inc()
+}
+
+// --- add-ons -----------------------------------------------------------------
+
+// ObserveAddonLoad records one add-on load attempt (M60).
+//
+// Called for every attempt including the refusals, which is the point: an
+// operator whose add-on is silently not there needs a series that says so, and a
+// counter that only ever counted successes would leave the failure visible in a
+// log line nobody is scraping.
+func (m *Metrics) ObserveAddonLoad(addon, outcome string) {
+	if m == nil {
+		return
+	}
+	m.addonLoads.WithLabelValues(addon, outcome).Inc()
+}
+
+// SetAddonInfo publishes the identity of an add-on that loaded (M60).
+func (m *Metrics) SetAddonInfo(addon, version string, abiVersion int, failureClass string) {
+	if m == nil {
+		return
+	}
+	m.addonInfo.WithLabelValues(addon, version, strconv.Itoa(abiVersion), failureClass).Set(1)
 }

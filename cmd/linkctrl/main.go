@@ -40,6 +40,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
@@ -254,6 +255,35 @@ func run(cfg config.Config, _ io.Writer) error {
 		"app":      pools.App,
 		"redirect": pools.Redirect,
 	}))
+
+	// The add-on host (M60). Before the services, because a `required` add-on
+	// that will not load has to stop the instance before anything is listening —
+	// and after the metrics registry, so a refusal is counted rather than only
+	// logged.
+	//
+	// Unset LINKCTRL_ADDONS_DIR returns a nil host: no runtime, no goroutine, no
+	// series. That is the shipped default, and every method on *addon.Host is
+	// nil-safe so nothing below has to ask.
+	//
+	// The error is returned rather than logged, which is the whole of the
+	// `required` failure class: the reason travels with the exit, in the same
+	// shape as a failed migration.
+	addons, err := addon.Open(ctx, addon.Options{
+		Dir:     cfg.Addons.Dir,
+		Logger:  log,
+		Metrics: metrics,
+	})
+	if err != nil {
+		return fmt.Errorf("add-on host: %w", err)
+	}
+	defer func() {
+		// A fresh context: ctx is cancelled by the signal that got us here, and a
+		// runtime told to close on a cancelled context would refuse the close
+		// itself.
+		if err := addons.Close(context.Background()); err != nil {
+			log.Warn("closing the add-on host", slog.Any("error", err))
+		}
+	}()
 
 	// Request limits. Built once here and shared: the router enforces two of
 	// them, the redirect handler the third, and the collector reports on all
@@ -976,8 +1006,10 @@ func run(cfg config.Config, _ io.Writer) error {
 
 	// The scrape endpoint lives on its own listener, on a port compose does not
 	// publish. Queue depths, pool saturation and traffic shape are operational
-	// detail, and putting them behind the same listener as the public site is
-	// how they end up on the internet by accident.
+	// detail — as is the add-on inventory linkctrl_addon_info publishes, which
+	// names what this instance runs and at which version — and putting any of it
+	// behind the same listener as the public site is how it ends up on the
+	// internet by accident.
 	metricsSrv := httpserver.New(httpserver.Options{
 		Addr:              cfg.HTTP.MetricsAddr,
 		Handler:           metricsMux(metrics),

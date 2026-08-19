@@ -27,6 +27,49 @@ migrations run at boot.
 
 ## [Unreleased]
 
+### Added
+
+- **Add-ons: an instance can load WASM modules, and refuse the ones that do not
+  check out.**
+
+  Point `LINKCTRL_ADDONS_DIR` at a directory holding one subdirectory per add-on,
+  each with an `addon.json` and the `.wasm` that manifest describes. At boot each
+  module is verified against the `sha256` in its manifest and either instantiated
+  or refused — a module whose bytes do not match is never compiled. What happens
+  when one will not load is the add-on's own declaration: `required` stops the
+  instance with the reason, `degrade` logs it, counts it, and the instance serves
+  without the module. A manifest that cannot be parsed also stops the instance,
+  because there is no declaration left to honour.
+
+  Two metrics come with it, on the metrics listener as everything else there is:
+  `linkctrl_addon_loads_total{addon,outcome}` and
+  `linkctrl_addon_info{addon,version,abi_version,failure_class}`. Both are absent
+  entirely on an instance with no add-ons directory, which makes the series itself
+  the answer to whether this instance is running any.
+
+  **Unset is the default and it costs nothing.** No WASM runtime is constructed,
+  no goroutine is started, no route is mounted, no table is created and no metric
+  series is published — each of those absences asserted by a test rather than by
+  this paragraph.
+
+  **What an add-on can do so far is nothing.** There is no host ABI yet, so a
+  loaded module imports nothing this product defines: it is instantiated, it is
+  observable, and it has no reach. Storage, routes, templates, the authentication
+  hook and the redirect path arrive in later releases of the 0.4 line, and the
+  manifest already carries the fields they will read — `abi_version`, declared
+  permissions, and declared settings — so an add-on published against this schema
+  does not have to be rewritten when they do. `schema_version` is checked for
+  equality and unknown fields are refused, deliberately: a manifest this host does
+  not fully understand is refused rather than half-honoured.
+
+  **The trust boundary is the directory.** A module in it is code this instance
+  executes; own it, and mount it read-only. See
+  [configuration.md](docs/configuration.md) and
+  [SECURITY.md](docs/SECURITY.md).
+
+  The runtime is [wazero](https://github.com/tetratelabs/wazero), which needs no
+  cgo, so the published binaries and image stay statically linked.
+
 ## [0.3.0] - 2026-08-18
 
 ### Added

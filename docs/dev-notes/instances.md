@@ -120,8 +120,9 @@ a browser. Test sits one above on each.
 
 Everything except HTTP is published to `127.0.0.1` only, by the compose override.
 That includes the metrics listener, which the base file deliberately does not
-publish at all: it is unauthenticated and its series describe traffic shape and
-saturation. The development override publishes it on loopback because
+publish at all: it is unauthenticated and its series describe traffic shape,
+saturation, and — with `LINKCTRL_ADDONS_DIR` set — which add-ons are installed
+and at which versions. The development override publishes it on loopback because
 `idle-stop.sh` needs to ask whether anyone is using the instance, and because a
 metrics endpoint you can curl is useful while building one. The production
 procedure in [deployment.md](../deployment.md) runs `-f docker-compose.yml`,

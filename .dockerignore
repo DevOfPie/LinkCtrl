@@ -38,6 +38,12 @@ docs/
 # tools/.
 tools/
 
+# The WASM test fixtures (M60), built by `make addon-fixtures` and gitignored:
+# ~3.7MB that `COPY . .` would otherwise carry into every build context and a
+# builder layer on any machine that has run the suite. The 20KB of sources beside
+# them stay; only the artifacts are worth a line.
+internal/addon/testdata/build/
+
 docker-compose*.yml
 Caddyfile
 Taskfile.yml

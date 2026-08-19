@@ -69,6 +69,7 @@ type Config struct {
 	SMTP      SMTPConfig
 	Feed      FeedConfig
 	Webhooks  WebhooksConfig
+	Addons    AddonsConfig
 	Shutdown  ShutdownConfig
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
@@ -485,6 +486,28 @@ type WebhooksConfig struct {
 	// make visible rather than to permit here. Validate refuses it.
 	RetentionDays int `env:"WEBHOOK_RETENTION_DAYS" envDefault:"30"`
 }
+
+// AddonsConfig is where the WASM host looks for add-ons (M60).
+type AddonsConfig struct {
+	// Dir is an operator-owned directory holding one subdirectory per add-on,
+	// each with an addon.json and the .wasm it describes.
+	//
+	// **Unset is the shipped default and it means there is no host**: no WASM
+	// runtime is constructed, no goroutine started, no route mounted, no table
+	// created and no metric series published. That is asserted by tests in
+	// internal/addon rather than promised here, because "off costs nothing" is
+	// the kind of claim that stops being true one milestone after somebody writes
+	// it down.
+	//
+	// Operator-owned rather than a path an add-on or a tenant can influence: a
+	// module in this directory is code this instance executes, so who may write
+	// to it is the whole of the trust boundary. docs/SECURITY.md states that in
+	// the same terms.
+	Dir string `env:"ADDONS_DIR"`
+}
+
+// Enabled reports whether this instance has an add-on host at all.
+func (a AddonsConfig) Enabled() bool { return a.Dir != "" }
 
 type ShutdownConfig struct {
 	DrainDelay time.Duration `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"5s"`
@@ -1142,6 +1165,22 @@ func (c Config) Validate() error {
 		if _, err := os.Stat(c.Analytics.GeoIPPath); err != nil {
 			add("GEOIP_MMDB_PATH: %q is not readable: %v; leave it empty to disable "+
 				"geographic reporting", c.Analytics.GeoIPPath, err)
+		}
+	}
+
+	// Refused at parse time rather than survived at boot, matching GEOIP_MMDB_PATH
+	// above and differing from it in one way: a missing GeoIP file disables one
+	// report, while a missing add-ons directory is an operator who believes this
+	// instance is running modules it has never seen. A path that is a file rather
+	// than a directory is the same mistake with a different spelling.
+	if c.Addons.Enabled() {
+		switch info, err := os.Stat(c.Addons.Dir); {
+		case err != nil:
+			add("ADDONS_DIR: %q is not readable: %v; leave it empty to run no "+
+				"add-ons at all", c.Addons.Dir, err)
+		case !info.IsDir():
+			add("ADDONS_DIR: %q is not a directory; it holds one directory per "+
+				"add-on, each with an addon.json", c.Addons.Dir)
 		}
 	}
 

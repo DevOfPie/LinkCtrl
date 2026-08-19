@@ -70,3 +70,8 @@ Thumbs.db
 # from here rather than from tools/agent-browser; they are per-session state
 # and never belong in a commit (learned at M47, which committed four).
 /.playwright-cli/
+
+# The WASM test modules, built by `make addon-fixtures` from the sources beside
+# them. Never committed: m60.md refuses a checked-in binary, and a 1.8 MB blob per
+# fixture is exactly the kind of build input nobody reviews.
+/internal/addon/testdata/build/

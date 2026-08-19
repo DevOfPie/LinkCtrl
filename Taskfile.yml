@@ -18,6 +18,10 @@ vars:
   # Must match the version stamped into internal/store/dbgen. Keep in sync with
   # the Makefile, which is the reference.
   SQLC_VERSION: v1.31.1
+  # The add-on host's WASM test fixtures, built and never committed. Keep in sync
+  # with the Makefile, which is the reference.
+  ADDON_FIXTURE_SRC: internal/addon/testdata/modules
+  ADDON_FIXTURE_DIR: internal/addon/testdata/build
   IMAGE: '{{.IMAGE | default "linkctrl:ci"}}'
   IMAGE_VERSION: '{{.IMAGE_VERSION | default "ci"}}'
   VERSION:
@@ -138,8 +142,38 @@ tasks:
     cmds:
       - rm -rf {{.BIN}} {{.DIST}} cover.out coverage.html
 
+  # Built rather than committed, for the reason the Makefile's own comment at this
+  # target gives at length: a blob in the tree is a build input nobody reviews.
+  # -buildmode=c-shared is load-bearing and not a flag — it makes the entry point
+  # _initialize, so the module is a reactor that stays instantiated.
+  #
+  # A dependency of every target that runs the add-on host's tests or drives the
+  # single-instance gate, rather than something to remember. It is the fast path
+  # and not the contract: internal/addon's fixture() builds what it needs when it
+  # is missing, so a contributor on Windows told to use this file gets a green
+  # `task test` either way (M60).
+  #
+  # Globbed over the source directories rather than naming the modules, for the
+  # reason the Makefile's comment gives at greater length: the set was written out
+  # in three places and a third module would have been built by one of them and by
+  # nothing else.
+  addon-fixtures:
+    desc: Build the WASM test modules the add-on host is tested against
+    env:
+      GOOS: wasip1
+      GOARCH: wasm
+    cmds:
+      - |
+        set -e
+        mkdir -p {{.ADDON_FIXTURE_DIR}}
+        for src in {{.ADDON_FIXTURE_SRC}}/*/main.go; do
+          mod=$(dirname "$src")
+          go build -buildmode=c-shared -o "{{.ADDON_FIXTURE_DIR}}/$(basename "$mod").wasm" "./$mod"
+        done
+
   test:
     desc: Unit tests with the race detector
+    deps: [addon-fixtures]
     cmds:
       - go test -race -covermode=atomic -coverprofile=cover.out ./...
 
@@ -299,6 +333,7 @@ tasks:
 
   ci-test:
     desc: Unit tests with the race detector, uncached — what CI runs
+    deps: [addon-fixtures]
     cmds:
       - go test -race -count=1 ./...
 
@@ -351,16 +386,24 @@ tasks:
   ci-image-smoke:
     desc: Check a built image reports its version and serves everything on Postgres alone
     cmds:
+      - task: addon-fixtures
+        ignore_error: true
       # The single-instance guarantee first, for the reason the Makefile gives:
       # the version stamp is the cheaper failure and the conformance is the one
       # somebody's milestone will break.
-      - bash scripts/single-instance-check.sh "{{.IMAGE}}"
+      - bash scripts/single-instance-check.sh "{{.IMAGE}}" "{{.ADDON_FIXTURE_DIR}}/minimal.wasm"
       - bash scripts/ci-image-smoke.sh "{{.IMAGE}}" "{{.IMAGE_VERSION}}"
 
+  # The fixture build is attempted and its failure tolerated, mirroring the
+  # Makefile: without a module the script skips its add-on limb and says so, and a
+  # conformance gate that cannot run at all because a WASM toolchain is missing is
+  # the worse of the two outcomes (F262).
   single-instance:
     desc: One container, no Redis, no load balancer — the whole surface
     cmds:
-      - bash scripts/single-instance-check.sh "{{.IMAGE}}"
+      - task: addon-fixtures
+        ignore_error: true
+      - bash scripts/single-instance-check.sh "{{.IMAGE}}" "{{.ADDON_FIXTURE_DIR}}/minimal.wasm"
 
   workflow-proposals:
     desc: Which ci/proposed/ workflow proposals the owner has not applied yet

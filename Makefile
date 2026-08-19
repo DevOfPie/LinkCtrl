@@ -130,7 +130,7 @@ clean: ## Remove build output
 ## ---- quality --------------------------------------------------------------
 
 .PHONY: test
-test: ## Unit tests with the race detector
+test: addon-fixtures ## Unit tests with the race detector
 	go test -race -covermode=atomic -coverprofile=cover.out ./...
 
 # LINKCTRL_REDIS_URL matters as much as the DSN: without it the Redis tier tests
@@ -356,7 +356,7 @@ verify-scan: ## Decode every logo'd code the product can draw, at simulated dist
 # a CI check that can be added without a workflow edit.
 
 .PHONY: ci-test
-ci-test: ## Unit tests with the race detector, uncached — what CI runs
+ci-test: addon-fixtures ## Unit tests with the race detector, uncached — what CI runs
 	go test -race -count=1 ./...
 
 .PHONY: ci-build
@@ -419,9 +419,20 @@ ci-image-smoke: single-instance ## Check a built image reports its version and s
 # Prerequisite rather than a second recipe line, so a run that never reaches the
 # version check still runs this one: the version stamp is the cheaper failure and
 # the conformance is the one somebody's milestone will break.
+#
+# `addon-fixtures` is built here and the failure is tolerated, which is deliberate
+# and is what closed F262. This target is reached by `ci-image-smoke`, and that is
+# the one CI job with a Docker daemon and no actions/setup-go step, so making the
+# whole one-container conformance run depend on the runner image happening to ship
+# a Go toolchain traded a real gate against an unpinned property of somebody
+# else's VM. Without a fixture the script skips its add-on limb and says so; with
+# one — every developer machine, and every runner that does ship Go — all three
+# limbs run exactly as before. `make addon-fixtures` on its own still fails loudly,
+# which is where somebody debugging a fixture should be looking.
 .PHONY: single-instance
 single-instance: ## One container, no Redis, no load balancer — the whole surface
-	@scripts/single-instance-check.sh "$(IMAGE)"
+	-@$(MAKE) --no-print-directory addon-fixtures
+	@scripts/single-instance-check.sh "$(IMAGE)" "$(ADDON_FIXTURE_DIR)/minimal.wasm"
 
 .PHONY: workflow-proposals
 workflow-proposals: ## Which ci/proposed/ workflow proposals the owner has not applied yet
@@ -448,6 +459,44 @@ sqlc-vet: require-db-password require-stack ## Prepare every query against a liv
 .PHONY: openapi
 openapi: ## Validate the OpenAPI document against the implementation
 	go test ./internal/httpx/ -run TestOpenAPI -count=1
+
+# The WASM modules the add-on host is tested against, and the one the
+# single-instance gate installs into a container.
+#
+# Built rather than committed. m60.md refuses a checked-in binary by name, and the
+# reason is the one every vendored asset in the frontend section is checksum-pinned
+# for: a blob in the tree is a build input nobody reviews. These are ~1.8 MB each
+# because a GOOS=wasip1 module built by the standard toolchain carries the whole Go
+# runtime; that is a fixture cost, not a product one, and it is why the fixture
+# strategy — not the product — is what would revisit TinyGo if it ever mattered.
+#
+# -buildmode=c-shared is load-bearing, not a flag: it makes the entry point
+# _initialize instead of _start, so the module is a reactor that stays
+# instantiated rather than a command that runs main and exits. addon.StartFunction
+# is the other half of the pair and the two must agree.
+#
+# A prerequisite of `test` and `ci-test` rather than something to remember, so the
+# build is paid for once, outside the test binary, with make's timestamps deciding.
+# It is not the only way the modules get built: internal/addon's fixture() builds
+# what it needs when it is missing, because two callers run `go test` without ever
+# reaching a make target and neither is this repository's to edit — the release
+# workflow, and the CI `image` job (F262). This target is the fast path, not the
+# contract.
+#
+# The set is globbed rather than named. It was named here and named again in two
+# other places, and a third module would have been built by one of them and by
+# nothing else; a source directory is the one enumeration that cannot disagree
+# with itself.
+ADDON_FIXTURE_SRC := internal/addon/testdata/modules
+ADDON_FIXTURE_DIR := internal/addon/testdata/build
+ADDON_FIXTURES    := $(patsubst $(ADDON_FIXTURE_SRC)/%/main.go,$(ADDON_FIXTURE_DIR)/%.wasm,$(wildcard $(ADDON_FIXTURE_SRC)/*/main.go))
+
+.PHONY: addon-fixtures
+addon-fixtures: $(ADDON_FIXTURES) ## Build the WASM test modules the add-on host is tested against
+
+$(ADDON_FIXTURE_DIR)/%.wasm: $(ADDON_FIXTURE_SRC)/%/main.go
+	@mkdir -p $(ADDON_FIXTURE_DIR)
+	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o $@ ./$(ADDON_FIXTURE_SRC)/$*
 
 ## ---- database -------------------------------------------------------------
 

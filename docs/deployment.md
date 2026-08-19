@@ -220,8 +220,10 @@ invisible in the logs and only shows up as flattened analytics.
 Two things not to forward:
 
 - **`:9090`.** The metrics listener has no authentication. It reports queue
-  depths, pool saturation and traffic shape. Compose does not publish it, and
-  the proxy should not reach it.
+  depths, pool saturation and traffic shape — and, on an instance running
+  add-ons, the name and version of every one of them, which is an inventory
+  rather than a saturation figure. Compose does not publish it, and the proxy
+  should not reach it.
 - **`/api/v1/openapi.json` if you set `LINKCTRL_DOCS_ENABLED=false`.** It is
   public by default, which is usually what you want; the switch is there for
   instances that should describe nothing.
@@ -684,10 +686,32 @@ the high-availability work is required to run it.** That is a gate rather than
 an intention: `scripts/single-instance-check.sh` starts the release image on a
 network carrying nothing but Postgres — no Redis, no load balancer, no second
 replica — and drives the redirect path, the dashboard, the API, the scheduler,
-cache invalidation and rate limiting over HTTP until each one answers. It runs
-in CI on every push, and a later change that makes any of those need a second
-component fails it. The required set is **Postgres**; everything else is
-optional.
+cache invalidation, rate limiting and **a loaded add-on** over HTTP until each one
+answers. It runs in CI on every push, and a later change that makes any of those
+need a second component fails it. The required set is **Postgres**; everything
+else is optional.
+
+The add-on limb is the one that is not self-contained (M60). It stages a
+directory holding a manifest and the module the manifest describes, mounts it
+read-only at `/addons`, and reads the per-add-on series off the metrics listener —
+so it needs `sha256sum` on the machine running it and a **pre-built** WASM
+fixture, which is why the script takes the module's path as its second argument
+and why `make single-instance` builds one first. **Without either, that limb is
+skipped and the other two still run**, naming which prerequisite was missing. It
+also skips against an **image older than the add-on host**, which has nothing for
+a module to load into: the limb reads that image's own version from
+`linkctrl_build_info` and declines below the release add-ons arrived in, rather
+than failing an artifact that is conformant in every way the gate is about.
+*Older* means a bare `major.minor.patch` below that release and nothing else — a
+prerelease of it, a `git describe` build off an older tag, `ci`, `dev` and no
+version series at all every one **assert**. The narrowness is deliberate and it
+costs one false red, the gate run against an old prerelease: a false red is
+visible and a false skip is not.
+Between them those two keep the invocation this script exists for — you point it
+at a published image with one argument, and that invocation has no repository
+checkout and nothing built.
+Nothing about the *product* gained a dependency: the add-ons directory is unset by
+default and an instance that configures none constructs no host at all.
 
 **What a rolling deploy actually costs, measured rather than described.** Three
 replicas behind a load balancer, every one of them destroyed and rebuilt while

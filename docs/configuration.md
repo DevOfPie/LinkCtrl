@@ -802,6 +802,111 @@ A *configuration* mistake is still fatal, as every other one is: an unparseable
 `SMTP_FROM`, an unknown TLS mode, a username without a password, or credentials
 that would go over the wire in clear all refuse to boot.
 
+## Add-ons
+
+**Off unless you set a directory, and off is exact.** With `LINKCTRL_ADDONS_DIR`
+empty no WASM runtime is constructed, no goroutine is started, no route is
+mounted, no table is created and no metric series is published. That is asserted
+by tests rather than asserted here, because "off costs nothing" is the kind of
+sentence that stops being true one release after somebody writes it.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_ADDONS_DIR` | *(empty — no add-ons)* | A directory holding one subdirectory per add-on. Validated at startup: a path that is not there, or is a file rather than a directory, refuses to boot rather than being read as "no add-ons". **On compose, add the mount before you set this.** The shipped `docker-compose.yml` has no `/addons` volume, so a container path set here is not readable inside the container and the refusal above takes the instance down — add the `volumes:` snippet from [the trust boundary](#the-trust-boundary) below in the same change. `lctl` reads the same `.env`, so it stops starting too, exactly as `GEOIP_MMDB_PATH` does. |
+
+### The layout
+
+One directory per add-on, **named for the add-on**, holding a manifest and the
+module it describes:
+
+```
+/var/lib/linkctrl/addons/
+  oidc/
+    addon.json
+    oidc.wasm
+```
+
+The directory name and the manifest's `name` must match. That is what lets a
+metric label exist for an add-on whose manifest will not parse, and what stops
+two directories claiming one identity — which would be two add-ons contending for
+one Postgres schema.
+
+### The manifest
+
+`addon.json`, and every field is required unless marked otherwise. Unknown fields
+are **refused**, not ignored: `schema_version` is checked for equality, so a field
+this host does not know means a manifest written for a schema this host does not
+implement.
+
+```json
+{
+  "schema_version": 1,
+  "name": "clickstats",
+  "version": "0.4.0",
+  "abi_version": 1,
+  "module": "clickstats.wasm",
+  "sha256": "5f2b…64 lowercase hex characters…",
+  "failure_class": "degrade",
+  "permissions": ["storage.own_schema", "redirect.observe"],
+  "settings": [
+    {"name": "retention_days", "type": "text",   "default": "30"},
+    {"name": "api_token",      "type": "secret"},
+    {"name": "granularity",    "type": "select", "options": ["hour", "day"], "default": "day"},
+    {"name": "count_bots",     "type": "toggle", "default": "false"}
+  ]
+}
+```
+
+| Field | Notes |
+| --- | --- |
+| `schema_version` | Must be `1`. Not "at least 1" — a newer manifest is refused rather than partially understood. |
+| `name` | 2–31 characters, lowercase letters, digits and underscores, starting with a letter. It has to be three things at once: a metric label, a directory name, and a Postgres schema name. |
+| `version` | The add-on's own version. Its author's business; this only refuses what would make a log line unreadable. |
+| `abi_version` | Which host ABI the module was built against. Read and stored now; enforced when the ABI exists. |
+| `module` | The `.wasm` file, as a **bare filename** inside this directory. A separator or a `..` is refused rather than cleaned. |
+| `sha256` | The digest of that file, 64 lowercase hex characters — what `sha256sum` prints. Verified before the module is compiled; a mismatch means it is never parsed, let alone run. |
+| `failure_class` | `required` or `degrade`. No default. |
+| `permissions` | Optional. Dotted lowercase names, as in `links.read`. Read and stored; enforcement arrives with the permission model. |
+| `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
+
+### What happens when an add-on will not load
+
+**The add-on decides, not you.** A manifest saying `required` stops the instance
+with the reason on stderr; one saying `degrade` logs an error, increments
+`linkctrl_addon_loads_total`, and the instance serves without it.
+
+**Both of those are about a module that *fails*.** A module that never returns —
+one whose package initialization spins, since initialization runs while the module
+is being instantiated — hangs the boot instead, and `degrade` does not rescue it:
+nothing has classified the failure yet, so no listener comes up and no metric is
+written. There is **no load-time deadline** and the process still answers SIGTERM.
+Filed as F267 in the build notes; until it is fixed, an add-on you did not write is
+an add-on that can stop this instance from starting whatever class it declares.
+
+So does a manifest this host cannot parse — it stops the instance. There is no
+class to honour in that case, and guessing the forgiving one would boot an
+instance with an authentication add-on silently missing.
+
+A file that is not a directory is ignored with a warning, so a `README` you left
+in there is not an outage.
+
+### The trust boundary
+
+**A module in this directory is code this instance executes.** Who may write to
+the directory is the whole of the boundary; the digest in the manifest protects
+against the file changing after it was published, and against nothing else — a
+manifest and a module replaced together verify perfectly. Own the directory, and
+mount it read-only:
+
+```yaml
+services:
+  app:
+    volumes:
+      - /var/lib/linkctrl/addons:/addons:ro
+```
+
+What a loaded module is handed is covered in [SECURITY.md](SECURITY.md).
+
 ## Shutdown
 
 | Variable | Default | Notes |

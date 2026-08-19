@@ -377,6 +377,17 @@ file. Append a row when you append an entry.
 | [Phase 4 planned: the spine and the fourteen slots](#2026-08-18--phase-4-planned-the-spine-and-the-fourteen-slots) | D211 — fourteen milestones, M59–M70, one dependency chain rather than areas; capabilities land in rising order of what a defect would cost; the mid-phase review sits **before** sessions and the redirect path, not at the numeric middle; wazero named at planning because `CGO_ENABLED=0` leaves one candidate; the *AI optimization, smart routing, predictive analytics* limbs move to *future* rather than riding along; two slots deliberately unspent |
 | [M59, the two repair shapes chosen at the plan's review](#2026-08-18--m59-the-two-repair-shapes-the-owner-chose-at-the-plans-review) | D212 — `release-check` **derives** `COMPOSE_PROJECT_NAME`, `COMPOSE_ENV_FILES` and the two DSNs itself rather than the documentation dropping the direct form, taking the drift pair knowingly and turning it into a step that fails on a mismatch; the DSN limb was forced by what the skip was hiding — unset, the integration suite guesses a password on the *demo* instance's port. D213 — the release-time gate is **named in workflow.md's Docs row**, so a worker between the fold and the tag meets the rule at the moment it binds them; the conflict is documented rather than removed and a post-fold reopening still re-folds by hand |
 | [M59, the F248 population was 83 and not 17](#2026-08-18--m59-the-f248-population-was-83-and-not-17) | D214 — an amendment on a **fact**: F248's count of 39 was taken over links carrying an explicit path to `deferred-findings.md` and so never looked inside that file, where 63 more were. 83 wrong links across 14 maintained files, 99 corrected once M59's own four rows closed. The assertion is unchanged, which is why it is an amendment and not a prompt; `deferred-findings.md` is not exempt as a source, and the recurring cost — closing a row means correcting every citation of it — is stated |
+| [M60, the Makefile line the phase's own first commit moved](#2026-08-18--m60-the-makefile-line-the-phases-own-first-commit-moved) | D215 — an amendment on a fact: M60's `CGO_ENABLED=0` citation read `Makefile:682` and the line is 692, moved by M59's own `check-ci` target. Logged rather than corrected in silence, because the rule requiring it carves out no arithmetic and a citation moved by one commit is what plan drift looks like before it looks like anything |
+| [M60, the manifest is the first artifact that leaves this repository](#2026-08-18--m60-the-manifest-is-the-first-artifact-that-leaves-this-repository) | D216 — the add-on manifest: JSON, one directory per add-on named for the add-on, `schema_version` checked for **equality** and unknown fields refused because the format crosses a repository boundary before the ABI settles. Six of the owner's answers of 2026-08-18 take their numbers here. A manifest nobody can parse **stops the instance**, deliberately: there is no failure class left to honour and assuming the forgiving one boots an instance with sign-in silently missing. Four validation rules are decisions rather than syntax — a bare-filename module refused rather than cleaned, no default failure class, no default on a secret setting, a lowercase digest. Permission names are checked for shape and not vocabulary, which stays M62's |
+| [M60, the host loads a reactor and grants it nothing](#2026-08-18--m60-the-host-loads-a-reactor-and-grants-it-nothing) | D217 — `-buildmode=c-shared` and `_initialize` rather than `_start`, so a module stays instantiated and package init runs *during* instantiation, which is what makes a failure class mean anything. Nothing is granted: no filesystem, no environment, discarded output, and wazero's **fake** clock and random source — recorded as a hazard for M61 rather than a feature. `WithCloseOnContextDone` set at birth for M66's deadline. The measured cost M66 prices against: 383 ms to compile, 1.9 ms to instantiate, 2.4 MB of guest memory. Fixtures built by `make addon-fixtures` and never committed, with the CI toolchain cost stated. The single-instance gate's third limb, sabotage-verified against the shipped image |
+| [M60, D215 was wrong before the commit carrying it was made](#2026-08-18--m60-d215-was-wrong-before-the-commit-carrying-it-was-made) | D218 — corrects D215: the line is **724**, not 692, moved another 32 lines by M60's own fixture block before the commit carrying the amendment existed. The citation is **withdrawn** rather than corrected a third time — the bullet and `host.go`'s package doc name the `dist` target instead. Generalises: an amendment made at step 1 asserts something about a tree the milestone then edits, so it is re-checked at 3.4 rather than inherited |
+| [M60, a label from a directory entry is a crash risk, not a cardinality one](#2026-08-18--m60-a-label-from-a-directory-entry-is-a-crash-risk-not-a-cardinality-one) | D219 — the refusal path's `addon` label was the raw directory entry, contradicting two comments that said no filename reaches a label. The harm is not the obvious one: client_golang **escapes** a newline in a label value and the exposition survives, but it **panics** on one that is not valid UTF-8 — at the observation, inside `addon.Open`, at boot, with no recover above it. Bounded by `labelFor` to `nameRe` or `InvalidName` (`<invalid>`, which `nameRe` cannot produce). Generalises to M63's schema names and M68's setting names: an operator-derived label on a boot path is a liveness question |
+| [M60, a fixture only make can build is a gate only make can run](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run) | D220 — `internal/addon`'s `fixture()` **builds** the missing module rather than instructing a caller to run `make addon-fixtures`, because two callers cannot be wired from this repository: `release.yml`'s direct `go test ./...` and the CI `image` job. The Makefile target stays as the fast path, not the contract. `single-instance` tolerates a fixture build that fails and the script **skips** its add-on limb rather than hard-failing, which closes F262 and restores the one-argument invocation against a published image that is F257's closing evidence. The fixture set is globbed rather than named, in the two files that still enumerate it |
+| [M60, no entry in this log will cite that line again](#2026-08-18--m60-no-entry-in-this-log-will-cite-that-line-again) | D221 — corrects D218, which corrected D215: the line is **741**, and D218's own citation of the fixture block was wrong too. The rule is replaced, not restated — **a decision entry does not cite a line number in a file the current phase is editing**; it names a target, a recipe, a function, or what to grep for |
+| [M60, the gate asks the image what it is before asserting what it does](#2026-08-18--m60-the-gate-asks-the-image-what-it-is-before-asserting-what-it-does) | D222 — the single-instance gate's add-on limb reads the image's **own version** from `linkctrl_build_info` and skips below the release the host arrives in, because pointed at the published `0.3.0` it failed a conformant artifact. Corrects [D220](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run): the fixture-path skip did **not** restore the one-argument invocation against a published image — that fixture is a `make test` prerequisite, so the skip can never fire where it was needed. The predicate fails closed: a current image missing the series still fails, and `ci`, `dev`, a prerelease or no series at all all assert |
+| [M60, the two answers that unparked the milestone](#2026-08-18--m60-the-two-answers-that-unparked-the-milestone) | D223 — the gate's add-on limb skips only on a **bare** semver triple below the floor, so a `-N-g<sha>` describe build asserts; a false red is visible and a false skip is silent, and both earlier predicates failed by being silent. Corrects D222's premise. D224 — a record cites **content, not a coordinate**, extending D221 past this log to findings rows and milestone files; the 72 already-stale citations are knowingly left, and the gate that would have caught them is priced as a milestone |
+| [M60, one duration over two steps priced neither](#2026-08-18--m60-one-duration-over-two-steps-priced-neither) | D225 — `TestInstantiationCostIsMeasured` timed the whole of `Open` in one `time.Since`, so the compile and instantiate figures [D217](#2026-08-18--m60-the-host-loads-a-reactor-and-grants-it-nothing) hands M66 were not reproducible from the tree. Compilation and instantiation are now timed one at a time, twice for the second instance, with `Open`'s duration kept as a third number. Three of D217's four numbers stand; the host-heap figure is corrected from 3.1 MB to **5.4 MB**. The plain figures and the `-race` ones differ elevenfold, which is stated because `make check` prints the second set. Shown red by a busy loop in the fixture's `init`: 15 seconds of instantiation, which the old single assertion passed |
+| [M60, the shipped milestone file this diff edited](#2026-08-18--m60-the-shipped-milestone-file-this-diff-edited-and-what-d224-conceded-too-widely) | D226 — the amendment to M59's F255 bullet, quoted both ways, recorded late after M60's sixth review asked for the trail; and the correction to D224, whose *nothing already written is fixed* was stated too widely. Narrower rule: a citation this diff **moves**, in a file it **already edits**, is corrected by content and recorded if the file is a shipped milestone's — every other stale citation stays, and findings rows are still not edited |
 
 ---
 
@@ -31046,3 +31057,591 @@ the script says so in as many words at `scripts/check-links.sh:139-142`. The
 recurring cost is stated here rather than discovered later: **closing a row now
 means correcting every citation of it**, including the ones in that file's own
 cells, and `make check-links` is what will say which.
+
+## 2026-08-18 — M60, the Makefile line the phase's own first commit moved
+
+**D215. An amendment, on a fact, and the smallest kind there is.**
+[M60](phase-details/m60.md)'s first bullet cites where the build sets
+`CGO_ENABLED=0`. It read `Makefile:682`; the line is `Makefile:692`.
+
+**As it stood:** ``The build is `CGO_ENABLED=0` (`Dockerfile:86`, `Makefile:682`)``
+**As amended:** ``The build is `CGO_ENABLED=0` (`Dockerfile:86`, `Makefile:692`)``
+
+**The tree fact that forced it.** `grep -n CGO_ENABLED Makefile` returns 692, and
+it returns it because [M59](phase-details/m59.md) added the `check-ci` target ten
+lines above. The plan was written against the tree of a few hours earlier, and
+the phase's own first milestone moved the citation. `Dockerfile:86` is unchanged
+and correct.
+
+Recorded rather than fixed in silence, because the rule that requires it does not
+carve out arithmetic, and the reason it does not is that *this* is what plan drift
+looks like before it looks like anything: a bullet naming a tree that has moved,
+correct when written, wrong within one commit, and cheap enough to correct without
+telling anyone. A milestone file citing a line number will meet this again — the
+citations are load-bearing for validation, which is why they are checked rather
+than skimmed, and why the check is worth its cost even when the answer is ten.
+
+## 2026-08-18 — M60, the manifest is the first artifact that leaves this repository
+
+**D216. The add-on manifest: JSON, one directory per add-on, versioned from the
+first commit, and strict about what it does not recognise.**
+
+Six of the owner's answers of 2026-08-18 are used here for the first time and take
+their numbers with this entry, per the convention
+[phase-4-candidates.md](phase-4-candidates.md) states: an add-on is a **WASM
+module loaded at runtime**; it is trusted with **declared permissions, enforced**;
+**a Postgres schema per add-on**; **the add-on declares** whether a load failure
+degrades or refuses; **both** published provenance and load-time verification; and
+the **declared settings** the Add-on manager's detail page renders, which was
+owner-added scope at the plan's review. [M60](phase-details/m60.md) parses and
+stores all of it. Only the last limb of the verification answer is discharged
+here — the load-time half; provenance is the add-on repository's release process
+and is M69's.
+
+**The format is JSON, and the directory is the identity.** An add-on is a
+directory named for the add-on, holding `addon.json` and the `.wasm` that manifest
+describes. JSON rather than YAML — which this repository already depends on — for
+one property: `encoding/json` can refuse a field it does not recognise, and a
+versioned schema needs that. The directory name and the manifest's `name` must
+match, which buys two things that are not obvious from the requirement. A metric
+label exists for an add-on whose manifest will not parse, because the label is the
+directory. And two directories cannot claim one identity, which at
+[M63](phase-details/m63.md) would be two add-ons contending for one Postgres
+schema.
+
+**`schema_version` is checked for equality and unknown fields are refused.** This
+is the strict end of a spectrum and it was chosen deliberately, because the
+manifest is the first artifact that crosses a repository boundary — the OIDC
+add-on lives in `DevOfPie/LinkCtrl-OIDC` and will read this format before the ABI
+stabilises. A manifest carrying a field this host does not know was written for a
+schema this host does not implement, and accepting it means instantiating a module
+whose author is expecting behaviour that will not happen. The cost is stated: a
+publisher who needs a new field needs a new schema version, and a host that gains
+a field has to decide whether old manifests still validate. That is the cost of a
+versioned format, paid at the point where the alternative — a field added quietly
+and half-honoured — is what actually breaks somebody.
+
+**A manifest nobody can parse stops the instance, and that is the harsh limb.**
+The failure class is the add-on's declaration, so a manifest that will not parse
+has no declaration to honour. The available answers were to assume `degrade` and
+carry on, or to refuse. Refusing is what landed: the operator who just changed
+this directory gets an error naming the add-on, where assuming `degrade` on an
+authentication module means an instance that boots with sign-in silently missing.
+The cost is real and is taken knowingly — a typo in a manifest is now an outage on
+restart rather than a warning — and it is bounded by the fact that this directory
+changes only when somebody changes it.
+
+**Four validation rules are decisions rather than syntax**, and each is here
+because the alternative is worse than the strictness:
+
+- `module` must be a **bare filename**, and a separator or a dot entry is
+  *refused rather than cleaned*. A manifest naming `../../etc/anything` is not a
+  manifest with a fixable path.
+- `failure_class` has **no default**. The one thing a default here decides is
+  whether an instance boots without a module somebody's sign-in depends on.
+- a `secret` setting **may not carry a default**, because a default secret is a
+  secret every installation of the add-on shares.
+- `sha256` must be **lowercase**, so the string in the manifest is byte-identical
+  to what `sha256sum` prints and a publisher comparing the two by eye is
+  comparing the same string.
+
+**Permission names are checked for shape and not for vocabulary.** Dotted
+lowercase, matching this product's own scopes, because an add-on's declared
+permissions will be read beside API-key scopes in one page at
+[M68](phase-details/m68.md) and two spellings for one idea is a thing somebody has
+to hold in their head forever. Which tokens exist is [M62](phase-details/m62.md)'s
+decision, and inventing a vocabulary here would mean M62 arriving to find its own
+question answered.
+
+## 2026-08-18 — M60, the host loads a reactor and grants it nothing
+
+**D217. The lifecycle: wazero, `_initialize`, no capabilities, and the numbers
+M66 will price against.**
+
+**A module is a reactor, not a command.** Test modules are built
+`GOOS=wasip1 GOARCH=wasm -buildmode=c-shared`, which makes the start function
+`_initialize` rather than `_start`, so package initialization runs during
+instantiation and the instance stays alive afterwards. Started at `_start` the
+module runs `main` and exits, and everything the ABI is for at
+[M61](phase-details/m61.md) would have nothing to call — shown red by sabotage
+rather than reasoned about: pointing `addon.StartFunction` at `_start` makes the
+loaded fixture's exported function trap with `runtime.notInitialized`.
+
+**Package initialization running inside instantiation is what makes a failure
+class mean anything.** It is why an add-on can fail at load time at all, and
+therefore what `required` and `degrade` are deciding about. The `failing` fixture
+panics in `init` for exactly that reason.
+
+**Nothing is granted.** WASI preview 1 is instantiated once per host because a Go
+module cannot start without it, and every capability behind it is left at wazero's
+default — which is not the operating system. No filesystem is preopened, no
+environment or arguments are passed, stdout and stderr are discarded, and the
+clocks and the random source are wazero's **fake** ones
+(`internal/sys/sys.go:151-175` in v1.12.0): a module that reads the wall clock
+sees a frozen one, and a module that reads randomness gets a deterministic stream.
+**That is written down as a hazard for M61 rather than as a feature.** An ABI
+author who assumes a module has a clock will find it has a stopped one, and the
+first add-on to hash something with a map iteration order will find it reproducible.
+Which of those M61 grants is M61's; until it does, an add-on has none of them.
+
+`WithCloseOnContextDone(true)` is set at construction, before anything needs it,
+because [M66](phase-details/m66.md)'s deadline is enforced by cancelling a context
+and a runtime that is not watching for cancellation cannot be interrupted. One
+line now; a change to every call site later.
+
+**The numbers, measured on this machine rather than estimated.** A fixture the
+standard toolchain produces is about 1.85 MB, because a `wasip1` Go module carries
+the whole runtime. Compiling it costs **383 ms** and happens once per module at
+boot. Instantiating it costs **1.9 ms**, and a second instance from the same
+compiled module costs the same again. The guest's linear memory is **2.4 MB** per
+instance, and the Go heap grows about 3.1 MB with it. M66 prices a per-request
+budget against those four numbers rather than against a guess, which is what
+m60.md's first risk asked for. The test that measures them asserts ceilings an
+order of magnitude above — what a shared runner can hold without flaking is a
+regression in the *shape* of the cost, not jitter — and logs the real figures.
+
+**Fixtures are built, never committed**, by `make addon-fixtures`, which is a
+prerequisite of `test`, `ci-test` and `single-instance` rather than something to
+remember. A checked-in 1.8 MB binary is a build input nobody reviews, which is the
+same reason every vendored asset in this repository is checksum-pinned. The stated
+cost: it puts a Go toolchain requirement on the CI `image` job, which has no
+`actions/setup-go` step and relies on the runner image's own Go. If that stops
+being true the job fails loudly, which is the behaviour a gate should have and is
+now something `make check-ci` asks about — [F255](deferred-findings.md#closed)'s
+whole point.
+
+**And the single-instance gate grew its third limb**, which is owed work #5 from
+[phase-4-candidates.md](phase-4-candidates.md). The add-on answer went to modules
+partly *because* a sidecar model would have made two containers the tested shape
+and quietly retired the constraint `scripts/single-instance-check.sh` exists to
+hold; a claim like that owes a case. The new limb stages a manifest and a module
+in a temporary directory, mounts it read-only into the container, boots with
+`failure_class: required` — so the host failing to verify or instantiate means the
+container never answers `/healthz` and there is no silent skip available — and
+then asserts the redirect, the dashboard, the API and `/readyz` are unchanged with
+a WASM module in the process. Sabotaged by flipping one byte of the staged module
+after its digest was taken, the container refuses to start with
+`add-on "minimal": checksum_mismatch`, which is the load-time verification proven
+in the shipped image rather than only in a unit test.
+
+## 2026-08-18 — M60, D215 was wrong before the commit carrying it was made
+
+**D218. A correction to [D215](#2026-08-18--m60-the-makefile-line-the-phases-own-first-commit-moved), and the end of citing that line at all.**
+D215 amended [M60](phase-details/m60.md)'s `CGO_ENABLED=0` citation from
+`Makefile:682` to `Makefile:692`, and offered as its tree fact that
+`grep -n CGO_ENABLED Makefile` returns 692. **It returns 724.** M60's own
+fixture block, `Makefile:452-482`, sits above that line and moved it another 32
+lines — inside the very milestone whose validation wrote the amendment, before
+the commit carrying it existed. Found by M60's reviewer, not by the actor that
+wrote D215.
+
+decisions.md is append-only, so D215's text stands and this entry is the
+correction. What it corrects is not the number:
+
+**The citation is withdrawn.** The bullet now names the Makefile's `dist`
+cross-compile loop, and `internal/addon/host.go`'s package doc does the same. A
+line number in a file the current phase is actively editing is a fact with a
+half-life of about one commit, and D215 spent a whole entry proving that by
+being falsified inside one. Two amendments for one number is the evidence; a
+third would have been a habit.
+
+The rule that produced D215 is unchanged and is not the thing at fault — a
+milestone file citing a tree fact still gets checked at validation, and the check
+is what caught the drift both times. What was wrong was the *kind* of fact
+chosen. A target name, a function name, a filename: each survives an insertion
+above it. `Makefile:682` did not survive the afternoon.
+
+Sharper still, and worth naming because it generalises past line numbers: an
+amendment made at [step 1](phase-loop.md#1-validate) is verified against the tree
+as it stands *before* the milestone is built, and the milestone then edits that
+tree. Anything the amendment asserted about a file the diff touches has to be
+re-checked at [step 3.4](phase-loop.md#3-land) rather than inherited. Nothing in
+the loop said so, because nothing had needed it; D215 is what needed it.
+
+## 2026-08-18 — M60, a label from a directory entry is a crash risk, not a cardinality one
+
+**D219. The refusal path's `addon` label is bounded, and the harm it is bounded
+against is not the one that sounds right.**
+
+M60's review found two comments asserting that nothing derived from a filename
+reaches a metric label — `internal/addon/host.go`'s `Outcome` doc and
+`internal/observability/metrics.go`'s add-on block — while the refusal path passed
+the raw directory entry, because a refusal that failed before the manifest parsed
+has no validated name to use.
+
+**The plausible version of the harm is false, and it was checked rather than
+reasoned about.** A directory name holding a newline or a quote does *not* corrupt
+the Prometheus text exposition: client_golang escapes `\n`, `\"` and `\\` in a
+label value, so those arrive as escapes and the format stays line-oriented. Driven
+on this machine, three label values through a real scrape.
+
+**The real harm is that the process dies.** `WithLabelValues` panics on a label
+value that is not valid UTF-8 — `panic: label value "\xff\xfe" is not valid UTF-8`
+— at the observation and not at the scrape. That observation happens inside
+`addon.Open`, at boot, on a path with no recover anywhere above it, so one
+directory named in some other encoding stops the instance before anything is
+listening. Also driven: the sabotage run of
+`TestARefusalNeverPublishesADirectoryNameAsALabel` panics rather than merely
+mislabelling, which is what that test now exists to catch.
+
+**The bound is `labelFor`:** `nameRe` or `InvalidName`, which is `<invalid>` —
+angle brackets because `nameRe` cannot produce them, so the sentinel cannot
+collide with a real add-on's name. Two badly named directories share one series,
+which is the point rather than a compromise; cardinality returns to installed
+add-ons plus one. The full name still reaches the boot log, where it is not a
+label and bounds nothing.
+
+**What generalises past this label.** A label value derived from operator input on
+a boot path is a liveness question and not an observability one, because
+client_golang's answer to a value it will not accept is a panic and not a dropped
+series. Two more such values are already scheduled: M63 gives each add-on a
+Postgres schema and M68 renders declared setting names. `nameRe`'s doc says it is
+the intersection of three things a name has to be at once; this is the fourth
+reason it is checked before anything is done with a name, and the only one that is
+about staying up.
+
+## 2026-08-18 — M60, a fixture only make can build is a gate only make can run
+
+**D220. `internal/addon`'s test fixtures build themselves, the fixture set is
+enumerated where it cannot disagree with itself, and the single-instance gate's
+add-on limb skips rather than fails when there is no module.** Three changes with
+one cause, found by M60's second review.
+
+**The cause.** `host_test.go`'s `fixture()` called `t.Fatalf` when the built
+`.wasm` was absent, on the argument that a *skip* would be a green run of a
+package whose whole subject is loading wasm. That argument is right and is
+unchanged. What was wrong was the conclusion drawn from it: that every caller of
+`go test` must therefore be wired to build the modules first. Four were wired —
+`make test`, `make ci-test`, the Taskfile's mirrors, and `release-check`. Two
+more exist and **cannot be wired from this repository**, because
+`.github/workflows/` is not pushable from the account this work runs under:
+
+- `release.yml` runs `go build`, `go vet` and `go test -race -count=1 ./...`
+  directly, not through a make target. Nothing there builds a fixture, so the
+  **release gate would have gone red at every tag push** — on a job that has
+  `actions/setup-go` and would otherwise be fine.
+- the CI `image` job, which is [F262](deferred-findings.md#closed), reached
+  `GOOS=wasip1 GOARCH=wasm go build` through `ci-image-smoke` → `single-instance`
+  → `addon-fixtures` while being the one job of four with **no** `actions/setup-go`
+  step.
+
+Both are [F255](deferred-findings.md#closed)'s shape — local green, remote red —
+and neither was reachable by adding a step somewhere.
+
+**So the artifact is the test's to produce.** `fixture()` builds the module when
+it is missing, with the same command and the same `-buildmode=c-shared`, and
+fails with the compiler's own output when it will not build. `make addon-fixtures`
+stays, because [m60.md](phase-details/m60.md) asks for a build step in the
+Makefile beside the other generated artifacts, and stays a prerequisite of `test`
+and `ci-test` — but it is now the **fast path, not the contract**. The build is
+paid for once outside the test binary when a caller came through make, and inside
+it when nobody did. Measured: a cold `go test -race -count=1 ./internal/addon/`
+on a wiped `testdata/build/` is 32s against 28s warm, both modules built.
+
+**The proposal route was considered and refused.** A `ci/proposed/` workflow patch
+adding `actions/setup-go` to the `image` job would have left a red release gate
+standing until the owner applied it, and a gate nobody has looked at is what F255
+cost nine days. The bar was set before the work: if on-demand building had not
+worked, the answer was to stop and report, not to propose.
+
+**F262 is closed by the same change, and named in the commit message** as
+[step 1](phase-loop.md#1-validate)'s in-spec exception. Two things had to be true
+together. `single-instance` now *attempts* `addon-fixtures` and tolerates the
+failure, so the one-container conformance run no longer depends on the runner
+image happening to ship a Go toolchain — an unpinned property of somebody else's
+VM, which is exactly the bar `golangci-lint`, the Tailwind CLI and three vendored
+assets are all pinned against. And `single-instance-check.sh` **skips its add-on
+limb** when there is no module, saying which prerequisite was missing, instead of
+hard-failing on a gitignored relative path. `make addon-fixtures` on its own still
+fails loudly, which is where somebody debugging a fixture is looking.
+
+That skip restores a use the first attempt had retired without noticing. The
+script is documented and *recorded* as a one-argument invocation against a
+**published image** — `ghcr.io/devofpie/linkctrl:0.3.0` is
+[F257](deferred-findings.md#closed)'s closing evidence — and a hard failure on
+`internal/addon/testdata/build/minimal.wasm` made that invocation require a repo
+checkout, a fixture build and the right working directory. `make single-instance`
+builds the module and drives all three limbs exactly as before, so the gate
+[m60.md](phase-details/m60.md) asks for is unchanged; what changed is that the
+operator case fails no more than it used to.
+
+**And the fixture set is enumerated once per file that needs it, by glob.** It was
+written out three times — the Makefile named two modules, the Taskfile named the
+same two, and `release-check` globbed the source directory — so a third fixture
+would have been built by one of them and by nothing else. `release-check`'s block
+is **deleted**, because `fixture()` covers what it was there for; the Makefile and
+the Taskfile both glob `testdata/modules/*/main.go`. Driven with a third module
+present: both build it, and both fail when it will not compile.
+
+**What generalises.** A gate whose prerequisite is a *built* artifact has to
+either build it or tolerate its absence. Requiring it while being unable to reach
+every caller is the failing shape, and it is not visible from the machine where
+the wiring was done — every one of the four wired callers was green here.
+
+## 2026-08-18 — M60, no entry in this log will cite that line again
+
+**D221. A third correction, and the last one, because the citation is gone
+rather than fixed.** [D215](#2026-08-18--m60-the-makefile-line-the-phases-own-first-commit-moved)
+said `Makefile:682` should read 692.
+[D218](#2026-08-18--m60-d215-was-wrong-before-the-commit-carrying-it-was-made)
+said 692 should read 724, and closed with a rule about re-checking an amendment's
+tree facts at [step 3.4](phase-loop.md#3-land). **`grep -n CGO_ENABLED Makefile`
+returns 741.** D218 also placed M60's fixture block at `Makefile:452-482`; it is
+neither — 452 is a `sqlc vet` recipe and 482 is prose inside a comment. Found by
+M60's third reviewer, in the entry whose whole subject was tree facts going
+stale, which is as complete a demonstration as the point could ask for.
+
+Nothing downstream is wrong. D218's *withdrawal* was the correct act and it held:
+[m60.md](phase-details/m60.md) and `internal/addon/host.go` name the `dist`
+target, and neither has needed touching through three moves of the line. What
+kept being wrong is the part of D218 that argued by citation while telling the
+reader not to.
+
+So the rule D218 stated is replaced rather than restated. Re-checking a line
+number at 3.4 is not the fix — three entries have now tried some version of care
+and the number moved anyway, twice inside a single milestone. **A decision entry
+does not cite a line number in a file the current phase is editing.** It names
+the target, the recipe, the function, the variable — something the file itself
+would have to be rewritten to falsify. Where a line is genuinely the only handle,
+it is written as *what to grep for*, so the reader gets a command that stays true
+instead of a coordinate that does not.
+
+This costs precision in exactly one case: pointing at an unnamed line in a long
+file. That case is rare, and three corrections in one day is what the alternative
+costs.
+
+## 2026-08-18 — M60, the gate asks the image what it is before asserting what it does
+
+**D222. The single-instance gate's add-on limb is keyed on the image's own
+version, and skips below the release the add-on host arrives in.** Found by
+M60's third review, driven rather than argued: `single-instance-check.sh` pointed
+at the published `ghcr.io/devofpie/linkctrl:0.3.0` ran its first two limbs green
+and then failed with *the add-on did not load: no `linkctrl_addon_` series at
+all*. Extracting the binary from that image confirms the obvious reason — no
+`linkctrl_addon` and no `ADDONS_DIR` string anywhere in it, because the host did
+not exist when it was built.
+
+**A false red on a conformant artifact is the one direction this gate must not
+fail in.** M57 wrote it to catch a dependency creeping into the product; an
+operator who runs it against the release they are about to deploy and is told the
+image is broken learns to stop running it, and then it catches nothing at all.
+
+**What made it reachable is [D220](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run),
+one milestone earlier, and that entry is wrong where it says otherwise.** D220
+made the limb skip when the *module* is missing and claimed the skip *restored
+the one-argument invocation against a published image that is F257's closing
+evidence*. It did not. The skip is keyed on a fixture path, and the fixture is a
+prerequisite of `make test` — so on any machine that has run the suite it is
+present, the skip can never fire, and the invocation D220 was protecting is
+precisely the one that breaks. What the skip actually protects is the CI `image`
+job, which has no Go toolchain and therefore no fixture, and that half of D220
+stands. F262 stays closed on it.
+
+**Three shapes were available and the version is the only one that fails
+closed.**
+
+- **Treat *no `linkctrl_addon_` series at all* as a skip.** Cheapest, and it
+  disarms the limb: a current image whose host is broken publishes exactly that,
+  so the gate would decline in the one case it was written to catch.
+- **An opt-in flag** — assert only when asked. It moves the default the wrong
+  way. An operator re-running the gate would get two limbs and no reason to know
+  the third had gone, which is the same silence with an extra argument.
+- **The version predicate.** Below the floor, skip with the reason and say the
+  other two limbs ran; at or above it, assert exactly as before. A current image
+  missing the series still fails, which is the whole of the argument.
+
+The version is read from `linkctrl_build_info`, which carries it as a label on
+the same metrics listener limb three already scrapes — so the answer costs no
+extra request and no new mechanism. Anything that is not a semver triple below
+the floor asserts: `ci` and `dev` are what this repository's own images report, a
+prerelease of the floor version carries the host, and a missing series or an
+empty label is not evidence of an old image. Every unrecognised case therefore
+lands on the strict side.
+
+**The floor is `0.4.0`, and it is stated in one place** — `ADDON_HOST_SINCE` in
+the script, beside the predicate that reads it. `0.3.0` is released and the
+add-on host is in `[Unreleased]`, whose own prose commits the rest of the ABI to
+*later releases of the 0.4 line*. The exposure is a patch release: cut `0.3.1`
+from this work and the limb would decline against an image that does have a host.
+That is a version nobody would cut for a feature this size, it fails in the safe
+direction, and the alternative — deriving the floor from the changelog at run
+time — buys a smaller risk with a parser in a shell script.
+
+**What generalises**: a gate that runs against *artifacts* rather than against a
+working tree is versioned whether or not anybody says so. Its assertions have to
+name which artifacts they apply to, or the first release that predates a check
+becomes a bug report about the release.
+
+## 2026-08-18 — M60, the two answers that unparked the milestone
+
+Both asked by the loop after it had been wrong twice, both answered by the owner
+on 2026-08-18, and both recommended by the loop — which is stated because a
+recommendation from the actor that also does the work is the one that needs its
+provenance visible.
+
+**D223. The conformance gate's add-on limb skips only on a bare semver triple
+below the floor.** `scripts/single-instance-check.sh` asserts that a container
+loaded a WASM module. An image predating the host has no such series, ignores the
+add-ons directory as the unknown variable it is, and is otherwise perfectly
+conformant, so asserting against one is a **false red on a good artifact** — the
+direction M57 built this gate to avoid. Two predicates were tried in the loop and
+both failed *silently*, which is the worse direction:
+
+- **Skip when no fixture is present.** The fixture is a `make test` prerequisite,
+  so on any machine that has run the suite it is always there and the skip never
+  fires. It protected the CI `image` job and nothing else.
+- **Skip when the version is a semver triple below the floor.** `make
+  docker-build` passes `git describe`, which on a phase branch reads
+  `v0.3.0-14-g<sha>-dirty`. Stripping the tail leaves `0.3.0`, below the floor, so
+  the gate **skipped against an image that had the host** — a silent green on the
+  developer's own build. This also falsifies [D222](#2026-08-18--m60-the-gate-asks-the-image-what-it-is-before-asserting-what-it-does)'s
+  premise that `ci` and `dev` are what this repository's images report; that entry
+  is append-only and this is its correction.
+
+The answer keeps the version predicate and narrows what counts: **only a bare
+`major.minor.patch` below the floor skips.** A `-N-g<sha>` describe tail means a
+build *after* that tag and therefore asserts, which is precisely the case that was
+broken. `ci`, `dev`, an empty label and a missing series all assert, as before.
+
+The accepted cost is one narrow false red: the gate run against an old
+*prerelease* image asserts and fails. It is accepted on a stated principle rather
+than by preference — **a false red is visible and diagnosable, a false skip is
+silent**, and every predicate that has failed here failed by being silent.
+
+Two shapes were declined. An explicit opt-in flag needs no version parsing and is
+unambiguous, but moves the default the wrong way: an operator re-running the gate
+against a published image gets two limbs and is not told the third never ran,
+which is the silent green again wearing a flag. Asserting always is simpler still
+and costs [F257](deferred-findings.md#closed)'s closing evidence outright — that
+row's verification is this script against a published release, which would become
+unrepeatable rather than skipped, and every future image would fail the gate once
+it was one release behind.
+
+**D224. A record cites content, not a coordinate.**
+[D221](#2026-08-18--m60-no-entry-in-this-log-will-cite-that-line-again) retired
+line citations for this log, which is the file where a citation is *least*
+load-bearing. In a findings row the citation **is** the evidence, and M60's diff
+moved **72** of them — 58 in [deferred-findings.md](deferred-findings.md), 14 in
+[phase-details/](phase-details/). [F261](deferred-findings.md#open) is open and
+cites the one line that was its whole evidentiary basis; nine lines of insertion
+above it made that row unworkable without anyone touching it.
+
+So D221's rule extends to every record: **name a function, a target, a variable,
+or what to grep for — something the file would have to be rewritten to
+falsify.** A line number appears only where nothing else identifies the place, and
+then as a command that stays true rather than a coordinate that does not.
+
+What this deliberately does **not** do is fix anything already written, and that
+cost is the reason the two other shapes were declined rather than a reason to
+prefer this one. A gate is buildable — `check-links` already parses every tracked
+file, and checking that a cited line still contains what the citing sentence
+quotes is the same shape as F248's row-membership pass — but all 72 existing
+citations would have to be corrected or grandfathered before it could pass, which
+is a milestone and not an edit. Declaring citations advisory in
+[workflow.md](workflow.md) was the cheapest and was declined for what it concedes:
+it would make the current state the rule rather than the defect, and F261 is what
+the current state costs.
+
+Going forward is therefore the whole of the change, and the stale 72 stay stale
+until something schedules them. Saying so here is the point — this is the kind of
+decision this project loses by not writing down what it chose not to fix.
+## 2026-08-18 — M60, one duration over two steps priced neither
+
+**D225. Compilation and instantiation are timed separately, and one of
+[D217](#2026-08-18--m60-the-host-loads-a-reactor-and-grants-it-nothing)'s four
+numbers was wrong.**
+
+D217 recorded four measured costs *"M66 prices a per-request budget against"*, and
+`TestInstantiationCostIsMeasured` timed **one** thing: the whole of `Open` —
+discover, verify, compile and instantiate — in a single `time.Since`. The compile
+figure and the instantiate figure were therefore not reproducible from the tree by
+anybody, including whoever wrote them, which is precisely what
+[m60.md](phase-details/m60.md)'s first risk asked this milestone to prevent:
+*measure instantiation time and resident cost in this milestone's tests so M66
+prices against numbers*. Resident cost was measured; the number M66 would actually
+spend was not.
+
+The test now times `rt.CompileModule` and `rt.InstantiateModule` one at a time —
+in-package, against the runtime configuration `Open` builds, because a cost
+measured against a different configuration prices nothing this host will pay — and
+instantiates **twice** from the one compiled module, since the second instance is
+the operation M66 repeats. `Open`'s own duration is still timed and is now a third
+number, what a boot costs, rather than a stand-in for either.
+
+**Three of D217's numbers stand and one is corrected.** On this machine, over four
+runs: the fixture is **1,854,311 bytes**, compiling costs **380–383 ms**,
+instantiating costs **1.5–2.1 ms** and the same again for the second instance, and
+the guest's linear memory is **2,424,832 bytes** — 2.4 MB, byte-identical every
+run. D217's fourth number, *"the Go heap grows about 3.1 MB with it"*, is **5.4
+MB**: 5,356,584 to 5,684,360 bytes of `HeapAlloc` delta across an instantiation,
+measured after a `runtime.GC()`. That figure is logged and deliberately not
+asserted — the allocator is free to move under it — but M66 budgets host memory
+against 5.4 MB per instance, not 3.1.
+
+**What the numbers are measured without is `-race`, and that matters here more
+than it usually does.** `make check` runs the suite with the race detector, so the
+figures a passing gate prints are not the figures above: compiling becomes **4.2 s**
+and instantiating **11 ms**, an eleven-fold and six-fold cost. M66's budget is
+priced against the plain numbers, and a reader comparing them to a gate's own log
+is comparing two different builds.
+
+The ceilings are two or three orders of magnitude above the plain numbers — one
+second for an instantiation, thirty for a compile or a boot, 64 MB of guest memory
+— because they run on a shared runner under `-race` and what they exist to catch is
+a change in the *shape* of the cost. **The split is what makes them able to catch
+it**, shown red rather than argued: a busy loop in the fixture's `init` makes
+instantiation cost 15 seconds, which the instantiation ceiling fails on and which
+the single whole-of-`Open` assertion this entry replaces would have **passed**, its
+30-second bound having room for a fifteen-second regression in the one step a
+request pays for.
+
+
+## 2026-08-18 — M60, the shipped milestone file this diff edited, and what D224 conceded too widely
+
+**D226. An amendment to [M59](phase-details/m59.md), recorded late — and the
+correction to [D224](#2026-08-18--m60-the-two-answers-that-unparked-the-milestone)
+that recording it forces.** M59 is `done` and M60's diff edits its definition of
+done. That is allowed and the precedent is [F202](deferred-findings.md#closed) —
+*"m54.md is the one shipped milestone file this work materially changes"*, recorded
+rather than left implicit — but the trail was missing until M60's sixth review
+asked for it.
+
+**As it stood** (M59's F255 bullet, at `0fbe174`):
+
+> The nine-day red window in F255's evidence (`Makefile:165-168`'s
+> unpinned-shellcheck argument, suppressions at `scripts/rolling-deploy.sh:102`
+> and `scripts/single-instance-check.sh:66`) is the case it must catch
+
+**As amended:**
+
+> The nine-day red window in F255's evidence (`Makefile:165-168`'s
+> unpinned-shellcheck argument, and the `SC2329,SC2317` suppressions on the
+> trap-invoked `cleanup` in `scripts/rolling-deploy.sh` and
+> `scripts/single-instance-check.sh` — named rather than cited by line, the way
+> D218 withdrew a citation M60 moved) is the case it must catch
+
+**The tree fact that forced it.** M60's add-on limb inserted 37 lines above the
+suppression in `single-instance-check.sh`, so the cited line 66 became a bare `#`
+and the suppression moved to 103. `grep -n SC2329 scripts/single-instance-check.sh`
+is what says where it is, and is what the amended text tells the reader to run
+instead of trusting a number. The assertion — that this is the case the CI gate
+must catch — is untouched, which is what makes it an amendment and not a decision.
+
+**What this corrects in D224.** That entry says the rule *"deliberately does not
+fix anything already written"* and that the 72 stale citations *"stay stale"*. One
+of the 14 in [phase-details/](phase-details/) did not stay stale: it was fixed in
+the same diff, by the same rule, before the rule was written down. The concession
+was stated too widely. The accurate form is narrower and is what D224 should have
+said:
+
+- A citation this diff **moves**, in a file this diff **already edits for another
+  reason**, is corrected — by content, per D224 — and the correction is recorded
+  here if the file belongs to a shipped milestone.
+- Every other stale citation stays. No sweep, no retrofit, and in particular
+  **[deferred-findings.md](deferred-findings.md)'s rows are still not edited**,
+  which is the case that carries the most of the 72.
+
+The difference matters because the wide form licensed exactly the silence this
+entry is correcting: it read as permission to leave a shipped milestone's file
+however the diff left it, and a shipped `done` row asserting something the tree no
+longer says is the one outcome this project spends a reopening to avoid.

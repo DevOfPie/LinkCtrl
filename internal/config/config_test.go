@@ -238,6 +238,10 @@ func TestValidateIndividualRules(t *testing.T) {
 		}, "max_connections"},
 		{"redirect pool zero", map[string]string{"LINKCTRL_DB_REDIRECT_MAX_CONNS": "0"}, "DB_REDIRECT_MAX_CONNS"},
 
+		{"addons dir that is not there", map[string]string{
+			"LINKCTRL_ADDONS_DIR": "/nonexistent/addons",
+		}, "ADDONS_DIR"},
+
 		{"batch exceeds queue", map[string]string{
 			"LINKCTRL_INGEST_BATCH_SIZE": "100", "LINKCTRL_INGEST_QUEUE_SIZE": "10",
 		}, "INGEST_BATCH_SIZE"},
@@ -646,5 +650,61 @@ func TestAuditRetentionDefaultsToKeepingEverything(t *testing.T) {
 	if c.Analytics.RetentionDays == c.Audit.RetentionDays {
 		t.Error("the audit and analytics windows have the same default; they are " +
 			"separate policies and the whole point is that their defaults differ")
+	}
+}
+
+// Unset is the shipped state and has to stay cheap to express: no host, and no
+// validation of a path nobody gave.
+func TestAddonsAreOffByDefault(t *testing.T) {
+	setEnv(t, validEnv())
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if c.Addons.Enabled() {
+		t.Error("add-ons are enabled with LINKCTRL_ADDONS_DIR unset")
+	}
+	if c.Addons.Dir != "" {
+		t.Errorf("ADDONS_DIR defaulted to %q", c.Addons.Dir)
+	}
+}
+
+// A file where a directory belongs is the same operator mistake with a different
+// spelling, and it has to be refused at parse time rather than met at boot: the
+// operator believes this instance is running modules it has never seen.
+func TestAddonsDirMustBeADirectory(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "addon.wasm")
+	if err := os.WriteFile(file, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	env := validEnv()
+	env["LINKCTRL_ADDONS_DIR"] = file
+	setEnv(t, env)
+
+	_, err := Parse()
+	if err == nil {
+		t.Fatal("a file was accepted as the add-ons directory")
+	}
+	if !strings.Contains(err.Error(), "is not a directory") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// And a real directory loads, so the rule above is refusing the mistake rather
+// than the feature.
+func TestAddonsDirAcceptsADirectory(t *testing.T) {
+	env := validEnv()
+	dir := t.TempDir()
+	env["LINKCTRL_ADDONS_DIR"] = dir
+	setEnv(t, env)
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse with a real add-ons directory: %v", err)
+	}
+	if !c.Addons.Enabled() || c.Addons.Dir != dir {
+		t.Errorf("ADDONS_DIR parsed as %q, enabled=%v", c.Addons.Dir, c.Addons.Enabled())
 	}
 }

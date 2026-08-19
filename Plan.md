@@ -49,6 +49,7 @@ Serves individuals, creators, businesses, developers and enterprises.
 | Observability | `log/slog`, Prometheus |
 | GeoIP | MaxMind DB reader, optional at runtime; database supplied by the operator |
 | Rate limiting | In-process token buckets, no external dependency |
+| Add-on runtime | `wazero` — WASM, pure Go, no cgo, so the binary stays `CGO_ENABLED=0` |
 | Deployment | Docker + Compose; Caddy for TLS |
 | Load testing | k6 |
 

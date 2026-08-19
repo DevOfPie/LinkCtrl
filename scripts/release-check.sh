@@ -303,6 +303,15 @@ fi
 step "tests and lint"
 require "go build ./..."            go build ./...
 require "go vet ./..."              go vet ./...
+
+# No add-on fixture step here, deliberately. The WASM modules internal/addon's
+# tests load are gitignored and never committed — m60.md refuses a checked-in
+# binary — and this script once built them so the unit-test step below would not
+# fail on a clean clone. internal/addon's own fixture() now builds what is missing,
+# which is the only form that also reaches the two callers no make target and no
+# script can wire: the release workflow's direct `go test ./...`, and the CI
+# `image` job (M60, F262). Building them a second time here would be a second
+# enumeration of the fixture set, free to disagree with the Makefile's.
 require "unit tests (race)"         go test -race -count=1 ./...
 require "OpenAPI matches the routes" go test -count=1 -run TestOpenAPI ./internal/httpx/
 if command -v golangci-lint >/dev/null 2>&1; then
