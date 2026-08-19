@@ -29,6 +29,68 @@ migrations run at boot.
 
 ### Added
 
+- **The add-on ABI is published, versioned, and consumed as a generated SDK.**
+
+  An add-on reaches this product through a fixed set of functions it imports from
+  the host, and through nothing else — no socket, no file, no database connection,
+  no environment. That set is the contract, it is enumerated in one place, and
+  `docs/addon-abi.md` is it: the functions, the calling convention, the version,
+  and the rules for changing it.
+
+  **The SDK is generated from the host's own definition** into an importable Go
+  package, `github.com/DevOfPie/LinkCtrl/sdk`, which depends on the standard
+  library and nothing else. An add-on lives in its own repository, imports that
+  package and compiles for `GOOS=wasip1 GOARCH=wasm`; a test in this repository
+  builds a consumer module against the SDK alone, with the module proxy turned
+  off, so the claim is mechanical rather than aspirational.
+
+  **The ABI follows semantic versioning with deprecation windows.** An add-on's
+  manifest declares which generation it was built against, and that is checked at
+  load, before any of the module is read — a module built against a newer
+  generation is refused, and so is one whose generation has been retired.
+  `linkctrl_addon_loads_total{outcome="abi_unsupported"}` counts it and the boot
+  log names both versions, because the fix is a version rather than a file. A
+  deprecation runs for at least two minor releases and 90 days, is announced in
+  four places including the SDK's own Go `Deprecated:` markers, and what counts as
+  breaking is a table rather than a judgement call.
+
+  **Three functions work; the rest are declared and refuse.** Logging, reading the
+  add-on's own declared settings, and asking the host its ABI version are live.
+  Storage, routes, templates, the authentication hook and redirect observation are
+  declared — their names fixed, their signatures fixed enough to compile against —
+  and answer a refusal a module can branch on until the release that implements
+  them. So an add-on can be written against the whole contract now instead of being
+  rewritten per release. Implementing a declared function is explicitly not a
+  breaking change, and neither is finishing the parameters of one no release has
+  implemented: that is what would otherwise have cost a version per limb, and the
+  one place it costs a publisher anything is named in `docs/addon-abi.md` along
+  with the rule.
+
+  **No function hands an add-on a client's address, in any form.** That is a
+  property of the surface and not a promise about somebody else's code: the record
+  carrying redirect data is bound to what `click_events` may carry — country-level,
+  and that table has no address column — and a test reads the column list out of
+  the migration to hold the bound. Region and city are refused too, though the
+  columns exist, because they resolve transiently and are never stored. An add-on
+  cannot store what it is never handed. A module's only route to the operator's log
+  is the ABI's own `log` function, attributed to the add-on; its output is still
+  discarded.
+
+  **Nor does any function hand an add-on a credential of this instance's.** An
+  add-on that serves a route sees the cookies whose names begin with one of the
+  `cookie_prefixes` its manifest declares, and a declared prefix must begin with
+  the add-on's own name — so an authentication add-on gets its own state cookie
+  and cannot ask for this instance's session cookie, which is server-side and
+  opaque and therefore *is* the credential rather than a description of one. The
+  same namespace bounds what it may set, because a cookie an add-on is not allowed
+  to read is one it must not be able to overwrite. Two add-ons cannot claim each
+  other's cookies either, and neither can deny the other its own: the namespace
+  comes from the name rather than from whoever registered first. Every payload the
+  host composes is enumerated field by field for the same reason, including the one
+  it hands back when it accepts a module's authentication claim: that one carries
+  when the session expires and whether a second factor is still owed, and no
+  token, no cookie and no row of the sessions table.
+
 - **Add-ons: an instance can load WASM modules, and refuse the ones that do not
   check out.**
 
@@ -52,15 +114,10 @@ migrations run at boot.
   series is published — each of those absences asserted by a test rather than by
   this paragraph.
 
-  **What an add-on can do so far is nothing.** There is no host ABI yet, so a
-  loaded module imports nothing this product defines: it is instantiated, it is
-  observable, and it has no reach. Storage, routes, templates, the authentication
-  hook and the redirect path arrive in later releases of the 0.4 line, and the
-  manifest already carries the fields they will read — `abi_version`, declared
-  permissions, and declared settings — so an add-on published against this schema
-  does not have to be rewritten when they do. `schema_version` is checked for
-  equality and unknown fields are refused, deliberately: a manifest this host does
-  not fully understand is refused rather than half-honoured.
+  **What a loaded module can reach is one published list.** `schema_version` is
+  checked for equality and unknown manifest fields are refused, deliberately: a
+  manifest this host does not fully understand is refused rather than
+  half-honoured.
 
   **The trust boundary is the directory.** A module in it is code this instance
   executes; own it, and mount it read-only. See

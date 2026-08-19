@@ -1,0 +1,105 @@
+//go:build wasip1
+
+// Command probe is the ABI's conformance fixture: it calls the host across every
+// class of answer the ABI can give and states what it got.
+//
+// It exists because m61.md requires the declared-but-refused pattern to be
+// *asserted* rather than assumed, and an assertion made only on the host side
+// proves the host's own map. This module is a real consumer of the generated SDK,
+// compiled the way a published add-on is compiled, so what it reports is what an
+// add-on in another repository would see.
+//
+// Two ways it reports, deliberately:
+//
+//   - every check logs one `probe: <check>=<outcome>` line through the ABI's own
+//     log function, which a test reads back;
+//   - a mismatch **panics**, which fails instantiation and therefore fails any
+//     test that loads this module at all, including one that captures no logs.
+//
+// The manifest this expects is written by the test that installs it: a declared
+// `retention_days` text setting defaulting to 30, and a declared `api_token`
+// secret, which a manifest may not give a default.
+package main
+
+import (
+	"errors"
+
+	"github.com/DevOfPie/LinkCtrl/sdk"
+)
+
+func check(name string, ok bool, detail string) {
+	outcome := "ok"
+	if !ok {
+		outcome = "MISMATCH: " + detail
+	}
+	_ = sdk.Log(sdk.LevelInfo, "probe: "+name+"="+outcome)
+	if !ok {
+		panic("probe: " + name + ": " + detail)
+	}
+}
+
+func init() {
+	// A live function that answers with a value: the host's own ABI version, which
+	// must be the one this module was generated against — the module was refused
+	// at load otherwise.
+	version, err := sdk.HostABIVersion()
+	check("abi_version", err == nil && version == sdk.ABIVersion,
+		"got "+version+" wanted "+sdk.ABIVersion+" err "+errText(err))
+
+	// A declared setting with a default. Values arrive with the Add-on manager;
+	// until then the declared default is the answer.
+	//
+	// The value is logged rather than compared against a literal, because the test
+	// installs this same module twice under two names with two different defaults —
+	// which is how it proves a host function answers the *calling* add-on and not
+	// whichever one happens to be first.
+	value, err := sdk.ConfigGet("retention_days")
+	check("config_declared", err == nil && value != "", "got "+value+" err "+errText(err))
+	_ = sdk.Log(sdk.LevelInfo, "probe: retention_days="+value)
+
+	// A declared setting with nothing behind it. A secret may not carry a default,
+	// so this is the shape every secret has before somebody sets one.
+	_, err = sdk.ConfigGet("api_token")
+	check("config_empty", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+
+	// A key this add-on's manifest does not declare. Denied, not missing: the
+	// manifest is what scopes the function, so there is no key outside it to be
+	// absent.
+	_, err = sdk.ConfigGet("some_other_addons_key")
+	check("config_undeclared", errors.Is(err, sdk.ErrDenied), "err "+errText(err))
+
+	// The one this fixture exists for. storage_query is declared by the ABI and
+	// implemented by no host yet, so it resolves as an import — the module links —
+	// and answers a status the module can branch on.
+	_, err = sdk.StorageQuery("select 1", nil)
+	check("declared_but_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+
+	// Every other unimplemented limb, so the refusal is the whole set's property
+	// and not one function's.
+	err = sdk.StorageExec("select 1", nil)
+	check("storage_exec_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+	_, err = sdk.HTTPRequestRead()
+	check("http_request_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+	err = sdk.HTTPResponseWrite(nil)
+	check("http_response_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+	_, err = sdk.TemplateRender("page", nil)
+	check("template_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+	_, err = sdk.SessionMint(nil)
+	check("session_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+	_, err = sdk.RedirectEventRead()
+	check("redirect_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
+
+	// The guest's own fault, answered as such rather than defaulted. A level
+	// nobody spelled correctly would otherwise become a line nobody greps for.
+	err = sdk.Log("shout", "this level does not exist")
+	check("bad_level", errors.Is(err, sdk.ErrInvalid), "err "+errText(err))
+}
+
+func errText(err error) string {
+	if err == nil {
+		return "<nil>"
+	}
+	return err.Error()
+}
+
+func main() {}

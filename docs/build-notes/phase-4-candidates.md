@@ -232,7 +232,13 @@ decision left in it, named so the milestone that meets it does not rediscover it
    `docs/SECURITY.md` and `README.md`. It is a published measurement and it is
    about to stop being true of an instance with an inline add-on.
 2. **A deprecation policy is written with the ABI**, because SemVer without one
-   is a version number and a hope.
+   is a version number and a hope. **Discharged by
+   [M61](phase-details/m61.md)**: [docs/addon-abi.md](../addon-abi.md) states what
+   counts as breaking as a table rather than a judgement, fixes the minimum window
+   at two minor releases and 90 days whichever ends later, and names the four
+   places a deprecation is announced — one of them the SDK's generated Go
+   `Deprecated:` markers, so a deprecation reaches a consumer's editor and not only
+   a changelog.
 3. **[releasing.md](../releasing.md)'s pre-1.0 sentence is rewritten**, since
    1.0 now turns on the add-on contract rather than on identity being built in.
 4. **`LinkCtrl-OIDC` gets an MIT `LICENSE`.** It is public and unlicensed today,
@@ -251,7 +257,13 @@ the plan the same day ([D211](decisions.md#2026-08-18--phase-4-planned-the-spine
   [upcoming-decisions.md](upcoming-decisions.md) with the shape of its answer
   fixed in advance.
 - **What the host functions actually are** — [M61](phase-details/m61.md)'s
-  central artifact, named there as the hardest of the phase.
+  central artifact, named there as the hardest of the phase. **Answered**: ten
+  functions in `internal/addon/abi`, six capability groups, one wasm module named
+  `linkctrl`, one calling convention for all of them. Three are live — `log`,
+  `config_get`, `abi_version` — and seven are declared and refused with a status a
+  module branches on, because the add-on repository compiles against the boundary
+  from its first commit. The list itself is the ABI: the SDK, the documented table
+  and the host module the runtime registers are all derived from it.
 - **How declared permissions are expressed and checked** —
   [M62](phase-details/m62.md), which examines the `NonDelegableScopes` analogy
   and records the answer either way.

@@ -424,6 +424,13 @@ Invariants:
   rename cannot re-open it (M57, D168). The residual window is a leader losing
   its lock connection while still working, which no deploy causes and every pass
   is written to survive.
+- **An add-on reaches this product through an enumerated set of imports and
+  nothing else.** No socket, no file, no shared table, no environment, so the whole
+  of what an add-on can do is one list — `internal/addon/abi` — published as
+  [docs/addon-abi.md](docs/addon-abi.md) and as a generated SDK an add-on's own
+  repository imports. The host owns the definition, and the host module the runtime
+  registers is derived from the same list rather than restating it, so host and
+  guest cannot disagree about a signature ([M61](docs/build-notes/phase-details/m61.md)).
 - The HTTP layer is two handler trees. The redirect tree carries no session
   lookup, CSRF check or template rendering. Enforced by test.
 - The redirect pool is separate from the application pool.
@@ -493,6 +500,7 @@ Implementation:
 | Analytics retention | 395 days default, enforced hourly by dropping monthly partitions of `click_events` and `visitors`; a partition goes only once its newest possible row is outside the window, so data survives up to a month longer. |
 | Audit retention | Its own window, `AUDIT_RETENTION_DAYS`, defaulting to 0 — keep forever. Never governed by the analytics number: an upgrade must not silently delete history assumed permanent. Growth is made visible instead, by `linkctrl_audit_log_bytes`. |
 | Geographic detail | Country only. Region and city are resolvable and deliberately not stored. |
+| The add-on boundary | The stance holds at the **ABI** rather than by reviewing add-on code, which this project cannot do for a module it did not write ([M61](docs/build-notes/phase-details/m61.md)). No host function hands a module a client address in any form, and the record carrying redirect data is bound to what `click_events` may carry — country-level, prefix-derived, with region and city refused although the columns exist. An add-on cannot store what it is never handed, and a test over the ABI surface reads the column list out of the migration rather than trusting a copy of it. |
 | Regional storage | One instance per region via `organizations.data_region`; no row-level routing |
 
 Consequence: the largest table holds no personal data and is out of scope for
@@ -697,6 +705,7 @@ produced a minority of them (F37).
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |
 | A replica killed without draining loses its buffered click events | The one thing the failover contract does **not** recover, and it is stated as a bound rather than left to be discovered: everything else in flight survives, because scheduled work is leader-elected on an advisory lock that releases when its holder dies and both queues claim under a 60-second lease. The click queue is neither — it is in-process and bounded by decision (D77), so a graceful shutdown flushes it and a `SIGKILL` does not. How much is lost is `linkctrl_analytics_queue_depth` at the moment of the kill. The fix is a durable work queue, which is *Redis Streams as a work queue* — a Phase 3 candidate that was not taken, and taking it would make Redis required and break the constraint in D110. [M56](docs/build-notes/phase-details/m56.md); the contract is in [docs/operations.md](docs/operations.md#what-happens-when-a-replica-dies). |
 | A dimension breakdown can be a quarter of an hour behind the totals beside it | [M37](docs/build-notes/phase-details/m37.md) discharged *the dimension rollup grows with traffic* by taking the split-cadence option: the breakdowns recompute every 15 minutes while the per-link and per-workspace totals stay on 60 seconds. The cost is a real one and it is on the page — a link's country, device and per-destination breakdowns can lag its click count by up to fifteen minutes, and nothing on the page says which of the two you are looking at. `linkctrl_rollup_staleness_seconds` is what makes the lag observable, with an alert recipe in [docs/operations.md](docs/operations.md#alerts-worth-having). Nothing about the query got cheaper: it is 4.8-6.3s per run at 5.7M events, 289k upserts, and the recorded fallback if that stops fitting 15 minutes is to narrow the recomputed window. Measured in [docs/slo.md](docs/slo.md#re-measured-for-m37-2026-08-03). |
+| The add-on ABI is `0.x`, and most of it refuses | [M61](docs/build-notes/phase-details/m61.md) publishes the whole contract and implements three functions of it: logging, reading an add-on's own declared settings, and reporting the host's ABI version. Storage, routes, templates, the session hook and redirect observation are declared — their names fixed, their signatures fixed enough to compile against — and every call answers a refusal until the milestone behind each one lands. That is deliberate, because the add-on repository compiles against this boundary from its first commit and cannot wait six milestones for a header file. The cost is stated rather than hidden: **the ABI promises no stability while it is `0.x`**, the signature of a refused function may still move as the behaviour is built — no version number moves with it, and a module built against the older SDK then fails to instantiate rather than misbehaving, which [docs/addon-abi.md](docs/addon-abi.md) states as the rule's one cost — and a generation can be retired on the minimum window — two minor releases and 90 days — and nothing longer. `1.0` is what would mean the contract has settled, and it is a release's statement to make. |
 | Unique visitors are estimates | Carrier NAT merges people; network switches split one. Daily resolution. |
 | Multi-day unique totals over-count | Sum of daily figures; exact values unrecoverable once salts are purged. |
 

@@ -6,10 +6,16 @@
 //
 // This is the lifecycle every later capability hangs off, built before any of
 // them so each seam lands inside a running host rather than beside a
-// hypothetical one. A module is found, its manifest read, its bytes hashed
-// against what the manifest claims, and the runtime asked to instantiate it. The
-// host resolves **no imports of its own** — there is no ABI until M61 — so an
-// add-on loaded here can be observed to be alive and can do nothing at all.
+// hypothetical one. A module is found, its manifest read, its declared ABI
+// generation checked, its bytes hashed against what the manifest claims, and the
+// runtime asked to instantiate it.
+//
+// The imports it may resolve are the ABI, which is authored in
+// internal/addon/abi and registered by hostabi.go. Three of them do something —
+// abi_version, log and config_get — and the rest are declared and refused with a
+// status a module can branch on, because the contract crosses a repository
+// boundary one milestone before the behaviour behind it exists. Storage, routes,
+// templates, the session hook and redirect observation are M63 to M66's.
 //
 // # The runtime, and why it is wazero
 //
@@ -36,11 +42,12 @@
 //     reads the wall clock sees a frozen one and a module that reads randomness
 //     gets a deterministic stream.
 //
-// That last one is a hazard for whoever writes the ABI, not a feature: M61
-// decides which of those a module is granted, and until it does, an add-on must
-// not be assumed to have any of them. A module's writes to stdout and stderr are
-// discarded for the same reason — routing them into the operator's log is a
-// capability, and this milestone grants none.
+// That last one is a hazard the ABI has not answered: nothing in abi.Functions
+// hands a module a real clock or a real random source, so a module needing either
+// has none, and sdk/doc.go tells a publisher so rather than leaving them to
+// discover it. A module's writes to stdout and stderr are still discarded —
+// routing them into the operator's log would be a capability granted by accident,
+// and the log function is the one that was granted on purpose.
 //
 // # Cost
 //
@@ -65,11 +72,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
+	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 )
 
@@ -83,7 +92,7 @@ const StartFunction = "_initialize"
 
 // Outcome is the closed vocabulary of load results, and it is a metric label.
 //
-// Five values, so the series count is the number of installed add-ons times five
+// Six values, so the series count is the number of installed add-ons times six
 // however many times the instance restarts. No error string is ever a label, and
 // the only filename that can become one is bounded by nameRe or collapsed to
 // InvalidName — see labelFor, which is what keeps the sentence above true of the
@@ -91,10 +100,16 @@ const StartFunction = "_initialize"
 type Outcome string
 
 const (
-	OutcomeLoaded            Outcome = "loaded"
-	OutcomeManifestInvalid   Outcome = "manifest_invalid"
-	OutcomeChecksumMismatch  Outcome = "checksum_mismatch"
-	OutcomeModuleUnreadable  Outcome = "module_unreadable"
+	OutcomeLoaded           Outcome = "loaded"
+	OutcomeManifestInvalid  Outcome = "manifest_invalid"
+	OutcomeChecksumMismatch Outcome = "checksum_mismatch"
+	OutcomeModuleUnreadable Outcome = "module_unreadable"
+	// OutcomeABIUnsupported is a manifest whose abi_version this host will not
+	// serve: built against a newer generation, or against one whose deprecation
+	// window has closed. Its own label rather than manifest_invalid, because the
+	// manifest is not invalid — it is a perfectly good manifest for a different
+	// host, and the operator's fix is a version rather than a syntax error.
+	OutcomeABIUnsupported    Outcome = "abi_unsupported"
 	OutcomeInstantiateFailed Outcome = "instantiate_failed"
 )
 
@@ -195,6 +210,13 @@ type Host struct {
 	runtime wazero.Runtime
 	loaded  []Loaded
 	log     *slog.Logger
+
+	// states is what an ABI call is answered against, keyed by the calling
+	// module's name — see hostabi.go. Guarded because a host function is called
+	// from whatever goroutine the guest is running on: at boot that is Open's own,
+	// and from M64 on it is a request's.
+	mu     sync.RWMutex
+	states map[string]*hostState
 }
 
 // Open discovers, verifies and instantiates every add-on in opts.Dir.
@@ -246,6 +268,14 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		_ = h.runtime.Close(ctx)
 		return nil, fmt.Errorf("wasi preview 1: %w", err)
 	}
+	// The ABI, registered before any module is compiled: an import that does not
+	// resolve is a link failure, so the whole declared set has to exist in the
+	// runtime before the first instantiation rather than growing as milestones
+	// land. hostabi.go is where "declared" and "refused" part company.
+	if err := h.registerABI(ctx); err != nil {
+		_ = h.runtime.Close(ctx)
+		return nil, err
+	}
 
 	for _, e := range entries {
 		name := e.Name()
@@ -259,7 +289,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 				slog.String("entry", name))
 			continue
 		}
-		loaded, err := loadOne(ctx, h.runtime, filepath.Join(dir, name), name)
+		loaded, err := loadOne(ctx, h, filepath.Join(dir, name), name)
 		if err != nil {
 			var le *LoadError
 			if !errors.As(err, &le) {
@@ -322,7 +352,7 @@ func fatal(e *LoadError) bool {
 // loadOne is the whole lifecycle for one add-on, in the order that makes each
 // step's failure the cheapest one available: the manifest before the module, the
 // digest before the runtime.
-func loadOne(ctx context.Context, rt wazero.Runtime, dir, entry string) (Loaded, error) {
+func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	fail := func(o Outcome, class FailureClass, err error) (Loaded, error) {
 		return Loaded{}, &LoadError{Addon: entry, Outcome: o, Err: err, class: class}
 	}
@@ -338,6 +368,13 @@ func loadOne(ctx context.Context, rt wazero.Runtime, dir, entry string) (Loaded,
 	if m.Name != entry {
 		return fail(OutcomeManifestInvalid, m.FailureClass,
 			fmt.Errorf("manifest names %q but the directory is %q; they must match", m.Name, entry))
+	}
+	// Before the module is read, let alone hashed or compiled. An add-on built
+	// against an ABI this host does not serve is refused for a reason that is
+	// knowable from 200 bytes of JSON, and doing the cheap check first is the same
+	// ordering rule the rest of this function follows.
+	if err := abi.CheckGeneration(m.ABIVersion); err != nil {
+		return fail(OutcomeABIUnsupported, m.FailureClass, err)
 	}
 
 	// filepath.Join with a validated bare filename, so this cannot leave dir.
@@ -358,13 +395,19 @@ func loadOne(ctx context.Context, rt wazero.Runtime, dir, entry string) (Loaded,
 			fmt.Errorf("%s hashes to %s, manifest says %s", m.Module, got, m.SHA256))
 	}
 
-	compiled, err := rt.CompileModule(ctx, code)
+	compiled, err := h.runtime.CompileModule(ctx, code)
 	if err != nil {
 		return fail(OutcomeInstantiateFailed, m.FailureClass, fmt.Errorf("compile: %w", err))
 	}
+	// Registered before instantiation, and this is not tidiness. Package
+	// initialization runs *during* InstantiateModule — that is what makes a
+	// load-time failure expressible at all — so a module whose init calls a host
+	// function does so before this call returns. State registered afterwards would
+	// mean every add-on's first ABI call answered StatusInternal.
+	deregister := h.registerState(m)
 	// The compiled form is owned by the runtime and closed with it. Closing it
 	// here would invalidate the instance below.
-	mod, err := rt.InstantiateModule(ctx, compiled,
+	mod, err := h.runtime.InstantiateModule(ctx, compiled,
 		wazero.NewModuleConfig().
 			WithName(m.Name).
 			WithStartFunctions(StartFunction))
@@ -375,6 +418,10 @@ func loadOne(ctx context.Context, rt wazero.Runtime, dir, entry string) (Loaded,
 		if mod != nil {
 			_ = mod.Close(ctx)
 		}
+		// The add-on is not loaded, so nothing may answer a call in its name. A
+		// `degrade` failure leaves the instance serving, and a stale entry here
+		// would be state for a module that is gone.
+		deregister()
 		return fail(OutcomeInstantiateFailed, m.FailureClass, err)
 	}
 
@@ -408,5 +455,8 @@ func (h *Host) Close(ctx context.Context) error {
 	err := h.runtime.Close(ctx)
 	h.runtime = nil
 	h.loaded = nil
+	h.mu.Lock()
+	h.states = nil
+	h.mu.Unlock()
 	return err
 }

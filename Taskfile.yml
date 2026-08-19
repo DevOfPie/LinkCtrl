@@ -157,11 +157,22 @@ tasks:
   # reason the Makefile's comment gives at greater length: the set was written out
   # in three places and a third module would have been built by one of them and by
   # nothing else.
+  # sources: and generates: are F266's fix on this side. This task rebuilt every
+  # module on every run while the Makefile's pattern rule watched each module's
+  # main.go alone — two builders, two staleness rules, one target name — and the
+  # asymmetry became live when M61 rebuilt the fixtures on top of the generated SDK.
+  # The sets below are the Makefile's prerequisites, expressed in Task's own terms:
+  # every .go file in a module's directory, and every .go file in the SDK.
   addon-fixtures:
     desc: Build the WASM test modules the add-on host is tested against
     env:
       GOOS: wasip1
       GOARCH: wasm
+    sources:
+      - '{{.ADDON_FIXTURE_SRC}}/*/*.go'
+      - sdk/*.go
+    generates:
+      - '{{.ADDON_FIXTURE_DIR}}/*.wasm'
     cmds:
       - |
         set -e
@@ -274,6 +285,11 @@ tasks:
       - go install github.com/sqlc-dev/sqlc/cmd/sqlc@{{.SQLC_VERSION}}
       - sqlc generate
       - git diff --exit-code -- internal/store/dbgen
+      # Not `task: abi-sdk`: that task is up-to-date-aware and would skip on a tree
+      # whose sources have not changed since the last run, which is exactly the
+      # tree this check is suspicious of.
+      - go run ./internal/addon/abi/gen
+      - git diff --exit-code -- sdk docs/addon-abi.md
 
   check-version-stamp:
     desc: Fail if a built binary does not report its version stamp
@@ -415,9 +431,25 @@ tasks:
     cmds:
       - task: sqlc
       - task: openapi
+      - task: abi-sdk
 
   sqlc:
     cmds: [sqlc generate]
+
+  # The add-on ABI's generated faces: the SDK an add-on imports and the function
+  # table in docs/addon-abi.md. Committed like sqlc's dbgen, and held to the same
+  # no-diff property by check-generate — the Makefile's comment at this target
+  # gives the reason at length.
+  abi-sdk:
+    desc: Regenerate the add-on SDK and the ABI's documented function table
+    sources:
+      - internal/addon/abi/*.go
+      - internal/addon/abi/gen/*.go
+    generates:
+      - sdk/abi_gen*.go
+      - docs/addon-abi.md
+    cmds:
+      - go run ./internal/addon/abi/gen
 
   sqlc-vet:
     desc: Prepare every query against a live database

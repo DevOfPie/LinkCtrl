@@ -233,6 +233,8 @@ check-generate: ## Fail if committed generated code does not match its source
 	go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 	sqlc generate
 	git diff --exit-code -- internal/store/dbgen
+	@$(MAKE) --no-print-directory abi-sdk
+	git diff --exit-code -- sdk docs/addon-abi.md
 
 .PHONY: check-version-stamp
 check-version-stamp: build ## Fail if a built binary does not report its version stamp
@@ -441,7 +443,22 @@ workflow-proposals: ## Which ci/proposed/ workflow proposals the owner has not a
 ## ---- codegen --------------------------------------------------------------
 
 .PHONY: generate
-generate: sqlc openapi ## Regenerate all generated code
+generate: sqlc openapi abi-sdk ## Regenerate all generated code
+
+# The add-on ABI has one author, internal/addon/abi, and three faces: the SDK an
+# add-on imports, the function table in docs/addon-abi.md, and the host module the
+# runtime registers. Only the first two are files; the third is derived at runtime
+# from the same slice, which is what makes host and guest unable to disagree about
+# a signature.
+#
+# Committed like sqlc's dbgen and the world-map paths, and held to the same
+# property: re-running it on an unchanged tree produces no diff, which is what
+# `check-generate` asserts. Committed rather than generated at build time because
+# the SDK is what another repository imports — an importable package that only
+# exists after somebody runs a make target is not one.
+.PHONY: abi-sdk
+abi-sdk: ## Regenerate the add-on SDK and the ABI's documented function table
+	go run ./internal/addon/abi/gen
 
 .PHONY: sqlc
 sqlc: ## Generate the database layer from SQL
@@ -487,14 +504,32 @@ openapi: ## Validate the OpenAPI document against the implementation
 # other places, and a third module would have been built by one of them and by
 # nothing else; a source directory is the one enumeration that cannot disagree
 # with itself.
+#
+# The prerequisites are every .go file in the module's directory **and every .go
+# file in the SDK**, which is F266's fix. The rule used to depend on `main.go`
+# alone while its recipe compiled the whole package directory, so a fixture that
+# grew a second file was built from a file the rule did not watch. That was
+# theoretical while each fixture was one file; M61 made it real from the other
+# side by rebuilding the fixtures on top of the generated SDK, which is a shared
+# input neither fixture's directory knows anything about. The failure it produces
+# is a green run against yesterday's bytes, in the one package whose subject is
+# verifying that bytes are the bytes a manifest describes.
+#
+# .SECONDEXPANSION: is what lets a pattern rule take a $(wildcard) over its own
+# stem — `$$*` is expanded when the rule is *used* rather than when it is read.
+# The Taskfile's mirror expresses the same set with sources:/generates:, and
+# internal/addon's own fixture() compares the same mtimes, because two of the three
+# callers cannot be reached from a make target at all (F262).
 ADDON_FIXTURE_SRC := internal/addon/testdata/modules
 ADDON_FIXTURE_DIR := internal/addon/testdata/build
 ADDON_FIXTURES    := $(patsubst $(ADDON_FIXTURE_SRC)/%/main.go,$(ADDON_FIXTURE_DIR)/%.wasm,$(wildcard $(ADDON_FIXTURE_SRC)/*/main.go))
+ADDON_SDK_SRC     := $(wildcard sdk/*.go)
 
 .PHONY: addon-fixtures
 addon-fixtures: $(ADDON_FIXTURES) ## Build the WASM test modules the add-on host is tested against
 
-$(ADDON_FIXTURE_DIR)/%.wasm: $(ADDON_FIXTURE_SRC)/%/main.go
+.SECONDEXPANSION:
+$(ADDON_FIXTURE_DIR)/%.wasm: $$(wildcard $(ADDON_FIXTURE_SRC)/$$*/*.go) $(ADDON_SDK_SRC)
 	@mkdir -p $(ADDON_FIXTURE_DIR)
 	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o $@ ./$(ADDON_FIXTURE_SRC)/$*
 

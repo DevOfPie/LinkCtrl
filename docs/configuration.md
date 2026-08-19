@@ -848,6 +848,7 @@ implement.
   "sha256": "5f2b…64 lowercase hex characters…",
   "failure_class": "degrade",
   "permissions": ["storage.own_schema", "redirect.observe"],
+  "cookie_prefixes": ["clickstats_"],
   "settings": [
     {"name": "retention_days", "type": "text",   "default": "30"},
     {"name": "api_token",      "type": "secret"},
@@ -862,12 +863,31 @@ implement.
 | `schema_version` | Must be `1`. Not "at least 1" — a newer manifest is refused rather than partially understood. |
 | `name` | 2–31 characters, lowercase letters, digits and underscores, starting with a letter. It has to be three things at once: a metric label, a directory name, and a Postgres schema name. |
 | `version` | The add-on's own version. Its author's business; this only refuses what would make a log line unreadable. |
-| `abi_version` | Which host ABI the module was built against. Read and stored now; enforced when the ABI exists. |
+| `abi_version` | Which **ABI generation** the module was built against, and it is checked at load, before any of the module is read. A module built against a newer generation than this build serves is refused; so is one built against a generation whose deprecation window has closed. What the integer means, and what a change to the ABI is allowed to break, is [addon-abi.md](addon-abi.md). |
 | `module` | The `.wasm` file, as a **bare filename** inside this directory. A separator or a `..` is refused rather than cleaned. |
 | `sha256` | The digest of that file, 64 lowercase hex characters — what `sha256sum` prints. Verified before the module is compiled; a mismatch means it is never parsed, let alone run. |
 | `failure_class` | `required` or `degrade`. No default. |
 | `permissions` | Optional. Dotted lowercase names, as in `links.read`. Read and stored; enforcement arrives with the permission model. |
+| `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is also what stops two add-ons claiming each other's cookies, in either direction: neither can read the other's, and neither can deny the other its own by installing first. |
 | `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
+
+### What an add-on can reach
+
+**One list, and nothing outside it.** An add-on imports a fixed set of functions
+from the host and has no other route into this instance: no socket, no file, no
+database connection, no environment. [addon-abi.md](addon-abi.md) is that list, the
+version it is published under and the promise attached to it — and it is generated
+from the same definition the host registers, so it cannot describe a function the
+host does not serve.
+
+Most of those functions do not work yet. They are declared so that an add-on can
+be written against the whole contract now, and each answers a refusal a module can
+branch on until the release that implements it arrives. What works today is
+logging, reading the add-on's own declared settings, and asking the host its ABI
+version. **No function hands an add-on a client's address**, in any form, which is
+why an add-on that watches redirects cannot store one — and none hands it a
+credential of this instance's either, which is what `cookie_prefixes` above is
+for: see [SECURITY.md](SECURITY.md).
 
 ### What happens when an add-on will not load
 
@@ -886,6 +906,13 @@ an add-on that can stop this instance from starting whatever class it declares.
 So does a manifest this host cannot parse — it stops the instance. There is no
 class to honour in that case, and guessing the forgiving one would boot an
 instance with an authentication add-on silently missing.
+
+An `abi_version` this build does not serve is a refusal like any other and the
+declared class decides what it costs you, because the manifest parsed and the class
+is therefore readable. The log line names both versions, which is the number you
+need to decide whether to upgrade LinkCtrl or to fetch a different build of the
+add-on; `linkctrl_addon_loads_total{outcome="abi_unsupported"}` is the same fact for
+a scrape.
 
 A file that is not a directory is ignored with a warning, so a `README` you left
 in there is not an outage.

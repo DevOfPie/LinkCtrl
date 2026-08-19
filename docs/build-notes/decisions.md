@@ -388,6 +388,16 @@ file. Append a row when you append an entry.
 | [M60, the two answers that unparked the milestone](#2026-08-18--m60-the-two-answers-that-unparked-the-milestone) | D223 — the gate's add-on limb skips only on a **bare** semver triple below the floor, so a `-N-g<sha>` describe build asserts; a false red is visible and a false skip is silent, and both earlier predicates failed by being silent. Corrects D222's premise. D224 — a record cites **content, not a coordinate**, extending D221 past this log to findings rows and milestone files; the 72 already-stale citations are knowingly left, and the gate that would have caught them is priced as a milestone |
 | [M60, one duration over two steps priced neither](#2026-08-18--m60-one-duration-over-two-steps-priced-neither) | D225 — `TestInstantiationCostIsMeasured` timed the whole of `Open` in one `time.Since`, so the compile and instantiate figures [D217](#2026-08-18--m60-the-host-loads-a-reactor-and-grants-it-nothing) hands M66 were not reproducible from the tree. Compilation and instantiation are now timed one at a time, twice for the second instance, with `Open`'s duration kept as a third number. Three of D217's four numbers stand; the host-heap figure is corrected from 3.1 MB to **5.4 MB**. The plain figures and the `-race` ones differ elevenfold, which is stated because `make check` prints the second set. Shown red by a busy loop in the fixture's `init`: 15 seconds of instantiation, which the old single assertion passed |
 | [M60, the shipped milestone file this diff edited](#2026-08-18--m60-the-shipped-milestone-file-this-diff-edited-and-what-d224-conceded-too-widely) | D226 — the amendment to M59's F255 bullet, quoted both ways, recorded late after M60's sixth review asked for the trail; and the correction to D224, whose *nothing already written is fixed* was stated too widely. Narrower rule: a citation this diff **moves**, in a file it **already edits**, is corrected by content and recorded if the file is a shipped milestone's — every other stale citation stays, and findings rows are still not edited |
+| [M61, the set of imports is the ABI](#2026-08-18--m61-the-set-of-imports-is-the-abi-and-one-slice-is-where-it-lives) | D227 — ten host functions in one slice, `abi.Functions`, from which the SDK, the documented table and the wazero host module are all derived; three live, seven **declared and refused** with a status a module branches on, because the add-on repository compiles against the boundary from its first commit. `registerABI` panics when the live flag and the implementation map disagree. One `linkctrl` module per runtime, scoped per call by the *calling* module's name, with state registered **before** instantiation because package init runs during it. One convention: i32 result, (pointer, length) in, guest-owned buffer out, no host allocation in the guest — a guest-exported allocator was rejected as a way to run guest code at a moment the guest did not choose |
+| [M61, an integer in a manifest, and which half of SemVer breaks](#2026-08-18--m61-an-integer-in-a-manifest-and-which-half-of-semver-breaks) | D228 — the manifest's `abi_version` is the ABI's **generation**, the component a break moves: the minor while the ABI is `0.x`, the major from 1.0. The ABI is **0.1.0**, because m61.md refuses a stability promise beyond `0.x`. The window is two minor releases and 90 days, whichever ends later, and `MinimumGeneration` is where a closed one becomes behaviour. What a manifest cannot express — the patch a module was built against — is left as a loud unresolved import rather than paid for with a schema change. *Is this minor or major* is a table, and a case it cannot decide is a defect in the document; a deprecation reaches a consumer through the SDK's generated Go `Deprecated:` marker. `abi_unsupported` is a sixth load outcome |
+| [M61, the stance crosses the boundary as a property, not a review](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review) | D229 — the privacy stance binds at the ABI, because this repository cannot audit a module it did not write: no function hands over a client address, every record field and parameter is checked against `AddressBearing` and a shape pattern, and a **click-derived** record's fields must be columns `click_events` actually has — read out of the migration, not copied into Go. `region` and `city` are refused although the columns exist, and their presence in the schema is asserted first so the exclusion cannot quietly stop meaning anything. `HTTPRequest` declares an allowlist of fields rather than a header map, which is where an address would otherwise have crossed |
+| [M61, the SDK is importable or it is a header file](#2026-08-18--m61-the-sdk-is-importable-or-it-is-a-header-file) | D230 — the SDK is `github.com/DevOfPie/LinkCtrl/sdk`, standard library only, proven by building a consumer module in a temporary directory with `GOPROXY=off` and by walking `go list -deps` for wasip1. Native twins for every function, returning an error rather than faking a host, because a package that only builds for wasip1 breaks `go build ./...` and every linter here. Both fixtures are now real consumers, and a new `probe` module calls the host across every class of answer, reporting through the ABI and panicking on a mismatch |
+| [M61, three builders, one staleness rule](#2026-08-18--m61-three-builders-one-staleness-rule-and-the-proof-that-was-almost-stale) | D231 — F266 closed under the deferred-overlap rule, since a fixture that does not rebuild when the SDK changes makes M61's *first proof the SDK compiles a working consumer* a stale artifact. Fixed in all three: `.SECONDEXPANSION:` with a `$(wildcard)` over the stem — which the row's own fix note said was impossible — plus `sdk/*.go`; the Taskfile's first `sources:`/`generates:`; and `fixture()` comparing mtimes, because two callers never reach a make target (F262). Driven on the way in by a test that failed against bytes built minutes earlier. F259's question is still open, and now has three lists rather than two |
+| [M61, an add-on sees the cookies it named and never the host's session](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session) | D232 — owner-answered: `HTTPRequest` carries a **prefix-filtered cookie set**, not the `Cookie` header. Sessions are server-side and opaque, so the header *is* the credential and a routes-granted add-on could act as any signed-in user; m64.md and m65.md already asserted the ABI had no such reach and stay true. Costs a manifest field and needs a **prefix-collision rule**. Asked as a prompt because the policy this milestone wrote makes removing a record field breaking |
+| [M61, two bullets that said more than any tree could](#2026-08-18--m61-two-bullets-that-said-more-than-any-tree-could) | D233 — two fact amendments: the load check moves on the **generation**, not the major, because SemVer puts a break in the minor while the ABI is `0.x` (D228); and the `click_events` column bound reaches **click-derived** records, while the address bound reaches every field and parameter — a request record must carry a method and a path, so the bullet as written was unmeetable rather than asserted |
+| [M61, a cookie namespace comes from the name](#2026-08-19--m61-a-cookie-namespace-comes-from-the-name-not-from-whoever-installed-first) | D234 — the prefix-collision rule D232 left owed: a declared `cookie_prefixes` entry must begin with the add-on's **own name** and an underscore, and may not reach this product's `linkctrl` namespace. Derived rather than registered, because a first-come registry lets a hostile add-on claim `oidc_` and take sign-in down on a `required` add-on — *cannot claim each other's* has to mean *cannot deny each other's* too. Third name-derived namespace after the metric label and M63's schema. Bounds `set_cookie` as well as the read. `schema_version` stays **1**: the field is added to a schema no release has published |
+| [M61, the host's own answer was the one payload nothing described](#2026-08-19--m61-the-hosts-own-answer-was-the-one-payload-nothing-described) | D235 — `session_mint`'s out parameter said *"as a JSON object"* and no record said what the object held, so an M65 answer carrying a token or a cookie would have left every assertion green: both privacy tests walk `Records` fields and parameter **names**, and the parameter is `session`, which D234 deliberately keeps out of `CredentialBearing`. The gap was directional — nothing walked **Functions → Records**. Fixed both halves: a `MintedSession` record carrying `expires_at` and `second_factor_required`, each traced to a sentence m65.md already owns, and a test refusing any parameter that crosses as JSON while describing nothing. The alternative to naming a record is the new `GuestShaped` flag — the add-on's own SQL arguments, rows and template data, which the host does not author |
+| [M61, the policy could not decide the change every milestone after it will make](#2026-08-19--m61-the-policy-could-not-decide-the-change-every-milestone-after-it-will-make) | D236 — the deprecation policy gave two answers: its table made *changing a function's parameters* breaking while *What is not promised* let a refused function's signature *"move within `0.x`"*, and `0.x` is ambiguous between *no version moves* and *the minor moves* — which **is** the generation. Records had no carve-out at all, so M64, M65 and M66 each finishing one would have cost a generation. Now the table's **first** row: while every released host answers `ErrNotAvailable`, that function's parameters and the records only such functions carry move no version. Conditions are *released* and *every carrying function refused*; the cost is a module built against the older SDK failing to instantiate, announced under `Changed` |
 
 ---
 
@@ -31645,3 +31655,535 @@ The difference matters because the wide form licensed exactly the silence this
 entry is correcting: it read as permission to leave a shipped milestone's file
 however the diff left it, and a shipped `done` row asserting something the tree no
 longer says is the one outcome this project spends a reopening to avoid.
+
+## 2026-08-18 — M61, the set of imports is the ABI, and one slice is where it lives
+
+**D227. What the host functions are, and why there is exactly one place they are
+written.** The owner set three answers on 2026-08-18 and all three are structural
+rather than advisory: the **set of imports is the ABI**, the **host owns the
+definition**, and add-ons consume a **generated, versioned SDK**. The design that
+follows is one Go slice, `abi.Functions` in `internal/addon/abi`, and three things
+derived from it:
+
+- the SDK an add-on imports — `//go:wasmimport` declarations, wrappers, error
+  values, level constants — written by `make abi-sdk`;
+- the function table in `docs/addon-abi.md`, written by the same target into a
+  marked region while the policy prose around it stays hand-written;
+- the wazero host module, which is **not** a generated file: `hostabi.go` builds
+  wazero's parameter types by expanding `Function.Params`, the same expansion the
+  generator applies to produce the guest's declarations.
+
+That third one is what makes *one authoring point* structural instead of a
+convention. Host and guest do not agree about a signature; they compute it from
+the same slice, so disagreeing is unrepresentable rather than merely unlikely.
+`make check-generate` re-runs the generator and fails on a diff, so a hand-edited
+SDK does not survive CI.
+
+**Ten functions, six capability groups, one wasm module named `linkctrl`.** Three
+are live — `log`, `config_get`, `abi_version` — and seven are **declared and
+refused**: `storage_query`, `storage_exec`, `http_request_read`,
+`http_response_write`, `template_render`, `session_mint`,
+`redirect_event_read`. m61.md requires that shape and the reason is the calendar
+rather than laziness: `DevOfPie/LinkCtrl-OIDC` compiles against this boundary from
+its first commit and cannot wait six milestones for a header file. A refused
+function resolves as an import, so the module links, and answers
+`StatusNotAvailable` — a status a module branches on rather than a link failure it
+cannot. `registerABI` **panics** if a function marked live has no implementation or
+an unimplemented one has one, so a milestone that flips a limb on and forgets the
+flag fails at construction in every test that opens a host.
+
+**One host module for every add-on, scoped per call.** wazero resolves imports by
+module name from the runtime's registry, so there is one `linkctrl` module per
+runtime and both of two add-ons import it. `api.GoModuleFunction` hands the
+implementation the *calling* module, whose name Open set from the manifest, and
+`hostState` turns that into the manifest and logger of whoever called. State is
+registered **before** `InstantiateModule` because package initialization runs
+during instantiation — that is what makes a load-time failure expressible at all —
+and state registered afterwards would mean every add-on's first ABI call answered
+`StatusInternal`. Proven by installing one module twice under two names with two
+different declared defaults and reading each one's own value back out of the log.
+
+**One calling convention, and the host allocates nothing in the guest.** Every
+function returns a single i32: a length or zero on success, a negative status
+otherwise. Values in cross as (pointer, length); values out cross into a buffer the
+*guest* owns as (pointer, capacity), and the return value is the size the value
+occupies — larger than the capacity means **nothing was written** and the caller
+retries at that size, which the generated SDK does for it. The rejected alternative
+was a guest-exported allocator, which hands the host a way to run guest code at a
+moment the guest did not choose; the first thing that reaches for is a module that
+traps inside its allocator while the host holds a lock. A truncating write was
+rejected for a smaller reason: a half-written JSON record is a parse error a
+publisher debugs as a host bug.
+
+Two bounds that are decisions rather than validation. A single value crossing into
+the host is capped at **64 KiB**, because a module can address as much as the
+runtime allows and a length is an argument from code the operator did not write.
+And every `String` parameter is checked for UTF-8 and refused rather than repaired,
+because a name this host cannot round-trip is a name it should not have accepted.
+
+## 2026-08-18 — M61, an integer in a manifest, and which half of SemVer breaks
+
+**D228. The ABI's version line, the deprecation window, and the one number a
+manifest carries.** SemVer with deprecation windows is the owner's answer of
+2026-08-18, taken *against* the recommendation of path versioning like `/api/v1`.
+Writing it down forced a question the answer did not settle: the manifest carries
+`abi_version` as a single integer, fixed by M60 and already public, and SemVer has
+three components.
+
+**The integer is the ABI's *generation*: the component a breaking change moves.**
+SemVer puts that component in different places before and after 1.0 — under `0.x`
+"anything may change at any time" and the practice every consumer expects is that
+the minor is where a break lands, while from 1.0 on it is the major. So
+`GenerationOf(major, minor)` is the rule, in code and tested, and `Generation` is
+the current answer. `abi_version: 1` means "built against the ABI's first
+generation", which is `0.1.x` today and becomes `1.x` when the contract stabilises
+without a break in between.
+
+The ABI is **0.1.0** and not 1.0.0. m61.md refuses any promise of stability beyond
+`0.x` in as many words — 1.0 *means* the contract is stable and that is the phase
+close's to state — so a 1.0.0 ABI shipped by this milestone would be the claim the
+milestone declines to make. The cost of the 0.x choice is that the manifest's floor
+of `abi_version >= 1` and `MinimumGeneration = 1` make the *retired* branch of the
+load-time check unreachable through any manifest today. It is unit-tested anyway,
+because the branch is what a closing window will use and an untested branch is what
+a closing window will find broken.
+
+**What cannot be checked at load, stated rather than fixed.** A module built
+against `0.1.3` and loaded on a `0.1.0` host would import a function added in
+`0.1.2`, and the manifest does not carry the patch it was built against. The
+manifest was **not** grown a second version field: the failure is loud, immediate
+and names the function, because the import does not resolve. Growing the schema
+would be a breaking change to a format another repository is already compiling
+against, in exchange for turning a named failure into an earlier named failure.
+
+**The window is two of this product's minor releases and 90 days, whichever ends
+later.** Two releases rather than one, so an operator who skips a release still
+sees a deprecation before it becomes a removal; 90 days as well, because releases
+here have been a day apart and a window measured only in releases can close inside
+a week. `MinimumGeneration` is where a closed window becomes behaviour, and it may
+not be raised before the window ends.
+
+**`docs/addon-abi.md` decides *is this minor or major* as a table**, first matching
+row wins, plus two cases the table cannot settle: a bug fix that changes an
+observable answer is breaking unless the old answer was a crash or contradicted its
+own documentation, and a field that stops being populated without being removed is
+breaking because nothing fails. **Implementing a declared-and-refused function is
+explicitly additive** — that is the row that stops the declared-but-refused pattern
+costing a generation per limb. The document also says that a case it cannot decide
+is a defect *in the document*, fixed in the same change that raised it, which is
+m61.md's third risk answered rather than acknowledged: the judgement that cost this
+project nine days of red CI (F255) was exactly this shape.
+
+A deprecation is announced in four places and all four are required. One of them is
+the SDK's generated Go **`Deprecated:`** marker, from the function's own
+`Deprecated` field — so a deprecation reaches a consumer's editor and `staticcheck`
+at the call site, rather than only a changelog nobody diffs.
+
+`abi_unsupported` is its own metric outcome rather than `manifest_invalid`, taking
+the load-outcome vocabulary from five values to six. The manifest is not invalid:
+it is a perfectly good manifest for a different host, and the operator's fix is a
+version rather than a syntax error.
+
+## 2026-08-18 — M61, the stance crosses the boundary as a property, not a review
+
+**D229. No host function hands an add-on a client address, and a test over the
+surface is what says so.** This is the fifth inherited-rule collision, named at the
+plan's review: the privacy stance — no IP column anywhere, `ip_prefix` only — meets
+an add-on that owns tables and watches redirects. Auditing an add-on's DDL was
+never available. This repository cannot review the source of a module it did not
+write, and a rule enforced by reading somebody else's code is not enforced.
+
+So the stance binds at the ABI. **An add-on cannot store what it is never handed**,
+and the enumeration in `abi.Records` is what makes that checkable:
+
+- every field of every record and every parameter of every function is checked
+  against `AddressBearing` — the literal names, including the CDN spellings and
+  this product's own `ip_prefix` — and against a shape pattern, because the literal
+  list alone would pass a field called `visitor_addr`;
+- `RedirectEvent` is marked `ClickDerived`, and every field of a click-derived
+  record must be a **column `click_events` actually has**. The test reads the column
+  list out of `internal/store/migrations`, `CREATE TABLE` and later `ADD COLUMN`
+  both, rather than comparing against a list copied into a Go file that would then
+  be the thing to keep true;
+- **`region` and `city` are refused although they are columns.** The stance says
+  they resolve transiently and are never stored, and an add-on with a schema of its
+  own is exactly where they would stop being transient. The test asserts the two
+  are present in the schema *before* asserting they are absent from the ABI, so the
+  exclusion cannot quietly stop meaning anything.
+
+`HTTPRequest` is the record where this was least obvious and it is the one worth
+naming: an HTTP request carries a client address in its headers, so the record
+declares an **allowlist of named fields** rather than a header map. `Forwarded`,
+`X-Forwarded-For`, `X-Real-IP` and the CDN spellings are absent by construction,
+and `Cookie` is present because an authentication flow cannot work without it.
+
+The other half of the same boundary is what a module can emit. Its stdout and
+stderr stay discarded and the ABI's `log` function is the only route out,
+attributed to the add-on with `addon` and `source=addon` so an operator can tell
+this product's words from a module's.
+
+## 2026-08-18 — M61, the SDK is importable or it is a header file
+
+**D230. The SDK lives at `sdk/` in this module, depends on the standard library
+alone, and builds on every platform.** m61.md asks for consumability *proven
+mechanically*, and three properties had to be arranged rather than asserted.
+
+**It is importable from outside.** `internal/` cannot be, so the package sits at
+the repository root as `github.com/DevOfPie/LinkCtrl/sdk`. A test builds a module
+in a temporary directory with its own `go.mod`, a filesystem `replace` onto this
+tree, an import of the SDK and of nothing else, `GOOS=wasip1 GOARCH=wasm`, and
+**`GOPROXY=off`** — so a build that would have to fetch anything fails instead of
+passing on a machine with a network. A second test walks `go list -deps` for
+wasip1 and fails on any dependency whose first path element contains a dot. Those
+two are what let `DevOfPie/LinkCtrl-OIDC` compile against the SDK from its first
+commit; the add-on repository actually doing so is M69's evidence and is not
+markable from this tree.
+
+**It builds natively.** `//go:wasmimport` needs `GOARCH=wasm`, so the real
+bindings are behind `wasip1 && wasm` — and a package whose only files are behind
+that tag breaks `go build ./...`, `go vet ./...` and every linter on this
+repository. Every generated function therefore has a native twin returning
+`errNotWasm`. It refuses rather than faking a host: returning a plausible zero
+would turn an add-on's test that never reached LinkCtrl into one that appeared to.
+
+**The fixtures are consumers.** `minimal` now imports the SDK and logs during
+instantiation, and a new `probe` fixture calls the host across every class of
+answer the ABI can give — a live function with a value, a declared setting, a
+declared setting with nothing behind it, an undeclared key, all seven refusals, and
+an invalid log level. It reports each through the ABI's own log function *and*
+panics on a mismatch, so a failure is loud in a test that captures no logs and in
+one that does. Two dissimilar consumers compile against the SDK inside this
+milestone, which is m61.md's first risk — an ABI shaped like OIDC — being paid down
+early rather than at M66.
+
+## 2026-08-18 — M61, three builders, one staleness rule, and the proof that was almost stale
+
+**D231. F266 is closed under the deferred-overlap rule, and the fix is in all
+three places.** [F266](deferred-findings.md#closed) said the Makefile's fixture
+rule depends on each module's `main.go` alone while its recipe compiles the whole
+directory, and that the Taskfile rebuilds unconditionally: two builders, two
+staleness rules, one target name. Validation found it makes **M61's own claim
+false**, which is the one path by which an unapproved finding becomes work — the
+bullet says the M60 test modules *"are rebuilt on top of [the SDK], which is the
+first proof the SDK compiles a working consumer"*, and a rule watching `main.go`
+alone does not rebuild a fixture when the **SDK** changes. The proof could be a
+stale artifact. The exception is named in the commit message, per
+[phase-loop.md](phase-loop.md#1-validate).
+
+Three mechanisms, because there are three entry points and two of them cannot be
+reached from a make target at all (F262 — the release workflow's direct
+`go test ./...`, and the CI image job):
+
+- the Makefile takes `.SECONDEXPANSION:` and a `$(wildcard)` over its own stem,
+  plus every `sdk/*.go` as a prerequisite. F266's fix note said *"a pattern rule
+  cannot take a `$(wildcard)` over its own stem"*, which is true of first
+  expansion and not of second — so the row's own reason for asymmetry does not
+  hold;
+- the Taskfile's task takes `sources:`/`generates:`, the first use of Task's own
+  up-to-date mechanism in that file;
+- `internal/addon`'s `fixture()` compares the same mtimes before using what is on
+  disk.
+
+**It was driven on the way in rather than argued after.** The two-add-on scoping
+test failed against a `probe.wasm` built minutes earlier from a source that had
+since been edited, and it failed as a guest panic — F266's predicted stale artifact,
+arriving exactly as the row said it would.
+
+**F259's question is not answered.** The mirror still carries hand-maintained
+lists, and now three of them rather than two. Whether the Taskfile should enumerate
+anything is still open, and this milestone made the case for answering it slightly
+stronger rather than weaker.
+
+## 2026-08-18 — M61, an add-on sees the cookies it named and never the host's session
+
+**D232. `HTTPRequest` carries a prefix-filtered cookie set, not the `Cookie`
+header.** Owner-answered 2026-08-18, on the loop's recommendation, before the
+field was published rather than after.
+
+As built, the record declared *"the Cookie header, verbatim"*, justified by the
+observation that an authentication flow cannot work without cookies. The
+observation is right and the field was not: LinkCtrl's sessions are **server-side
+and opaque**, so that header *is* the credential. An add-on holding the routes
+grant could read it and act as whoever was signed in — not by escaping the
+sandbox, but by being handed the key through the front door.
+
+Two milestone files already asserted the opposite, in the terms this decision
+keeps true rather than amends:
+
+- [m64.md](phase-details/m64.md) — *"it cannot read the cookie, mint, or destroy
+  sessions … asserted by the ABI having no such function yet"*
+- [m65.md](phase-details/m65.md) — *"The add-on never sees a token, a cookie, or
+  the session row; asserted by the ABI's surface — no function returns them"*
+
+**An add-on receives only cookies whose name matches a prefix it declares in its
+manifest.** An OIDC add-on gets its own state cookie, which is the whole of what
+the authentication flow needed, and the host's session cookie is not reachable
+through any name it can declare. The boundary is a property of the ABI, checkable
+by a test, rather than a promise about code this project did not write — which is
+the same argument [D229](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review)
+makes for client addresses, applied to the credential.
+
+The cost is real and accepted: one more manifest field, an add-on that genuinely
+needs some other host cookie cannot have it, and **prefix collisions need a
+rule** — two add-ons must not be able to claim each other's names, and the
+milestone that builds this owes that rule with the field.
+
+The two shapes declined, and what each would have cost. **Keeping the verbatim
+header** is simplest and needs no new mechanism; it changes the trust model to
+*an add-on is host-trusted code*, falsifies both bullets above, and would oblige
+`docs/SECURITY.md` to say plainly that an installed add-on can impersonate users.
+That is defensible for operator-installed code but must be stated rather than
+implied, and stating it is a larger decision than this milestone was scoped to
+take. **Publishing no cookie access until [M65](phase-details/m65.md)** is the
+most conservative and narrows nothing later; it pushes the OIDC state round-trip
+onto a mechanism that does not exist yet, and M69's acceptance test would be
+where the gap surfaced — late, and in the milestone least able to absorb it.
+
+Timing is the reason this was a prompt rather than a repair. By the deprecation
+policy **this same milestone wrote**, removing a field from a record is breaking,
+so publishing the verbatim header and narrowing it in M65 would have cost a
+generation and an announcement window. A field is cheapest to get right in the
+commit that first publishes it.
+
+## 2026-08-18 — M61, two bullets that said more than any tree could
+
+**D233. Two amendments, both on facts, both found by M61's review reading the
+bullets against the code.**
+
+**First — the wrong version axis.**
+
+*As it stood:* "an add-on built against a newer **major** is refused, an older
+**minor** within the window loads."
+
+*As amended:* "an add-on built against a newer **generation** is refused, an
+older one within the window loads."
+
+*The tree fact:* `abi.Generation` is the ABI's minor while the ABI is `0.x`, per
+[D228](#2026-08-18--m61-an-integer-in-a-manifest-and-which-half-of-semver-breaks), because
+SemVer puts a break in the minor until 1.0 and m61.md itself refuses a stability
+promise beyond `0.x`. Read literally, the bullet said a manifest declaring 2 —
+that is, 0.2.x — should *load*, and the tree refuses it. The bullet was written
+before the version scheme was chosen; nobody could have decided the two
+differently, since the axis follows from `0.x` and not from preference.
+
+**Second — a bound no route-handling ABI can meet.**
+
+*As it stood:* "what the redirect event (M66) **and every other import** carry is
+at most what `click_events` may carry".
+
+*As amended:* the address bound reaches **every record field and every
+parameter**; the `click_events` column bound reaches **click-derived** records.
+
+*The tree fact:* `HTTPRequest` carries a method, a path, a query and a body, and
+none of those is a `click_events` column. A request record that satisfied the
+bullet as written could not describe a request, so the sentence was not an
+assertion anybody made — it was the redirect-event bound with its scope
+overstated by one clause. What the tree asserts is two bounds rather than one, and
+the stronger of them is the one that covers everything: the address blocklist runs
+over every field of every record and every parameter of every function.
+
+Both are fact-level, so both were amended rather than prompted, and the test for
+that is unchanged — could anyone have decided otherwise? Not while `0.x` decides
+the first and arithmetic decides the second. The assertion in the same review that
+*was* decidable went to the owner instead, and is
+[D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session).
+
+## 2026-08-19 — M61, a cookie namespace comes from the name, not from whoever installed first
+
+**D234. A declared cookie prefix must begin with the add-on's own name, and may
+not reach this product's own cookie namespace.** This is the prefix-collision
+rule [D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session)
+named as owed with the field, and it is built rather than asked because the
+requirement it has to meet leaves one shape standing.
+
+The manifest gains `cookie_prefixes`, a list. Each entry must match
+`^[a-z][a-z0-9_]{1,63}$`, must begin with the manifest's own `name` and an
+underscore, and may not be prefix-comparable with `linkctrl`, `__Host-` or
+`__Secure-`. Plural rather than one, because a declaration is worth having only
+if it can be narrow: an add-on wanting exactly `oidc_state` and `oidc_nonce` says
+so instead of claiming `oidc_` and everything under it.
+
+**Why the name and not a registry.** The requirement is that two add-ons must
+not be able to claim each other's prefixes. A registry meets that on its face —
+refuse the second add-on whose prefix overlaps one already loaded — and fails on
+the word *able*. It makes claiming a prefix an act with an effect on somebody
+else: install a module declaring `oidc_`, and the OIDC add-on beside it no longer
+loads. Its `failure_class` decides what that costs, and for the one add-on this
+phase exists to serve the class is `required`, so the cost is an instance that
+will not boot. A namespace derived from the name has no such move in it — the
+name is already unique per instance, because the directory must equal it, and
+nothing an add-on declares can reach outside its own. Order stops mattering, and
+so does who installed first.
+
+It is also the third namespace in this product derived from an add-on's name
+rather than registered: the Prometheus label is the first and M63's Postgres
+schema the second, both for this reason, and `nameRe`'s comment already carries
+the intersection all three have to fit.
+
+**The `linkctrl` half is not redundant.** The name rule alone leaves exactly one
+hole, and it is the one that matters: an add-on *named* `linkctrl` would own
+`linkctrl_`, which is where `linkctrl_session` and `linkctrl_theme` live. So the
+product's namespace is reserved outright. `__Host-` and `__Secure-` are
+unreachable through the name rule already — no valid name starts with an
+underscore — and are listed anyway, because that rule is not this check's to rely
+on. The list is held to the real cookie names by a test that reads
+`auth.SessionCookieName` and `auth.SessionCookieNameInsecure` from the package
+that sets them and asserts every prefix of each is caught; `internal/httpx`'s
+appearance cookie is named as a literal beside them rather than read, because M64
+makes `httpx` import `internal/addon` and the import cannot go both ways.
+
+**Both directions.** The same prefixes bound what `HTTPResponse.set_cookie` may
+name. A cookie an add-on is not allowed to read is one it must not be able to
+overwrite — otherwise the filter stops a module from stealing a session and
+leaves it able to replace one. Stated in the record and in the document; the
+enforcement is M64's, in the milestone that first writes a response.
+
+**Asserted at the surface, not promised.** `HTTPRequest.cookies` is an object
+keyed by name, and `Record.PrefixedCookies` marks the record that carries it.
+`abi_test.go` holds the two together in both directions — a record carrying
+cookies and not marked fails, and so does one marked and carrying them as a
+string, which is how the whole header would cross — and a `CredentialBearing`
+blocklist beside `AddressBearing` refuses `cookie`, `authorization`,
+`session_token` and the rest as field or parameter names anywhere in the ABI. A
+cookie-shaped name that is not one of the two in `CookieFields` fails too, since
+the field that would have leaked the session was called `cookie` and the next
+attempt would be called something else. That is D229's design applied to the
+credential, for D229's reason: this project cannot review a module it did not
+write.
+
+**`schema_version` stays 1**, and that is a judgement worth recording because
+the schema is checked for equality and unknown fields are refused, so a field
+added to a schema already in the wild would mean two hosts disagreeing about what
+schema 1 is. It is not in the wild. M60 published it one commit ago on an
+unreleased branch, no add-on exists, `DevOfPie/LinkCtrl-OIDC` has no first commit
+yet, and the only manifests are this repository's fixtures. Bumping would put a
+version number on a history that never happened and cost every fixture an edit;
+the equality check protects released schemas, and this one is still being
+written in the phase that introduced it. The rule M60's own comment states — *a
+publisher who needs a new field needs a new schema version* — is about a
+publisher outrunning a host, which is not this.
+
+**What it costs, stated rather than implied.** An add-on cannot use a
+`__Host-`- or `__Secure-`-prefixed cookie name of its own, which is a real loss:
+those prefixes are a browser-enforced defence and an add-on's state cookie would
+be entitled to one. It cannot use a cookie name fixed by somebody else's
+specification either. And an add-on named `linkctrl` can declare no prefixes at
+all. The first is the one to revisit if an add-on ever needs it, and the shape of
+the answer is already visible — the host writes an add-on's cookies, so it could
+prepend the attribute prefix itself and keep the namespace check on the part the
+add-on named. Not built, because nothing needs it and a field is cheapest to get
+right before there is a consumer.
+
+## 2026-08-19 — M61, the host's own answer was the one payload nothing described
+
+**D235. Every payload the host composes is a named record, and a test walks
+Functions → Records to keep it that way.** `session_mint`'s out parameter was
+documented as *"what the host minted, as a JSON object"*, and that sentence was
+the whole of the description: no record said what the object contained, so an M65
+implementation answering `{"token": …}`, `{"session_id": …}` or a cookie inside
+it would have left every assertion in `abi_test.go` green.
+
+**Why the existing tests could not see it.** Both privacy assertions walk
+`Records` fields and function **parameter names** —
+[D229](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review)'s
+address bound and
+[D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session)'s
+credential bound alike — and the parameter is called `session`, which is in
+neither blocklist and deliberately so:
+[D234](#2026-08-19--m61-a-cookie-namespace-comes-from-the-name-not-from-whoever-installed-first)
+records that `CredentialBearing` lists `session_cookie`, `session_id` and
+`session_token` and not the bare word. So the gap was structural rather than a
+missed entry. `TestEveryRecordIsCarriedBySomeFunction` walked Records →
+Functions; **nothing walked Functions → Records**, and an unenumerated payload
+lives exactly in that direction — no fields to check and no name worth
+blocklisting.
+
+**Both halves, because the entry is what the second half prevents.**
+`MintedSession` is now a record, carried by `session_mint`, and
+`TestEveryJSONParameterNamesWhatItCarries` refuses a parameter that crosses as
+JSON and says nothing about what is in it. One missing entry is what the record
+fixes; the test is what stops the next one, and there was going to be a next one:
+four parameters in this ABI are documented "as a JSON array/object" and
+`session_mint`'s was the only **host-authored** one — the only place the host is
+the party handing something over.
+
+**Two ways to satisfy the test, and both are declarations.** A parameter names a
+record in its own doc sentence — *"as an HTTPRequest record"*, which four already
+did — or it carries `GuestShaped`, the new flag on `Param`, meaning this ABI
+deliberately does not describe the shape because the host does not author it:
+`storage_query`'s arguments and rows, `storage_exec`'s arguments and
+`template_render`'s data are the add-on's own SQL parameters, its own schema's
+rows and its own template's data. Naming both is refused as well, since a payload
+is one this ABI describes or one it does not. The assertion binds to the **doc
+sentence** rather than to a second structural field, because that sentence is what
+the generator emits into the SDK and into the published table: a parameter whose
+documented shape and whose declared record disagree is precisely the case worth
+catching. The converse is checked too — a name in `Carries` that no parameter
+carries is a record the function does not actually pass.
+
+**What `MintedSession` carries, and why only two fields.** `expires_at`, and
+`second_factor_required`. Each traces to a sentence m65.md already states is the
+host's — *"what role it holds and how long the session lives"*, and *"an account
+with TOTP enrolled still meets its second factor after an add-on assertion"* —
+rather than to anything invented here, because M65 is the milestone that decides
+this behaviour and M61's job is to make the answer describable. No token, no
+cookie and no row of the sessions table, which is the half m65.md cites this
+surface for. A field M65 finds it needs is additive under the policy; the
+alternative shapes were an out parameter dropped altogether, which the add-on
+completing an authentication flow needs *something* back from, and a record
+guessing at account identifiers, which would be this milestone deciding M65's
+account-linking question by accident.
+
+## 2026-08-19 — M61, the policy could not decide the change every milestone after it will make
+
+**D236. A function no released host implements has no signature to break, and
+that is now the first row of the table rather than a second answer buried below
+it.** `docs/addon-abi.md` said *"the first row that matches decides"* and made
+*changing a function's parameters* breaking, while its *What is not promised*
+section said the signature of a declared-and-refused function *"may change within
+`0.x`"*. Two sections, two answers, and the document's own rule — *if a real case
+is not decidable, that is a defect in this document* — pointed at itself.
+
+Records were the worse half. *Removing a field from a record, renaming one, or
+changing its type* is breaking with no carve-out at all, and M64 finalising
+`HTTPRequest` and `HTTPResponse`, M65 `SessionClaim` and `MintedSession`, M66
+`RedirectEvent` is that case three times in this phase — each costing a
+generation under the table, which is the exact cost the declared-and-refused
+pattern
+([D227](#2026-08-18--m61-the-set-of-imports-is-the-abi-and-one-slice-is-where-it-lives))
+exists to avoid.
+
+**The rule.** While every released host answers `ErrNotAvailable` for a function,
+that function's parameters — and the records only such functions carry — move no
+version at all. The same *neither* a doc change gets. What the declaration
+promised is the **name**, the **status**, and that a module handling
+`ErrNotAvailable` keeps working; the parameters were already in *What is not
+promised*, and nothing can have depended on them because every call was refused
+before it reached one.
+
+**`0.x` was the ambiguity, not the answer.** *"May change within `0.x`"* reads
+either as *no version moves* or as *the minor moves*, and while the ABI is `0.x`
+the minor **is** the generation
+([D228](#2026-08-18--m61-an-integer-in-a-manifest-and-which-half-of-semver-breaks)).
+So the phrase managed to be both the permissive reading and the most expensive
+one. It is replaced by a rule that names no version component at all, which also
+survives 1.0 without being rewritten.
+
+**Two conditions, both checkable rather than judged.** *Released*, not
+*unimplemented in a working tree*: a function becomes live in a release and that
+release fixes its signature, after which the ordinary rows apply. And a record is
+inside the carve-out only while **every** function carrying it is refused by every
+released host — `Function.Carries` is the list to read, which is part of why it is
+a field rather than prose.
+
+**It is not free, and the cost is stated where it falls.** A module built against
+the older SDK and run on the host that implements the function with different
+parameters fails to instantiate, naming the unresolved import — the same loud
+failure this document already describes for the patch a manifest cannot express.
+So the change is announced under `Changed` in CHANGELOG.md even though no version
+moves. A module that branches on `ErrNotAvailable` and recompiles is unaffected,
+which is the whole reason the pattern earns its keep. CHANGELOG.md's own claim
+that the refused functions are *"declared with their names and their signatures
+fixed"* was the same contradiction in the release notes and now reads as Plan.md's
+*Known limitations* row already did: names fixed, signatures fixed enough to
+compile against.

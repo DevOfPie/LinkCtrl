@@ -79,10 +79,14 @@ type Setting struct {
 // Manifest is an add-on's identity and its intent, read before its code is.
 //
 // Every field is consumed by a later milestone and none is decorative:
-// ABIVersion by M61, Permissions by M62, Settings by M68. They are parsed and
-// stored here so the file format is settled once, in the milestone that
-// publishes it, rather than growing a field per milestone across a boundary
-// another repository is already compiling against.
+// ABIVersion by M61, Permissions by M62, Settings by M68, CookiePrefixes by
+// M64. They are parsed and stored here so the file format is settled once, in
+// the milestone that publishes it, rather than growing a field per milestone
+// across a boundary another repository is already compiling against —
+// CookiePrefixes being the exception that proves the cost, added by M61 the
+// commit after this schema was written, because the ABI record it bounds was
+// published in the same commit and a field is cheapest to get right before
+// anything is built against it (D232).
 type Manifest struct {
 	SchemaVersion int    `json:"schema_version"`
 	Name          string `json:"name"`
@@ -110,6 +114,18 @@ type Manifest struct {
 	Permissions []string `json:"permissions,omitempty"`
 
 	Settings []Setting `json:"settings,omitempty"`
+
+	// CookiePrefixes is the cookie namespace this add-on owns: the request record
+	// M64 hands it carries the cookies whose names begin with one of these and no
+	// others, and the cookies it may set are bounded the same way.
+	//
+	// Declared rather than granted wholesale because this product's sessions are
+	// server-side and opaque, which makes the Cookie header the credential itself
+	// — an add-on handed it verbatim could act as whoever is signed in. Owner-set
+	// 2026-08-18 (D232). Parsed and validated here, where the manifest's other
+	// declarations live; consumed at M64, which is where a request first reaches
+	// an add-on.
+	CookiePrefixes []string `json:"cookie_prefixes,omitempty"`
 }
 
 // nameRe bounds an add-on's name to what can be three things at once: a
@@ -127,6 +143,38 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,30}$`)
 // The vocabulary is deliberately not checked. M62 decides which tokens exist;
 // this refuses only shapes no vocabulary would want.
 var permissionRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
+
+// cookiePrefixRe bounds a declared cookie prefix to the shape a cookie name can
+// have here. Narrower than RFC 6265's token, and deliberately the same alphabet
+// as an add-on's name, because every prefix has to begin with one.
+var cookiePrefixRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,63}$`)
+
+// hostCookieNamespaces is every prefix a cookie this product sets itself begins
+// with: `linkctrl_session` and `linkctrl_theme` today, the first of them also
+// spelled `__Host-linkctrl_session` on a secure deployment. No add-on may
+// declare a prefix that reaches into one, which is the half of D232's answer the
+// name rule below cannot supply on its own — an add-on *named* `linkctrl` would
+// otherwise own the namespace this product is already in.
+//
+// A test asserts the session cookie's real names, read from internal/auth
+// rather than copied, are caught by this list, so the list cannot quietly stop
+// covering the credential it exists for.
+var hostCookieNamespaces = []string{"linkctrl", "__Host-", "__Secure-"}
+
+// reachesHostCookie reports whether a declared prefix could match a cookie of
+// this product's. Both directions of the comparison: a prefix inside a
+// namespace, and a prefix so short that a namespace is inside *it* — the second
+// is unreachable while every prefix must begin with the add-on's own name and
+// underscore, and it is checked anyway because that rule is not this function's
+// to rely on.
+func reachesHostCookie(prefix string) bool {
+	for _, ns := range hostCookieNamespaces {
+		if strings.HasPrefix(prefix, ns) || strings.HasPrefix(ns, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // versionRe is loose on purpose. An add-on's own version is its author's
 // business — the SemVer promise the owner set is about the ABI, not about every
@@ -252,6 +300,31 @@ func (m Manifest) Validate() error {
 			add("permissions: %q is declared twice", p)
 		}
 		seenPerm[p] = true
+	}
+
+	seenPrefix := make(map[string]bool, len(m.CookiePrefixes))
+	for _, p := range m.CookiePrefixes {
+		switch {
+		case !cookiePrefixRe.MatchString(p):
+			add("cookie_prefixes: %q is not a usable cookie-name prefix; 2 to 64 "+
+				"characters, lowercase letters, digits and underscores, starting with "+
+				"a letter", p)
+		case !strings.HasPrefix(p, m.Name+"_"):
+			// The whole collision rule, and it is a namespace rather than a registry:
+			// derived from the name, two add-ons cannot claim each other's cookies and
+			// neither can be denied its own by an add-on that loaded first. The same
+			// shape the Postgres schema (M63) and the route prefix (M64) take, for the
+			// same reason — the name is the one thing already unique per instance.
+			add("cookie_prefixes: %q must begin with %q: a cookie namespace is derived "+
+				"from the add-on's name, so no two add-ons can claim each other's "+
+				"cookies and none can claim one of this product's", p, m.Name+"_")
+		case reachesHostCookie(p):
+			add("cookie_prefixes: %q reaches this product's own cookie namespace, which "+
+				"no add-on may read or set: the session cookie is the session", p)
+		case seenPrefix[p]:
+			add("cookie_prefixes: %q is declared twice", p)
+		}
+		seenPrefix[p] = true
 	}
 
 	seenSetting := make(map[string]bool, len(m.Settings))

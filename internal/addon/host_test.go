@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -56,7 +57,7 @@ var builds struct {
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
 	path := filepath.Join(fixtureDir, name+".wasm")
-	if code, err := os.ReadFile(path); err == nil {
+	if code, err := os.ReadFile(path); err == nil && !stale(t, path, name) {
 		return code
 	}
 	buildFixture(t, name, path)
@@ -65,6 +66,55 @@ func fixture(t *testing.T, name string) []byte {
 		t.Fatalf("the %s test module is still not readable after building it: %v", name, err)
 	}
 	return code
+}
+
+// stale reports whether a built module is older than something it was built from.
+//
+// This is the reader F266 named: fixture() consumed whatever was on disk without
+// asking, so a module built before its sources changed was used as though it were
+// current. That was theoretical while every fixture was one main.go nothing else
+// fed — and it stopped being theoretical the moment the fixtures were rebuilt on
+// top of the SDK (M61), which is a shared input that changes for reasons the
+// fixture's own directory knows nothing about. The failure it produces is the
+// worst available: a load that succeeds against yesterday's bytes, in the package
+// whose whole subject is verifying that bytes are the bytes a manifest describes.
+//
+// The Makefile and the Taskfile carry the same dependency set for the same reason.
+// Three mechanisms rather than one is F259's question and not this function's; what
+// this function owes is that `go test` alone — which the release workflow and the
+// CI image job both run — is not the weakest of the three.
+func stale(t *testing.T, path, name string) bool {
+	t.Helper()
+	built, err := os.Stat(path)
+	if err != nil {
+		return true
+	}
+	var inputs []string
+	for _, pattern := range []string{
+		filepath.Join(fixtureSrc, name, "*.go"),
+		// The SDK. Every fixture imports it, and a generated SDK changes whenever the
+		// ABI does.
+		filepath.Join("..", "..", "sdk", "*.go"),
+	} {
+		found, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatalf("the fixture input pattern %q is malformed: %v", pattern, err)
+		}
+		inputs = append(inputs, found...)
+	}
+	if len(inputs) == 0 {
+		t.Fatalf("the %s test module has no inputs, so staleness cannot be decided", name)
+	}
+	for _, in := range inputs {
+		info, err := os.Stat(in)
+		if err != nil {
+			t.Fatalf("a fixture input disappeared while being read: %v", err)
+		}
+		if info.ModTime().After(built.ModTime()) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildFixture runs the same command `make addon-fixtures` runs, from this
@@ -95,6 +145,57 @@ func buildFixture(t *testing.T, name, out string) {
 	builds.done[name] = err
 	if err != nil {
 		t.Fatalf("the %s test module is not built and will not build: %v\nbuild it by hand to see why: make addon-fixtures", name, err)
+	}
+}
+
+// The F266 fix, asserted rather than assumed: fixture() consumes what is on disk,
+// so what stops it consuming yesterday's bytes is this comparison and nothing else.
+// The Makefile and the Taskfile carry the same input set; this is the third
+// builder, and it is the one the release workflow and the CI image job reach.
+func TestAFixtureOlderThanItsInputsIsStale(t *testing.T) {
+	artifact := filepath.Join(t.TempDir(), "minimal.wasm")
+	if err := os.WriteFile(artifact, []byte("not really wasm"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Older than every input, which is what a fixture built before an edit looks
+	// like — including an edit to the SDK, which is an input no fixture's own
+	// directory knows anything about.
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(artifact, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if !stale(t, artifact, "minimal") {
+		t.Error("a module older than its sources was treated as current")
+	}
+
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(artifact, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if stale(t, artifact, "minimal") {
+		t.Error("a module newer than every input was rebuilt anyway")
+	}
+
+	// A module whose own source is current but whose SDK is not. The SDK is the
+	// input F266 stopped being theoretical over.
+	sdkFiles, err := filepath.Glob(filepath.Join("..", "..", "sdk", "*.go"))
+	if err != nil || len(sdkFiles) == 0 {
+		t.Fatalf("the SDK has no files to compare against: %v", err)
+	}
+	between := time.Now()
+	if err := os.Chtimes(artifact, between, between); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(sdkFiles[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.ModTime().After(between) {
+		t.Skip("the SDK was regenerated during this test run, so there is no order to assert")
+	}
+	if stale(t, artifact, "minimal") {
+		t.Error("a module newer than the SDK was rebuilt anyway")
 	}
 }
 
@@ -623,6 +724,15 @@ func TestInstantiationCostIsMeasured(t *testing.T) {
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
 		t.Fatal(err)
 	}
+	// The ABI, because Open registers it and a cost measured without it is a cost
+	// no instance pays — the fixture imports the host module, so a runtime without
+	// it cannot instantiate the fixture at all. State for each instance name too:
+	// the fixture logs from package initialization, and a host function answers the
+	// calling module.
+	direct := &Host{runtime: rt, log: slog.New(slog.DiscardHandler)}
+	if err := direct.registerABI(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	start := time.Now()
 	compiled, err := rt.CompileModule(ctx, code)
@@ -644,10 +754,13 @@ func TestInstantiationCostIsMeasured(t *testing.T) {
 		runtime.GC()
 		runtime.ReadMemStats(&before)
 
+		name := fmt.Sprintf("minimal_%d", i)
+		direct.registerState(manifestFor(name, ClassRequired, code))
+
 		start = time.Now()
 		mod, err := rt.InstantiateModule(ctx, compiled,
 			wazero.NewModuleConfig().
-				WithName(fmt.Sprintf("minimal-%d", i)).
+				WithName(name).
 				WithStartFunctions(StartFunction))
 		instantiate[i] = time.Since(start)
 		if err != nil {

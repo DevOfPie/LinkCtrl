@@ -3,6 +3,8 @@ package addon
 import (
 	"strings"
 	"testing"
+
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 )
 
 // valid is the manifest every case below mutates one field of, so a failing case
@@ -23,6 +25,7 @@ func valid() Manifest {
 			{Name: "granularity", Type: SettingSelect, Options: []string{"hour", "day"}, Default: "day"},
 			{Name: "count_bots", Type: SettingToggle, Default: "false"},
 		},
+		CookiePrefixes: []string{"clickstats_state"},
 	}
 }
 
@@ -113,6 +116,28 @@ func TestManifestValidationRules(t *testing.T) {
 		{"a secret with a default, which every installation would share", func(m *Manifest) {
 			m.Settings = []Setting{{Name: "token", Type: SettingSecret, Default: "hunter2"}}
 		}, "may not carry a default"},
+		{"a cookie prefix outside the add-on's own namespace", func(m *Manifest) {
+			m.CookiePrefixes = []string{"state"}
+		}, "must begin with \"clickstats_\""},
+		{"a cookie prefix claiming another add-on's namespace", func(m *Manifest) {
+			m.CookiePrefixes = []string{"oidc_state"}
+		}, "must begin with \"clickstats_\""},
+		{"a cookie prefix in this product's own namespace", func(m *Manifest) {
+			m.Name = "linkctrl"
+			m.CookiePrefixes = []string{"linkctrl_session"}
+		}, "reaches this product's own cookie namespace"},
+		{"an empty cookie prefix, which is every cookie", func(m *Manifest) {
+			m.CookiePrefixes = []string{""}
+		}, "not a usable cookie-name prefix"},
+		{"a one-character cookie prefix", func(m *Manifest) {
+			m.CookiePrefixes = []string{"c"}
+		}, "not a usable cookie-name prefix"},
+		{"a cookie prefix with a capital letter", func(m *Manifest) {
+			m.CookiePrefixes = []string{"clickstats_State"}
+		}, "not a usable cookie-name prefix"},
+		{"a cookie prefix declared twice", func(m *Manifest) {
+			m.CookiePrefixes = []string{"clickstats_state", "clickstats_state"}
+		}, "\"clickstats_state\" is declared twice"},
 	}
 
 	for _, tc := range tests {
@@ -175,5 +200,44 @@ func TestTrailingContentIsRefused(t *testing.T) {
 	doc := `{"schema_version": 1, "name": "a"} {"schema_version": 1}`
 	if _, err := parseManifest(strings.NewReader(doc)); err == nil {
 		t.Fatal("two objects in one manifest parsed")
+	}
+}
+
+// TestNoDeclarableCookiePrefixReachesThisProductsCookies is D232's boundary from
+// the manifest side, and the falsifiable half of it: the session cookie's names
+// are read from the package that sets them rather than copied here, so a rename
+// there fails this test instead of quietly widening what an add-on may declare.
+func TestNoDeclarableCookiePrefixReachesThisProductsCookies(t *testing.T) {
+	hostCookies := []string{
+		auth.SessionCookieName,
+		auth.SessionCookieNameInsecure,
+		// internal/httpx's appearance cookie, named rather than read: this package
+		// must not import httpx, because M64 makes httpx import this one. It is
+		// inside the same `linkctrl` namespace as the two above, which is what the
+		// assertion below is really about.
+		"linkctrl_theme",
+	}
+
+	// Every prefix of every one of them, because a prefix is what a manifest
+	// declares and a short one reaches further than a long one.
+	for _, name := range hostCookies {
+		for i := 1; i <= len(name); i++ {
+			if !reachesHostCookie(name[:i]) {
+				t.Errorf("%q is a prefix of this product's cookie %q and the namespace list "+
+					"does not catch it", name[:i], name)
+			}
+		}
+	}
+
+	// And the rule as a whole: the one add-on name that could otherwise own this
+	// product's namespace cannot declare a prefix inside it, however it is spelled.
+	for i := len("linkctrl_"); i <= len(auth.SessionCookieNameInsecure); i++ {
+		prefix := auth.SessionCookieNameInsecure[:i]
+		m := valid()
+		m.Name = "linkctrl"
+		m.CookiePrefixes = []string{prefix}
+		if err := m.Validate(); err == nil {
+			t.Errorf("a manifest named linkctrl declaring the cookie prefix %q validated", prefix)
+		}
 	}
 }

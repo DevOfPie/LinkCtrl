@@ -17,13 +17,24 @@ it? — decides the location.
 | [releasing.md](releasing.md) | What a version number means, upgrading, rolling back, building artifacts yourself |
 | [slo.md](slo.md) | The redirect latency promise, and the measurement behind it |
 | [SECURITY.md](SECURITY.md) | The security model, its deliberate gaps, and how to report a vulnerability |
+| [addon-abi.md](addon-abi.md) | The add-on ABI: every function an add-on may import, the version it is published under, and what a change to it may break |
 
-Two of these are judgment calls, recorded so they are not re-litigated:
+Three of these are judgment calls, recorded so they are not re-litigated:
 `releasing.md` stays although cutting a release is the maintainer's job, because
 what versions mean, how to upgrade and how to roll back are the operator's
 contract. `slo.md` stays although it contains methodology, because it is the
 performance promise README makes — evidence a host can check is part of the
-promise.
+promise. `addon-abi.md` stays although its reader is neither an operator nor
+somebody changing this product: it is a contract with a **third** party, an
+add-on publisher in another repository, and *using LinkCtrl* is what they are
+doing — the same reason `usage.md` covers the API rather than the subfolders
+do. Two facts settle it beyond the reading. Its table is generated, and
+`build-notes/` holds nothing generated; and the operator's own
+`configuration.md` sends them here for what `abi_version` means when a load is
+refused, so a path in `build-notes/` would put half of an operator's answer
+behind a door marked *for people building it*. It is also cited from doc
+comments in a generated SDK that lands in somebody else's checkout, where
+`build-notes/` reads as this project's private notes.
 
 ## For people building it — subfolders
 
