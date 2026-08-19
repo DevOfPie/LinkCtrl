@@ -22,7 +22,25 @@ func HostABIVersion() (string, error) {
 // routing them into an operator's log is a capability and the host grants
 // none it was not asked for. The host adds the add-on's name; a message
 // that repeats it is noise. An unknown level is ErrInvalid rather than a
-// silent default, so a typo does not become a line nobody greps for.
+// silent default, so a typo does not become a line nobody greps for. The
+// message is neutralized before it is written and bounded at 4 KiB, and the
+// rule is stated as what survives rather than as what is caught: a graphic
+// character reaches the line as itself, in any script, and everything else
+// becomes its escape — a newline, a control character, an ANSI escape,
+// every format and bidirectional control, every unassigned or private-use
+// code point, and the few characters that are graphic by category and
+// render as nothing. So an invisible code point appears in the line rather
+// than acting on whoever reads it, and a code point Unicode adds after the
+// host was built is escaped rather than let through. One graphic character
+// does not reach the line as itself: a backslash is doubled, so that the
+// two characters \ and n cannot be mistaken for an escaped newline, and a
+// module cannot spell the host's own truncation mark. The named exceptions
+// run the other way: Unicode's prepended concatenation marks — the
+// Arabic, Syriac and Kaithi signs that scope the digits after them — are
+// left alone, read from Unicode's property rather than from a list, so a
+// host built against a newer revision carries the marks it added. Nothing
+// is refused for any of it, and a message that needed none arrives as it
+// was written, backslashes aside.
 //
 // level is one of the Level constants; message is the line, without a
 // trailing newline.
@@ -44,6 +62,10 @@ func Log(level string, message string) error {
 // key is the name of a setting this add-on's manifest declares.
 //
 // ABI: linkctrl.config_get, since 0.1.0; implemented since this version.
+//
+// Requires the config.read permission, declared in this add-on's manifest.
+// A module that did not declare it gets ErrDenied, whether or not the host
+// implements the function.
 func ConfigGet(key string) (string, error) {
 	return "", errNotWasm
 }
@@ -60,6 +82,10 @@ func ConfigGet(key string) (string, error) {
 // ABI: linkctrl.storage_query, since 0.1.0; declared, and not implemented
 // by every host: a host without it answers ErrNotAvailable, which a module
 // may branch on.
+//
+// Requires the storage.own_schema permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
 func StorageQuery(sql string, args []byte) ([]byte, error) {
 	return nil, errNotWasm
 }
@@ -76,6 +102,10 @@ func StorageQuery(sql string, args []byte) ([]byte, error) {
 // ABI: linkctrl.storage_exec, since 0.1.0; declared, and not implemented by
 // every host: a host without it answers ErrNotAvailable, which a module may
 // branch on.
+//
+// Requires the storage.own_schema permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
 func StorageExec(sql string, args []byte) error {
 	return errNotWasm
 }
@@ -88,6 +118,10 @@ func StorageExec(sql string, args []byte) error {
 // ABI: linkctrl.http_request_read, since 0.1.0; declared, and not
 // implemented by every host: a host without it answers ErrNotAvailable,
 // which a module may branch on.
+//
+// Requires the routes.own_prefix permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
 func HTTPRequestRead() ([]byte, error) {
 	return nil, errNotWasm
 }
@@ -103,6 +137,10 @@ func HTTPRequestRead() ([]byte, error) {
 // ABI: linkctrl.http_response_write, since 0.1.0; declared, and not
 // implemented by every host: a host without it answers ErrNotAvailable,
 // which a module may branch on.
+//
+// Requires the routes.own_prefix permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
 func HTTPResponseWrite(response []byte) error {
 	return errNotWasm
 }
@@ -120,6 +158,10 @@ func HTTPResponseWrite(response []byte) error {
 // ABI: linkctrl.template_render, since 0.1.0; declared, and not implemented
 // by every host: a host without it answers ErrNotAvailable, which a module
 // may branch on.
+//
+// Requires the routes.own_prefix permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
 func TemplateRender(name string, data []byte) ([]byte, error) {
 	return nil, errNotWasm
 }
@@ -140,19 +182,30 @@ func TemplateRender(name string, data []byte) ([]byte, error) {
 // ABI: linkctrl.session_mint, since 0.1.0; declared, and not implemented by
 // every host: a host without it answers ErrNotAvailable, which a module may
 // branch on.
+//
+// Requires the session.mint permission, declared in this add-on's manifest.
+// A module that did not declare it gets ErrDenied, whether or not the host
+// implements the function.
 func SessionMint(claim []byte) ([]byte, error) {
 	return nil, errNotWasm
 }
 
 // RedirectEventRead reads the redirect this add-on is observing. What it
 // carries is at most what click_events may carry — prefix-derived and
-// country-level, and no client address in any form. Which declaration class
-// an add-on must hold to reach it is the host's to state. A host that does
-// not implement it yet answers ErrNotAvailable.
+// country-level, and no client address in any form. The grant it costs is
+// redirect.observe, which is out-of-band observation and nothing more:
+// running inside the redirect path itself is redirect.inline, a separate
+// declaration no host grants yet, so a module cannot reach the path by
+// holding this. A host that does not implement it yet answers
+// ErrNotAvailable.
 //
 // ABI: linkctrl.redirect_event_read, since 0.1.0; declared, and not
 // implemented by every host: a host without it answers ErrNotAvailable,
 // which a module may branch on.
+//
+// Requires the redirect.observe permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
 func RedirectEventRead() ([]byte, error) {
 	return nil, errNotWasm
 }

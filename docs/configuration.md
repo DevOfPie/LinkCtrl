@@ -867,9 +867,31 @@ implement.
 | `module` | The `.wasm` file, as a **bare filename** inside this directory. A separator or a `..` is refused rather than cleaned. |
 | `sha256` | The digest of that file, 64 lowercase hex characters — what `sha256sum` prints. Verified before the module is compiled; a mismatch means it is never parsed, let alone run. |
 | `failure_class` | `required` or `degrade`. No default. |
-| `permissions` | Optional. Dotted lowercase names, as in `links.read`. Read and stored; enforcement arrives with the permission model. |
+| `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the six below. |
 | `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is also what stops two add-ons claiming each other's cookies, in either direction: neither can read the other's, and neither can deny the other its own by installing first. |
 | `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
+
+#### The permissions an add-on may declare
+
+Six, and the list is closed: adding one is a change to LinkCtrl, not something a
+manifest can do. [addon-abi.md](addon-abi.md) says which function each one gates
+and generates the same table from the host's own definition.
+
+| Permission | Lets the add-on |
+| --- | --- |
+| `config.read` | Read its own declared settings — the `settings` list above, and nothing else |
+| `storage.own_schema` | Read and write the Postgres schema it owns, whole. Not finer, and not another add-on's |
+| `routes.own_prefix` | Serve requests under the path prefix it owns, and render its own templates through this product's renderer |
+| `session.mint` | Tell this instance that somebody authenticated, and ask for a session. The highest-value grant here — an add-on holding it decides who is signed in |
+| `redirect.observe` | Watch redirects out of band. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form |
+| `redirect.inline` | Run inside the redirect path itself. **No release grants this yet**; an add-on declaring it loads, does not hold it, and says so in the boot log |
+
+Two functions cost nothing and need no declaration: asking the host its ABI
+version, and writing a line to your log. Everything else costs one of the six.
+
+**A refused call is `ErrDenied`, and it is refused before the host says whether it
+implements the function at all** — so an add-on that declared nothing cannot use
+the availability status to find out what this build can do.
 
 ### What an add-on can reach
 
@@ -884,10 +906,11 @@ Most of those functions do not work yet. They are declared so that an add-on can
 be written against the whole contract now, and each answers a refusal a module can
 branch on until the release that implements it arrives. What works today is
 logging, reading the add-on's own declared settings, and asking the host its ABI
-version. **No function hands an add-on a client's address**, in any form, which is
-why an add-on that watches redirects cannot store one — and none hands it a
-credential of this instance's either, which is what `cookie_prefixes` above is
-for: see [SECURITY.md](SECURITY.md).
+version — and each of those, apart from the ABI version and the log, is behind one
+of the permissions above. **No function hands an add-on a client's address**, in
+any form, which is why an add-on that watches redirects cannot store one — and none
+hands it a credential of this instance's either, which is what `cookie_prefixes`
+above is for: see [SECURITY.md](SECURITY.md).
 
 ### What happens when an add-on will not load
 
@@ -913,6 +936,13 @@ is therefore readable. The log line names both versions, which is the number you
 need to decide whether to upgrade LinkCtrl or to fetch a different build of the
 add-on; `linkctrl_addon_loads_total{outcome="abi_unsupported"}` is the same fact for
 a scrape.
+
+A `permissions` entry this build does not know is a refusal too, and the declared
+class decides what it costs you. The vocabulary is closed for the reason unknown
+manifest fields are refused — an add-on asking for a capability this build cannot
+name is asking for behaviour that will not happen — and the error names every token
+that *is* allowed, which is the fix. A permission this build knows and grants to
+nobody is **not** a refusal: the add-on loads without it, and the boot log says so.
 
 A file that is not a directory is ignored with a warning, so a `README` you left
 in there is not an outage.

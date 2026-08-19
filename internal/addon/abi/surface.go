@@ -205,6 +205,16 @@ type Function struct {
 	// Live is whether this host implements it. False means declared and refused
 	// with StatusNotAvailable.
 	Live bool
+	// Requires is the [Permission] the calling add-on must hold, or empty for a
+	// function every module may call.
+	//
+	// The host checks it before it does anything else, including before it refuses
+	// a function it has not implemented: an add-on that declared nothing gets
+	// StatusDenied from `storage_query` rather than StatusNotAvailable, so the
+	// ABI's own capability probe is not a way to enumerate a host's limbs without
+	// declaring them. Empty is a deliberate answer and not an omission — a test
+	// names the ungated functions literally.
+	Requires string
 	// Deprecated, when set, is the sentence the SDK emits as a Go "Deprecated:"
 	// marker — which is what makes a deprecation reach a consumer's vet output
 	// rather than only a changelog. RemovedNotBefore is the ABI version it may

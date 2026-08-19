@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 )
 
 // ManifestFile is the name every add-on directory must hold. Fixed rather than
@@ -108,9 +110,12 @@ type Manifest struct {
 
 	FailureClass FailureClass `json:"failure_class"`
 
-	// Permissions is what the add-on says it needs. Stored and not interpreted:
-	// the vocabulary and the enforcement are M62's, and inventing either here
-	// would mean M62 arriving to find its own decision already made.
+	// Permissions is what the add-on says it needs, and it is the whole of what it
+	// may do: the vocabulary is abi.Permissions, every host function names the
+	// grant it costs, and a call whose grant is not declared here is refused
+	// (M62). Validation below refuses a token outside the vocabulary; whether a
+	// declared one is actually *held* is resolveGrants', because a permission can
+	// exist and be grantable by no host yet.
 	Permissions []string `json:"permissions,omitempty"`
 
 	Settings []Setting `json:"settings,omitempty"`
@@ -136,12 +141,18 @@ type Manifest struct {
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,30}$`)
 
 // permissionRe matches this product's own permission spelling — dotted,
-// lowercase, links.read — because an add-on's declared permissions will be read
+// lowercase, links.read — because an add-on's declared permissions are read
 // beside API-key scopes in the same manager page, and two spellings for the same
 // idea is a thing somebody has to hold in their head forever.
 //
-// The vocabulary is deliberately not checked. M62 decides which tokens exist;
-// this refuses only shapes no vocabulary would want.
+// The shape is checked before the vocabulary so that a typo reads as a typo. The
+// vocabulary itself is abi.Permissions and is **closed** (M62): a token outside it
+// refuses the add-on, for the reason DisallowUnknownFields refuses an unknown
+// field — a declaration this host cannot interpret is a manifest whose author
+// expects behaviour that will not happen, and there is no safe direction to guess
+// in. A token that is in the vocabulary and not grantable on this host —
+// redirect.inline, until the milestone that admits an add-on onto the redirect
+// path — is a different case and loads: see resolveGrants.
 var permissionRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
 
 // cookiePrefixRe bounds a declared cookie prefix to the shape a cookie name can
@@ -295,6 +306,10 @@ func (m Manifest) Validate() error {
 			add("permissions: %q is not a permission name; expected dotted "+
 				"lowercase, as in links.read", p)
 			continue
+		}
+		if _, known := abi.PermissionByName(p); !known {
+			add("permissions: %q is not one of this host's permissions; the vocabulary "+
+				"is closed and is %s", p, strings.Join(abi.PermissionNames(), ", "))
 		}
 		if seenPerm[p] {
 			add("permissions: %q is declared twice", p)

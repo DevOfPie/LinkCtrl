@@ -377,7 +377,10 @@ func TestAModuleLoadsAndStaysInstantiated(t *testing.T) {
 	body := scrape(t, metrics)
 	for _, want := range []string{
 		`linkctrl_addon_loads_total{addon="minimal",outcome="loaded"} 1`,
-		`linkctrl_addon_info{abi_version="1",addon="minimal",failure_class="required",version="1.0.0"} 1`,
+		// permissions is empty because this manifest declares none, and an add-on that
+		// asked for nothing holds nothing (M62). The populated form is asserted in
+		// permissions_test.go.
+		`linkctrl_addon_info{abi_version="1",addon="minimal",failure_class="required",permissions="",version="1.0.0"} 1`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the scrape is missing %q:\n%s", want, seriesLike(body, "linkctrl_addon_"))
@@ -755,7 +758,9 @@ func TestInstantiationCostIsMeasured(t *testing.T) {
 		runtime.ReadMemStats(&before)
 
 		name := fmt.Sprintf("minimal_%d", i)
-		direct.registerState(manifestFor(name, ClassRequired, code))
+		m := manifestFor(name, ClassRequired, code)
+		grants, _ := resolveGrants(m)
+		direct.registerState(m, grants)
 
 		start = time.Now()
 		mod, err := rt.InstantiateModule(ctx, compiled,

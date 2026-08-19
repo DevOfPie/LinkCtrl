@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"math"
 	"slices"
+	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/tetratelabs/wazero/api"
@@ -20,8 +22,11 @@ import (
 // # What is live, and what is declared
 //
 // Three functions work here — abi_version, log and config_get — and the rest are
-// registered and answer abi.StatusNotAvailable. That is m61.md's requirement, not
-// a shortcut: the contract has to be complete on paper before it is complete in
+// registered and answer abi.StatusNotAvailable to an add-on that holds the
+// permission they cost, and abi.StatusDenied to one that does not. Which of the two
+// comes first is the next section's, and it is a decision rather than an accident.
+// That the remainder is refused rather than absent is m61.md's requirement, not a
+// shortcut: the contract has to be complete on paper before it is complete in
 // behaviour, because the add-on repository compiles against it from its first
 // commit and cannot wait for six milestones. The refusal is a status a module
 // branches on rather than a link failure it cannot, and implementing a refused
@@ -32,6 +37,17 @@ import (
 // Live has one. A milestone that implements a limb and forgets to flip the flag
 // therefore fails at construction, in every test that opens a host, instead of
 // shipping a function the documentation calls refused.
+//
+// # What a call costs
+//
+// Every function names the permission it costs in abi.Function.Requires, and
+// dispatch refuses a call whose grant the calling add-on did not declare —
+// **before** it refuses one this host has not implemented, so a module that
+// declared nothing cannot probe for the limbs a host has. Grants are resolved once
+// at load (grants.go) because from M66 this check sits on the redirect path. Two
+// functions cost nothing: abi_version reports a constant, and log is the one
+// capability granted on purpose, since a module's stdout and stderr are discarded
+// and it has no other way out.
 //
 // # How one host module serves many add-ons
 //
@@ -81,7 +97,10 @@ var hostFuncs = map[string]hostFunc{
 			// can fix it.
 			return int32(abi.StatusInvalid)
 		}
-		st.log.Log(context.Background(), slogLevels[level], message)
+		// Neutralized here, on the way in, and never by whatever writes the line —
+		// see sanitizeLogMessage. The level needs none of it: it is compared against
+		// a closed vocabulary one line above rather than passed through.
+		st.log.Log(context.Background(), slogLevels[level], sanitizeLogMessage(message))
 		return 0
 	},
 
@@ -97,6 +116,12 @@ var hostFuncs = map[string]hostFunc{
 			// it is a value this add-on has no standing to ask for. A module cannot
 			// probe for another add-on's settings or for this product's own
 			// configuration, because neither is in its manifest.
+			//
+			// The second of two questions, and dispatch has already answered the
+			// first: `config.read` is whether this add-on may read settings at all,
+			// and this is whether the key is one of its own. Both answer Denied and
+			// only the first is a permission, which is why only the first is
+			// counted in the refusals metric.
 			return int32(abi.StatusDenied)
 		}
 		if s.Default == "" {
@@ -119,6 +144,200 @@ var slogLevels = map[string]slog.Level{
 	"error": slog.LevelError,
 }
 
+// maxLogMessage bounds the line one log call can put in front of a reader.
+//
+// Not the same bound as maxStringIn, which protects this process's heap: 64 KiB of
+// escaped control characters is a record nobody reads, and a module writing one per
+// call is a denial of service against whoever has to read the log rather than
+// against the host. 4 KiB is longer than any message with something to say and
+// short enough that a truncated one is still greppable. The bound is on what gets
+// written, after escaping, so it holds whatever the message was made of.
+const maxLogMessage = 4 << 10
+
+// logTruncated is what a reader sees in place of the rest. Present or absent, it
+// answers the question a bounded line otherwise leaves open — whether the message
+// ended or the host stopped copying it.
+//
+// It carries a backslash, and that is the whole of what makes it the host's own
+// (D244). Every backslash a module writes is doubled by escapeLogRune, so a lone one
+// in a written line can only have come from this file: a module ending its message
+// with `…(truncated)` produces exactly those characters and reads as a message that
+// was cut, while one ending it with `…\(truncated)` reads as `…\\(truncated)`. The
+// mark is a claim the host makes about its own copying, so a module has to be unable
+// to make it.
+const logTruncated = `…\(truncated)`
+
+// sanitizeLogMessage neutralizes a message a module handed over, before the logger
+// sees it.
+//
+// D240's requirement, and the reason it lives here rather than in the logger: log
+// is ungated, so every loaded module can reach it including one that declared no
+// permission at all, which makes this the widest untrusted input this host has —
+// and there is no second boundary between this function and an operator's screen.
+// Two harms follow, and a permission check would have stopped neither. A message
+// carrying a newline can close the host's own record and open one that reads as the
+// host's, and log records are what an operator reasons from when something has gone
+// wrong. A message carrying an ANSI escape, a zero-width character or a bidi
+// override can put bytes in front of a reader arranged to be overlooked.
+//
+// Escaped rather than dropped, because what a module tried to write is evidence: a
+// reader who sees \n knows more than one handed a message with a hole in it. Not
+// delegated to slog either, though both handlers NewLogger builds do quote what
+// they write: which handler an operator configured is not something this boundary
+// may depend on, and neither of them bounds a length.
+func sanitizeLogMessage(s string) string {
+	var b strings.Builder
+	// Sized to what will be written, not to what arrived: the input may be maxStringIn
+	// and the output cannot exceed maxLogMessage, and Builder.String does not copy — so
+	// growing to the input would leave a 4 KiB line holding a 64 KiB array for as long
+	// as the log record lives.
+	b.Grow(min(len(s), maxLogMessage))
+	// The mark is reserved rather than appended over the bound, so maxLogMessage is
+	// the size of what gets written and not the size of most of it.
+	limit := maxLogMessage - len(logTruncated)
+	for _, r := range s {
+		esc := escapeLogRune(r)
+		n := len(esc)
+		if esc == "" {
+			n = utf8.RuneLen(r)
+		}
+		if b.Len()+n > limit {
+			b.WriteString(logTruncated)
+			break
+		}
+		if esc == "" {
+			// WriteRune, so a byte sequence that was not valid UTF-8 becomes the
+			// replacement character rather than reaching the log as itself. readString
+			// has already refused one, and this function is also called on its own.
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(esc)
+	}
+	return b.String()
+}
+
+// escapeLogRune is the escape for a rune that may not reach a log line as itself,
+// or "" for one that may. The ones a reader actually meets keep their familiar
+// spellings; everything else becomes its code point, which is what makes an
+// invisible character visible rather than merely absent.
+//
+// **Backslash is escaped although it is graphic, and that is what makes the escaping
+// injective** (D244). Left alone, a module writing the two characters `\` and `n`
+// produced a line byte-identical to the one a real newline produced, so a reader
+// could not tell which had happened — and this log is meant to be read as evidence.
+// Doubling it is what strconv.Quote does, for this reason. It is the one place where
+// a graphic character does not reach the line as itself, and it is the reason
+// logTruncated can be a mark a module cannot forge.
+func escapeLogRune(r rune) string {
+	switch r {
+	case '\n':
+		return `\n`
+	case '\r':
+		return `\r`
+	case '\t':
+		return `\t`
+	case '\\':
+		return `\\`
+	}
+	if !escapedRune(r) {
+		return ""
+	}
+	if r > 0xFFFF {
+		return `\U` + hexRune(r, 8)
+	}
+	return `\u` + hexRune(r, 4)
+}
+
+const hexDigits = "0123456789abcdef"
+
+func hexRune(r rune, digits int) string {
+	out := make([]byte, digits)
+	for i := digits - 1; i >= 0; i-- {
+		out[i] = hexDigits[r&0xf]
+		r >>= 4
+	}
+	return string(out)
+}
+
+// escapedRune reports whether a rune may not reach a log line as itself.
+//
+// **It is a default-deny, and that shape is the decision** (D242). The first form of
+// this function enumerated the invisible code points, and an enumeration is
+// permanently behind Unicode: it missed U+061C ARABIC LETTER MARK, which arrived in
+// the same revision as the bidi isolates it did cover, along with U+180E, the
+// interlinear annotation controls and the musical and hieroglyphic format
+// characters. Three documents describe this function's set as closed, and a list a
+// Unicode revision can outdate cannot keep that description true.
+//
+// So the test is inverted: **everything that is not a graphic character is escaped**
+// — Cc, Cf, Cn, Co, Zl and Zp, which is the C0 and C1 controls, every format
+// character, every unassigned code point and every private use one. Category Cf
+// needs no limb of its own; no Cf code point is graphic, checked over the whole
+// range rather than assumed.
+//
+// Three corrections sit on top, each a named case rather than a category, and each
+// one a place default-deny alone answers wrongly.
+//
+// **What the inversion costs**, stated because it is the mirror of what the
+// enumeration cost: Cn means unassigned *in the Unicode tables this Go was built
+// with*, so a code point assigned after them is escaped until Go catches up. The
+// enumeration's staleness was a hole a new code point walked through; this one is a
+// message that reads worse for a release. Failing closed on the way Unicode moves is
+// the trade.
+func escapedRune(r rune) bool {
+	if meaningfulFormatRune(r) {
+		return false
+	}
+	// A Braille blank cell is a genuine graphic character and is not
+	// default-ignorable, so neither limb below reaches it. What earns it a named case is
+	// that it is the one blank which is not whitespace: the seventeen Zs code points
+	// that survive here render as nothing too — U+2000-U+200A, U+202F, U+205F and
+	// U+3000 among them, several wider than a space — but a reader knows whitespace when
+	// they meet it and so does everything that trims, collapses or splits on it, while a
+	// run of U+2800 is content that looks like blank. Padding is not the reason and
+	// cannot be: what a line can hold is bounded by maxLogMessage whatever it is made
+	// of. Braille text an add-on logs gets its spaces escaped: loud rather than silent,
+	// which is the direction this whole function leans.
+	if r == '\u2800' {
+		return true
+	}
+	// Seven code points are letters or marks by category — the Hangul fillers, the
+	// Khmer inherent vowels, the combining grapheme joiner — and render as nothing, so
+	// IsGraphic says yes where a reader sees no. Unicode has a property for exactly
+	// this class and Go carries its non-Cf residue under this name.
+	if unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r) {
+		return true
+	}
+	return !unicode.IsGraphic(r)
+}
+
+// meaningfulFormatRune is the allowlist D241 argued for: format characters that
+// carry meaning in a message rather than hiding one.
+//
+// Each is a prefixed sign that scopes the digits after it — the Arabic number, sign,
+// footnote marker, end-of-ayah, pound and piastre marks, the Syriac abbreviation
+// mark, the Kaithi number signs. They are Cf, so default-deny would escape them, and
+// a sanitizer that mangles Arabic is a bug with a worse blast radius than the one it
+// prevents. Nothing here is invisible in the sense that matters: each changes how the
+// run that follows it is read, in the place a reader is already looking.
+//
+// **It is Unicode's own property, not a transcription of one** (D243). Those
+// characters are exactly `Prepended_Concatenation_Mark`, and the first form of this
+// allowlist copied that property's members out by hand — eleven of the thirteen, so
+// U+0890 ARABIC POUND MARK and U+0891 ARABIC PIASTRE MARK were escaped from the day
+// it was written. That is the staleness U+061C was, and it is what D242 replaced an
+// enumeration to be rid of one function up: a list a Unicode revision can outdate
+// cannot carry a claim that names its members. Reading the table Go already ships
+// means a toolchain update moves the allowlist with it.
+//
+// This is the whole of what default-deny gives back, which is why it is one
+// predicate. Everything else in Cf is escaped, U+061C included — D241's own
+// reasoning put it there and only the code disagreed.
+func meaningfulFormatRune(r rune) bool {
+	return unicode.Is(unicode.Prepended_Concatenation_Mark, r)
+}
+
 // hostState is what one add-on's calls are answered against.
 type hostState struct {
 	manifest Manifest
@@ -127,9 +346,13 @@ type hostState struct {
 	log *slog.Logger
 	// settings is manifest.Settings by name, which is what config_get scopes to.
 	settings map[string]Setting
+	// grants is what this add-on holds, resolved once at load. Read on every call
+	// through the ABI and never rebuilt — see Grants, where the reason it has to be
+	// a lookup rather than a walk of the manifest is the redirect path's budget.
+	grants Grants
 }
 
-func newHostState(m Manifest, log *slog.Logger) *hostState {
+func newHostState(m Manifest, grants Grants, log *slog.Logger) *hostState {
 	settings := make(map[string]Setting, len(m.Settings))
 	for _, s := range m.Settings {
 		settings[s.Name] = s
@@ -141,13 +364,14 @@ func newHostState(m Manifest, log *slog.Logger) *hostState {
 			slog.String("source", "addon"),
 		),
 		settings: settings,
+		grants:   grants,
 	}
 }
 
 // registerState makes an add-on's state reachable from a host function before the
 // module that will call one exists. Returns the deregistration.
-func (h *Host) registerState(m Manifest) func() {
-	st := newHostState(m, h.log)
+func (h *Host) registerState(m Manifest, grants Grants) func() {
+	st := newHostState(m, grants, h.log)
 	h.mu.Lock()
 	if h.states == nil {
 		h.states = make(map[string]*hostState)
@@ -198,13 +422,20 @@ func (h *Host) registerABI(ctx context.Context) error {
 }
 
 // dispatch is the wrapper every ABI function is registered through: it finds the
-// calling add-on's state and answers on the wasm stack.
+// calling add-on's state, checks the grant the function costs, and answers on the
+// wasm stack.
+//
+// **The permission check comes before everything else, including before a refused
+// function's StatusNotAvailable.** Two reasons, and the second is the one worth
+// stating: an add-on that declared nothing must not be able to use the ABI's own
+// capability probe to enumerate which limbs this host implements, and a refusal
+// counted per module is only complete if it counts the calls to functions that do
+// not work yet — which is every capability worth abusing until M63 to M66 land.
+//
+// The check is a map lookup on a set resolved at load. It sits on the redirect
+// path from M66, where the inherited rule is a cached p99 under 20 ms, so it
+// touches no manifest, no vocabulary and nothing on disk. See Grants.
 func (h *Host) dispatch(f abi.Function, impl hostFunc) api.GoModuleFunc {
-	if impl == nil {
-		return func(_ context.Context, _ api.Module, stack []uint64) {
-			stack[0] = api.EncodeI32(int32(abi.StatusNotAvailable))
-		}
-	}
 	return func(ctx context.Context, mod api.Module, stack []uint64) {
 		st := h.hostState(mod.Name())
 		if st == nil {
@@ -217,6 +448,28 @@ func (h *Host) dispatch(f abi.Function, impl hostFunc) api.GoModuleFunc {
 				slog.String("module", mod.Name()),
 				slog.String("function", f.Name))
 			stack[0] = api.EncodeI32(int32(abi.StatusInternal))
+			return
+		}
+		if f.Requires != "" && !st.grants.Has(f.Requires) {
+			// Counted always, logged at debug. The counter is what an operator
+			// alerts on and it is bounded — one series per add-on per permission —
+			// while a warning per call would be a module's own loop deciding how
+			// much an instance logs, on a path that from M66 is the redirect path.
+			// The add-on's name comes from a validated manifest and the permission
+			// from a closed vocabulary, so neither label is guest input.
+			h.metrics.ObserveAddonRefusal(st.manifest.Name, f.Requires)
+			// h.log rather than st.log: st.log marks a line as the add-on's own
+			// words, and this is the host's refusal of them.
+			h.log.Debug("refused an add-on's call: it did not declare the permission "+
+				"the function needs",
+				slog.String("addon", st.manifest.Name),
+				slog.String("function", f.Name),
+				slog.String("permission", f.Requires))
+			stack[0] = api.EncodeI32(int32(abi.StatusDenied))
+			return
+		}
+		if impl == nil {
+			stack[0] = api.EncodeI32(int32(abi.StatusNotAvailable))
 			return
 		}
 		stack[0] = api.EncodeI32(impl(ctx, st, mod, stack))

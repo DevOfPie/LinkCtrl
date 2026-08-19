@@ -398,6 +398,14 @@ file. Append a row when you append an entry.
 | [M61, a cookie namespace comes from the name](#2026-08-19--m61-a-cookie-namespace-comes-from-the-name-not-from-whoever-installed-first) | D234 — the prefix-collision rule D232 left owed: a declared `cookie_prefixes` entry must begin with the add-on's **own name** and an underscore, and may not reach this product's `linkctrl` namespace. Derived rather than registered, because a first-come registry lets a hostile add-on claim `oidc_` and take sign-in down on a `required` add-on — *cannot claim each other's* has to mean *cannot deny each other's* too. Third name-derived namespace after the metric label and M63's schema. Bounds `set_cookie` as well as the read. `schema_version` stays **1**: the field is added to a schema no release has published |
 | [M61, the host's own answer was the one payload nothing described](#2026-08-19--m61-the-hosts-own-answer-was-the-one-payload-nothing-described) | D235 — `session_mint`'s out parameter said *"as a JSON object"* and no record said what the object held, so an M65 answer carrying a token or a cookie would have left every assertion green: both privacy tests walk `Records` fields and parameter **names**, and the parameter is `session`, which D234 deliberately keeps out of `CredentialBearing`. The gap was directional — nothing walked **Functions → Records**. Fixed both halves: a `MintedSession` record carrying `expires_at` and `second_factor_required`, each traced to a sentence m65.md already owns, and a test refusing any parameter that crosses as JSON while describing nothing. The alternative to naming a record is the new `GuestShaped` flag — the add-on's own SQL arguments, rows and template data, which the host does not author |
 | [M61, the policy could not decide the change every milestone after it will make](#2026-08-19--m61-the-policy-could-not-decide-the-change-every-milestone-after-it-will-make) | D236 — the deprecation policy gave two answers: its table made *changing a function's parameters* breaking while *What is not promised* let a refused function's signature *"move within `0.x`"*, and `0.x` is ambiguous between *no version moves* and *the minor moves* — which **is** the generation. Records had no carve-out at all, so M64, M65 and M66 each finishing one would have cost a generation. Now the table's **first** row: while every released host answers `ErrNotAvailable`, that function's parameters and the records only such functions carry move no version. Conditions are *released* and *every carrying function refused*; the cost is a module built against the older SDK failing to instantiate, announced under `Changed` |
+| [M62, a grant is held, and the mechanism is a parallel](#2026-08-19--m62-a-grant-is-held-and-the-mechanism-is-a-parallel-rather-than-a-reuse) | D237 — the add-on permission vocabulary is **six closed tokens** and the `NonDelegableScopes` analogy is **paralleled, not reused**: putting an add-on grant into that map would falsify the shipped claim that it is the only mechanism deciding what a *key* may hold, so `Permission.Grantable` is the same shape over a different principal. Storage is one grant because m62.md excluded anything finer than the schema; routes and templates are one because a template rendered for nobody is not a capability. D18 matched **neither** limb and no 00800 seed migration is owed — an add-on grant is not in this product's permission map. `abi_version` and `log` are ungated deliberately and named by test. `redirect.inline` is declarable and held by nobody, asserted rather than commented, as is the check being a lookup on a set resolved at load |
+| [M62, a refusal that comes before the availability status](#2026-08-19--m62-a-refusal-that-comes-before-the-availability-status) | D238 — three orderings. **Denied before NotAvailable**, because the refusal counter would otherwise count almost nothing while every capability is still declared-and-refused, and because `StatusNotAvailable` is a *probe* answer a module that declared nothing must not get. An **unknown** token refuses the add-on (`DisallowUnknownFields`' argument) and a **known-but-ungrantable** one does not, or M66 would have nothing to turn on — the cost is that a permission added later is a refusal on an older host. Narrowing `config_get` to require `config.read` **moved no version**, because ABI 0.1.0 has never been released; from the release that publishes it, the same change is breaking |
+| [M62, the manager is M68 and two bullets still said M67](#2026-08-19--m62-the-manager-is-m68-and-two-bullets-still-said-m67) | D239 — a fact amendment: M62 cited M67 for the manager UI twice and the plan's review split that into M67 (install/remove) and M68 (the surface). Nothing built changed, which is what makes it a fact. The same stale number in `single-instance-check.sh` stays, per D226. Also records a disclosed near-miss — `git restore` used where the rule says counter-edit, nothing lost, and the rule names *checkout* while covering *restore* |
+| [M62, two functions cost nothing, and what reaches the log is not trusted](#2026-08-19--m62-two-functions-cost-nothing-and-what-reaches-the-log-is-not-trusted) | D240 — owner-answered: `abi_version` and `log` stay **ungated** and the bullet is amended, because gating `log` makes a misdeclared add-on silent in the case an operator most needs it to speak. The answer carried a requirement the question did not: **what an add-on writes to the log is sanitized at the boundary**, before the logger, asserted by test — an ungated `log` is the widest untrusted input this host has, and a forged record or a laundered secret is not something a permission check would have stopped |
+| [M62, how the log is sanitized, and the carve-out a publisher can check](#2026-08-19--m62-how-the-log-is-sanitized-and-the-carve-out-a-publisher-can-check) | D241 — D240 said sanitize at the boundary and left the shape open. **Escaped, not dropped**, because what a module tried to write is evidence; the set is C0 and C1 by `unicode.IsControl` plus an **enumerated** invisible list, since Unicode's category Cf also carries the Arabic number-formatting characters that belong in ordinary text. Bounded at **4 KiB of what is written**, after escaping, which no slog handler does for you — and not delegated to slog at all, though both handlers `NewLogger` builds do quote, because which handler an operator configured is not something a boundary may rest on. Also: the pre-release permission carve-out now sits in `docs/addon-abi.md` where a publisher reads it, conditioned on the generation being unpublished, and it announces nothing because that condition means there is nobody to announce to |
+| [M62, the escape set is inverted rather than extended](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended) | D242 — [D241](#2026-08-19--m62-how-the-log-is-sanitized-and-the-carve-out-a-publisher-can-check)'s **enumerated** invisible list is replaced by a **default-deny**: what is not a graphic character is escaped, which is Cc, Cf, Cn, Co, Zl and Zp in one predicate. The enumeration was incomplete the day it was written — `U+061C`, `U+180E`, `U+FFF9`–`U+FFFB`, the musical and hieroglyphic format controls — and three documents called its set closed. Extending it was the alternative and was measured rather than assumed: default-deny leaves 22 scripts untouched, so the enumeration bought nothing. D241's Cf objection survives as a **named allowlist** — the Arabic, Syriac and Kaithi number signs — and two corrections run the other way: Unicode's graphic default-ignorables, and `U+2800`. The cost is that Cn means *unassigned to this Go*, so a newer code point is escaped until the host is rebuilt: legibility, failing closed, against a security hole failing open. The set is now asserted from Unicode's categories rather than from a second copy of the list |
+| [M62, the allowlist is Unicode's property, not a transcription of it](#2026-08-19--m62-the-allowlist-is-unicodes-property-not-a-transcription-of-it) | D243 — [D242](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended)'s own defect, one function down: the allowlist it left behind transcribed Unicode's **`Prepended_Concatenation_Mark`** property and carried **eleven** of its **thirteen** members, so `U+0890` and `U+0891` were escaped from the day it was written — the staleness `U+061C` was, in the mechanism that replaced it. It is now the property itself, read from the table Go ships, so a toolchain update carries it forward. The test hid it by hand-copying the same eleven; it now asserts the property, that every member is non-graphic and so a real carve-out, and that the set has not shrunk. Supersedes D242's mechanism, not its argument. Also corrects D242's *"nine"*, which described a list of eleven, and the three documents plus the generated `log` doc that overstated the carve-out. **No ABI version moves** |
+| [M62, the escaping is injective, so a reader can tell what was written](#2026-08-19--m62-the-escaping-is-injective-so-a-reader-can-tell-what-was-written) | D244 — `escapeLogRune` left `\` alone because it is graphic, so a module writing `\` and `n` produced the line a real newline produced, and a message could end with the truncation mark itself. Nothing was forged and no document overclaimed; it is fixed because a log read as **evidence** may not be ambiguous, which is why `strconv.Quote` doubles the backslash. Backslash is now the one graphic character escaped, which makes the mark `…\(truncated)` unforgeable for free — a module's copy arrives doubled. Cost is stated for publishers: a Windows path or a regex arrives with doubled backslashes. Asserted at the boundary, through the ABI at **four** backslashes against a real newline's two, and as a counted exception in the shape test. Same entry corrects `U+2800`'s rationale, which was equally true of the seventeen surviving `Zs` code points and read literally licensed escaping spaces |
 
 ---
 
@@ -32187,3 +32195,496 @@ that the refused functions are *"declared with their names and their signatures
 fixed"* was the same contradiction in the release notes and now reads as Plan.md's
 *Known limitations* row already did: names fixed, signatures fixed enough to
 compile against.
+
+## 2026-08-19 — M62, a grant is held, and the mechanism is a parallel rather than a reuse
+
+**D237.** m62.md delegates one design call to this milestone in writing: *"the
+analogy to `NonDelegableScopes` is examined and the answer recorded … whether
+add-on permissions reuse that mechanism or parallel it is this milestone's design
+call."* The answer is **parallel it**, and the vocabulary is six tokens in
+`internal/addon/abi`'s `Permissions`.
+
+**The vocabulary, and why each entry is one entry.** `config.read`,
+`storage.own_schema`, `routes.own_prefix`, `session.mint`, `redirect.observe`,
+`redirect.inline`. Three of those decisions are worth naming. **Storage is one
+grant, not two**: m62.md deliberately excludes row- and column-level permissions
+and says the grant *is* the add-on's own schema, whole, so splitting read from
+write would have invented a boundary the milestone had already argued against.
+**Routes and templates are one grant**, because a module renders a fragment in
+order to answer a request and a template rendered for nobody is not a capability.
+**`config.read` exists at all** because m62.md's enumeration lists *config keys*
+and because the two questions `config_get` answers are genuinely different: the
+manifest's `settings` list says which keys exist, and the grant says whether the
+module may read any of them. The spelling is dotted lowercase — it was already the
+spelling in `docs/configuration.md`'s worked example and in `manifest_test.go`'s
+reference manifest, both written by M60, and matching them was cheaper than
+correcting them.
+
+**Two functions cost nothing, and it is a decision.** m62.md says *every* host
+function checks the calling module's grants, and its enumerated vocabulary has no
+entry for `abi_version` or `log` — so the two facts only reconcile if *ungated* is
+an answer rather than an omission. It is. `abi_version` reports a constant. `log`
+is the capability that was granted on purpose, which the host's own package comment
+already said in as many words: a module's stdout and stderr are discarded precisely
+so that reaching an operator's log has to be given. Requiring a declaration for it
+would put a line in every manifest and buy nothing — a module refused the log still
+runs, and now silently. `TestTheUngatedFunctionsAreNamed` names the two literally,
+so a third cannot arrive by somebody forgetting the field.
+
+**Why not reuse `NonDelegableScopes`.** The mechanism is the right *shape* — a set
+naming what a principal may never hold, enforced in exactly one place, with no
+second check in a handler — and reusing the map itself would falsify a claim this
+repository has already shipped. The inherited Permissions rule says
+`NonDelegableScopes` is *the only mechanism for whether a key may hold a permission
+at all*, and `apikey.go`'s comment reasons about every entry as an API-key scope
+against D18's limbs. Putting `redirect.inline` in there would make that map hold
+tokens that are not permissions in this product's permission table, are not held by
+any credential, and cannot be delegated to anything — and the sentence about what
+the map is for would stop being true. So the parallel is
+`Permission.Grantable`: same property, same single point of enforcement, a
+different principal.
+
+**Which limb of D18 this matched: neither, and the inherited rule is answered
+rather than skipped.** D18 decides whether a *permission in this product's map* is
+delegable to an API key. An add-on grant is not in that map: there is no
+`permissions` row, no role grant, no 00800-pattern seed migration, and nothing to
+delegate to — a module is not a credential and cannot issue one. The inherited rule
+requiring a seed migration per new permission is therefore not collided with, it is
+out of scope, and this entry is where that is written down so the next reader does
+not go looking for the migration.
+
+**What is fixed and was not this milestone's to move**, both from m62.md: a grant
+is **held, never inferred** — nothing about a module's name, its code, its other
+declarations or its install order widens what it may call — and it is conferred by
+the operator's act of installing a module whose manifest asks for it, rather than
+by a role row.
+
+**`redirect.inline` is declarable and held by nobody.** The class exists so that
+the milestone admitting an add-on onto the redirect path enforces behaviour against
+a permission that is already enforced, and so that a module cannot acquire it by
+accident while asking to observe redirects — the owner's first requirement on the
+redirect answer. `Grantable: false` is how, `TestNothingHoldsRedirectInline` is the
+refusal m62.md asks for, and `TestThePermissionVocabularyIsExactlyThis` asserts the
+flag literally so that turning it on is a line in a diff rather than a
+side effect.
+
+**The check's shape is load-bearing and is therefore asserted, not described.**
+From M66 it sits on the redirect path, where the inherited rule is a cached p99
+under 20 ms, so grants are resolved once at load into a set and `Grants.Has` is a
+map lookup. Two tests hold that rather than a comment:
+`TestAGrantCheckAllocatesNothing` fails if the check builds anything, and
+`TestGrantsAreResolvedOnceAtLoad` edits the manifest the host was handed and
+requires the answer not to move — which a test asserting only the answer would have
+passed either way.
+
+**Visibility, at the minimum m62.md sets.** The boot log names the grants rather
+than counting them, and `linkctrl_addon_info` grew a `permissions` label carrying
+what a module **holds** — sorted, so a manifest listing the same grants in another
+order does not change the series' identity, and excluding a withheld one, so the
+label answers *what is this running* rather than *what did it ask for*. The
+difference between the two is what the boot warning is for. The proper operator
+surface is the Add-on manager's, and m62.md's *(M67)* citations for it predate the
+plan review that split the manager out of M67 into M68 — the assertion (no UI here)
+is unaffected.
+
+## 2026-08-19 — M62, a refusal that comes before the availability status
+
+**D238.** Three orderings had to be picked and none was forced by m62.md, so each
+is recorded with what it costs.
+
+**The permission check runs before `StatusNotAvailable`.** A module that declared
+nothing gets `ErrDenied` from `storage_query`, not `ErrNotAvailable`. Two reasons,
+and the second is the one that decided it. The counter m62.md requires would
+otherwise count almost nothing: every capability worth abusing is declared-and-
+refused until M63–M66 land, so a host answering unavailability first would have
+had one gated live function to count refusals for. And the ABI invites a module to
+*probe* for capabilities — `StatusNotAvailable` exists for exactly that — which
+makes probing a way to enumerate a host's limbs without asking for any of them. The
+cost is that a publisher who forgot a manifest line sees `ErrDenied` where they
+expected `ErrNotAvailable`; the SDK's generated doc comment now names the required
+permission at the call site, which is the cheapest place to answer that.
+
+**An unknown permission refuses the add-on; a known-but-ungrantable one does
+not.** The vocabulary is closed, and the argument for refusing a token outside it
+is the one `DisallowUnknownFields` already makes in `manifest.go`: a declaration
+this host cannot interpret is a manifest whose author expected behaviour that will
+not happen, and there is no safe direction to guess in. `redirect.inline` is the
+opposite case and must load, or the class would be undeclarable and M66 would have
+nothing to turn on — the host knows what it means and can honestly answer *you do
+not hold it*. The asymmetry is deliberate and both halves are tested. The cost:
+adding a permission to the vocabulary is additive for a new host and a **refusal**
+on an older one, so an add-on declaring a permission introduced later will not load
+on a build that predates it. That is the same shape as the patch-version case
+`docs/addon-abi.md` already documents, and it is stated in *What is not promised*.
+
+**Narrowing `config_get` moved no version.** It is live, and requiring
+`config.read` narrows what it will do — which the deprecation policy's table calls
+breaking. It moved nothing because the policy's own condition is *released*: ABI
+0.1.0 has never shipped, so there is no published host whose behaviour changed and
+no consumer who could have depended on the old one. The entry is here because the
+next such change will not have that excuse, and the reasoning has to be visible
+rather than re-derived: from the release that publishes the ABI, moving a live
+function to a permission an add-on might not hold is breaking.
+
+## 2026-08-19 — M62, the manager is M68 and two bullets still said M67
+
+**D239. An amendment on a fact, found by the worker rather than by a review.**
+[M62](phase-details/m62.md) pointed twice at M67 for the add-on manager's UI.
+
+**As it stood:** "surfaced to operators properly in **M67's** manager" and
+"any UI for grants (**M67**)"
+
+**As amended:** both name [M68](phase-details/m68.md).
+
+**The tree fact that forced it.** The plan's own review split the manager into two
+milestones — M67 is runtime install and remove, M68 is the manager surface — and
+[phase-details/README.md](phase-details/README.md)'s status table has said so since
+Phase 4 was planned. M62 was written before that split and its citations did not
+move with it. Nothing built in M62 changed either way, because no UI landed under
+either number, which is exactly why this is a fact and not an assertion.
+
+`scripts/single-instance-check.sh` carries the same stale number in a comment.
+That one **stays**, by [D226](#2026-08-18--m60-the-shipped-milestone-file-this-diff-edited-and-what-d224-conceded-too-widely):
+a citation is corrected when the diff already edits the file for another reason,
+and M62's diff does not touch that comment.
+
+**Recorded beside it, because a disclosed near-miss is worth more than a clean
+record.** M62's worker regenerated `doc-cost.md` to read the number and restored
+it with `git restore` rather than by counter-edit. The file is verified at `HEAD`
+and nothing was uncommitted in it, so nothing was lost. The rule exists because
+`git checkout` has destroyed uncommitted work in this repository **twice**, and
+`git restore` is the same family of command with the same failure mode; the
+disclosure is the behaviour the rule wants when it has already been bent. No row
+and no further action — the rule is written, it was followed by saying so, and the
+next reader of this entry now knows that *restore* is covered by a rule that names
+*checkout*.
+
+## 2026-08-19 — M62, two functions cost nothing, and what reaches the log is not trusted
+
+**D240. Owner-answered 2026-08-19, on a prompt raised at acceptance, and the
+answer carried a requirement the question did not contain.**
+
+[M62](phase-details/m62.md)'s enforcement bullet said *"every host function (M61)
+checks the calling module's grants before acting"*, and the tree gates eight of
+ten. `abi_version` and `log` carry no requirement, argued in
+[D237](#2026-08-19--m62-a-grant-is-held-and-the-mechanism-is-a-parallel-rather-than-a-reuse).
+The bullet's own enumerated vocabulary has no token for either function, so the
+tree and the bullet could not both be right, and *which functions must be gated*
+is a choice somebody could have made differently — an assertion, and therefore a
+prompt rather than an amendment the loop makes for itself.
+
+**The two stay ungated and the bullet is amended.** `abi_version` reports a
+compile-time constant. `log` is the capability this host grants on purpose: a
+module's stdout and stderr are discarded, so `log` is the only way it can say
+anything, and the case where that matters most is precisely a module whose
+declarations are wrong. Gating it would make a misdeclared add-on **silent**,
+leaving an operator to diagnose it from the host's refusal counter alone. The cost
+accepted is that *every function is checked* is now a claim with a footnote, and
+the footnote is a test that fails when the ungated set changes.
+
+**The requirement the owner added: what an add-on writes to the log is sanitized
+at the boundary, as early as possible.** This does not soften the answer — it
+follows from it. An ungated `log` is reachable by every loaded module including
+one that declared nothing at all, which makes it the widest untrusted input this
+host has, and two things follow that a permission check would never have stopped:
+
+- **A forged record.** A message carrying newlines or control characters can
+  close the host's log line and open one of its own, so an add-on could write a
+  record that reads as the host's — and log records are what an operator reasons
+  from when something has gone wrong.
+- **A secret laundered past a reader.** The log is read by people and shipped to
+  aggregators, and a module that can place arbitrary bytes in it can place bytes
+  it wants somebody else to see, formatted to be overlooked.
+
+So the host neutralizes the message **before it reaches the logger** rather than
+trusting the module to have done it, and that is asserted by test, because the
+entire premise of this milestone is that the module is not trusted. Where the
+sanitizing happens matters as much as that it happens: at the host function, on
+the way in, not in the logger and not in whatever reads the log — there is no
+second boundary on that path.
+
+This is the shape [D229](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review)
+and [D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session)
+already argue for addresses and credentials, applied to the one function
+deliberately left open: a property of the boundary, checkable here, rather than a
+promise about code this project did not write.
+
+## 2026-08-19 — M62, how the log is sanitized, and the carve-out a publisher can check
+
+**D241.** [D240](#2026-08-19--m62-two-functions-cost-nothing-and-what-reaches-the-log-is-not-trusted)
+settled *that* what an add-on writes to the log is neutralized, and where. It left
+three things open that somebody could have decided differently, and this entry is
+those three plus the document repair the same review asked for.
+
+**Escaped, not dropped.** A sanitizer has two honest shapes: refuse the call, or
+neutralize the message. Refusing is out — it makes `log` gated in effect, which is
+exactly what D240 declined. Between replacing an offending rune with nothing and
+replacing it with its escape, the escape wins: what a module *tried* to write is
+evidence, and a reader who meets `\u001b` in a line knows something an operator
+handed a message with a hole in it does not. `\n`, `\r` and `\t` keep their
+familiar spellings and everything else becomes its code point, so an invisible
+character is made visible rather than merely absent.
+
+**The set is enumerated, and Unicode's own category is not the test.** C0 and C1 come
+from `unicode.IsControl`, which is where the newline and the ANSI escape live. The
+rest — zero-width space, the bidi marks, embeddings, overrides and isolates, the word
+joiner, the byte order mark, the soft hyphen, the tag characters above the BMP — are a
+list in `invisibleRune`. Category `Cf` was the obvious alternative and is wrong: it
+also carries the Arabic number-formatting characters, which belong in ordinary text a
+module may legitimately log, and a sanitizer that mangles Arabic is a bug with a
+worse blast radius than the one it prevents. The cost of the list is that a code point
+Unicode adds later is not covered until somebody adds it; the test enumerates the set
+so a change to it is deliberate.
+
+**Bounded at 4 KiB of what is written.** D240 did not ask for a length bound and the
+review did: an unbounded message is a denial of service against whoever reads the log,
+which is a different victim from the one `maxStringIn` protects — that bound is 64 KiB
+and it is about this process's heap. The bound is applied *after* escaping, because
+six bytes of escape per rune is how a message well inside `maxStringIn` becomes a line
+nobody reads, and truncation is by rune so the last thing written is never half a
+character.
+
+**Not delegated to slog, though slog would have done most of it.** Both handlers
+`observability.NewLogger` builds quote what they write, so a raw newline would have
+been escaped by the handler anyway. That is not a boundary: which handler an operator
+configured is a configuration value, `ReplaceAttr` is a hook this product's own code
+edits, and neither handler bounds a length. The test tells the two apart on purpose —
+it asserts the *doubled* backslash, which only appears when the host escaped before
+the handler did.
+
+**Where the assertion is made.** The `undeclared` fixture, which declares no
+permission at all, hands over one message carrying every class: a newline followed by
+a plausible `level=ERROR` record, an ANSI erase, a right-to-left override and a
+zero-width space. A module holding no grant is the honest place to test an ungated
+function from, since *every loaded module* is this function's reach. The
+character-by-character set and the bound are unit tests beside it, because one message
+cannot enumerate a set.
+
+**And the carve-out a publisher can check.** The same review found that
+[D238](#2026-08-19--m62-a-refusal-that-comes-before-the-availability-status)'s
+reasoning — narrowing `config_get` to cost `config.read` moved no version, because ABI
+0.1.0 has never been released — appeared nowhere a publisher reads, while
+`docs/addon-abi.md` shipped as M61's own deliverable and its breaking table says
+narrowing is breaking. It is now a row in that table and a subsection under it,
+conditioned on what a reader can check: the generation is published by the release
+that ships it, and while the ABI's first appearance is still under `[Unreleased]` no
+host has published it.
+
+Unlike the signature carve-out that precedes it, this one **announces nothing**, and
+the asymmetry is the part worth recording. A refused function's signature can change
+while its generation is published, so there are publishers to tell. A function's
+*cost* cannot: the release that publishes a generation publishes every cost in it, so
+this carve-out only ever applies while there is nobody to announce to. The one reader
+it can still cost anything is somebody tracking an unreleased SDK, and what they owe
+is one line of manifest — the call answers `ErrDenied` naming the function, and the
+generated doc comment above it names the permission.
+
+
+---
+
+## 2026-08-19 — M62, the escape set is inverted rather than extended
+
+**D242.** [D241](#2026-08-19--m62-how-the-log-is-sanitized-and-the-carve-out-a-publisher-can-check)
+chose an **enumerated** list of invisible code points over Unicode's own category, and
+this entry replaces that choice with its inverse. The reasoning D241 gave was right
+about Cf and wrong about what to do with it, which is why this is a new entry rather
+than a correction to the old one: the objection is kept and the mechanism is not.
+
+**What the enumeration missed.** M62's second review read `invisibleRune` against
+Unicode rather than against D241 and found **U+061C ARABIC LETTER MARK** absent — an
+invisible `Cf` bidirectional control, added in the same revision as the isolates the
+list *did* carry, and not a member of `unicode.IsControl`. Six more families were
+absent with it: **U+180E**, **U+FFF9**–**U+FFFB** (interlinear annotation, which hides
+the run it wraps in some renderers), **U+1D173**–**U+1D17A**, **U+13430**–**U+1343F**,
+and two characters that are graphic by category and render as nothing — **U+3164
+HANGUL FILLER** and **U+2800 BRAILLE PATTERN BLANK**.
+
+What makes that a defect rather than a gap is that three documents stated the set as
+**closed**: `docs/SECURITY.md`'s add-on permissions row, `CHANGELOG.md`'s `[Unreleased]`
+entry, and the function's own comment — *"the enumerated subset with nothing to do in a
+log line"*. U+061C has nothing to do in a log line and was not in it. D241's own logic
+had already put it on the escaped side. Only the code disagreed.
+
+**Extending the list was the alternative, and it was measured rather than declined.**
+The instruction was to verify the inverted shape and build the enumeration instead if
+default-deny broke a message this project would want in a log. So the check was run
+before the choice: over the whole code point range, and over ordinary text in
+**twenty-two** scripts and notations — Arabic, Hebrew, Syriac, Devanagari, Tamil, Thai,
+Khmer, Myanmar, Tibetan, Mongolian, CJK, Hangul, Egyptian hieroglyphs, musical
+notation, Braille letters, emoji with a variation selector, combining marks, the
+replacement character invalid UTF-8 becomes, a non-breaking space and an ideographic
+space among them. **Every one survives unescaped.** Nothing legitimate turned up on the
+escaped side, so the enumeration was buying no legibility at all — it was only
+narrowing the defence. That is what settled it.
+
+**So the test is inverted: what is not a graphic character is escaped.** One predicate
+over `unicode.IsGraphic`, which is Unicode's L, M, N, P, S and Zs — every letter, mark,
+digit, punctuation mark, symbol and space in every script. Its complement is Cc, Cf,
+Cn, Co, Zl and Zp: the C0 and C1 controls, every format and bidirectional control,
+every unassigned code point and every private-use one. **Category Cf needs no limb of
+its own** — no Cf code point is graphic, asserted over the full range rather than
+reasoned, so naming Cf as a second test would be dead code.
+
+**D241's objection is kept, as a named allowlist.** It was right that Cf carries the
+Arabic number-formatting characters and that a boundary which mangles Arabic is a worse
+defect than the one it prevents. Under default-deny that becomes an explicit list of
+nine: `U+0600`–`U+0605`, `U+06DD`, `U+070F`, `U+08E2`, `U+110BD`, `U+110CD` — the
+Arabic, Syriac and Kaithi number signs. Each is a *prefixed* sign that scopes the
+digits after it, in the place a reader is already looking, so none of them is invisible
+in the sense that matters. The list being an allowlist is the whole difference: a
+missing entry here makes a legitimate message uglier, where a missing entry in the old
+list made an invisible character invisible.
+
+**Two corrections run the other way**, and they are the part default-deny alone gets
+wrong. Seven code points are letters or marks by category and render as nothing — the
+Hangul fillers, the Khmer inherent vowels, the combining grapheme joiner — so
+`IsGraphic` says yes where a reader sees nothing; Unicode has a property for exactly
+that class and Go carries its non-Cf residue as
+`unicode.Other_Default_Ignorable_Code_Point`, so this is a property and not a list.
+`U+2800` is the one named rune in the whole function: a Braille blank cell is a genuine
+graphic character, is not default-ignorable, and still renders as nothing, which is
+enough to pad a message until what matters is off the edge. Braille text an add-on logs
+gets its spaces escaped — legible and loud, which is the direction this function now
+leans everywhere.
+
+**What the inversion costs, stated because it is the mirror of what the enumeration
+cost.** `Cn` means unassigned *in the Unicode tables the host's Go was built with*, so
+a code point assigned by a newer revision is escaped until the host is rebuilt. The
+enumeration's staleness was a hole a new code point walked through; this one is a
+message that reads worse for a release. Both are consequences of Unicode moving, and
+this is the one that fails closed.
+
+**The three documents now describe what ships**, which is what makes the claim
+keepable: each states the rule as *what survives* rather than as a list of what is
+caught, names the allowlist, and names the Cn cost. `docs/SECURITY.md` also records
+that the enumerated form shipped in this milestone's first two attempts and what it
+missed, because a reader who met the old sentence deserves to know it moved. The
+generated `log` doc comment moved with them — through `internal/addon/abi`'s function
+table, so `sdk/abi_gen_other.go`, `sdk/abi_gen_wasip1.go` and `docs/addon-abi.md`
+carry it. **No ABI version moves**: a doc comment is not a signature, per that page's
+own table.
+
+**And the set is no longer pinned by a list beside the list.** The previous test
+enumerated code points and passed while U+061C reached the logger as itself, because a
+test that lists what the code lists agrees with the code by construction. What is
+asserted now is the documents' sentence, derived from Unicode's categories: every
+non-graphic rune is escaped, every graphic one is not, and the exceptions to each are
+**counted** — nine allowlisted, eight graphic-and-escaped — so widening either is a
+deliberate edit to the test. Beside it, a second test that ordinary text in those
+twenty-two scripts crosses the boundary unchanged, because default-deny is the shape
+that owes that evidence and the enumeration was safe there by construction.
+
+**One allocation fix, in the same function.** `sanitizeLogMessage` sized its builder to
+the *input*, up to `maxStringIn`'s 64 KiB, while output cannot exceed
+`maxLogMessage`'s 4 KiB — and `strings.Builder.String` does not copy, so a 4 KiB line
+retained a 64 KiB array for as long as the log record lived. It now grows to the
+smaller of the two. Recorded rather than left to the diff because it is the second
+place in this milestone where the two bounds were confused for one, and they have
+different victims: `maxStringIn` protects this process's heap, `maxLogMessage` protects
+whoever reads the log.
+
+## 2026-08-19 — M62, the allowlist is Unicode's property, not a transcription of it
+
+**D243.** [D242](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended)
+replaced an enumeration of invisible code points with a default-deny, for one reason:
+*a list a Unicode revision can outdate cannot keep the description three documents
+give it*. The allowlist it left behind — `meaningfulFormatRune`, one function down —
+was such a list, and it was **already stale on the day it was written**.
+
+The eleven code points it named are Unicode's **`Prepended_Concatenation_Mark`**
+property, transcribed. That property has **thirteen** members. The two it dropped are
+`U+0890 ARABIC POUND MARK` and `U+0891 ARABIC PIASTRE MARK`, both `Cf`, both added in
+Unicode 14.0, and both escaped by every host M62 built — the same shape as `U+061C`,
+in the mechanism that replaced the mistake `U+061C` was.
+
+So the allowlist is now the property:
+`unicode.Is(unicode.Prepended_Concatenation_Mark, r)`. Go ships the table — verified
+against this tree's toolchain, which is Unicode 15.0: exactly those thirteen, no
+more, and every one of the previous eleven among them. **This supersedes the
+mechanism half of D242 and touches none of its argument** — the escape set is still
+default-deny over `unicode.IsGraphic`, the two corrections still run the other way,
+and the reason for the allowlist is still D241's, that a boundary which mangles
+Arabic is a worse defect than the one it prevents.
+
+**The test hid it, and that is the part worth recording.** D242's own test was
+written to stop a test agreeing with the code by construction, and it did that for
+the default-deny half by asserting Unicode's categories. For the allowlist half it
+kept a hand-copy of the same eleven runes, so `U+0890` fell into the
+`!unicode.IsGraphic` branch, was escaped, and the test agreed with the
+implementation. A test that lists what the code lists is the defect D242 named; half
+a fix for it looks exactly like a fix. What is asserted now is the property, with
+what a property cannot say added beside it: that every member is **non-graphic**, so
+each is a real carve-out from default-deny rather than a code point that would have
+survived anyway, and that the property has **not shrunk** below the thirteen members
+this Go carries. Growth is deliberately not asserted against — a newer toolchain
+widening the allowlist is the whole point of reading the table.
+
+**A count in D242's entry was wrong and is corrected here rather than edited there**,
+because this file is append-only: it says *"an explicit list of nine"* and *"nine
+allowlisted"*. The list it describes had eleven members, and the property has
+thirteen. The figure to carry forward is thirteen, and it moves with the toolchain.
+
+Three documents and the published ABI overstated the carve-out while the two marks
+were escaped — `docs/SECURITY.md`'s add-on permissions row, `CHANGELOG.md`, and the
+`log` doc comment in `internal/addon/abi/functions.go`, which reaches
+`sdk/abi_gen_other.go`, `sdk/abi_gen_wasip1.go` and `docs/addon-abi.md`'s generated
+table. Each now names the property rather than a list, and `docs/SECURITY.md` records
+what the hand-copied form missed, for the reason it already records what the
+enumeration missed: a reader who met the old sentence deserves to know it moved. **No
+ABI version moves** — a doc comment is not a signature, per that page's own table.
+
+It failed **closed**: an Arabic message using the pound mark read worse, and nothing
+got through. This is legibility, and it is worth a round because the fix is one
+expression against a table the package was already importing.
+
+## 2026-08-19 — M62, the escaping is injective, so a reader can tell what was written
+
+**D244.** `escapeLogRune` emitted `\n`, `\r`, `\t`, `\uXXXX` and `\UXXXXXXXX` and left
+`\` alone, because a backslash is a graphic character and default-deny leaves those
+as themselves. The consequence is that the mapping was **not injective**: a module
+writing the two characters `\` and `n` produced a line byte-identical to the one a
+real newline produced. The same shape gave the truncation mark away — a module could
+end its message with `…(truncated)` and make a complete message read as a cut one.
+
+Nothing was forged by it. A real newline never survived, the record boundary stayed
+the handler's, and no document claimed more than shipped, which is why this was
+argued as legibility rather than as a hole. **It is fixed anyway, because the log is
+meant to be read as evidence**: a reader who cannot tell a literal `\n` from an
+escaped newline is reading something ambiguous, and `strconv.Quote` doubles the
+backslash for exactly this reason.
+
+So a backslash is escaped although it is graphic — **the one place a graphic
+character does not reach the line as itself**. That is what makes the second half
+free rather than a second mechanism: every backslash a module writes is doubled, so a
+lone one in a written line can only have come from the host, and the truncation mark
+became `…\(truncated)`. A module ending its message with those characters now reaches
+the log as `…\\(truncated)`, which is a different line. The mark is a claim the host
+makes about its own copying, and the requirement is that a module be unable to make
+it — the same reasoning D241 used for the doubled backslash the end-to-end test looks
+for, one level down.
+
+The cost is real and is stated in the publisher-facing page rather than left to be
+discovered: a Windows path or a regular expression in a message arrives with its
+backslashes doubled. `docs/addon-abi.md` says so, beside the joiner and the Cn
+consequences it already warned about; `docs/SECURITY.md` and `CHANGELOG.md` name the
+exception where they state what survives, because a row that says *every graphic
+character reaches the line as itself* is false without it.
+
+**Asserted from both sides.** At the boundary: a backslash is doubled, and a module's
+copy of the truncation mark is not the host's. Through the ABI: the `undeclared`
+fixture's hostile message now carries a literal `\` and `n`, and the host-side test
+requires **four** backslashes where the real newline gives two — the module's, doubled
+by the host, quoted again by the handler. And in the shape test, `U+005C` joins the
+graphic-and-escaped exceptions with its own reason, so it is counted rather than
+tolerated.
+
+**The rationale for `U+2800` was corrected in the same function**, and it changes no
+behaviour. The comment escaped the Braille blank because it *"renders as nothing,
+which is enough to pad a message until what matters is off the edge"* — a sentence
+equally true of the **seventeen** `Zs` code points that survive, several of them wider
+than a space, and padding is bounded by `maxLogMessage` whatever it is made of. The
+real reason is that `U+2800` is the one blank that is **not whitespace**: a reader
+knows whitespace when they meet it and so does anything that trims, collapses or
+splits on it, while a run of `U+2800` is content that looks like blank. Recorded
+because the old rationale, read literally, licenses escaping the space characters,
+which would mangle every message this product logs.

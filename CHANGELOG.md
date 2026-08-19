@@ -29,6 +29,64 @@ migrations run at boot.
 
 ### Added
 
+- **An add-on gets what it named and nothing else.**
+
+  A manifest's `permissions` array is now the whole of what a module may do, and
+  the host enforces it rather than trusting the module. Every function in the ABI
+  names the permission it costs; the host resolves a manifest's declarations at
+  load and refuses any call whose grant is not held, with a status the module can
+  branch on and a `linkctrl_addon_refusals_total{addon,permission}` counter an
+  operator can alert on. The check lives in the host's dispatch rather than in each
+  function, so a capability cannot arrive with its check somewhere else.
+
+  **The vocabulary is closed and it is six tokens**: reading the add-on's own
+  settings, owning a Postgres schema, serving a path prefix and rendering its own
+  templates, minting a session, observing redirects out of band, and running inside
+  the redirect path. A `permissions` entry outside that list refuses the add-on at
+  load, for the same reason an unknown manifest field does. Two functions cost
+  nothing and are ungated deliberately: asking the host its ABI version, and
+  writing a line to the log, which is the one capability that was granted on
+  purpose.
+
+  **Ungated is not the same as trusted.** Because every loaded module can write to
+  the log, including one that declared nothing at all, the host neutralizes the
+  message before the line is written and bounds it at 4 KiB. What survives as
+  itself is the set of **graphic** characters — every letter, mark, digit,
+  punctuation mark, symbol and space, in every script, with one exception — and
+  everything else appears in the line as its escape: a newline, a control character,
+  an ANSI escape, every format and bidirectional control, every unassigned or
+  private-use code point, and the few characters that are graphic by category and
+  render as nothing. The exception is the **backslash**, which is doubled, because
+  it introduces every escape the host writes: without that, a module writing `\`
+  and `n` produced the line a real newline produced, and the mark on a truncated
+  line was something a message could end with itself. **The carve-outs run the
+  other way and are named**: Unicode's prepended concatenation marks — the Arabic,
+  Syriac and Kaithi signs that scope the digits after them — are meaning rather than
+  concealment and are left alone, read from Unicode's property so that a host built
+  against a newer revision carries what it added. Stated as what is *permitted*
+  rather than as a list of what is caught, because a list of invisible characters is
+  behind the next Unicode revision the day it is written. So an add-on cannot forge
+  a record that reads as this product's own, cannot arrange bytes in an operator's
+  log to be overlooked, and cannot make a complete message read as a truncated one.
+  Nothing is refused for it — a module whose message needed neutralizing still gets
+  to speak, which is the whole reason the log costs nothing.
+
+  **The refusal comes before the availability status.** A module that declared
+  nothing is refused for want of a declaration, not told that the host has not
+  implemented the function — so probing for a capability, which the ABI invites,
+  only reports on capabilities the module asked for.
+
+  **Running inside the redirect path is a separate declaration, and no release
+  grants it.** It is published now so that the release admitting an add-on onto that
+  path enforces behaviour against a permission that is already enforced, and so a
+  module cannot acquire it by accident while asking to observe redirects. An add-on
+  declaring it loads, does not hold it, and the boot log says so.
+
+  **What each add-on holds is readable**: named in the boot log, and on
+  `linkctrl_addon_info`, whose `permissions` label carries the grants a module
+  actually **holds** rather than the ones it asked for. The Add-on manager is where
+  this gets a proper surface.
+
 - **The add-on ABI is published, versioned, and consumed as a generated SDK.**
 
   An add-on reaches this product through a fixed set of functions it imports from
@@ -103,11 +161,12 @@ migrations run at boot.
   without the module. A manifest that cannot be parsed also stops the instance,
   because there is no declaration left to honour.
 
-  Two metrics come with it, on the metrics listener as everything else there is:
-  `linkctrl_addon_loads_total{addon,outcome}` and
-  `linkctrl_addon_info{addon,version,abi_version,failure_class}`. Both are absent
-  entirely on an instance with no add-ons directory, which makes the series itself
-  the answer to whether this instance is running any.
+  Three metrics come with it, on the metrics listener as everything else there is:
+  `linkctrl_addon_loads_total{addon,outcome}`,
+  `linkctrl_addon_info{addon,version,abi_version,failure_class,permissions}` and
+  `linkctrl_addon_refusals_total{addon,permission}`. All three are absent entirely
+  on an instance with no add-ons directory, which makes the series itself the answer
+  to whether this instance is running any.
 
   **Unset is the default and it costs nothing.** No WASM runtime is constructed,
   no goroutine is started, no route is mounted, no table is created and no metric

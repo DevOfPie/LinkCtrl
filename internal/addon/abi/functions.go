@@ -8,6 +8,13 @@ package abi
 // removed here disappears from all of them — which is the property that makes
 // the deprecation policy enforceable rather than aspirational.
 //
+// Each function names the [Permission] it costs in Requires, or names none — the
+// vocabulary is [Permissions] and the host refuses a call whose grant the calling
+// add-on's manifest did not declare. Two functions are ungated on purpose:
+// abi_version reports a constant, and log is the capability that was granted
+// deliberately rather than by accident, since a module's stdout and stderr are
+// discarded and it is the only way out.
+//
 // Six capability groups, one per limb the phase's remaining milestones land:
 // logging and config are this milestone's and work; storage is M63's, routes and
 // templates M64's, the session hook M65's, redirect observation M66's, and each
@@ -41,10 +48,27 @@ var Functions = []Function{
 			"routing them into an operator's log is a capability and the host grants none " +
 			"it was not asked for. The host adds the add-on's name; a message that repeats " +
 			"it is noise. An unknown level is ErrInvalid rather than a silent default, so a " +
-			"typo does not become a line nobody greps for.",
+			"typo does not become a line nobody greps for. The message is neutralized " +
+			"before it is written and bounded at 4 KiB, and the rule is stated as what " +
+			"survives rather than as what is caught: a graphic character reaches the line " +
+			"as itself, in any script, and everything else becomes its escape — a newline, " +
+			"a control character, an ANSI escape, every format and bidirectional control, " +
+			"every unassigned or private-use code point, and the few characters that are " +
+			"graphic by category and render as nothing. So an invisible code point appears " +
+			"in the line rather than acting on whoever reads it, and a code point Unicode " +
+			"adds after the host was built is escaped rather than let through. One graphic " +
+			"character does not reach the line as itself: a backslash is doubled, so that " +
+			"the two characters \\ and n cannot be mistaken for an escaped newline, and a " +
+			"module cannot spell the host's own truncation mark. The named exceptions run " +
+			"the other way: Unicode's prepended concatenation marks — the Arabic, Syriac " +
+			"and Kaithi signs that scope the digits after them — are left alone, read from " +
+			"Unicode's property rather than from a list, so a host built against a newer " +
+			"revision carries the marks it added. Nothing is refused for any of it, and a " +
+			"message that needed none arrives as it was written, backslashes aside.",
 	},
 	{
 		Name: "config_get", Go: "ConfigGet", Since: "0.1.0", BackedBy: "M61", Live: true,
+		Requires: "config.read",
 		Params: []Param{
 			{Name: "key", Kind: String, Doc: "the name of a setting this add-on's manifest declares"},
 			{Name: "value", Kind: OutString, Doc: "the value, or the declared default"},
@@ -60,6 +84,7 @@ var Functions = []Function{
 	},
 	{
 		Name: "storage_query", Go: "StorageQuery", Since: "0.1.0", BackedBy: "M63",
+		Requires: "storage.own_schema",
 		Params: []Param{
 			{Name: "sql", Kind: String, Doc: "a statement against this add-on's own schema"},
 			{Name: "args", Kind: Bytes, Doc: "positional arguments, as a JSON array", GuestShaped: true},
@@ -73,6 +98,7 @@ var Functions = []Function{
 	},
 	{
 		Name: "storage_exec", Go: "StorageExec", Since: "0.1.0", BackedBy: "M63",
+		Requires: "storage.own_schema",
 		Params: []Param{
 			{Name: "sql", Kind: String, Doc: "a statement against this add-on's own schema"},
 			{Name: "args", Kind: Bytes, Doc: "positional arguments, as a JSON array", GuestShaped: true},
@@ -84,6 +110,7 @@ var Functions = []Function{
 	},
 	{
 		Name: "http_request_read", Go: "HTTPRequestRead", Since: "0.1.0", BackedBy: "M64",
+		Requires: "routes.own_prefix",
 		Params: []Param{
 			{Name: "request", Kind: OutBytes, Doc: "the request, as an HTTPRequest record"},
 		},
@@ -95,6 +122,7 @@ var Functions = []Function{
 	},
 	{
 		Name: "http_response_write", Go: "HTTPResponseWrite", Since: "0.1.0", BackedBy: "M64",
+		Requires: "routes.own_prefix",
 		Params: []Param{
 			{Name: "response", Kind: Bytes, Doc: "the response, as an HTTPResponse record"},
 		},
@@ -107,6 +135,7 @@ var Functions = []Function{
 	},
 	{
 		Name: "template_render", Go: "TemplateRender", Since: "0.1.0", BackedBy: "M64",
+		Requires: "routes.own_prefix",
 		Params: []Param{
 			{Name: "name", Kind: String, Doc: "a template this add-on shipped"},
 			{Name: "data", Kind: Bytes, Doc: "the template's data, as a JSON object", GuestShaped: true},
@@ -120,6 +149,7 @@ var Functions = []Function{
 	},
 	{
 		Name: "session_mint", Go: "SessionMint", Since: "0.1.0", BackedBy: "M65",
+		Requires: "session.mint",
 		Params: []Param{
 			{Name: "claim", Kind: Bytes, Doc: "who authenticated, as a SessionClaim record"},
 			{Name: "session", Kind: OutBytes, Doc: "what the host minted, as a MintedSession record"},
@@ -137,15 +167,18 @@ var Functions = []Function{
 	},
 	{
 		Name: "redirect_event_read", Go: "RedirectEventRead", Since: "0.1.0", BackedBy: "M66",
+		Requires: "redirect.observe",
 		Params: []Param{
 			{Name: "event", Kind: OutBytes, Doc: "the redirect, as a RedirectEvent record"},
 		},
 		Carries: []string{"RedirectEvent"},
 		Doc: "RedirectEventRead reads the redirect this add-on is observing. What it carries " +
 			"is at most what click_events may carry — prefix-derived and country-level, and " +
-			"no client address in any form. Which declaration class an add-on must hold to " +
-			"reach it is the host's to state. A host that does not implement it yet " +
-			"answers ErrNotAvailable.",
+			"no client address in any form. The grant it costs is redirect.observe, which " +
+			"is out-of-band observation and nothing more: running inside the redirect path " +
+			"itself is redirect.inline, a separate declaration no host grants yet, so a " +
+			"module cannot reach the path by holding this. A host that does not implement " +
+			"it yet answers ErrNotAvailable.",
 	},
 }
 

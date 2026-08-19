@@ -17,6 +17,12 @@
 // boundary one milestone before the behaviour behind it exists. Storage, routes,
 // templates, the session hook and redirect observation are M63 to M66's.
 //
+// What a module may *call* is narrower still: every function names the permission
+// it costs, the manifest is where an add-on declares the ones it needs, and an
+// undeclared call is refused and counted (M62). Grants are resolved once here at
+// load — grants.go — and checked on every call in hostabi.go, because from M66 the
+// check sits on the redirect path.
+//
 // # The runtime, and why it is wazero
 //
 // The image is built CGO_ENABLED=0 — Dockerfile:86, and the Makefile's `dist`
@@ -186,7 +192,15 @@ type Loaded struct {
 	Dir string
 
 	module api.Module
+	grants Grants
 }
+
+// Grants is what this add-on holds, which is not the same as what its manifest
+// declared: a permission the vocabulary carries and no host grants yet is
+// declarable and not held. This is the readable form m62.md asks for — the boot
+// log and linkctrl_addon_info carry the same set, and the Add-on manager reads it
+// from here.
+func (l Loaded) Grants() Grants { return l.grants }
 
 // MemorySize is the guest's linear memory in bytes, which is the resident cost
 // of holding this add-on instantiated.
@@ -210,6 +224,10 @@ type Host struct {
 	runtime wazero.Runtime
 	loaded  []Loaded
 	log     *slog.Logger
+	// metrics is held rather than passed, because the refusal counter is written
+	// from an ABI call and not from Open. Nil-safe on every method, which is what
+	// lets a test open a host without a registry.
+	metrics *observability.Metrics
 
 	// states is what an ABI call is answered against, keyed by the calling
 	// module's name — see hostabi.go. Guarded because a host function is called
@@ -256,7 +274,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// the guarantee is what makes the log diffable across restarts.
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
-	h := &Host{log: log}
+	h := &Host{log: log, metrics: opts.Metrics}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
 	// because it is what lets M66 interrupt a module that will not return: a
@@ -299,7 +317,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			}
 			// labelFor, not name: this is the one label in the file taken from a
 			// directory entry rather than from a validated manifest.
-			opts.Metrics.ObserveAddonLoad(labelFor(name), string(le.Outcome))
+			h.metrics.ObserveAddonLoad(labelFor(name), string(le.Outcome))
 			if fatal(le) {
 				_ = h.Close(ctx)
 				return nil, err
@@ -311,16 +329,22 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 				slog.Any("error", le.Err))
 			continue
 		}
-		opts.Metrics.ObserveAddonLoad(loaded.Manifest.Name, string(OutcomeLoaded))
-		opts.Metrics.SetAddonInfo(loaded.Manifest.Name, loaded.Manifest.Version,
-			loaded.Manifest.ABIVersion, string(loaded.Manifest.FailureClass))
+		h.metrics.ObserveAddonLoad(loaded.Manifest.Name, string(OutcomeLoaded))
+		h.metrics.SetAddonInfo(loaded.Manifest.Name, loaded.Manifest.Version,
+			loaded.Manifest.ABIVersion, string(loaded.Manifest.FailureClass),
+			loaded.grants.String())
 		h.loaded = append(h.loaded, loaded)
+		// The grants are named rather than counted. A count answers "did anything
+		// change" and nothing else, and what an operator reading a boot log needs to
+		// know about a module they installed is which capabilities it asked for —
+		// m62.md's *grants are visible*, of which this and the info gauge are the
+		// minimum and M68's manager is the proper surface.
 		log.Info("add-on loaded",
 			slog.String("addon", loaded.Manifest.Name),
 			slog.String("version", loaded.Manifest.Version),
 			slog.Int("abi_version", loaded.Manifest.ABIVersion),
 			slog.String("failure_class", string(loaded.Manifest.FailureClass)),
-			slog.Int("declared_permissions", len(loaded.Manifest.Permissions)),
+			slog.Any("permissions", loaded.grants.Names()),
 			slog.Int("declared_settings", len(loaded.Manifest.Settings)),
 			slog.Uint64("guest_memory_bytes", uint64(loaded.MemorySize())))
 	}
@@ -399,12 +423,26 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	if err != nil {
 		return fail(OutcomeInstantiateFailed, m.FailureClass, fmt.Errorf("compile: %w", err))
 	}
+
+	// Resolved once, here, and never again: from M66 a grant check sits on the
+	// redirect path, so what the check reads has to already exist. See grants.go.
+	grants, withheld := resolveGrants(m)
+	if len(withheld) > 0 {
+		// Said before the module runs, because package initialization runs during
+		// instantiation and a call refused for this reason happens next. A warning
+		// rather than a refusal: the class is declarable on purpose, and the
+		// milestone that admits an add-on onto the redirect path is what turns it on.
+		h.log.Warn("an add-on declared a permission no host grants yet; it does not "+
+			"hold it and every call behind it is refused",
+			slog.String("addon", m.Name),
+			slog.Any("permissions", withheld))
+	}
 	// Registered before instantiation, and this is not tidiness. Package
 	// initialization runs *during* InstantiateModule — that is what makes a
 	// load-time failure expressible at all — so a module whose init calls a host
 	// function does so before this call returns. State registered afterwards would
 	// mean every add-on's first ABI call answered StatusInternal.
-	deregister := h.registerState(m)
+	deregister := h.registerState(m, grants)
 	// The compiled form is owned by the runtime and closed with it. Closing it
 	// here would invalidate the instance below.
 	mod, err := h.runtime.InstantiateModule(ctx, compiled,
@@ -425,7 +463,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		return fail(OutcomeInstantiateFailed, m.FailureClass, err)
 	}
 
-	return Loaded{Manifest: m, Dir: dir, module: mod}, nil
+	return Loaded{Manifest: m, Dir: dir, module: mod, grants: grants}, nil
 }
 
 // Addons is what loaded, in discovery order. The slice is a copy; the instances

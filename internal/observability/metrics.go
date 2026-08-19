@@ -45,8 +45,9 @@ type Metrics struct {
 	webhookDeliveries *prometheus.CounterVec
 	automationFirings *prometheus.CounterVec
 
-	addonLoads *prometheus.CounterVec
-	addonInfo  *prometheus.GaugeVec
+	addonLoads    *prometheus.CounterVec
+	addonInfo     *prometheus.GaugeVec
+	addonRefusals *prometheus.CounterVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -195,7 +196,8 @@ func NewMetrics() *Metrics {
 				"action failed).",
 		}, []string{"trigger", "outcome"}),
 
-		// Add-ons (M60). Both labels are bounded by how many modules an operator
+		// Add-ons (M60, and the refusal counter below is M62's). Every `addon` label
+		// in the three is bounded by how many modules an operator
 		// installed — plus one, for the sentinel named below — which is the first
 		// metric in this file whose cardinality is set by the deployment rather
 		// than by a closed vocabulary in the code, and it is bounded all the same,
@@ -224,8 +226,26 @@ func NewMetrics() *Metrics {
 		// this instance is running.
 		addonInfo: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "linkctrl_addon_info",
-			Help: "Always 1 per loaded add-on; the labels carry its identity.",
-		}, []string{"addon", "version", "abi_version", "failure_class"}),
+			Help: "Always 1 per loaded add-on; the labels carry its identity and the " +
+				"permissions it holds.",
+		}, []string{"addon", "version", "abi_version", "failure_class", "permissions"}),
+
+		// Refused ABI calls (M62). `permission` is addon.abi's closed vocabulary and
+		// is six words, so this is bounded at six series per installed add-on — the
+		// same deployment-set bound the pair above carries, times a closed set, which
+		// is why a per-function label was not added: the permission is what an
+		// operator can act on, and the function is in the log line beside it.
+		//
+		// It counts *undeclared* calls and nothing else. A call refused because the
+		// host has not implemented the function yet is not here — a module probing a
+		// capability is doing what the ABI invites — and neither is a settings key
+		// outside the add-on's own manifest, which is a scope question rather than a
+		// permission.
+		addonRefusals: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_addon_refusals_total",
+			Help: "ABI calls refused because the add-on did not declare the permission " +
+				"the function requires, by add-on and permission.",
+		}, []string{"addon", "permission"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -244,7 +264,7 @@ func NewMetrics() *Metrics {
 		m.feedChecks,
 		m.webhookDeliveries,
 		m.automationFirings,
-		m.addonLoads, m.addonInfo,
+		m.addonLoads, m.addonInfo, m.addonRefusals,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -602,10 +622,31 @@ func (m *Metrics) ObserveAddonLoad(addon, outcome string) {
 	m.addonLoads.WithLabelValues(addon, outcome).Inc()
 }
 
-// SetAddonInfo publishes the identity of an add-on that loaded (M60).
-func (m *Metrics) SetAddonInfo(addon, version string, abiVersion int, failureClass string) {
+// SetAddonInfo publishes the identity of an add-on that loaded (M60), and the
+// permissions it holds (M62).
+//
+// `permissions` is the *held* set, sorted and comma-separated — not what the
+// manifest declared, since a permission the vocabulary carries and no host grants
+// yet is declarable and not held. Sorted so a series does not change identity
+// because a manifest listed the same grants in another order.
+func (m *Metrics) SetAddonInfo(addon, version string, abiVersion int, failureClass, permissions string) {
 	if m == nil {
 		return
 	}
-	m.addonInfo.WithLabelValues(addon, version, strconv.Itoa(abiVersion), failureClass).Set(1)
+	m.addonInfo.WithLabelValues(addon, version, strconv.Itoa(abiVersion), failureClass,
+		permissions).Set(1)
+}
+
+// ObserveAddonRefusal records one ABI call refused for want of a declared
+// permission (M62).
+//
+// Called from the host's own dispatch, on whatever goroutine the guest is running
+// on, which from M66 is a request's. Both labels are bounded: the add-on's name
+// comes from a validated manifest and the permission from a closed vocabulary, so
+// neither is guest input however the module was written.
+func (m *Metrics) ObserveAddonRefusal(addon, permission string) {
+	if m == nil {
+		return
+	}
+	m.addonRefusals.WithLabelValues(addon, permission).Inc()
 }

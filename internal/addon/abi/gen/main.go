@@ -276,6 +276,15 @@ func docComment(b *bytes.Buffer, f abi.Function) {
 			"answers ErrNotAvailable, which a module may branch on"
 	}
 	comment(b, "", "ABI: "+abi.HostModule+"."+f.Name+", since "+f.Since+"; "+status+".")
+	// The permission is emitted because it is the one thing a consumer cannot
+	// discover from the signature and cannot recover from the error: ErrDenied says
+	// the host refused, and only this says which line of the manifest was missing.
+	if f.Requires != "" {
+		b.WriteString("//\n")
+		comment(b, "", "Requires the "+f.Requires+" permission, declared in this add-on's "+
+			"manifest. A module that did not declare it gets ErrDenied, whether or not the "+
+			"host implements the function.")
+	}
 	if f.Deprecated != "" {
 		b.WriteString("//\n")
 		comment(b, "", "Deprecated: "+f.Deprecated+" It may be removed in ABI "+f.RemovedNotBefore+" or later.")
@@ -327,7 +336,8 @@ func docTable(path string) error {
 	fmt.Fprintf(&b, "The ABI is **%s**, generation **%d**, and this host loads generation %d or newer.\n\n",
 		abi.Version, abi.Generation, abi.MinimumGeneration)
 
-	b.WriteString("| Function | Since | Status | What it is |\n| --- | --- | --- | --- |\n")
+	b.WriteString("| Function | Since | Requires | Status | What it is |\n" +
+		"| --- | --- | --- | --- | --- |\n")
 	for _, f := range abi.Functions {
 		status := "**live**"
 		if !f.Live {
@@ -336,8 +346,26 @@ func docTable(path string) error {
 		if f.Deprecated != "" {
 			status += " · **deprecated**, removable in " + f.RemovedNotBefore
 		}
-		fmt.Fprintf(&b, "| `%s`<br>`sdk.%s(%s)` | %s | %s | %s |\n",
-			f.Name, f.Go, goParams(f), f.Since, status, oneLine(f.Doc))
+		requires := "—"
+		if f.Requires != "" {
+			requires = "`" + f.Requires + "`"
+		}
+		fmt.Fprintf(&b, "| `%s`<br>`sdk.%s(%s)` | %s | %s | %s | %s |\n",
+			f.Name, f.Go, goParams(f), f.Since, requires, status, oneLine(f.Doc))
+	}
+
+	b.WriteString("\n### Permissions\n\nAn add-on declares what it needs in its manifest's " +
+		"`permissions` array, and the host refuses a call whose permission is not there — " +
+		"before it refuses one it has not implemented, so a module that declared nothing " +
+		"cannot use the availability status to find out what a host can do. The vocabulary " +
+		"is closed: a token outside it refuses the add-on at load.\n\n" +
+		"| Permission | Grantable | Is |\n| --- | --- | --- |\n")
+	for _, p := range abi.Permissions {
+		grantable := "yes"
+		if !p.Grantable {
+			grantable = "**no host grants it yet**"
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", p.Name, grantable, oneLine(p.Doc))
 	}
 
 	b.WriteString("\n### Statuses\n\nEvery function returns one `i32`: a length or zero on success, " +

@@ -72,11 +72,13 @@ func TestNilMetricsIsSafe(t *testing.T) {
 	m.ObserveJob("rollup", nil)
 	m.ObserveJob("rollup", errors.New("boom"))
 	m.ObserveJobSkipped("rollup")
-	// The add-on pair (M60). Both are called from addon.Open, which runs before
-	// anything else at boot and is handed whatever metrics the caller has — the
-	// CLI has none.
+	// The add-on trio (M60, and the refusal counter M62). The first two are called
+	// from addon.Open, which runs before anything else at boot and is handed whatever
+	// metrics the caller has — the CLI has none. The third is called from a host
+	// function, on whatever goroutine the guest runs on, and reaches the same nil.
 	m.ObserveAddonLoad("minimal", "loaded")
-	m.SetAddonInfo("minimal", "1.0.0", 1, "required")
+	m.SetAddonInfo("minimal", "1.0.0", 1, "required", "config.read")
+	m.ObserveAddonRefusal("minimal", "storage.own_schema")
 	m.Register(nil)
 	if m.Gather() != nil {
 		t.Error("nil metrics returned a registry")

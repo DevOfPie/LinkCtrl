@@ -431,6 +431,26 @@ Invariants:
   repository imports. The host owns the definition, and the host module the runtime
   registers is derived from the same list rather than restating it, so host and
   guest cannot disagree about a signature ([M61](docs/build-notes/phase-details/m61.md)).
+  **What a module may call out of that list is what its manifest declared**, against
+  a closed six-token vocabulary the host resolves at load and checks on every call,
+  refusing anything else with a distinguishable status and a counter per add-on and
+  permission ([M62](docs/build-notes/phase-details/m62.md)). The check sits in the
+  host's dispatch rather than in each function, and it runs before the host says
+  whether it implements the function at all, so a module that declared nothing
+  cannot enumerate what a build can do. Running inside the redirect path is a
+  separate declaration no release grants yet. **The two functions that cost nothing
+  are not the two that are trusted**: writing to the log is ungated on purpose, so
+  the host neutralizes and bounds the message at the boundary rather than at the
+  logger, which is where a module that declared nothing would otherwise be able to
+  forge a record that reads as this product's own. What survives that boundary is
+  the set of graphic characters, in any script, and what does not is escaped — a
+  default-deny, because a list of invisible characters is behind the next Unicode
+  revision the day it is written. The one graphic character escaped anyway is the
+  backslash, so that a reader can tell a literal `\n` from an escaped newline and a
+  module cannot spell the mark on a truncated line; the carve-out running the other
+  way is Unicode's prepended concatenation marks, read from the property rather than
+  copied out of it, for the same reason the escape set is not a list (M62, D240,
+  D241, D242, D243, D244).
 - The HTTP layer is two handler trees. The redirect tree carries no session
   lookup, CSRF check or template rendering. Enforced by test.
 - The redirect pool is separate from the application pool.
