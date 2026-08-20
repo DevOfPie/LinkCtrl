@@ -2,6 +2,7 @@ package addon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/tetratelabs/wazero/api"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
@@ -23,8 +25,9 @@ import (
 //
 // # What is live, and what is declared
 //
-// Five functions work here — abi_version, log, config_get and the two storage
-// functions M63 turned on — and the rest are
+// Eight functions work here — abi_version, log, config_get, the two storage
+// functions M63 turned on, and the request, response and session-context
+// functions M64 did — and the rest are
 // registered and answer abi.StatusNotAvailable to an add-on that holds the
 // permission they cost, and abi.StatusDenied to one that does not. Which of the two
 // comes first is the next section's, and it is a decision rather than an accident.
@@ -127,10 +130,17 @@ var hostFuncs = map[string]hostFunc{
 			// counted in the refusals metric.
 			return int32(abi.StatusDenied)
 		}
+		if v, configured := st.values[key]; configured {
+			// What an operator set, which outranks the manifest's default for the
+			// reason every other value in this product does: the declaration is the
+			// publisher's answer and the environment is the operator's.
+			return writeOut(mod, stack[2], stack[3], []byte(v.Reveal()))
+		}
 		if s.Default == "" {
-			// A declared setting with nothing behind it yet. Secrets are here by
-			// construction — a manifest may not give one a default — and so is any
-			// setting whose value the Add-on manager will supply.
+			// A declared setting with nothing behind it yet. A secret nobody has
+			// configured is here by construction — a manifest may not give one a
+			// default — and so is any setting whose value the Add-on manager will
+			// supply.
 			return int32(abi.StatusNotFound)
 		}
 		return writeOut(mod, stack[2], stack[3], []byte(s.Default))
@@ -171,6 +181,64 @@ var hostFuncs = map[string]hostFunc{
 		// length of; inventing a meaning for the number here would be a second
 		// convention for one i32.
 		return 0
+	},
+
+	// The three functions M64 turned on. Each is answered against the *request's*
+	// state, which is a per-request instance's own — see Host.Route — so "outside
+	// a request" is not a flag to check but a state that cannot be faked: the
+	// load-time instance has no request, and neither does another request's.
+	"http_request_read": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		if st.request == nil {
+			// What a module calling this from package initialization gets, which is
+			// every module: initialization runs during instantiation, and the request
+			// is attached to the state before that. NotFound rather than Invalid — the
+			// call is well formed and there is simply nothing to read.
+			return int32(abi.StatusNotFound)
+		}
+		encoded, err := st.encodedRequest()
+		if err != nil {
+			return st.marshalFailed("http_request_read", err)
+		}
+		return writeOut(mod, stack[0], stack[1], encoded)
+	},
+
+	"http_response_write": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		raw, ok := readBytes(mod, stack[0], stack[1])
+		if !ok {
+			return int32(abi.StatusInvalid)
+		}
+		if st.request == nil {
+			return int32(abi.StatusNotFound)
+		}
+		if st.response != nil {
+			// A response is one record, not a stream. Refused rather than replacing
+			// the first one: a module that wrote twice does not know which of its two
+			// answers the visitor got, and neither would its author.
+			return int32(abi.StatusInvalid)
+		}
+		resp, err := decodeResponse(raw, st.manifest.CookiePrefixes)
+		if err != nil {
+			// Debug, and the reason never crosses: the guest gets StatusInvalid and
+			// the detail goes where an operator can read it. A module looping on a
+			// malformed record would otherwise decide how much an instance logs.
+			st.hostLog.Debug("refused an add-on's response",
+				slog.String("addon", st.manifest.Name),
+				slog.Any("error", err))
+			return int32(abi.StatusInvalid)
+		}
+		st.response = &resp
+		return 0
+	},
+
+	"session_context": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		if st.request == nil {
+			return int32(abi.StatusNotFound)
+		}
+		encoded, err := json.Marshal(st.session)
+		if err != nil {
+			return st.marshalFailed("session_context", err)
+		}
+		return writeOut(mod, stack[0], stack[1], encoded)
 	},
 }
 
@@ -465,6 +533,11 @@ type hostState struct {
 	hostLog *slog.Logger
 	// settings is manifest.Settings by name, which is what config_get scopes to.
 	settings map[string]Setting
+	// values is what an operator configured, by setting name, and it is what
+	// config_get answers with when there is one. Held as config.Secret for every
+	// setting rather than only the ones a manifest called secret, so that no
+	// path out of this struct can print a configured value.
+	values map[string]config.Secret
 	// grants is what this add-on holds, resolved once at load. Read on every call
 	// through the ABI and never rebuilt — see Grants, where the reason it has to be
 	// a lookup rather than a walk of the manifest is the redirect path's budget.
@@ -473,9 +546,64 @@ type hostState struct {
 	// for one that declared no storage — and also for one that declared it on a
 	// host with no database, which noStorage answers.
 	storage *store.AddonDB
+
+	// request is what this instance is answering, and nil for the instance that
+	// was created at load. It is the whole of "outside a request": a per-request
+	// instance has its own state, so nothing has to be cleared afterwards and no
+	// two requests can see each other's.
+	request *Request
+	// encoded is request, marshalled once. A guest that reads the record twice —
+	// which the retry half of the calling convention makes ordinary, since a
+	// first call with a small buffer answers with the size — pays for one
+	// marshal rather than two.
+	encoded []byte
+	// session is who is signed in on that request, and it is a value rather than
+	// a pointer because "nobody" is a SessionContext with SignedIn false rather
+	// than an absence (D261).
+	session SessionContext
+	// response is what the guest wrote, or nil until it does.
+	response *Response
 }
 
-func newHostState(m Manifest, grants Grants, storage *store.AddonDB, log *slog.Logger) *hostState {
+// forRequest is the per-request copy of an add-on's state.
+//
+// A copy, so the load-time state keeps answering config_get and log for whatever
+// else is running, and so the fields above are written once by the goroutine that
+// created them and read only by the guest it belongs to — which is what makes
+// this path need no lock of its own.
+func (s *hostState) forRequest(req *Request, sess SessionContext) *hostState {
+	out := *s
+	out.request = req
+	out.session = sess
+	out.encoded = nil
+	out.response = nil
+	return &out
+}
+
+// encodedRequest marshals the request record once and remembers it.
+func (s *hostState) encodedRequest() ([]byte, error) {
+	if s.encoded == nil {
+		b, err := json.Marshal(s.request)
+		if err != nil {
+			return nil, err
+		}
+		s.encoded = b
+	}
+	return s.encoded, nil
+}
+
+// marshalFailed is a record this host could not encode, which is the host's own
+// fault and is StatusInternal by the ABI's definition of it.
+func (s *hostState) marshalFailed(function string, err error) int32 {
+	s.hostLog.Error("the host could not encode a record it owes an add-on",
+		slog.String("addon", s.manifest.Name),
+		slog.String("function", function),
+		slog.Any("error", err))
+	return int32(abi.StatusInternal)
+}
+
+func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
+	values map[string]config.Secret, log *slog.Logger) *hostState {
 	settings := make(map[string]Setting, len(m.Settings))
 	for _, s := range m.Settings {
 		settings[s.Name] = s
@@ -488,6 +616,7 @@ func newHostState(m Manifest, grants Grants, storage *store.AddonDB, log *slog.L
 		),
 		hostLog:  log,
 		settings: settings,
+		values:   values,
 		grants:   grants,
 		storage:  storage,
 	}
@@ -495,8 +624,9 @@ func newHostState(m Manifest, grants Grants, storage *store.AddonDB, log *slog.L
 
 // registerState makes an add-on's state reachable from a host function before the
 // module that will call one exists. Returns the deregistration.
-func (h *Host) registerState(m Manifest, grants Grants, storage *store.AddonDB) func() {
-	st := newHostState(m, grants, storage, h.log)
+func (h *Host) registerState(m Manifest, grants Grants, storage *store.AddonDB,
+	values map[string]config.Secret) func() {
+	st := newHostState(m, grants, storage, values, h.log)
 	h.mu.Lock()
 	if h.states == nil {
 		h.states = make(map[string]*hostState)

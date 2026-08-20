@@ -13,11 +13,14 @@ import (
 // internal/config/surface_test.go takes: the claim is about files, so only a check
 // over those files can hold it.
 //
-// **These tests are meant to fail, at M64 and M63 respectively**, when an add-on
-// first reaches the page and first owns a schema. That is not drift — it is the
-// point. When it happens, the assertion is narrowed deliberately and in writing,
-// exactly as scripts/single-instance-check.sh and demoCoverage() require of
-// themselves, and never deleted.
+// **These tests were meant to fail, at M64 and M63 respectively**, when an
+// add-on first reached the page and first owned a schema. That is not drift — it
+// was the point. Both have now been narrowed deliberately and in writing, exactly
+// as scripts/single-instance-check.sh and demoCoverage() require of themselves,
+// and neither was deleted: the route one became a bound on *which* files know
+// about add-ons (below), and the migration one still holds, because an add-on's
+// schema is created for an add-on that exists rather than migrated into every
+// instance.
 //
 // What they buy in the meantime is the difference between "add-ons cost an
 // instance nothing when unconfigured" as a sentence and as a fact. A route
@@ -87,16 +90,74 @@ func TestNoMigrationMentionsAddOns(t *testing.T) {
 	}
 }
 
-// No route. M60 reads the directory at boot and that is the whole lifecycle; the
-// manager is M68's and an add-on's own routes are M64's.
-func TestNoHTTPSurfaceMentionsAddOns(t *testing.T) {
+// httpSurfaceMentioningAddOns is every file of the HTTP surface allowed to know
+// add-ons exist, and it is the narrowed form of M60's "no route" absence.
+//
+// **Narrowed at M64, deliberately and in writing, which is what the header above
+// requires of this file.** M60's claim was that no route was mounted and no page
+// rendered, and M64 mounts one and renders one, so the absence is gone and what
+// replaces it is a bound: the feature is allowed to exist in the files listed
+// here and nowhere else. That is the property worth keeping — an add-on's page is
+// four files, not a concept that leaks into the link tree, the analytics reader
+// or a dozen templates — and it is the property the two claims below cannot
+// state on their own.
+//
+// A file added here is a decision. A file that starts naming add-ons without
+// being added is this test failing, which is the point.
+var httpSurfaceMentioningAddOns = []string{
+	// The handler, its tests, and the interface the router registers it through.
+	"internal/httpx/addons.go",
+	"internal/httpx/addons_test.go",
+	"internal/httpx/router.go",
+	"internal/httpx/router_test.go",
+	"internal/httpx/web.go",
+	// The page the host wraps an add-on's answer in, and its fixture.
+	"internal/ui/templates/pages/addon.html",
+	"internal/ui/ui_test.go",
+}
+
+// The HTTP surface knows about add-ons in the files M64 gave it and in no
+// others, and the API surface still knows nothing at all.
+func TestOnlyTheNamedHTTPFilesMentionAddOns(t *testing.T) {
+	allowed := make(map[string]bool, len(httpSurfaceMentioningAddOns))
+	for _, f := range httpSurfaceMentioningAddOns {
+		allowed[filepath.FromSlash(f)] = true
+	}
+
 	var hits []string
 	hits = append(hits, mentionsAddOns(t, "internal/httpx", ".go")...)
 	hits = append(hits, mentionsAddOns(t, "internal/ui", ".go", ".html")...)
-	if len(hits) > 0 {
-		t.Errorf("the HTTP surface mentions add-ons: %v\n"+
-			"M60 mounts no route and renders no page. If this is M64 or later, "+
-			"narrow this test deliberately rather than deleting it", hits)
+
+	seen := map[string]bool{}
+	for _, hit := range hits {
+		seen[hit] = true
+		if !allowed[hit] {
+			t.Errorf("%s mentions add-ons and is not in httpSurfaceMentioningAddOns; "+
+				"an add-on's reach into the HTTP surface is bounded by that list, so "+
+				"either this file should not know about add-ons or the list is what "+
+				"needs the deliberate change", hit)
+		}
+	}
+	// The other direction, which is what stops the list outliving the code: a
+	// named file that no longer mentions add-ons is a bound describing nothing.
+	for _, f := range httpSurfaceMentioningAddOns {
+		if !seen[filepath.FromSlash(f)] {
+			t.Errorf("%s is named as an add-on-aware file and does not mention add-ons; "+
+				"the list has outlived the code", f)
+		}
+	}
+
+	// The redirect tree is the half of M60's absence that does not narrow. An
+	// add-on's prefix is on the application tree only (m64.md), so no file serving
+	// a short link may know add-ons exist — and every one of them is inside the
+	// package the sweep above covers, which is why this is a second read of the
+	// same directory rather than a claim about somewhere else.
+	for _, hit := range hits {
+		base := filepath.Base(hit)
+		if strings.HasPrefix(base, "redirect") || strings.HasPrefix(base, "rootredirect") {
+			t.Errorf("%s serves the redirect path and mentions add-ons; the prefix is "+
+				"application-tree only", hit)
+		}
 	}
 
 	spec, err := os.ReadFile(filepath.Join(repoRoot(t), "api", "openapi.yaml"))
@@ -105,6 +166,8 @@ func TestNoHTTPSurfaceMentionsAddOns(t *testing.T) {
 	}
 	if lower := strings.ToLower(string(spec)); strings.Contains(lower, "addon") ||
 		strings.Contains(lower, "add-on") {
-		t.Error("api/openapi.yaml mentions add-ons; M60 adds no API surface")
+		t.Error("api/openapi.yaml mentions add-ons; M64 deliberately adds no API " +
+			"surface — whether third-party surfaces are bound by *every UI feature " +
+			"has API support* is M69's question, with a real case in front of it")
 	}
 }

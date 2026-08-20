@@ -693,6 +693,41 @@ func registerAppRoutes(d Deps, app *appMux) {
 			app.Handle("POST /login/code", guard(http.HandlerFunc(web.MFAChallengeSubmit)))
 		}
 
+		// An installed add-on's own pages (M64), on the application tree and
+		// nowhere else. Registered only when this instance has an add-on host, so
+		// an operator who installed none has no such route — asserted by
+		// TestNoAddonRouteWithoutAHost, and it is the reason the pattern is here
+		// rather than beside the public pages above.
+		//
+		// **Not under `signedIn`, and that is D261.** An add-on that authenticates
+		// somebody is answering a request from a person who has no session yet, so
+		// a session requirement here would make M65's hook unreachable through the
+		// surface built for it. What an add-on may learn about who *is* signed in
+		// is a grant of its own with no credential behind it (session.context),
+		// and what bounds an anonymous request's cost is the host's concurrency
+		// bound rather than a limiter of this route's own.
+		//
+		// Method-less on purpose: an add-on answers whatever it was asked, and a
+		// method filter here would be this file deciding which verbs somebody
+		// else's flow needs.
+		//
+		// **The application tree's CSRF middleware applies, and it is not
+		// conditional on a credential.** http.CrossOriginProtection refuses *every*
+		// cross-site unsafe request, whether or not a cookie was sent, so an
+		// anonymous POST from another origin to an add-on's route is a 403 the
+		// module never sees. Measured on this router: `Sec-Fetch-Site: cross-site`
+		// and `same-site` are both 403, while `same-origin`, `none` and the header
+		// absent all reach the module. That is the right default and it is not free
+		// — an identity provider posting a `response_mode=form_post` callback here
+		// is a browser navigation from the provider's origin, so it is refused,
+		// while a server-to-server webhook sends no Sec-Fetch-Site and passes.
+		// F284 carries it to M65, which builds an authentication flow on exactly
+		// this path.
+		if web.Addons != nil {
+			app.HandleFunc(AddonPagePattern, web.AddonPage)
+			app.HandleFunc(AddonBarePattern, web.AddonPage)
+		}
+
 		// Everything else redirects anonymous visitors to the login form,
 		// where the API would return a problem document.
 		for pattern, fn := range map[string]http.HandlerFunc{

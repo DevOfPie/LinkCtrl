@@ -1012,6 +1012,12 @@ func run(cfg config.Config, _ io.Writer) error {
 			Team: teamSvc, Signup: signupSvc, Recovery: recoverySvc,
 			Accounts: accountSvc, MFA: mfaSvc,
 			Disputes: disputeSvc, Instance: instanceSvc,
+			// An installed add-on's own pages (M64). Assigned through addonRouter
+			// rather than directly, because a nil *addon.Host in an interface field
+			// is not a nil interface — and the difference is a route mounted on
+			// every instance that configured no add-ons at all, which is exactly
+			// the cost m60.md promised nobody would pay.
+			Addons: addonRouter(addons),
 		},
 	})
 
@@ -1202,4 +1208,20 @@ func mfaIssuer(cfg config.Config) string {
 		return u.Host
 	}
 	return "LinkCtrl"
+}
+
+// addonRouter is the add-on host as the router's interface, or a nil interface
+// when there is no host.
+//
+// The typed-nil trap, closed at the one site where it exists. Every method on
+// *addon.Host is nil-safe, so handing a nil one over would *work* — it would
+// answer ErrNoRoute and 404 — and that is what makes the trap worth a function:
+// the failure is not a panic, it is a route quietly mounted on every instance
+// that installed nothing, and the only thing that would notice is a test reading
+// the mount list.
+func addonRouter(h *addon.Host) httpx.AddonRouter {
+	if h == nil {
+		return nil
+	}
+	return h
 }

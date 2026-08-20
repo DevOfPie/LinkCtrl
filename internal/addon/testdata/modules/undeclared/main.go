@@ -57,8 +57,11 @@ func init() {
 	_, err = sdk.ConfigGet("retention_days")
 	denied("config_get", err)
 
-	// Every function whose behaviour no host has built yet. Denied rather than
-	// NotAvailable, which is the whole of the ordering claim.
+	// Every gated function, whether or not this host has built the limb behind it.
+	// Denied rather than NotAvailable, and denied rather than answered, which is
+	// the whole of the ordering claim: the permission check comes first, so a
+	// module that declared nothing can neither call an implemented function nor
+	// learn which functions are implemented.
 	_, err = sdk.StorageQuery("select 1", nil)
 	denied("storage_query", err)
 	denied("storage_exec", sdk.StorageExec("select 1", nil))
@@ -67,6 +70,8 @@ func init() {
 	denied("http_response_write", sdk.HTTPResponseWrite(nil))
 	_, err = sdk.TemplateRender("page", nil)
 	denied("template_render", err)
+	_, err = sdk.SessionContextRead()
+	denied("session_context", err)
 	_, err = sdk.SessionMint(nil)
 	denied("session_mint", err)
 	_, err = sdk.RedirectEventRead()

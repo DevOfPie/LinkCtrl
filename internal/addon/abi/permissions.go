@@ -17,11 +17,16 @@ const PermissionStorage = "storage.own_schema"
 //
 // **Closed and enumerated**, the same discipline `?src=` uses: adding an entry is
 // a code change, and a test asserts the set literally, so a vocabulary that grew
-// a seventh token cannot do it quietly. Six entries, one per limb this phase
-// lands, because the enforcement (M62) had to be built before any capability
-// worth abusing existed — a grant declared here and implemented later is refused
-// by an already-enforced permission rather than by a check somebody remembers to
-// add.
+// a token cannot do it quietly. It grew one at M64 — `session.context`, which the
+// phase plan had not separated from the routes grant — and that is what the
+// discipline is for: the seventh entry arrived in a diff, with the test that names
+// the set edited in the same commit and D258 saying what riding on
+// `routes.own_prefix` would have cost instead.
+//
+// Seven entries, one per limb this phase lands plus that one, because the
+// enforcement (M62) had to be built before any capability worth abusing existed —
+// a grant declared here and implemented later is refused by an already-enforced
+// permission rather than by a check somebody remembers to add.
 //
 // It lives in this package and not in the host, for the reason [Functions] does:
 // this is the ABI's authoring point, the SDK and the published table are
@@ -63,6 +68,16 @@ var Permissions = []Permission{
 			"templates through the host's renderer. One grant rather than two: a module " +
 			"renders a fragment in order to answer a request, and a template rendered " +
 			"for nobody is not a capability.",
+	},
+	{
+		Name: "session.context", Grantable: true, BackedBy: "M64",
+		Doc: "Ask the host who is signed in: identity, workspace and organization, and " +
+			"nothing else. Its own token rather than a thing a page-serving add-on gets " +
+			"for free, because `routes.own_prefix` is read as *this add-on draws a page* " +
+			"and identity is a second answer — a manifest declaring one grant should not " +
+			"turn out to have declared two. It is the read half and the whole of it: " +
+			"there is no cookie, no token and no session row behind it, and minting or " +
+			"destroying a session is session.mint.",
 	},
 	{
 		Name: "session.mint", Grantable: true, BackedBy: "M65",

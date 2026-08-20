@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -115,6 +116,94 @@ func TestEnvExampleAdvertisesNothingUnread(t *testing.T) {
 		if !read[name] {
 			t.Errorf("%s is in .env.example but nothing reads it", name)
 		}
+	}
+}
+
+// The add-on setting family (M64) is the one part of this product's environment
+// surface that envNames cannot walk: which variables exist is decided by a
+// manifest an operator dropped in a directory, not by a struct tag. So the two
+// tests above cannot see it in either direction, and this is what covers the gap
+// — the *prefix* is documented, in both places a variable would have been.
+//
+// Not a carve-out in TestEnvExampleAdvertisesNothingUnread's exception list,
+// deliberately: nothing is being excused there, because no concrete variable name
+// is advertised. What is advertised is a shape, and a shape is only useful if it
+// is written down where an operator looks.
+func TestTheAddonSettingPrefixIsDocumented(t *testing.T) {
+	for _, rel := range []string{".env.example", "docs/configuration.md"} {
+		if !strings.Contains(readRepoFile(t, rel), AddonEnvPrefix) {
+			t.Errorf("%s does not mention %s, so an operator cannot discover how to "+
+				"configure an installed add-on", rel, AddonEnvPrefix)
+		}
+	}
+}
+
+// What AddonSettings reads, and what it deliberately does not.
+func TestAddonSettingsReadsDeclaredSettingsOnly(t *testing.T) {
+	t.Setenv("LINKCTRL_ADDON_OIDC_CLIENT_ID", "an-id")
+	t.Setenv("LINKCTRL_ADDON_OIDC_CLIENT_SECRET", "a-secret")
+	t.Setenv("LINKCTRL_ADDON_OIDC_EMPTY", "")
+	t.Setenv("LINKCTRL_ADDON_OIDC_UNDECLARED", "ignored")
+	got := AddonSettings("oidc", []string{"client_id", "client_secret", "empty"})
+	if len(got) != 2 {
+		t.Errorf("read %d settings, want 2: %v", len(got), got)
+	}
+	if v := got["client_id"]; v.Reveal() != "an-id" {
+		t.Errorf("client_id is %q", v.Reveal())
+	}
+	if _, present := got["empty"]; present {
+		t.Error("a variable set to nothing was read as a value; an operator leaving an " +
+			"empty line means the setting is unset")
+	}
+	if _, present := got["undeclared"]; present {
+		t.Error("a setting no manifest declared was read")
+	}
+	// Every value comes back as a Secret, whatever the manifest called the
+	// setting, so no path out of this map can print one.
+	if s := fmt.Sprint(got["client_secret"]); strings.Contains(s, "a-secret") {
+		t.Errorf("a configured value printed itself as %q", s)
+	}
+
+	if got := AddonSettingVar("oidc", "client_id"); got != "LINKCTRL_ADDON_OIDC_CLIENT_ID" {
+		t.Errorf("AddonSettingVar is %q", got)
+	}
+	if AddonSettings("oidc", nil) == nil {
+		t.Error("an add-on that declared nothing got a nil map rather than an empty one")
+	}
+}
+
+// One variable, two settings — and this package cannot resolve it.
+//
+// `oidc` and `oidc_x` are both legal add-on names, and a variable name is the
+// add-on's name and the setting's joined by an underscore, so `x_key` of the first
+// and `key` of the second are the same string. Asking by declared name does not
+// help: both add-ons would be asking for a variable that exists, and the value
+// would be read by whichever asked.
+//
+// So this test asserts the collision rather than a resolution of it, and names
+// where the resolution is: internal/addon refuses to load two add-ons whose names
+// stand in a `name + "_"` prefix relation, which is the same relation and closes
+// the cookie namespace with it. That refusal is asserted there
+// (TestPrefixRelatedNamesCannotBothLoad) and cannot be asserted here — internal/addon
+// imports this package, so the dependency only goes one way.
+//
+// An earlier version of this test set LINKCTRL_ADDON_OIDC_X_KEY to "belongs to
+// oidc_x" and asserted that add-on `oidc` read it. It passed, and it was
+// documenting the leak as correct behaviour.
+func TestOneVariableCanNameTwoAddonsSettings(t *testing.T) {
+	one, two := AddonSettingVar("oidc", "x_key"), AddonSettingVar("oidc_x", "key")
+	if one != two {
+		t.Fatalf("%s and %s are different variables, so the ambiguity this documents "+
+			"is gone; internal/addon's load-time refusal is where it was closed and "+
+			"that reasoning needs re-checking against whatever changed here", one, two)
+	}
+
+	t.Setenv(one, "whose value is this")
+	if got := AddonSettings("oidc", []string{"x_key"}); got["x_key"].Reveal() != "whose value is this" {
+		t.Errorf("oidc did not read %s: %v", one, got)
+	}
+	if got := AddonSettings("oidc_x", []string{"key"}); got["key"].Reveal() != "whose value is this" {
+		t.Errorf("oidc_x did not read %s: %v", one, got)
 	}
 }
 

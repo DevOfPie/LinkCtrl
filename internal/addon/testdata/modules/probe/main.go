@@ -84,14 +84,26 @@ func init() {
 	err = sdk.StorageExec("select 1", nil)
 	check("storage_exec_no_database", errors.Is(err, sdk.ErrInternal), "err "+errText(err))
 
+	// The three functions M64 implemented, called from *outside* a request — which
+	// is where package initialization always is, because an instance is made per
+	// request and the request is attached to it after this runs. So the answer is
+	// neither a refusal nor a record: it is ErrNotFound, and that is the honest
+	// answer to "read the request" when there is not one.
+	//
+	// They are checked here rather than only in the routing tests because this
+	// fixture's job is to call every function in the ABI: a limb that landed and
+	// left this file alone would be a limb nothing probes from the guest side.
+	_, err = sdk.HTTPRequestRead()
+	check("http_request_outside_request", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+	err = sdk.HTTPResponseWrite(nil)
+	check("http_response_outside_request", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+	_, err = sdk.SessionContextRead()
+	check("session_context_outside_request", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+
 	// The ones this fixture exists for. Each is declared by the ABI and implemented
 	// by no host yet, so it resolves as an import — the module links — and answers a
 	// status the module can branch on. That the refusal is the whole set's property
 	// and not one function's is why every one of them is here.
-	_, err = sdk.HTTPRequestRead()
-	check("http_request_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
-	err = sdk.HTTPResponseWrite(nil)
-	check("http_response_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
 	_, err = sdk.TemplateRender("page", nil)
 	check("template_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
 	_, err = sdk.SessionMint(nil)

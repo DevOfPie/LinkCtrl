@@ -509,6 +509,63 @@ type AddonsConfig struct {
 // Enabled reports whether this instance has an add-on host at all.
 func (a AddonsConfig) Enabled() bool { return a.Dir != "" }
 
+// AddonEnvPrefix is where an add-on's configured settings are read from:
+// LINKCTRL_ADDON_<NAME>_<SETTING>, both halves upper-cased.
+//
+// The same environment every other value in this file comes from, deliberately —
+// m64.md's "config reaches an add-on the way it reaches the product". An add-on's
+// settings cannot be struct fields, because which of them exist is decided by a
+// manifest an operator dropped in a directory rather than by this build, so
+// [AddonSettings] reads them by name instead of by tag. That is the whole of the
+// difference, and it costs two things worth knowing:
+//
+//   - `.env.example` cannot enumerate them, so the reference documents the shape
+//     and surface_test.go carves the prefix out by name rather than by accident;
+//   - the `unset` treatment the env library gives this file's own secrets does not
+//     reach them. A value read here stays in the process environment, because the
+//     add-on host may be opened more than once in one process and a variable
+//     consumed by the first open would be missing from the second. What does reach
+//     them is the [Secret] type: every value comes back wrapped, whatever the
+//     manifest called it, so no value an operator configured can print itself
+//     through fmt, slog or json.
+const AddonEnvPrefix = EnvPrefix + "ADDON_"
+
+// AddonSettingVar is the variable one setting of one add-on is read from.
+func AddonSettingVar(addon, setting string) string {
+	return AddonEnvPrefix + strings.ToUpper(addon) + "_" + strings.ToUpper(setting)
+}
+
+// AddonSettings reads the values an operator configured for one add-on.
+//
+// Asked for the settings the manifest **declares**, and it reads exactly those —
+// never a scan of the environment for a matching prefix. That is not tidiness: a
+// prefix scan would hand an add-on every variable under its name, including the
+// ones a neighbour's name reaches into, and would have to guess who meant what.
+// An add-on that declared nothing reads nothing.
+//
+// Declaring does not make the *variable* unambiguous, and this comment used to
+// say it did. `LINKCTRL_ADDON_OIDC_X_KEY` is `x_key` of `oidc` and `key` of
+// `oidc_x` — both legal names — whichever way it is looked up, because the
+// variable is a concatenation and the name is one half of it. What resolves it is
+// that the two add-ons cannot both be loaded: names standing in a `name + "_"`
+// prefix relation are refused at load, in nameCollisions (internal/addon), where
+// the same relation closes the cookie namespace. So no two *loaded* add-ons
+// produce one variable, which is the property this function needs and the only one
+// it has.
+//
+// A variable that is set and empty is treated as unset, which is what an operator
+// leaving a line in their .env with nothing after the `=` means. The add-on then
+// gets its declared default, or ErrNotFound.
+func AddonSettings(addon string, declared []string) map[string]Secret {
+	out := make(map[string]Secret, len(declared))
+	for _, name := range declared {
+		if v := os.Getenv(AddonSettingVar(addon, name)); v != "" {
+			out[name] = Secret(v)
+		}
+	}
+	return out
+}
+
 type ShutdownConfig struct {
 	DrainDelay time.Duration `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"5s"`
 	Timeout    time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`

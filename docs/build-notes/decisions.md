@@ -419,6 +419,16 @@ file. Append a row when you append an entry.
 | [M63, the schema boundary stops every other add-on and not the add-on itself](#2026-08-19--m63-the-schema-boundary-stops-every-other-add-on-and-not-the-add-on-itself) | D255 — [D245](#2026-08-19--m63-an-add-ons-own-schema-is-additive-to-nobody-because-nobody-else-reads-it) said *no other add-on can read it, and no amount of qualified SQL gets there*, and three other documents said the same. **Measured false**: two statements from the confined role — `GRANT USAGE ON SCHEMA … TO PUBLIC` and `GRANT SELECT, INSERT ON ALL TABLES … TO PUBLIC` — let another add-on read and write those tables, and the post-condition answered **0 rows**, because a grant is not an object and neither catalogue it asked records one. The *host* offers no vocabulary for sharing; the *capability* is the add-on's, over its own data. Corrected by append rather than edit, in seven sites counted rather than listed, and the additive-ness answer now rests on *no reader the add-on did not create itself*. The post-condition gains a **third direction** — `pg_namespace.nspacl` and `pg_class.relacl`, `aclexplode`d, any grantee but the add-on's own role — built rather than filed because it is two branches in a statement that already runs once per load. Not `pg_shdepend`, which records no `'a'` row for a grant to `PUBLIC`; two ACL columns and not five, because schema `USAGE` is necessary for every path and `NULL` in `proacl` means *the default*, which for a function is `EXECUTE` to `PUBLIC`. A narrowing rather than a boundary: an operator's own grant refuses the add-on too, and the remedy is one `REVOKE`. Also **amends m63.md's additive-ness bullet** and settles the roles dump on `--roles-only` across four prose sites |
 | [M63, the orchestrator confirms an amendment a worker made](#2026-08-19--m63-the-orchestrator-confirms-an-amendment-a-worker-made) | D256 — a worker amended m63.md's additive-ness bullet, which phase-loop.md reserves to the orchestrator, and disclosed it. **Confirmed rather than redone**: the three parts are recorded, the tree fact is a measurement, and it is fact-level — nobody could decide Postgres refuses an owner the right to grant. Third disclosed breach of this shape in the phase; the fix, if it recurs, is the **spawn contract saying what a worker does with a fact-level correction it has already proved**, which is a process change and the owner's |
 | [M63, a grant on an add-on's schema refuses the add-on, operator's or not](#2026-08-19--m63-a-grant-on-an-add-ons-schema-refuses-the-add-on-operators-or-not) | D257 — owner-answered: **refuse**, fail-closed and uniform with the check's two ownership directions, accepting that an operator's own deliberate grant breaks the add-on and is told exactly what to revoke. *Warn* would make this the only direction that does not refuse; *`PUBLIC` only* is defeated by one statement, since an add-on can read a sibling's role name from `pg_roles`. Also records the process fact: **an amendment that changes what the tree does carries a decidable half, and that half is a prompt** |
+| [M64, who is signed in costs a token of its own](#2026-08-20--m64-who-is-signed-in-costs-a-token-of-its-own) | D258 — F270's first half: the vocabulary grows a **seventh** token, `session.context`, rather than folding identity into `routes.own_prefix`, because a page-serving grant should not silently be an identity grant. Two mechanisms: dispatch refuses the call, and the record is zeroed before the request |
+| [M64, an add-on returns data and the host renders; templates from a module stay refused](#2026-08-20--m64-an-add-on-returns-data-and-the-host-renders-templates-from-a-module-stay-refused) | D259 — the host owns every byte of HTML: a module answers text, `text/html` is refused, the host wraps and escapes. `template_render` stays declared-and-refused and its `BackedBy` still says M64, which is F283 for the owner rather than the worker's to redefine |
+| [M64, one module instance per request, measured against the page budget](#2026-08-20--m64-one-module-instance-per-request-measured-against-the-page-budget) | D260 — instance per request at ~2 ms and ~2.4 MB, bounded at sixteen in flight; what it buys is that guest memory does not cross requests. A pool saves 2 ms of a 250 ms budget and keeps state across them |
+| [M64, an add-on's routes are reachable without a session](#2026-08-20--m64-an-add-ons-routes-are-reachable-without-a-session) | D261 — public, because an add-on that authenticates somebody has no session to require; `signed_in: false` rather than a failure. Admits an unauthenticated surface running third-party code, which is what D260's bound answers |
+| [M64, the request body says whether it is encoded, and the response body cannot be](#2026-08-20--m64-the-request-body-says-whether-it-is-encoded-and-the-response-body-cannot-be) | D262 — `body_base64` added inbound so *"base64 when it is not UTF-8"* is decidable; outbound the same sentence is corrected, because the content types a module may name are text |
+| [M64, an add-on's settings come from the environment, by declared name](#2026-08-20--m64-an-add-ons-settings-come-from-the-environment-by-declared-name) | D263 — `LINKCTRL_ADDON_<NAME>_<SETTING>`, looked up per declared setting rather than scanned by prefix (`oidc` versus `oidc_x`), held as `Secret` for every setting, and **not** unset from the environment because a host may be opened twice |
+| [M64, no add-on CSS is served, so nothing ships unscanned](#2026-08-20--m64-no-add-on-css-is-served-so-nothing-ships-unscanned) | D264 — the theme gap answered by absence: the milestone takes only the *host wraps the content* limb of its own bullet, so M24.5's scan covers every stylesheet this product serves. Building the scanner first would be a filter with nothing to filter |
+| [M64, the demo shows no add-on page, and the coverage test cannot say so](#2026-08-20--m64-the-demo-shows-no-add-on-page-and-the-coverage-test-cannot-say-so) | D265 — an add-on is files, not rows: showing one on the demo means a wasm module in the demo image, which is M68's question. `demoCoverage()` is SQL-only, so the record is this entry and a comment where the gate is enforced |
+| [M64, a request too large to cross is the client's error, and the host says so before the module runs](#2026-08-20--m64-a-request-too-large-to-cross-is-the-clients-error-and-the-host-says-so-before-the-module-runs) | D266 — the request record is bounded at the ABI's single-value bound and answers **413**. Replaces a comment claiming an alignment that measurement refuted: host→guest is bounded by guest memory, not by 64 KiB, so a module could be handed a record it could not answer about and the visitor got a 502 for a body they chose the size of |
+| [M64, two add-on names in a prefix relation are both refused, and three sentences said they could not be](#2026-08-20--m64-two-add-on-names-in-a-prefix-relation-are-both-refused-and-three-sentences-said-they-could-not-be) | D267 — `nameRe` admits `_`, so `oidc` may declare the cookie prefix `oidc_x` and read every cookie of add-on `oidc_x`; the same relation makes `LINKCTRL_ADDON_OIDC_X_KEY` two settings. **Both** names are refused at load — no winner, since picking one is D234's first-come rule with spelling deciding — which closes the cookie case and the settings case together, because both namespaces are `name + "_" + anything`. Claims read from the manifest, not from directory entries; eighth load outcome, `name_collision` |
 
 ---
 
@@ -33604,3 +33614,395 @@ this is the same rule aimed at the orchestrator, and it is narrower: **an amendm
 that changes what the tree does — not only what a document says about it — carries a
 decidable half, and the decidable half is a prompt however clearly factual the rest
 of it is.**
+
+## 2026-08-20 — M64, who is signed in costs a token of its own
+
+**D258.** m64.md's *session context, not session power* bullet says a route handler
+can ask the host who is signed in *"when its grant includes it"*, and M62 closed the
+permission vocabulary at six tokens, none of which expresses that. [F270](deferred-findings.md#open)
+is what noticed: the bullet justified the closed half — no cookie, no mint — by
+citing the declared-but-refused list, and the *asking* function was not in that list
+either. So the function is M64's to declare, and the grant it costs is a real choice.
+
+**Chosen: its own token, `session.context`**, seventh in the vocabulary, gating one
+function. The test that names the set literally was edited in the same commit, which
+is M62's own stated discipline for growing it, and a function added to the ABI moves
+no version (D236).
+
+**What the loser costs, stated because it was the cheaper option.** Riding on
+`routes.own_prefix` needed no new token and no test edit, and it makes a manifest
+mean more than it says: `routes.own_prefix` reads as *this add-on draws a page*, and
+an operator installing a module that draws a page has not thereby agreed that it
+learns the identity of everybody who opens it. A grant nobody would predict from its
+name is the failure a closed vocabulary exists to prevent, and one extra line in a
+manifest is a small price for the declaration being honest.
+
+**Two mechanisms, not one.** Dispatch refuses the call for an add-on that did not
+declare the token — that is M62's machinery, unchanged — and `Host.Route` also
+zeroes the record before the request begins, so an add-on without the grant is handed
+nothing rather than merely refused a call. The second is belt: it cannot be observed
+from the guest while the first holds, and it is there so that a later edit to the
+first cannot become a disclosure.
+
+## 2026-08-20 — M64, an add-on returns data and the host renders; templates from a module stay refused
+
+**D259.** m64.md's first risk calls host-wrapped rendering *the load-bearing security
+claim*, and the validation note for this milestone put it in one sentence: an add-on's
+output *"is always data, never template"*. That sentence decides a question the ABI
+had left open. `template_render` is declared as *"renders one of this add-on's own
+templates"*, which means a module ships template **source** — markup — and the host
+parses it. Markup a module wrote is not data.
+
+**Chosen: the host owns every byte of HTML.** A module answers a `Response` whose
+body is text; the content types it may name are a closed pair that excludes
+`text/html`; and the default is that the host wraps the text in
+`internal/ui/templates/pages/addon.html`, where `html/template` escapes it. There is
+no markup path, so there is nothing to sanitize and nothing to get wrong — a module
+that answers with a script tag renders the characters of a script tag, asserted
+against a module that tries three shapes of it.
+
+**`template_render` is therefore still declared and still refused**, and its
+`BackedBy` still says M64. That is a mismatch on the published surface rather than a
+missing feature: this milestone answered the rendering half a different way, and
+whether that function is redefined to name a host-owned template, moved to a later
+milestone, or deprecated is a **decision about a published contract** and so not the
+worker's. [F283](deferred-findings.md#open) carries it for the owner, and M64.9 reads
+the ABI against what was built, which is the review this is exactly the input to.
+
+**What the loser costs.** Add-on-shipped templates would let a module lay out a real
+page — a form, a table — instead of a block of text, and the OIDC add-on's start page
+is a link, so nothing this phase needs it. Buying it costs a manifest field with a
+digest per file (the migrations pattern), a load-time parse into a clone of the host's
+template set, and a scanner over somebody else's markup for script tags, inline
+handlers, external references and raw palette utilities — a filter, which is the shape
+this decision is avoiding. The trade is that an add-on's page looks plain until
+somebody decides that markup from a module is worth a filter.
+
+## 2026-08-20 — M64, one module instance per request, measured against the page budget
+
+**D260.** m64.md's second risk names the choice — *"an instance per request or a
+pooled instance"* — and asks this milestone to measure it. M60 measured the two costs
+that decide it (D225): compiling the 1.85 MB fixture takes a few hundred milliseconds
+and instantiating the compiled form takes about 2 ms with about 2.4 MB of guest
+memory. Compiling per request was ruled out by those numbers before this milestone
+started; instantiating was not.
+
+**Chosen: an instance per request**, instantiated from the compiled module the host
+already holds, with the request's own context so the runtime's `CloseOnContextDone`
+interrupts a guest that will not return. Measured here rather than inherited:
+`TestRoutingCostsAnInstantiation` times a whole round trip through the ABI and logs
+it, and the ceiling it asserts is a tenth of the 250 ms page target — which is the
+threshold at which this decision would have to be revisited, written as a test rather
+than as a sentence.
+
+**The number, on this machine, 2026-08-20: 3.96 ms** for a whole request — the host
+instantiating, the guest initializing, `http_request_read`, the guest's handler,
+`http_response_write` and the instance closing. M60's own measurement runs in the
+same suite and reports 1.76 ms and 2.42 ms for the two instantiations of the same
+fixture (and 385 ms to compile it, once, at boot), so **the ABI round trip, the JSON
+in both directions and the guest's own work are about two milliseconds on top of the
+instance**. Against 250 ms for a page that is 1.6%, and against the 20 ms cached
+redirect p99 it would be a third of the budget — which is why this is M64's answer
+for the dashboard and not M66's for the redirect path.
+
+**What it buys** is that guest memory does not cross requests. A module cannot leave
+one visitor's state where another visitor's request can read it, which for an
+authentication add-on is the difference between a nonce and a vulnerability; and an
+add-on that needs state between two requests of one flow has to put it in the schema
+it owns, where it survives a restart and is visible to every replica. A per-request
+instance also cannot be poisoned: a guest that traps takes its own instance down and
+nothing else.
+
+**What it costs, and the bound.** About 2 ms per request, and 2.4 MB per request *in
+flight* — which on an unauthenticated surface (D261) is memory exhaustion with no
+session to rate-limit against. So the number in flight is bounded at sixteen across
+the instance, about 38 MB at saturation, and a seventeenth waits on the request's own
+deadline rather than being refused immediately. The bound is a constant and not a
+knob: a knob would need a default anyway, and this one is measured against the cost
+it bounds.
+
+**The loser: a pool, or the loaded instance under a mutex.** Either saves the 2 ms
+and caps memory by construction. Both keep guest state across requests, which makes
+the isolation above a matter of add-on discipline rather than of the host's shape, and
+the singleton form additionally serializes an add-on's pages behind one slow request
+and has no way back from a poisoned instance short of a restart. Two milliseconds
+against 250 is not a price worth that.
+
+## 2026-08-20 — M64, an add-on's routes are reachable without a session
+
+**D261.** Every other dashboard page is behind `signedIn` — a session, and an
+organization to spend it in. An add-on's pages are not, and the reason is M65: an
+add-on that authenticates somebody is answering a request from a person who does not
+have a session yet, so a session requirement on this surface would make the hook
+built for it unreachable through it. The bullet that follows it in m64.md — *an
+add-on route handler can ask the host who is signed in* — reads as an option rather
+than a precondition, which is only coherent if nobody signed in is a state a route
+meets.
+
+So a route is public, and the record says so honestly: `signed_in` is false and every
+other field is empty, rather than the call failing.
+
+**What that admits, stated rather than implied.** An unauthenticated request runs
+third-party code, which is why the concurrency bound in D260 exists and why
+`docs/SECURITY.md` names it. It is not a new *trust* boundary — the add-ons directory
+was already one, and a module in it is code this instance executes — but it is a new
+*reachability* one: before this milestone, nothing an operator installed could be
+provoked by somebody without an account.
+
+**Not chosen: public only for add-ons that declare it.** A per-add-on switch is the
+obvious middle, and it is a manifest field, which at schema version 1 means every
+published manifest keeps working and every *new* one is unreadable to an older host.
+It also answers a question nobody has asked yet: no add-on exists that wants its
+pages behind a session, and M68's manager is where an operator's own answer would
+belong. Left for the milestone that has a case.
+
+## 2026-08-20 — M64, the request body says whether it is encoded, and the response body cannot be
+
+**D262.** The `HTTPRequest` record documented its body as *"the body, base64 when it
+is not UTF-8"*, which is not implementable as written on either side: a guest handed
+a string cannot tell an encoded body from a body that happens to look encoded, and a
+host handed one cannot either.
+
+**Inbound**, the record gains `body_base64`, a boolean that is true exactly when the
+request's own bytes were not valid UTF-8. Additive, so it breaks no consumer that
+ignores it, and it makes the existing sentence decidable rather than replacing it.
+
+**Outbound**, the same sentence is **corrected** rather than implemented: a
+response's body is UTF-8 text and there is no encoded form. The reason is that there
+is nothing for one to carry — the content types a module may name are text, and a
+flag saying *this is base64* with no non-text response to be the base64 of would be a
+field describing a capability that does not exist. A module needing to answer bytes
+is a milestone with a case in front of it, not a field added in advance.
+
+## 2026-08-20 — M64, an add-on's settings come from the environment, by declared name
+
+**D263.** m64.md asks for config to reach an add-on *"the way it reaches the
+product"*: `LINKCTRL_ADDON_<NAME>_<SETTING>`, read through `internal/config`, handed
+to the module at load, bounded by the grant, with secrets getting the `Secret`
+treatment. Three details were the milestone's to decide.
+
+**Read by declared name, never by prefix scan.** `oidc` and `oidc_x` are both legal
+add-on names, so `LINKCTRL_ADDON_OIDC_X_KEY` is ambiguous to a scan and unambiguous
+to a lookup of the variable a declared setting names. The consequence is that a
+variable for a setting no manifest declares is silently not read — no warning,
+because a warning would have to guess which add-on it was meant for — which is the
+same scoping `config_get` already applies to an undeclared key.
+
+**Held as `config.Secret` for every setting, not only the ones a manifest called
+secret.** The type is what makes *must not print* structural rather than careful, and
+applying it uniformly means no site has to ask which kind of setting it is holding.
+Nothing needs the plain value except `config_get` itself, which reveals it at the
+point of use.
+
+**Not unset from the environment after reading**, which is where this deliberately
+differs from the product's own secrets. The env library unsets those once, during a
+single `Parse`; an add-on host can be opened more than once in one process, and a
+variable consumed by the first open would be missing from the second. The cost is
+that an add-on's secret stays in the process environment, which `docs/SECURITY.md`
+states beside the `Secret` treatment rather than leaving to be discovered.
+
+Values are read once at load, for the reason grants are resolved once: `config_get`
+is on a request's path and must not read the environment per call. Changing one
+therefore takes a restart, which `docs/configuration.md` says.
+
+## 2026-08-20 — M64, no add-on CSS is served, so nothing ships unscanned
+
+**D264.** m64.md requires this milestone to answer the theme gap as a decision rather
+than discover it: `internal/ui/theme_test.go` walks the **embedded** templates, a
+module's assets are not in the embed, and the file says the milestone either extends
+the discipline to served add-on CSS as a host-side check or ships add-on CSS
+unscanned and says so.
+
+**Chosen: a third answer the bullet's own wording allows — serve no add-on assets at
+all.** The CSP bullet offers a disjunction ("returns content the host wraps in the
+layout, **or** serves declared static assets from its module"), and this milestone
+takes the first limb only. There is therefore no add-on CSS on this instance: the one
+template M64 added is embedded like every other, so M24.5's scan covers it
+completely, and the sentence *the scan covers the CSS this product serves* stays true
+without an exception.
+
+**What that costs an add-on.** Its page is drawn with the host's theme tokens and the
+host's layout, and it cannot ship a stylesheet, a font or an image. For a text body
+inside the dashboard's own frame that is no loss; for a page that wants a diagram it
+is. The milestone that wants one inherits the question this decision did not answer —
+how a served add-on asset is scanned — with the advantage that it will have a real
+asset to scan rather than a hypothetical one, and `M68`'s manager surface is where an
+operator would be told which add-ons ship what.
+
+**Not chosen: extend the scan to a module's assets now.** It is the answer the bullet
+expects, and it costs a scanner over third-party bytes with nothing to scan: no
+add-on serves an asset, so the check would be a mechanism whose first real input
+arrives in a later milestone and whose correctness nobody could measure until then.
+Building a filter before there is anything to filter is how a filter comes to be
+trusted without evidence.
+
+## 2026-08-20 — M64, the demo shows no add-on page, and the coverage test cannot say so
+
+**D265.** The demo gate applies to a milestone that adds something somebody can see,
+and M64 adds a page. The demo instance shows none of it, and this records why rather
+than leaving the gate looking satisfied.
+
+An add-on is **files in a directory**, not rows in a database. Showing an add-on's
+page on the demo means building a wasm module, shipping it into the demo image and
+pointing `LINKCTRL_ADDONS_DIR` at it — which makes the demo instance execute a module
+for the sake of a screenshot, and makes `make demo-update` depend on a wasm toolchain.
+That is a decision about what the demo *is*, and it belongs to [M68](phase-details/m68.md),
+where the add-on manager gives an evaluator something to look at that is the product's
+own surface rather than a fixture's.
+
+`demoCoverage()` cannot express the gap either: every row is a SQL count against the
+demo database, and there is no table an installed add-on appears in. So the honest
+record is this entry plus a comment where the gate is enforced, and **not** a row
+asserting zero over a query that would be about nothing. The rule's own escape applies
+— *does not apply to work with nothing to look at* — narrowly: there is something to
+look at, and the demo does not install the thing that would draw it.
+
+## 2026-08-20 — M64, a request too large to cross is the client's error, and the host says so before the module runs
+
+**D266.** The comment on `maxAddonRequestBody` justified a 64 KiB read cap by
+claiming *"a module's whole request record crosses the ABI boundary as one value,
+which is bounded at 64 KiB there, so a larger body could not be delivered anyway"*.
+M64's review doubted it and measurement refuted it, in both halves.
+
+**The claim's mechanism does not exist.** `maxStringIn` bounds guest→host, in
+`readString`. The other direction is `writeOut`, which answers the *size* when the
+value does not fit the buffer the guest offered and lets the guest re-ask with a
+buffer that does — so a record is bounded by guest memory and by nothing else. A
+request record of **393,344 bytes** was measured crossing intact and answered 200,
+built from a 64 KiB body of control characters, each of which costs six bytes inside
+the JSON encoding.
+
+**What the false claim was hiding is a real cliff, and it is the response side.** A
+module that reflects what it was sent has to write its answer *back* through
+`readString`, where `maxStringIn` does bind. Measured against the `pages` fixture,
+whose default path echoes the record: a 65,336-byte body answered 200 and a 65,536-byte
+one answered **502**, with an operator-visible `ERROR` line, for a body the client
+chose the size of. `maxResponseBody` at 256 KiB does not save it — that is the second,
+looser bound, and the record is what crosses.
+
+**The bound now sits on the record, and it answers 413.** `Route` encodes the record
+before it takes an instance and refuses anything over `maxStringIn` as
+`ErrRequestTooLarge`, which `internal/httpx` maps to 413 and does not log at error.
+The number is the ABI's own single-value bound, because a record over it is one this
+boundary would not carry in the other direction either.
+
+**What it does not close, and this is measured rather than reasoned.** A module
+reflecting its whole input *plus* anything of its own is over the response bound while
+the request was under it. Against the same fixture: a plain body of **65,350** answers
+200 and one of **65,380** does not — a band about fifty bytes wide, the width of the
+`echo ` prefix and the JSON escaping of the record's own quotes. No request bound can
+close it, because the decoration is the module's and the host does not know it, and
+choosing a number that closed it *for this fixture* would be a bound justified by one
+fixture. Nor is the host mislabelling anything there: `http_response_write` answers
+`StatusInvalid`, so the module has been told its answer was refused and can write a
+smaller one. The fixture returns -1 instead, and a module that turns a documented
+refusal into a refusal of its own route is exactly what a 502 reports.
+
+**What it costs.** The ceiling on a *body* is now a function of its bytes rather than
+a number an operator can read off a constant — the envelope sits beside it, a body
+that is not UTF-8 is base64 first, and JSON escaping is up to six bytes a character.
+That is stated in `docs/SECURITY.md` and in the comment rather than approximated with
+a second constant that would drift from this one. `maxAddonRequestBody` stays at 64 KiB
+as the coarse gate: its job is to stop the host buffering more than could ever be the
+smaller half of a record it will refuse, and its refusal is the same 413.
+
+**Not chosen: lower `maxAddonRequestBody` until the cliff moves out of reach.** It was
+the review's own first suggestion and it cannot be made true. The expansion is the
+*module's* response shape, which the host does not know: a module echoing a 10 KiB body
+three times exceeds the bound with a body a tenth of the cap. A number chosen to make
+the fixture pass would be a bound whose justification is one fixture.
+
+**Not chosen: raise `maxStringIn`, or bound the response separately.** Both move the
+number this milestone was told not to move quietly. `maxStringIn` is a liveness bound
+on the host's own heap across every ABI function, and the milestone that wants an
+add-on to answer with more than 64 KiB should argue for it where that argument belongs.
+
+## 2026-08-20 — M64, two add-on names in a prefix relation are both refused, and three sentences said they could not be
+
+**D267.** D232's whole answer to add-on cookie collisions is that the namespace is
+*structural*: a declared prefix must begin with the add-on's own name and an
+underscore, so — the argument went — no add-on can claim another's and none can be
+denied its own by whichever installed first. D234 fixed that as the rule. M64's
+second review measured the first half false, and this milestone's own diff had just
+extended the same reasoning to a second namespace.
+
+**What was measured, with both add-ons loaded and nothing else changed.** `nameRe`
+is `^[a-z][a-z0-9_]{1,30}$`, so `oidc` and `oidc_x` are both legal names and both
+installable.
+
+- **Cookies.** Add-on `oidc` may declare the prefix `oidc_x` — it begins with
+  `oidc_`, so `Manifest.Validate` accepts it — and every prefix add-on `oidc_x` is
+  allowed to declare begins `oidc_x_`. Inbound filtering (`RequestIn.record`) and
+  outbound authorisation (`checkCookie`) are both `strings.HasPrefix`, so `oidc`
+  read `oidc_x_state` out of the request record and was authorised to set it. On an
+  authentication add-on that is one module reading and overwriting another's
+  session state.
+- **Settings.** `AddonSettingVar("oidc", "x_key")` and
+  `AddonSettingVar("oidc_x", "key")` are both `LINKCTRL_ADDON_OIDC_X_KEY`, and each
+  add-on reads it by asking for a setting it declared. New in this diff.
+
+**Three sentences asserted the impossibility of it**, and the third is the one worth
+naming: `internal/config/surface_test.go` set that variable to `"belongs to oidc_x"`
+and asserted that add-on `oidc` read it. It passed. A test that documents a leak and
+calls it correct defends the defect against the next person who notices, which is
+worse than no test at all.
+
+**In scope by the standing rule, not by choice.** *A recorded abuse path is in a fix
+milestone's scope by default* — a row whose evidence describes something a principal
+can **do**, including when it is found during that milestone. One add-on reading and
+overwriting another's session state is something a principal can do. The review
+itself had judged it a deferred row on the ground that the structural fix belongs to
+M60/M61's validation; the rule outranks that judgement, and the fix turned out to be
+small.
+
+**The fix: two loaded names may not stand in a `name + "_"` prefix relation.**
+`nameCollisions` in `internal/addon/host.go`, checked in `Open` before anything is
+loaded.
+
+That relation is not one case of the ambiguity — it is the whole of it, in both
+places, and the proof is one line. Both namespaces are `name + "_" + anything`. If
+two distinct names produce one string, the concatenations agree character for
+character; the shorter name's characters therefore prefix the longer name, and the
+character after them is the separator. So the shorter plus an underscore is a prefix
+of the longer, and nothing else can collide. Names are lowercase, so upper-casing
+for the environment adds nothing. That is why one check closes both cases, and the
+review's instruction to stop and report rather than close one did not have to fire.
+
+**Both members of the pair are refused.** There is no principled winner. Awarding
+the namespace to whichever name sorts first is D234's first-come rule with spelling
+in place of install order — and it always picks the *shorter* name, because a prefix
+sorts first, so the add-on that reached into its neighbour's namespace would be the
+one that kept it. Either add-on can deny the other by being installed; that cost
+exists under any refusal rule, and handing one of them the other's cookies does not.
+
+**The claim is read from manifests, not from directory entries.** `claimants` reads
+each directory's manifest and counts a name only where the manifest names the
+directory it sits in. Reading entries would be one line shorter and would let a
+mis-installed `oidc_x` refuse a working `oidc`, reporting a name collision to an
+operator whose actual problem is one typo. The cost is that the manifest is parsed
+twice per add-on at boot, a few hundred bytes each, and that an add-on which claims a
+name and then fails its checksum still collides — its operator's fix is the same
+rename either way.
+
+**`name_collision` is the eighth load outcome**, for the reason `abi_unsupported` was
+the sixth: neither manifest is invalid, each is a good manifest on its own, and the
+operator's fix is a directory name rather than anything inside a file. The refusal
+honours each add-on's own `failure_class`, which is only knowable because the class
+was read from the manifest — so a `required` add-on whose namespace is ambiguous
+stops the instance, which is what that class means when the add-on is sign-in.
+
+**The route prefix and the Postgres schema were never exposed to this.** Each uses
+the whole name as one segment with nothing joined onto it, and add-on routes mount as
+a single `/addons/{addon}/{rest...}` pattern whose segment is looked up by exact name.
+The three name-derived namespaces are not equally safe, and what separates them is
+whether anything is concatenated after the name; that is now stated where each is
+derived.
+
+**Six sentences were corrected, not the three the review listed.** `manifest.go`,
+`config.go` and `surface_test.go` were named; counting rather than trusting the
+enumeration found the same claim in `docs/addon-abi.md`, `docs/configuration.md` and
+`CHANGELOG.md`. Each now says which half of the rule it is describing.
+`surface_test.go`'s test asserts the collision it used to excuse and names where it is
+closed — the refusal itself cannot be asserted there, since `internal/addon` imports
+`internal/config` and not the other way round.
+

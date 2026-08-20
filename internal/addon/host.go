@@ -90,7 +90,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tetratelabs/wazero"
@@ -98,6 +101,7 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
@@ -112,7 +116,7 @@ const StartFunction = "_initialize"
 
 // Outcome is the closed vocabulary of load results, and it is a metric label.
 //
-// Seven values, so the series count is the number of installed add-ons times seven
+// Eight values, so the series count is the number of installed add-ons times eight
 // however many times the instance restarts. No error string is ever a label, and
 // the only filename that can become one is bounded by nameRe or collapsed to
 // InvalidName — see labelFor, which is what keeps the sentence above true of the
@@ -138,6 +142,13 @@ const (
 	// outside the schema the add-on owns. Which of those it was is in the log; the
 	// label is what tells an operator where to look.
 	OutcomeStorageFailed Outcome = "storage_failed"
+	// OutcomeNameCollision is two installed add-ons whose names stand in a
+	// `name + "_"` prefix relation — see nameCollisions, which is where the whole
+	// rule is. Its own label rather than manifest_invalid for the reason
+	// abi_unsupported is: neither manifest is invalid, each is a perfectly good
+	// manifest on its own, and the operator's fix is a directory name rather than
+	// anything inside a file.
+	OutcomeNameCollision Outcome = "name_collision"
 )
 
 // InvalidName is the addon label for a directory whose name could never be an
@@ -224,6 +235,12 @@ type Options struct {
 	// pools before it opens the host, and both of these come from the same place
 	// the migrations did.
 	DSN string
+
+	// Settings is where an add-on's configured values come from, asked for the
+	// settings its manifest declares. Nil means the environment, through
+	// [config.AddonSettings], which is what an instance uses; a test substitutes
+	// values without writing to the process environment.
+	Settings func(addon string, declared []string) map[string]config.Secret
 }
 
 // Loaded is one add-on that instantiated.
@@ -241,6 +258,15 @@ type Loaded struct {
 	module  api.Module
 	grants  Grants
 	storage *store.AddonDB
+	// settings is what an operator configured for this add-on, by declared
+	// setting name — see config.AddonSettings. Held as Secret whatever the
+	// manifest called the setting, so no value can print itself.
+	settings map[string]config.Secret
+	// compiled is the module's compiled form, kept because a route gets an
+	// instance of its own per request (M64, D260) and compiling per request was
+	// ruled out by M60's measurement. It is owned by the runtime and closed with
+	// it, which is why nothing here closes it.
+	compiled wazero.CompiledModule
 }
 
 // Grants is what this add-on holds, which is not the same as what its manifest
@@ -282,13 +308,28 @@ type Host struct {
 	// the maintenance job.
 	db  *pgxpool.Pool
 	dsn string
+	// settings is Options.Settings with its default applied.
+	settings func(addon string, declared []string) map[string]config.Secret
 
 	// states is what an ABI call is answered against, keyed by the calling
 	// module's name — see hostabi.go. Guarded because a host function is called
 	// from whatever goroutine the guest is running on: at boot that is Open's own,
-	// and from M64 on it is a request's.
+	// and since M64 it is a request's.
+	//
+	// A per-request instance is registered here too, under a name no manifest
+	// could carry, and removed when the request ends. That is what scopes a
+	// request to the instance answering it: dispatch resolves state by the
+	// *calling* module's name, so an add-on's own request record cannot be read
+	// by the add-on's load-time instance or by another request's.
 	mu     sync.RWMutex
 	states map[string]*hostState
+
+	// slots bounds how many add-on requests hold an instance at once. See
+	// maxConcurrentRoutes.
+	slots chan struct{}
+	// instances numbers per-request module names. Monotonic rather than random:
+	// a name that appears in a log is one an operator can order against another.
+	instances atomic.Uint64
 }
 
 // Open discovers, verifies and instantiates every add-on in opts.Dir.
@@ -328,7 +369,26 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// the guarantee is what makes the log diffable across restarts.
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
-	h := &Host{log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN}
+	// Every name that is claimed, read before anything is loaded, because whether
+	// one add-on may load is a question about the *other* names installed beside
+	// it — the one check in this file that cannot be made from one directory.
+	// See nameCollisions.
+	claimed := claimants(dir, entries)
+	collisions := nameCollisions(claimed)
+	classes := make(map[string]FailureClass, len(claimed))
+	for _, c := range claimed {
+		classes[c.name] = c.class
+	}
+
+	settings := opts.Settings
+	if settings == nil {
+		settings = config.AddonSettings
+	}
+	h := &Host{
+		log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN,
+		settings: settings,
+		slots:    make(chan struct{}, maxConcurrentRoutes),
+	}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
 	// because it is what lets M66 interrupt a module that will not return: a
@@ -361,7 +421,25 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 				slog.String("entry", name))
 			continue
 		}
-		loaded, err := loadOne(ctx, h, filepath.Join(dir, name), name)
+		var (
+			loaded Loaded
+			err    error
+		)
+		if others := collisions[name]; len(others) > 0 {
+			// Refused before it is loaded, rather than unwound after: the cheapest
+			// place to stop is the one before a schema exists and a module's package
+			// initialization has run.
+			err = &LoadError{
+				Addon: name, Outcome: OutcomeNameCollision, class: classes[name],
+				Err: fmt.Errorf("%q cannot load beside %s: one name plus an underscore "+
+					"is a prefix of the other, so the cookie prefixes and the %s "+
+					"variables derived from the two names overlap. Rename one directory "+
+					"and the add-on's manifest with it; neither loads until then",
+					name, quoteAll(others), config.AddonEnvPrefix),
+			}
+		} else {
+			loaded, err = loadOne(ctx, h, filepath.Join(dir, name), name)
+		}
 		if err != nil {
 			var le *LoadError
 			if !errors.As(err, &le) {
@@ -400,6 +478,12 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			slog.String("failure_class", string(loaded.Manifest.FailureClass)),
 			slog.Any("permissions", loaded.grants.Names()),
 			slog.Int("declared_settings", len(loaded.Manifest.Settings)),
+			// How many of them an operator has actually set, which is the question a
+			// boot log can answer and `config_get` returning a default cannot. The
+			// count and never a name-value pair: a setting may be a secret, and the
+			// values are held as config.Secret exactly so that a line like this one
+			// cannot become the leak.
+			slog.Int("configured_settings", len(loaded.settings)),
 			slog.String("schema", loaded.Schema),
 			slog.Int("migrations", len(loaded.Manifest.Migrations)),
 			slog.Uint64("guest_memory_bytes", uint64(loaded.MemorySize())))
@@ -440,6 +524,105 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 // the whole rule is that the add-on decides.
 func fatal(e *LoadError) bool {
 	return e.class == "" || e.class == ClassRequired
+}
+
+// claimant is a directory that has established an identity: its manifest parses
+// and names the directory it sits in.
+type claimant struct {
+	name  string
+	class FailureClass
+}
+
+// claimants reads the manifests in dir for the one thing the collision check
+// needs before anything loads — which names are claimed, and under whose failure
+// class.
+//
+// Best-effort by design. An entry whose manifest will not parse, or which names
+// some other directory, has claimed nothing: it fails on its own terms in the
+// load loop, and it must not take a neighbour whose install is intact down with
+// it. That is the difference between reading manifests here and reading the
+// directory entries — a mis-installed `oidc_x` would otherwise refuse `oidc` as
+// well, and the operator would be told about a name collision when what they have
+// is one typo.
+//
+// Everything past the name is deliberately *not* checked here. A module whose
+// bytes are wrong or whose ABI generation this host will not serve has still
+// declared the name and the prefixes under it, and its operator's fix is the same
+// rename either way — so it collides, and the cost is that a broken install
+// refuses its neighbour rather than only itself.
+//
+// The manifest is read twice per add-on, here and in loadOne. Boot only, a few
+// hundred bytes of JSON each, and the alternative is threading a parsed manifest
+// through the load path to save it.
+func claimants(dir string, entries []os.DirEntry) []claimant {
+	out := make([]claimant, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		m, err := ReadManifest(filepath.Join(dir, e.Name()))
+		if err != nil || m.Name != e.Name() {
+			continue
+		}
+		out = append(out, claimant{name: m.Name, class: m.FailureClass})
+	}
+	return out
+}
+
+// nameCollisions reports every claimed name standing in a `name + "_"` prefix
+// relation with another, mapped to the names it collides with.
+//
+// That relation is the whole of the ambiguity, in both places a name becomes a
+// namespace by concatenation, and the measurement is in host_test.go rather than
+// in this comment:
+//
+//   - **Cookies.** A declared prefix must begin with the add-on's own name and an
+//     underscore (D234), so add-on `oidc` may declare `oidc_x` — which is a
+//     prefix of every prefix add-on `oidc_x` is allowed to declare. Inbound
+//     filtering and outbound authorisation are both a prefix test, so `oidc`
+//     reads and overwrites `oidc_x`'s cookies, session state included.
+//   - **Settings.** LINKCTRL_ADDON_OIDC_X_KEY is `x_key` of `oidc` and `key` of
+//     `oidc_x` at once (D263), and no lookup can tell which operator meant which.
+//
+// It is exactly the relation and not merely one case of it. Both namespaces are
+// `name + "_" + anything`, so two distinct names produce one string only when the
+// shorter plus an underscore is a prefix of the longer: the concatenations agree
+// character for character, and the character after the shorter name is the
+// underscore. Names are lowercase (nameRe), so upper-casing for the environment
+// introduces no collisions of its own.
+//
+// The route prefix and the Postgres schema are unaffected. Each uses the whole
+// name as one path or identifier segment, with nothing concatenated after it, so
+// `/addons/oidc/` and `/addons/oidc_x/` are as distinct as their names are.
+//
+// **Both members of a pair are refused**, never the shorter or the longer. There
+// is no principled winner, and awarding the namespace to whichever name sorts
+// first would be the first-come rule D234 rejected, one milestone later with the
+// order decided by spelling instead of by install order — `oidc` sorts before
+// `oidc_x` precisely because it is the prefix. The cost is that either add-on can
+// deny the other by being installed; that cost exists under any refusal rule,
+// while handing one of them the other's cookies does not.
+func nameCollisions(cs []claimant) map[string][]string {
+	out := make(map[string][]string)
+	for i, a := range cs {
+		for _, b := range cs[i+1:] {
+			if strings.HasPrefix(b.name, a.name+"_") || strings.HasPrefix(a.name, b.name+"_") {
+				out[a.name] = append(out[a.name], b.name)
+				out[b.name] = append(out[b.name], a.name)
+			}
+		}
+	}
+	return out
+}
+
+// quoteAll is the collision message's list of other names, quoted so a name with
+// an underscore in it reads as one name.
+func quoteAll(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+	return strings.Join(quoted, ", ")
 }
 
 // loadOne is the whole lifecycle for one add-on, in the order that makes each
@@ -518,12 +701,19 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		return fail(OutcomeStorageFailed, m.FailureClass, err)
 	}
 
+	// What an operator configured, resolved once at load for the reason the grants
+	// are: config_get is a map lookup on a request's path and must not read the
+	// environment per call. Declared settings only — an environment variable for a
+	// setting no manifest declares is not read, which is the same scoping
+	// config_get itself applies (D263).
+	values := h.settings(m.Name, settingNames(m))
+
 	// Registered before instantiation, and this is not tidiness. Package
 	// initialization runs *during* InstantiateModule — that is what makes a
 	// load-time failure expressible at all — so a module whose init calls a host
 	// function does so before this call returns. State registered afterwards would
 	// mean every add-on's first ABI call answered StatusInternal.
-	deregister := h.registerState(m, grants, storage)
+	deregister := h.registerState(m, grants, storage, values)
 	// The compiled form is owned by the runtime and closed with it. Closing it
 	// here would invalidate the instance below.
 	mod, err := h.runtime.InstantiateModule(ctx, compiled,
@@ -555,8 +745,8 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		schema = storage.Schema()
 	}
 	return Loaded{
-		Manifest: m, Dir: dir, Schema: schema,
-		module: mod, grants: grants, storage: storage,
+		Manifest: m, Dir: dir, Schema: schema, settings: values,
+		module: mod, grants: grants, storage: storage, compiled: compiled,
 	}, nil
 }
 
@@ -768,3 +958,18 @@ func (h *Host) Close(ctx context.Context) error {
 	h.mu.Unlock()
 	return err
 }
+
+// settingNames is the settings a manifest declares, which is what
+// config.AddonSettings is asked for.
+func settingNames(m Manifest) []string {
+	out := make([]string, 0, len(m.Settings))
+	for _, s := range m.Settings {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
+// ConfiguredSettings is how many of this add-on's declared settings an operator
+// has given a value. It is what M68's manager reads to draw "set" beside a
+// secret it must never echo.
+func (l Loaded) ConfiguredSettings() int { return len(l.settings) }

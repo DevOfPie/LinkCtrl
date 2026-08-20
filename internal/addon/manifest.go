@@ -414,14 +414,22 @@ func (m Manifest) Validate() error {
 				"characters, lowercase letters, digits and underscores, starting with "+
 				"a letter", p)
 		case !strings.HasPrefix(p, m.Name+"_"):
-			// The whole collision rule, and it is a namespace rather than a registry:
-			// derived from the name, two add-ons cannot claim each other's cookies and
-			// neither can be denied its own by an add-on that loaded first. The same
-			// shape the Postgres schema (M63) and the route prefix (M64) take, for the
-			// same reason — the name is the one thing already unique per instance.
+			// Half of the collision rule, and only half: a namespace rather than a
+			// registry, so no add-on can be denied its own by one that loaded first.
+			// The same shape the Postgres schema (M63) and the route prefix (M64)
+			// take, for the same reason — the name is the one thing already unique per
+			// instance.
+			//
+			// What this rule cannot see is the *other* names installed. `oidc` may
+			// declare `oidc_x`, which begins with its own name and an underscore and is
+			// a prefix of everything add-on `oidc_x` can declare, so the second half is
+			// at load: two names standing in a `name + "_"` prefix relation are both
+			// refused (nameCollisions, host.go). Neither claim is honoured, and it takes
+			// both halves for "two add-ons cannot claim each other's cookies" to be
+			// true. It was measured false with only this one.
 			add("cookie_prefixes: %q must begin with %q: a cookie namespace is derived "+
-				"from the add-on's name, so no two add-ons can claim each other's "+
-				"cookies and none can claim one of this product's", p, m.Name+"_")
+				"from the add-on's name, so no add-on can be denied its own and none "+
+				"can claim one of this product's", p, m.Name+"_")
 		case reachesHostCookie(p):
 			add("cookie_prefixes: %q reaches this product's own cookie namespace, which "+
 				"no add-on may read or set: the session cookie is the session", p)

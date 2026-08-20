@@ -29,6 +29,71 @@ migrations run at boot.
 
 ### Added
 
+- **An add-on can serve pages, under its own prefix, and LinkCtrl draws them.**
+
+  A module whose manifest declares `routes.own_prefix` now answers requests under
+  `/addons/<name>/` on the dashboard host — never on the link host, which still
+  serves short links and nothing else. Configuration reaches it the way it reaches
+  the product: `LINKCTRL_ADDON_<NAME>_<SETTING>` in this instance's environment, for
+  the settings its manifest declares, with a value here outranking the manifest's
+  own default. And an add-on can ask who is signed in on the request it is
+  answering, which costs a grant of its own — `session.context`, which is why the
+  permission vocabulary below is seven tokens rather than the six it was planned
+  as — because an add-on that draws a page has not thereby asked to know the
+  identity of everybody who opens it.
+
+  **The add-on does not write the HTML, and that is the whole of the security
+  claim.** What a module answers is *text*. The content types it may name for
+  itself are `text/plain` and `application/json`, neither of which a browser
+  executes; `text/html` is refused at the moment the module writes it; and by
+  default LinkCtrl wraps the text in its own page, escaped like every other value
+  on every other page. So a module that answers with a script tag, an inline
+  handler or an external reference puts the *characters* of one on the screen —
+  asserted against a real module that tries all three — and the
+  Content-Security-Policy is byte-identical to what it was before add-ons could
+  draw anything. There is no sanitizer to get wrong, because there is no markup
+  path to sanitize.
+
+  The cost of that shape is stated rather than buried: an add-on's page is plain.
+  It ships no markup, no stylesheet, no font and no image, and the ABI function
+  that would change that is declared and still refused. What an add-on gets
+  instead is this product's own layout, its theme in both modes, and no front-end
+  toolchain to bring.
+
+  **Three things worth knowing before you install one.** Those pages are reachable
+  **without signing in** — they have to be, because an add-on that authenticates
+  somebody is answering a request from a person who has no session yet — and an
+  add-on learns nothing about who is signed in when nobody is. A module holding the
+  routes grant can **redirect a visitor anywhere**, since sending somebody to an
+  identity provider is the point of one; LinkCtrl enforces only that the redirect
+  is never permanent. And sixteen add-on requests run at once across the instance,
+  a further one waiting on the request's own timeout: each holds about 2.4 MB while
+  it runs, because a request gets an instance of the module to itself. That
+  isolation is deliberate — one visitor's state cannot be left where another
+  visitor's request can read it — and it means an add-on keeping state between two
+  requests of one flow keeps it in the schema it owns, where it survives a restart
+  and every replica can see it. A request too large to cross into a module answers
+  **413** and never reaches it, so a body somebody chose the size of cannot be
+  reported in your log as the add-on failing.
+
+  A cookie an add-on sets is bounded by the same declared prefixes as the ones it
+  may read, scoped to its own path, with `Secure`, `HttpOnly` and `SameSite`
+  applied by LinkCtrl. An add-on's configured secret is held in the type that
+  refuses to print itself, whatever the manifest called the setting, so it cannot
+  reach a log through a line about the add-on. Editing settings from the dashboard
+  is the Add-on manager's job and is not built yet; until then the environment is
+  the whole of it, and changing one takes a restart.
+
+  **Two add-ons cannot both load when one's name plus an underscore begins the
+  other's** — `oidc` and `oidc_x`. Both are refused, counted as
+  `linkctrl_addon_loads_total{outcome="name_collision"}`, and the boot log names
+  the pair, because a cookie prefix and a `LINKCTRL_ADDON_` variable are each the
+  add-on's name with something joined onto it, so the two namespaces overlap and
+  there is no honest answer to whose a shared one is. Neither is awarded the
+  other's, including the one that would have loaded first: rename a directory and
+  the `name` in its manifest with it. If either add-on is `required`, the instance
+  does not start until you do.
+
 - **An add-on can have tables of its own, in a schema of its own, that it cannot
   leave.**
 
@@ -168,11 +233,12 @@ migrations run at boot.
   operator can alert on. The check lives in the host's dispatch rather than in each
   function, so a capability cannot arrive with its check somewhere else.
 
-  **The vocabulary is closed and it is six tokens**: reading the add-on's own
+  **The vocabulary is closed and it is seven tokens**: reading the add-on's own
   settings, owning a Postgres schema, serving a path prefix and rendering its own
-  templates, minting a session, observing redirects out of band, and running inside
-  the redirect path. A `permissions` entry outside that list refuses the add-on at
-  load, for the same reason an unknown manifest field does. Two functions cost
+  templates, asking who is signed in, minting a session, observing redirects out of
+  band, and running inside the redirect path. A `permissions` entry outside that
+  list refuses the add-on at load, for the same reason an unknown manifest field
+  does. Two functions cost
   nothing and are ungated deliberately: asking the host its ABI version, and
   writing a line to the log, which is the one capability that was granted on
   purpose.
@@ -241,13 +307,16 @@ migrations run at boot.
   four places including the SDK's own Go `Deprecated:` markers, and what counts as
   breaking is a table rather than a judgement call.
 
-  **Five functions work; the rest are declared and refuse.** Logging, reading the
-  add-on's own declared settings, asking the host its ABI version, and — since the
-  add-on storage entry below — the two storage calls are live. Routes, templates,
-  the authentication hook and redirect observation are
-  declared — their names fixed, their signatures fixed enough to compile against —
-  and answer a refusal a module can branch on until the release that implements
-  them. So an add-on can be written against the whole contract now instead of being
+  **Eight functions work; the rest are declared and refuse.** Logging, reading the
+  add-on's own declared settings, asking the host its ABI version, the two storage
+  calls, and — since the add-on pages entry above — reading the request, writing
+  the response and asking who is signed in are live. Rendering a template, the
+  authentication hook and redirect observation are declared — their names fixed,
+  their signatures fixed enough to compile against — and answer a refusal a module
+  can branch on until the release that implements them. Rendering is the one that
+  will not simply be filled in: a page's HTML is composed by the host and an
+  add-on returns text, so the function as declared has no behaviour to grow into
+  and what happens to it is an open question about a published contract. So an add-on can be written against the whole contract now instead of being
   rewritten per release. Implementing a declared function is explicitly not a
   breaking change, and neither is finishing the parameters of one no release has
   implemented: that is what would otherwise have cost a version per limb, and the
@@ -271,9 +340,10 @@ migrations run at boot.
   and cannot ask for this instance's session cookie, which is server-side and
   opaque and therefore *is* the credential rather than a description of one. The
   same namespace bounds what it may set, because a cookie an add-on is not allowed
-  to read is one it must not be able to overwrite. Two add-ons cannot claim each
-  other's cookies either, and neither can deny the other its own: the namespace
-  comes from the name rather than from whoever registered first. Every payload the
+  to read is one it must not be able to overwrite. Neither can an add-on be denied
+  its own namespace by whichever registered first, since the namespace comes from
+  the name. That alone did not stop two add-ons claiming each other's, and the rest
+  of the answer is the name-collision refusal described above. Every payload the
   host composes is enumerated field by field for the same reason, including the one
   it hands back when it accepts a module's authentication claim: that one carries
   when the session expires and whether a second factor is still owed, and no

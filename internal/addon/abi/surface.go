@@ -189,6 +189,29 @@ var LogLevels = []string{"debug", "info", "warn", "error"}
 // a refusal that names the version.
 const HostModule = "linkctrl"
 
+// GuestHTTPHandler is the one function this ABI requires a *module* to export:
+// the host calls it to hand a request to an add-on holding `routes.own_prefix`.
+//
+// It takes no arguments and returns an i32 the same way a host function does — a
+// negative number is one of [Statuses], anything else is success. The request is
+// not passed in and the response is not returned out, because the convention
+// already has a way to move a record across and inventing a second one for this
+// direction would double what a publisher has to learn: the guest calls
+// `http_request_read` to see what it was asked and `http_response_write` to
+// answer, and both are refused outside a request.
+//
+// Prefixed, because a module's export namespace is flat and shared with whatever
+// the toolchain puts in it. Named here rather than in the host so that the host
+// looks up the same string a publisher writes in `//go:wasmexport` — the constant
+// cannot appear in that directive, which is why the fixture writes the literal
+// and a test proves the two agree by the module actually answering.
+//
+// A module that declares the routes grant and exports nothing is refused at the
+// request rather than at load: the export is a property of the wasm the manifest
+// names, and refusing an instance for it would take an instance down for a page
+// nobody asked for. The host answers 500 and logs which export was missing.
+const GuestHTTPHandler = "linkctrl_http_handle"
+
 // Function is one entry in the ABI: what a module may import.
 type Function struct {
 	// Name is the wasm import name, and it is the identity the SemVer promise is

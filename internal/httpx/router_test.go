@@ -25,6 +25,13 @@ func maximalDeps() Deps {
 	fillPointers(reflect.ValueOf(&d).Elem(), map[reflect.Type]bool{})
 	// The one registration gated on configuration rather than on a dependency.
 	d.Config.DocsEnabled = true
+	// The one dependency that is an interface rather than a pointer, so
+	// fillPointers cannot make one (M64). Set by hand, and the check below was
+	// widened to interfaces in the same change: an interface field left nil takes
+	// its routes out of both guards below without either of them failing, which is
+	// precisely the silence patternFloor and TestMaximalDepsFillsEveryDependency
+	// exist to break.
+	d.Web.Addons = nopAddonRouter{}
 	return d
 }
 
@@ -82,7 +89,20 @@ func TestMaximalDepsFillsEveryDependency(t *testing.T) {
 	for _, v := range []reflect.Value{reflect.ValueOf(d), reflect.ValueOf(*d.Web)} {
 		for i := range v.NumField() {
 			f := v.Field(i)
-			if f.Kind() == reflect.Pointer && f.IsNil() {
+			// Interface as well as pointer since M64: Web.Addons is an interface, and
+			// a nil one is exactly as invisible to the two guards below as a nil
+			// pointer was.
+			//
+			// Deps.Authenticator is the one interface field exempt, and it is exempt
+			// because it gates no *pattern*: NewRouter reads it to build the session
+			// middleware, so registerAppRoutes — which is what both guards below run
+			// — registers exactly the same set with it nil. Named rather than
+			// skipped silently, so an interface that does gate a route cannot join it
+			// by looking similar.
+			if v.Type().Field(i).Name == "Authenticator" {
+				continue
+			}
+			if (f.Kind() == reflect.Pointer || f.Kind() == reflect.Interface) && f.IsNil() {
 				t.Errorf("%s.%s is nil after maximalDeps: the routes gated on it are never "+
 					"registered, so nothing checks that they are mounted or reserved",
 					v.Type().Name(), v.Type().Field(i).Name)

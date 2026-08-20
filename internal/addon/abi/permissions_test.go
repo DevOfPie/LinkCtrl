@@ -29,6 +29,10 @@ func TestThePermissionVocabularyIsExactlyThis(t *testing.T) {
 		{"config.read", true},
 		{"storage.own_schema", true},
 		{"routes.own_prefix", true},
+		// The seventh, added at M64 (D258). It is here rather than folded into
+		// routes.own_prefix because a manifest reader would not expect a page-serving
+		// grant to also hand over who is signed in.
+		{"session.context", true},
 		{"session.mint", true},
 		{"redirect.observe", true},
 		{"redirect.inline", false},

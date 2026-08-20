@@ -871,6 +871,17 @@ func pageData(t *testing.T) map[string]any {
 			"FieldErrors": map[string]string{},
 			"Notice":      "", "Error": "",
 		},
+		// An installed add-on's page (M64). The body is what a *hostile* module
+		// would answer with, so every page-wide scan in this package — the layout
+		// sweep, the overflow scan, the theme-token walk — reads a render whose
+		// content is markup an add-on tried to inject. It is inert here for the
+		// same reason it is inert in production: it is a value, and the escaping
+		// belongs to the template rather than to a filter.
+		"addon": map[string]any{
+			"Title": "probe", "Nav": "", "Identity": owner(), "HasOrganization": true,
+			"Addon": "probe",
+			"Body":  "<script>alert(1)</script>\nA second line, because the body is text.",
+		},
 		"account": map[string]any{
 			"Title": "Account", "Nav": "account", "Identity": owner(),
 			"FieldErrors": map[string]string{},

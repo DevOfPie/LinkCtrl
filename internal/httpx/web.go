@@ -76,6 +76,11 @@ type Web struct {
 	// the section undrawn and its two routes unregistered, which is the state a
 	// deployment without the queue is already in.
 	Instance *instance.Service
+	// Addons routes a request to an installed add-on's own pages (M64). Nil is
+	// the ordinary state — an instance with no LINKCTRL_ADDONS_DIR has no host at
+	// all — and it leaves the `/addons/` pattern unregistered, which is what keeps
+	// m60.md's "no route is mounted" true for every operator who installs none.
+	Addons AddonRouter
 }
 
 // shell is what the layout template needs on every page.

@@ -806,7 +806,8 @@ that would go over the wire in clear all refuse to boot.
 
 **Off unless you set a directory, and off is exact.** With `LINKCTRL_ADDONS_DIR`
 empty no WASM runtime is constructed, no goroutine is started, no route is
-mounted, no table is created and no metric series is published. That is asserted
+mounted — including the `/addons/` prefix an installed add-on's pages are served
+under — no table is created and no metric series is published. That is asserted
 by tests rather than asserted here, because "off costs nothing" is the kind of
 sentence that stops being true one release after somebody writes it.
 
@@ -867,13 +868,13 @@ implement.
 | `module` | The `.wasm` file, as a **bare filename** inside this directory. A separator or a `..` is refused rather than cleaned. |
 | `sha256` | The digest of that file, 64 lowercase hex characters — what `sha256sum` prints. Verified before the module is compiled; a mismatch means it is never parsed, let alone run. |
 | `failure_class` | `required` or `degrade`. No default. |
-| `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the six below. |
-| `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is also what stops two add-ons claiming each other's cookies, in either direction: neither can read the other's, and neither can deny the other its own by installing first. |
+| `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the seven below. |
+| `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is what stops an add-on being denied its own by whichever installed first; it does not on its own stop `oidc` declaring `oidc_x`, so the other half of the rule is at load — two installed add-ons whose names stand in a `name + "_"` prefix relation are **both refused**, counted as `name_collision`, and the boot log names the pair. Rename one directory and its manifest. |
 | `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
 
 #### The permissions an add-on may declare
 
-Six, and the list is closed: adding one is a change to LinkCtrl, not something a
+Seven, and the list is closed: adding one is a change to LinkCtrl, not something a
 manifest can do. [addon-abi.md](addon-abi.md) says which function each one gates
 and generates the same table from the host's own definition.
 
@@ -881,7 +882,8 @@ and generates the same table from the host's own definition.
 | --- | --- |
 | `config.read` | Read its own declared settings — the `settings` list above, and nothing else |
 | `storage.own_schema` | Read and write the Postgres schema it owns, whole. Not finer, and not another add-on's |
-| `routes.own_prefix` | Serve requests under the path prefix it owns, and render its own templates through this product's renderer |
+| `routes.own_prefix` | Serve requests under the path prefix it owns — `/addons/<name>/`, on the dashboard and never on the link host — and have what it answers rendered by this product |
+| `session.context` | Ask who is signed in on the request it is answering: the account, its email and display name, the workspace and organization the request landed in, and the role held there. Nothing else, and nothing that could be replayed — no cookie, no token, no session identifier. It is separate from `routes.own_prefix` deliberately: an add-on that draws a page has not thereby asked to know who is looking at it |
 | `session.mint` | Tell this instance that somebody authenticated, and ask for a session. The highest-value grant here — an add-on holding it decides who is signed in |
 | `redirect.observe` | Watch redirects out of band. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form |
 | `redirect.inline` | Run inside the redirect path itself. **No release grants this yet**; an add-on declaring it loads, does not hold it, and says so in the boot log |
@@ -902,12 +904,13 @@ version it is published under and the promise attached to it — and it is gener
 from the same definition the host registers, so it cannot describe a function the
 host does not serve.
 
-Most of those functions do not work yet. They are declared so that an add-on can
+Some of those functions do not work yet. They are declared so that an add-on can
 be written against the whole contract now, and each answers a refusal a module can
 branch on until the release that implements it arrives. What works today is
-logging, reading the add-on's own declared settings, and asking the host its ABI
-version — and each of those, apart from the ABI version and the log, is behind one
-of the permissions above. **No function hands an add-on a client's address**, in
+logging, reading the add-on's own declared settings, reading and writing its own
+Postgres schema, answering HTTP requests under its own prefix, and asking who is
+signed in on one — and each of those, apart from the ABI version and the log, is
+behind one of the permissions above. **No function hands an add-on a client's address**, in
 any form, which is why an add-on that watches redirects cannot store one — and none
 hands it a credential of this instance's either, which is what `cookie_prefixes`
 above is for: see [SECURITY.md](SECURITY.md).
@@ -946,6 +949,72 @@ nobody is **not** a refusal: the add-on loads without it, and the boot log says 
 
 A file that is not a directory is ignored with a warning, so a `README` you left
 in there is not an outage.
+
+### Configuring an add-on
+
+An add-on's declared settings are read from this instance's environment, one
+variable per setting:
+
+```
+LINKCTRL_ADDON_<NAME>_<SETTING>
+```
+
+Both halves upper-cased. An add-on called `oidc` declaring a `client_id` setting
+reads `LINKCTRL_ADDON_OIDC_CLIENT_ID`, and the `_FILE` convention this product
+uses for its own secrets does **not** apply here.
+
+Three rules, and each is a refusal you will not see:
+
+- **Only declared settings are read.** A variable naming a setting no manifest
+  declares does nothing at all — it is not a warning, because two add-ons whose
+  names are prefixes of each other would make "did you mean this one" a guess.
+  The add-on's own documentation is what lists its settings; the manifest is what
+  proves the list.
+- **A value here outranks the manifest's default**, exactly as every other value
+  in this file outranks the default beside it. A setting with neither is absent,
+  which is what a `secret` always is until you set one — a manifest may not carry
+  a default for one.
+- **A value set to nothing is unset.** A line with nothing after the `=` means the
+  add-on gets its default, not an empty string.
+
+Values are held in memory the way this product's own secrets are: typed so they
+cannot print themselves into a log, a panic or a config dump, whatever the
+manifest called the setting. The boot log says how many settings an add-on has
+configured and never which or what.
+
+Editing these from the dashboard is the Add-on manager's job and it is not built
+yet, so this environment is the whole of it. Nothing reads a setting from the
+database, which means changing one takes a restart.
+
+### The pages an add-on serves
+
+An add-on holding `routes.own_prefix` answers requests under `/addons/<name>/`,
+on the **dashboard** host only. The link host serves short links and nothing else,
+and no add-on route reaches it.
+
+Three things worth knowing before you install one:
+
+- **Those pages are reachable without signing in.** They have to be: an add-on
+  that authenticates somebody is answering a request from a person who does not
+  have a session yet. What such an add-on learns about who *is* signed in is the
+  `session.context` grant above, and it learns nothing when nobody is.
+- **The add-on does not write the HTML.** It answers text, and LinkCtrl draws the
+  page around it, escaped. An add-on cannot put a script, an inline handler or an
+  external reference into your dashboard, and the Content-Security-Policy is
+  unchanged from every other page — which is a property of how the page is built
+  rather than of a filter. An add-on may also answer `text/plain` or
+  `application/json` for its own endpoints; `text/html` is refused.
+- **It may send a visitor off this origin.** Redirecting to an identity provider
+  is the point of an authentication add-on, so an add-on holding this grant can
+  redirect a visitor to any address — never permanently, which this product
+  enforces. That is one of the reasons the directory is a trust boundary.
+
+Sixteen add-on requests are served at once across the whole instance; a
+seventeenth waits for one of them to finish and gives up when the request's own
+timeout does. Each in-flight request holds about 2.4 MB while it runs, because a
+request gets an instance of the module to itself — which is also why an add-on
+cannot keep anything in memory between two requests of one flow, and has to keep
+it in the schema it owns.
 
 ### The trust boundary
 

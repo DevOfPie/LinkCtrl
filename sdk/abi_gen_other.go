@@ -119,12 +119,14 @@ func StorageExec(sql string, args []byte) error {
 
 // HTTPRequestRead reads the request that reached one of this add-on's
 // routes. It answers ErrNotFound outside a request, which is what a module
-// calling it from package initialization gets. A host that does not
-// implement it yet answers ErrNotAvailable.
+// calling it from package initialization gets — an instance is made per
+// request and its initialization runs before the request is attached, so
+// this is the ordinary answer during init rather than an edge case. Read
+// twice in one request it answers the same record twice: the host holds it,
+// the guest does not consume it.
 //
-// ABI: linkctrl.http_request_read, since 0.1.0; declared, and not
-// implemented by every host: a host without it answers ErrNotAvailable,
-// which a module may branch on.
+// ABI: linkctrl.http_request_read, since 0.1.0; implemented since this
+// version.
 //
 // Requires the routes.own_prefix permission, declared in this add-on's
 // manifest. A module that did not declare it gets ErrDenied, whether or not
@@ -136,14 +138,19 @@ func HTTPRequestRead() ([]byte, error) {
 // HTTPResponseWrite answers the request that reached one of this add-on's
 // routes. Called twice for one request it is ErrInvalid: a response is one
 // record, not a stream, because a module that can hold a connection open is
-// a module that can hold every connection open. A host that does not
-// implement it yet answers ErrNotAvailable.
+// a module that can hold every connection open. What the record may carry
+// is bounded by the host and not by the module: `content_type` is a closed
+// vocabulary that does not include text/html, because the host wraps a page
+// and an add-on that could choose the type could choose markup; `location`
+// is answered 302 and never a permanent redirect; and `set_cookie` is
+// bounded by the prefixes the manifest declares, with the host's own
+// Secure, HttpOnly and SameSite attributes applied. Each of those is
+// ErrInvalid rather than a silently corrected response.
 //
 // response is the response, as an HTTPResponse record.
 //
-// ABI: linkctrl.http_response_write, since 0.1.0; declared, and not
-// implemented by every host: a host without it answers ErrNotAvailable,
-// which a module may branch on.
+// ABI: linkctrl.http_response_write, since 0.1.0; implemented since this
+// version.
 //
 // Requires the routes.own_prefix permission, declared in this add-on's
 // manifest. A module that did not declare it gets ErrDenied, whether or not
@@ -170,6 +177,28 @@ func HTTPResponseWrite(response []byte) error {
 // manifest. A module that did not declare it gets ErrDenied, whether or not
 // the host implements the function.
 func TemplateRender(name string, data []byte) ([]byte, error) {
+	return nil, errNotWasm
+}
+
+// SessionContextRead asks the host who is signed in on the request this
+// add-on is answering. It is the *read* half of the session boundary and
+// the whole of it: what comes back is an identity and where it is working,
+// never a cookie, a token or a session row, so an add-on can draw a page
+// for the person in front of it and cannot act as them anywhere else.
+// Nobody signed in is not an error — add-on routes are reachable without
+// a session, because a sign-in flow could not otherwise begin — so the
+// record's `signed_in` is false and every other field is empty. Outside a
+// request it is ErrNotFound, which is what a module calling it from package
+// initialization gets. Minting a session is session_mint and is a different
+// grant.
+//
+// ABI: linkctrl.session_context, since 0.1.0; implemented since this
+// version.
+//
+// Requires the session.context permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
+func SessionContextRead() ([]byte, error) {
 	return nil, errNotWasm
 }
 

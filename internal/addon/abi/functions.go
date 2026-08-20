@@ -16,8 +16,12 @@ package abi
 // discarded and it is the only way out.
 //
 // Six capability groups, one per limb the phase's milestones land: logging and
-// config are M61's, storage is M63's, and all three work. Routes and templates are
-// M64's, the session hook M65's, redirect observation M66's, and each of those is
+// config are M61's, storage is M63's, routes and the session *read* are M64's, and
+// all of those work. Template rendering from a module's own files is declared and
+// **still refused** — M64 answered the rendering half by wrapping what a module
+// returns rather than by parsing markup a module ships, which is D259 and is why
+// the function that would parse it did not land with the milestone that backs it.
+// The session *hook* is M65's and redirect observation M66's, and each of those is
 // **declared here and refused at runtime** with
 // StatusNotAvailable. That order is deliberate — a module written against the
 // whole contract compiles today, and the milestone that implements a limb turns
@@ -120,7 +124,7 @@ var Functions = []Function{
 			"here too; what differs is that the transaction is not read-only.",
 	},
 	{
-		Name: "http_request_read", Go: "HTTPRequestRead", Since: "0.1.0", BackedBy: "M64",
+		Name: "http_request_read", Go: "HTTPRequestRead", Since: "0.1.0", BackedBy: "M64", Live: true,
 		Requires: "routes.own_prefix",
 		Params: []Param{
 			{Name: "request", Kind: OutBytes, Doc: "the request, as an HTTPRequest record"},
@@ -128,11 +132,13 @@ var Functions = []Function{
 		Carries: []string{"HTTPRequest"},
 		Doc: "HTTPRequestRead reads the request that reached one of this add-on's routes. " +
 			"It answers ErrNotFound outside a request, which is what a module calling it " +
-			"from package initialization gets. A host that does not implement it yet answers " +
-			"ErrNotAvailable.",
+			"from package initialization gets — an instance is made per request and its " +
+			"initialization runs before the request is attached, so this is the ordinary " +
+			"answer during init rather than an edge case. Read twice in one request it " +
+			"answers the same record twice: the host holds it, the guest does not consume it.",
 	},
 	{
-		Name: "http_response_write", Go: "HTTPResponseWrite", Since: "0.1.0", BackedBy: "M64",
+		Name: "http_response_write", Go: "HTTPResponseWrite", Since: "0.1.0", BackedBy: "M64", Live: true,
 		Requires: "routes.own_prefix",
 		Params: []Param{
 			{Name: "response", Kind: Bytes, Doc: "the response, as an HTTPResponse record"},
@@ -141,8 +147,14 @@ var Functions = []Function{
 		Doc: "HTTPResponseWrite answers the request that reached one of this add-on's " +
 			"routes. Called twice for one request it is ErrInvalid: a response is one " +
 			"record, not a stream, because a module that can hold a connection open is a " +
-			"module that can hold every connection open. A host that does not implement it " +
-			"yet answers ErrNotAvailable.",
+			"module that can hold every connection open. What the record may carry is " +
+			"bounded by the host and not by the module: `content_type` is a closed " +
+			"vocabulary that does not include text/html, because the host wraps a page " +
+			"and an add-on that could choose the type could choose markup; `location` is " +
+			"answered 302 and never a permanent redirect; and `set_cookie` is bounded by " +
+			"the prefixes the manifest declares, with the host's own Secure, HttpOnly and " +
+			"SameSite attributes applied. Each of those is ErrInvalid rather than a " +
+			"silently corrected response.",
 	},
 	{
 		Name: "template_render", Go: "TemplateRender", Since: "0.1.0", BackedBy: "M64",
@@ -157,6 +169,24 @@ var Functions = []Function{
 			"tokens and its Content-Security-Policy. It is also how an add-on reaches the " +
 			"page without bringing a front-end toolchain: it renders nothing itself. A " +
 			"host that does not implement it yet answers ErrNotAvailable.",
+	},
+	{
+		Name: "session_context", Go: "SessionContextRead", Since: "0.1.0", BackedBy: "M64", Live: true,
+		Requires: "session.context",
+		Params: []Param{
+			{Name: "context", Kind: OutBytes, Doc: "who is signed in, as a SessionContext record"},
+		},
+		Carries: []string{"SessionContext"},
+		Doc: "SessionContextRead asks the host who is signed in on the request this add-on " +
+			"is answering. It is the *read* half of the session boundary and the whole of " +
+			"it: what comes back is an identity and where it is working, never a cookie, a " +
+			"token or a session row, so an add-on can draw a page for the person in front " +
+			"of it and cannot act as them anywhere else. Nobody signed in is not an error " +
+			"— add-on routes are reachable without a session, because a sign-in flow could " +
+			"not otherwise begin — so the record's `signed_in` is false and every other " +
+			"field is empty. Outside a request it is ErrNotFound, which is what a module " +
+			"calling it from package initialization gets. Minting a session is " +
+			"session_mint and is a different grant.",
 	},
 	{
 		Name: "session_mint", Go: "SessionMint", Since: "0.1.0", BackedBy: "M65",
@@ -240,12 +270,23 @@ var Records = []Record{
 				"add-on may declare reaches a cookie of the host's"},
 			{"content_type", "string", "the request's Content-Type"},
 			{"accept_language", "string", "the request's Accept-Language"},
-			{"body", "string", "the body, base64 when it is not UTF-8"},
+			{"body", "string", "the body, base64 when body_base64 says so"},
+			{"body_base64", "boolean", "whether body is base64 rather than text; it is true " +
+				"exactly when the request's own body was not valid UTF-8, and it exists " +
+				"because a guest cannot otherwise tell an encoded body from one that " +
+				"happens to look encoded"},
 		},
 	},
 	{
 		Name: "HTTPResponse",
-		Doc:  "What an add-on answers a request with.",
+		Doc: "What an add-on answers a request with, and what the host will let it. " +
+			"`content_type` is a closed vocabulary — text/plain and application/json — " +
+			"and **text/html is deliberately absent**: leaving it empty is the ordinary " +
+			"case and means the host wraps the body in the dashboard's own page, escaped, " +
+			"which is what makes \"an add-on cannot inject markup\" a property of this " +
+			"record rather than of a filter somewhere. Every bound here is checked when " +
+			"the record is written, so a module learns it was refused from the call it " +
+			"made rather than from a page that differs from what it asked for.",
 		Fields: []Field{
 			{"status", "number", "the HTTP status code"},
 			{"content_type", "string", "the response's Content-Type"},
@@ -254,7 +295,30 @@ var Records = []Record{
 				"declares — a namespace an add-on owns is one it owns in both directions, or " +
 				"it could overwrite a cookie it is not allowed to read; the host applies its " +
 				"own Secure, HttpOnly and SameSite attributes"},
-			{"body", "string", "the body, base64 when it is not UTF-8"},
+			{"body", "string", "the body, as UTF-8 text — this direction carries no encoded " +
+				"form, because the content types an add-on may name are text and a flag " +
+				"saying otherwise would be a flag with nothing behind it"},
+		},
+	},
+	{
+		Name: "SessionContext",
+		Doc: "Who is signed in on the request an add-on is answering, and where they are " +
+			"working. It is deliberately not the session: no cookie, no token and no " +
+			"session identifier crosses, because this product's sessions are opaque " +
+			"server-side rows and the cookie *is* the credential (D232) — an add-on handed " +
+			"one could act as whoever is signed in, without escaping the sandbox. What is " +
+			"here is what a page needs in order to be drawn for somebody: who they are, " +
+			"and which tenant and workspace their request landed in. Every field is empty " +
+			"and `signed_in` is false when nobody is, which is the ordinary state of a " +
+			"route that begins an authentication flow.",
+		Fields: []Field{
+			{"signed_in", "boolean", "whether anybody is signed in at all; false makes every field below empty"},
+			{"user_id", "string", "the account, as a UUID — stable, and the only identifier of a person this record carries"},
+			{"email", "string", "the account's email address"},
+			{"display_name", "string", "the person's name, for display"},
+			{"workspace_id", "string", "the workspace this request landed in, as a UUID"},
+			{"organization_id", "string", "the organization that workspace belongs to, as a UUID — the tenant, which a workspace is not"},
+			{"role", "string", "the role held in that organization: owner, admin, editor or viewer"},
 		},
 	},
 	{

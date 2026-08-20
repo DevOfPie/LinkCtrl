@@ -21,6 +21,7 @@ import (
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 )
 
@@ -519,23 +520,166 @@ func TestManifestNameMustMatchItsDirectory(t *testing.T) {
 	}
 }
 
-// A module the manifest describes and the directory does not hold.
-func TestAMissingModuleIsRefused(t *testing.T) {
+// --- names that stand in a prefix relation ----------------------------------
+
+// prefixRelated is the pair the whole rule is about, built the way an operator
+// would install it: `oidc` declaring the prefix `oidc_x`, which is legal because
+// it begins with its own name and an underscore, and `oidc_x` declaring
+// `oidc_x_state`, which is legal for the same reason.
+func prefixRelated(code []byte, class FailureClass) (Manifest, Manifest) {
+	a := manifestFor("oidc", class, code)
+	a.Permissions = []string{"routes.own_prefix"}
+	a.CookiePrefixes = []string{"oidc_x"}
+
+	b := manifestFor("oidc_x", class, code)
+	b.Permissions = []string{"routes.own_prefix"}
+	b.CookiePrefixes = []string{"oidc_x_state"}
+	return a, b
+}
+
+// The abuse path the load-time refusal closes, measured rather than asserted.
+//
+// Both manifests are valid on their own — that is what makes this a question
+// about the installed *set* — and while both loaded, `oidc` read and overwrote
+// `oidc_x`'s session state, because inbound filtering and outbound authorisation
+// are both a prefix test. The same relation makes one environment variable mean
+// two settings. Neither namespace is fixed here: what is fixed is that two names
+// standing in that relation cannot both load, so no pair of loaded add-ons can
+// reach the overlap.
+func TestPrefixRelatedNamesCannotBothLoad(t *testing.T) {
 	code := fixture(t, "minimal")
+	a, b := prefixRelated(code, ClassDegrade)
+
+	// The two overlaps, stated as the facts they are. Both survive this fix and
+	// both are unreachable because of it.
+	if err := a.Validate(); err != nil {
+		t.Fatalf("oidc declaring the prefix oidc_x is refused by Validate, so this "+
+			"test no longer measures what it is for: %v", err)
+	}
+	if err := b.Validate(); err != nil {
+		t.Fatalf("oidc_x is refused by Validate: %v", err)
+	}
+	sent := &http.Cookie{Name: "oidc_x_state", Value: "oidc_x's own session state"}
+	if crossed := (RequestIn{Cookies: []*http.Cookie{sent}}).record(a.CookiePrefixes); len(crossed.Cookies) != 1 {
+		t.Errorf("oidc's prefixes no longer admit %s, so the cookie half of the "+
+			"collision is gone and the refusal below has one reason fewer", sent.Name)
+	}
+	if err := checkCookie(Cookie{Name: sent.Name, Value: "overwritten"}, a.CookiePrefixes); err != nil {
+		t.Errorf("oidc may no longer set %s: %v", sent.Name, err)
+	}
+	if one, two := config.AddonSettingVar("oidc", "x_key"),
+		config.AddonSettingVar("oidc_x", "key"); one != two {
+		t.Errorf("%s and %s are no longer one variable, so the settings half of the "+
+			"collision is gone", one, two)
+	}
+
 	root := t.TempDir()
-	install(t, root, manifestFor("minimal", ClassDegrade, code), nil)
+	install(t, root, a, code)
+	install(t, root, b, code)
 
 	metrics := observability.NewMetrics()
 	h, err := openHost(t, root, metrics)
 	if err != nil {
-		t.Fatalf("a degrade-class add-on stopped the instance: %v", err)
+		t.Fatalf("a degrade-class collision stopped the instance: %v", err)
 	}
+	// Both, not the shorter and not the longer: there is no principled winner, and
+	// picking by sort order would be D234's first-come rule with spelling deciding.
 	if h.Len() != 0 {
-		t.Errorf("%d add-ons loaded", h.Len())
+		t.Errorf("%d add-ons loaded from a colliding pair; neither may", h.Len())
+		for _, l := range h.Addons() {
+			t.Errorf("loaded %q, whose cookie prefixes are %v", l.Manifest.Name,
+				l.Manifest.CookiePrefixes)
+		}
 	}
-	if body := scrape(t, metrics); !strings.Contains(body,
-		`linkctrl_addon_loads_total{addon="minimal",outcome="module_unreadable"} 1`) {
-		t.Errorf("the refusal was not counted as unreadable:\n%s", seriesLike(body, "linkctrl_addon_"))
+	body := scrape(t, metrics)
+	for _, name := range []string{"oidc", "oidc_x"} {
+		want := `linkctrl_addon_loads_total{addon="` + name + `",outcome="` +
+			string(OutcomeNameCollision) + `"} 1`
+		if !strings.Contains(body, want) {
+			t.Errorf("%q's refusal was not counted as a collision:\n%s", name,
+				seriesLike(body, "linkctrl_addon_"))
+		}
+	}
+}
+
+// The underscore is the whole of the relation. `oidcx` concatenates with nothing
+// `oidc` can produce, so both names are ordinary neighbours.
+func TestNamesThatMerelySharePrefixTextBothLoad(t *testing.T) {
+	code := fixture(t, "minimal")
+	root := t.TempDir()
+	install(t, root, manifestFor("oidc", ClassRequired, code), code)
+	install(t, root, manifestFor("oidcx", ClassRequired, code), code)
+
+	h, err := openHost(t, root, nil)
+	if err != nil {
+		t.Fatalf("two names in no prefix relation stopped the instance: %v", err)
+	}
+	if h.Len() != 2 {
+		t.Errorf("%d add-ons loaded, want 2", h.Len())
+	}
+}
+
+// A collision is honoured against each add-on's own failure class, which is only
+// knowable because the claim is read from the manifest rather than from the
+// directory entry. A `required` add-on whose namespace is ambiguous stops the
+// instance, for the reason its class exists: sign-in shared with a squatter is
+// not a degraded instance.
+func TestARequiredCollisionStopsTheInstance(t *testing.T) {
+	code := fixture(t, "minimal")
+	root := t.TempDir()
+	a, b := prefixRelated(code, ClassRequired)
+	install(t, root, a, code)
+	install(t, root, b, code)
+
+	_, err := openHost(t, root, nil)
+	if err == nil {
+		t.Fatal("a required add-on in a name collision did not stop the instance")
+	}
+	if !strings.Contains(err.Error(), "cannot load beside") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// A directory that has claimed nothing denies nothing. Here the manifest parses
+// and names some other directory, so it can never load — and it is not allowed to
+// take the add-on beside it down on the way. That is why the claim is read from
+// manifests rather than from directory entries: an entry is a name somebody typed,
+// and a manifest agreeing with its directory is the only thing that makes it an
+// identity.
+func TestADirectoryThatClaimsNothingDeniesNothing(t *testing.T) {
+	code := fixture(t, "minimal")
+	root := t.TempDir()
+	a, b := prefixRelated(code, ClassDegrade)
+	install(t, root, a, code)
+
+	// Installed into `oidc_x` while naming `oidc_x_typo`: a real mis-install, and
+	// the shape loadOne refuses for disagreeing with its directory.
+	install(t, root, b, code)
+	b.Name = "oidc_x_typo"
+	// Its prefixes go with the name: a manifest is validated against its own name
+	// before anything compares it to the directory, so declarations that named the
+	// old one would fail for the wrong reason.
+	b.CookiePrefixes = nil
+	manifest, err := json.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "oidc_x", ManifestFile), manifest, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h, openErr := openHost(t, root, nil)
+	if openErr != nil {
+		t.Fatalf("a mis-installed neighbour stopped the instance: %v", openErr)
+	}
+	if h.Len() != 1 {
+		t.Errorf("%d add-ons loaded, want 1: a manifest that disagrees with its "+
+			"directory claims no name", h.Len())
+	}
+	for _, l := range h.Addons() {
+		if l.Manifest.Name != "oidc" {
+			t.Errorf("loaded %q rather than oidc", l.Manifest.Name)
+		}
 	}
 }
 
@@ -790,7 +934,7 @@ func TestInstantiationCostIsMeasured(t *testing.T) {
 		name := fmt.Sprintf("minimal_%d", i)
 		m := manifestFor(name, ClassRequired, code)
 		grants, _ := resolveGrants(m)
-		direct.registerState(m, grants, nil)
+		direct.registerState(m, grants, nil, nil)
 
 		start = time.Now()
 		mod, err := rt.InstantiateModule(ctx, compiled,

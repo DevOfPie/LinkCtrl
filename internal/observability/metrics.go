@@ -206,9 +206,9 @@ func NewMetrics() *Metrics {
 		// because installing an add-on is an operator action against a directory
 		// and not something a tenant can do.
 		//
-		// `outcome` is addon.Outcome and is seven words: loaded, manifest_invalid,
+		// `outcome` is addon.Outcome and is eight words: loaded, manifest_invalid,
 		// abi_unsupported, checksum_mismatch, module_unreadable,
-		// instantiate_failed, storage_failed. No error
+		// instantiate_failed, storage_failed, name_collision. No error
 		// string ever reaches a label. `addon` comes from the validated manifest
 		// on the loaded path and from the *directory entry* on the refusal path,
 		// where there is no manifest to take it from — bounded there by the host,
@@ -220,7 +220,7 @@ func NewMetrics() *Metrics {
 			Name: "linkctrl_addon_loads_total",
 			Help: "Add-on load attempts by add-on and outcome (loaded, manifest_invalid, " +
 				"abi_unsupported, checksum_mismatch, module_unreadable, instantiate_failed, " +
-				"storage_failed).",
+				"storage_failed, name_collision).",
 		}, []string{"addon", "outcome"}),
 
 		// The identity series, modelled on linkctrl_build_info: always 1, and the

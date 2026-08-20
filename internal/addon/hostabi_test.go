@@ -195,8 +195,9 @@ func TestTheProbeFixtureGetsEveryClassOfAnswer(t *testing.T) {
 		"probe: config_undeclared=ok",
 		"probe: storage_query_no_database=ok",
 		"probe: storage_exec_no_database=ok",
-		"probe: http_request_refused=ok",
-		"probe: http_response_refused=ok",
+		"probe: http_request_outside_request=ok",
+		"probe: http_response_outside_request=ok",
+		"probe: session_context_outside_request=ok",
 		"probe: template_refused=ok",
 		"probe: session_refused=ok",
 		"probe: redirect_refused=ok",
@@ -218,9 +219,11 @@ func TestTheProbeFixtureGetsEveryClassOfAnswer(t *testing.T) {
 		}
 	}
 	// Every refused check is named `<something>_refused=ok`, so counting the suffix
-	// counts the set. The two storage checks are deliberately named differently —
-	// M63 implemented those functions, and this host has no database rather than no
-	// implementation — which is what keeps this count honest as limbs land.
+	// counts the set. The checks for functions that are implemented are deliberately
+	// named otherwise — the two storage ones because this host has no database
+	// rather than no implementation, and M64's three because "outside a request" is
+	// a state and not a refusal — which is what keeps this count honest as limbs
+	// land. It has moved twice now, from five to three, without this line changing.
 	if reported := strings.Count(logs, "_refused=ok"); reported != refused {
 		t.Errorf("the ABI declares %d refused functions and the probe reported %d", refused, reported)
 	}
@@ -236,7 +239,10 @@ func TestTheProbeFixtureGetsEveryClassOfAnswer(t *testing.T) {
 func TestAHostFunctionAnswersTheCallingAddon(t *testing.T) {
 	code := fixture(t, "probe")
 	dir := t.TempDir()
-	for name, retention := range map[string]string{"probe": "30", "probe_two": "90"} {
+	// `probetwo` rather than `probe_two`: two names standing in a `name + "_"`
+	// prefix relation are refused at load (nameCollisions), which is what this test
+	// installed before D267 and is nothing to do with what it measures.
+	for name, retention := range map[string]string{"probe": "30", "probetwo": "90"} {
 		m := manifestFor(name, ClassRequired, code)
 		m.Permissions = grantable()
 		m.Settings = []Setting{
@@ -256,7 +262,7 @@ func TestAHostFunctionAnswersTheCallingAddon(t *testing.T) {
 	logs := sink.String()
 	for _, want := range []string{
 		`msg="probe: retention_days=30" addon=probe source=addon`,
-		`msg="probe: retention_days=90" addon=probe_two source=addon`,
+		`msg="probe: retention_days=90" addon=probetwo source=addon`,
 	} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("the logs do not carry %s\n%s", want, logs)
@@ -748,7 +754,7 @@ func TestAModuleThatDeclaredNothingIsDeniedEveryGatedFunction(t *testing.T) {
 	scraped := scrape(t, metrics)
 	for _, permission := range []string{
 		"config.read", "storage.own_schema", "routes.own_prefix",
-		"session.mint", "redirect.observe",
+		"session.context", "session.mint", "redirect.observe",
 	} {
 		series := `linkctrl_addon_refusals_total{addon="undeclared",permission="` + permission + `"}`
 		if !strings.Contains(scraped, series) {

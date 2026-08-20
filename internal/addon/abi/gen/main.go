@@ -9,8 +9,9 @@
 //     constants all come from abi.Functions, abi.Statuses and abi.LogLevels.
 //   - docs/addon-abi.md's function table, between the generated markers. The
 //     policy prose around it is written by hand; the table is not, because a
-//     table of ten functions maintained beside the ten functions is a table that
-//     describes nine of them.
+//     hand-maintained table of N functions beside N functions is a table that
+//     describes N-1 of them. Written without the number on purpose: the first
+//     draft of this comment said ten, twice, and there are eleven.
 //
 // Run it with `make abi-sdk`, or `make generate`, which is where sqlc and
 // openapi also live. `make check-generate` re-runs it and fails on a diff, so a

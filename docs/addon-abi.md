@@ -438,6 +438,53 @@ A function this ABI declares and this host has not implemented yet answers
 **`ErrNotAvailable`** — a status a module can branch on, which is what lets one
 module work against two hosts. Probing for a capability is the intended use.
 
+## What a module exports
+
+The functions above are what a module *imports*. There is one function it must
+**export**, and it is how the host hands over a request:
+
+```go
+//go:wasmexport linkctrl_http_handle
+func handle() int32 { … }
+```
+
+Required only of an add-on that declared `routes.own_prefix`; ignored for one
+that did not. It takes no arguments and returns an `int32`, read the way a host
+function's answer is read — a negative number is one of the statuses in the table
+below, anything else is success.
+
+**Nothing is passed in and nothing is returned out**, deliberately: the calling
+convention already has a way to move a record across, and a second one for this
+direction would double what there is to learn. Inside the handler, call
+`http_request_read` to see what you were asked and `http_response_write` to
+answer. Both are `ErrNotFound` outside a request — which includes package
+initialization, since the host makes an instance per request and attaches the
+request after the module has initialized.
+
+Three things follow from that, and each of them is a real constraint rather than
+a note:
+
+- **A module cannot keep state between two requests.** Its memory is new every
+  time. State a flow needs across requests belongs in the schema
+  `storage.own_schema` grants, where it also survives a restart and is visible to
+  every replica of the instance.
+- **A response is one record, and writing twice is `ErrInvalid`.** The first
+  write stands. A module that could keep writing could hold a connection open,
+  and a module that can hold one open can hold every one open.
+- **A handler that returns without writing is a failure**, answered as one. There
+  is no implicit empty page.
+
+What a response may carry is bounded by the host and checked at the moment you
+write it, so a refusal reaches you as a status from your own call rather than as a
+page that differs from what you asked for: `content_type` is `text/plain`,
+`application/json`, or **empty**, which is the ordinary case and means the host
+wraps your body in the dashboard's own page, escaped. `text/html` is refused —
+the host owns the HTML, which is what makes "an add-on cannot inject markup" a
+property of this boundary rather than of a filter. A `location` is answered `302`
+and never a permanent redirect; a `set_cookie` name has to begin with one of your
+declared `cookie_prefixes`, and the host applies its own `Path`, `Secure`,
+`HttpOnly` and `SameSite`.
+
 ## What is not promised
 
 - **Stability, while the ABI is `0.x`.** A generation may be retired with the
@@ -477,8 +524,12 @@ module work against two hosts. Probing for a capability is the intended use.
   bound what `set_cookie` may name, because a cookie an add-on may not read is
   one it must not be able to overwrite. Two consequences worth stating: an
   add-on that needs some *other* cookie of the host's cannot have it, and two
-  add-ons can neither read nor deny each other's cookies, since the namespace
-  comes from the name rather than from whoever installed first.
+  add-ons can neither read nor deny each other's cookies. The namespace comes
+  from the name rather than from whoever installed first, and that alone was not
+  enough: `oidc` may declare `oidc_x`, which is a prefix of every prefix add-on
+  `oidc_x` is allowed to declare. So two names standing in a `name + "_"` prefix
+  relation are **both refused at load** — neither is awarded the other's
+  namespace, and the instance says which two directories to rename.
 
 ## The ABI
 
@@ -493,9 +544,10 @@ The ABI is **0.1.0**, generation **1**, and this host loads generation 1 or newe
 | `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it, and ErrNotFound only when it declared none. Values are edited in the Add-on manager; until a host implements that, every answer is a declared default. |
 | `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed — ErrDenied, which is distinguishable from ErrInvalid so that a module can tell confinement from its own mistake. One statement per call: the host parses through the extended protocol, so a payload carrying two is refused. The read is a read at the server, in a READ ONLY transaction, so this function cannot be used to write. Arguments are a JSON array of strings, numbers, booleans and nulls; pass JSON as a string and cast it. Rows come back as a JSON array of objects keyed by column name, and a result with two columns of one name is refused rather than collapsed. |
 | `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep — the add-on ships them in its own `migrations/` directory and names each with its digest in the manifest, and the host applies them at load inside the same schema this function writes to. Everything StorageQuery says about the boundary, the single statement and the arguments applies here too; what differs is that the transaction is not read-only. |
-| `http_request_read`<br>`sdk.HTTPRequestRead()` | 0.1.0 | `routes.own_prefix` | declared, refused | HTTPRequestRead reads the request that reached one of this add-on's routes. It answers ErrNotFound outside a request, which is what a module calling it from package initialization gets. A host that does not implement it yet answers ErrNotAvailable. |
-| `http_response_write`<br>`sdk.HTTPResponseWrite(response []byte)` | 0.1.0 | `routes.own_prefix` | declared, refused | HTTPResponseWrite answers the request that reached one of this add-on's routes. Called twice for one request it is ErrInvalid: a response is one record, not a stream, because a module that can hold a connection open is a module that can hold every connection open. A host that does not implement it yet answers ErrNotAvailable. |
+| `http_request_read`<br>`sdk.HTTPRequestRead()` | 0.1.0 | `routes.own_prefix` | **live** | HTTPRequestRead reads the request that reached one of this add-on's routes. It answers ErrNotFound outside a request, which is what a module calling it from package initialization gets — an instance is made per request and its initialization runs before the request is attached, so this is the ordinary answer during init rather than an edge case. Read twice in one request it answers the same record twice: the host holds it, the guest does not consume it. |
+| `http_response_write`<br>`sdk.HTTPResponseWrite(response []byte)` | 0.1.0 | `routes.own_prefix` | **live** | HTTPResponseWrite answers the request that reached one of this add-on's routes. Called twice for one request it is ErrInvalid: a response is one record, not a stream, because a module that can hold a connection open is a module that can hold every connection open. What the record may carry is bounded by the host and not by the module: `content_type` is a closed vocabulary that does not include text/html, because the host wraps a page and an add-on that could choose the type could choose markup; `location` is answered 302 and never a permanent redirect; and `set_cookie` is bounded by the prefixes the manifest declares, with the host's own Secure, HttpOnly and SameSite attributes applied. Each of those is ErrInvalid rather than a silently corrected response. |
 | `template_render`<br>`sdk.TemplateRender(name string, data []byte)` | 0.1.0 | `routes.own_prefix` | declared, refused | TemplateRender renders one of this add-on's own templates through the host's renderer, so a page an add-on draws inherits the product's escaping, its theme tokens and its Content-Security-Policy. It is also how an add-on reaches the page without bringing a front-end toolchain: it renders nothing itself. A host that does not implement it yet answers ErrNotAvailable. |
+| `session_context`<br>`sdk.SessionContextRead()` | 0.1.0 | `session.context` | **live** | SessionContextRead asks the host who is signed in on the request this add-on is answering. It is the *read* half of the session boundary and the whole of it: what comes back is an identity and where it is working, never a cookie, a token or a session row, so an add-on can draw a page for the person in front of it and cannot act as them anywhere else. Nobody signed in is not an error — add-on routes are reachable without a session, because a sign-in flow could not otherwise begin — so the record's `signed_in` is false and every other field is empty. Outside a request it is ErrNotFound, which is what a module calling it from package initialization gets. Minting a session is session_mint and is a different grant. |
 | `session_mint`<br>`sdk.SessionMint(claim []byte)` | 0.1.0 | `session.mint` | declared, refused | SessionMint tells the host that this add-on authenticated somebody, and asks for a session. The add-on does not make a session and never sees a token: it makes an assertion, the host decides whether an account exists for it and what the session may do, and the cookie is written by the host. That split is what keeps the host, and not an add-on, the authority over who is signed in. What comes back is a MintedSession, and it is enumerated for the same reason the claim is: an answer described only as "a JSON object" is an answer the credential assertion over this surface cannot read. A host that does not implement it yet answers ErrNotAvailable. |
 | `redirect_event_read`<br>`sdk.RedirectEventRead()` | 0.1.0 | `redirect.observe` | declared, refused | RedirectEventRead reads the redirect this add-on is observing. What it carries is at most what click_events may carry — prefix-derived and country-level, and no client address in any form. The grant it costs is redirect.observe, which is out-of-band observation and nothing more: running inside the redirect path itself is redirect.inline, a separate declaration no host grants yet, so a module cannot reach the path by holding this. A host that does not implement it yet answers ErrNotAvailable. |
 
@@ -508,6 +560,7 @@ An add-on declares what it needs in its manifest's `permissions` array, and the 
 | `config.read` | yes | Read this add-on's own declared settings. It is the narrowest grant here and it is still a grant: the manifest's `settings` list says which keys exist, and this says whether the module may read any of them at all. |
 | `storage.own_schema` | yes | Read and write the Postgres schema this add-on owns, whole. The schema boundary is the whole of the grant — there is no row-level or column-level form of it, and nothing here names another add-on's schema or this product's own tables. It does not stop you giving your own schema away: a `GRANT` on what you own works, and the host reports it at your next load and refuses you until it is revoked. Migrations are the host's and are not this grant. |
 | `routes.own_prefix` | yes | Serve requests under the path prefix this add-on owns, and render its own templates through the host's renderer. One grant rather than two: a module renders a fragment in order to answer a request, and a template rendered for nobody is not a capability. |
+| `session.context` | yes | Ask the host who is signed in: identity, workspace and organization, and nothing else. Its own token rather than a thing a page-serving add-on gets for free, because `routes.own_prefix` is read as *this add-on draws a page* and identity is a second answer — a manifest declaring one grant should not turn out to have declared two. It is the read half and the whole of it: there is no cookie, no token and no session row behind it, and minting or destroying a session is session.mint. |
 | `session.mint` | yes | Tell the host that somebody authenticated, and ask for a session. The highest-value grant in this vocabulary: a module holding it decides who is signed in, subject to the host's own judgement about whether an account exists and what the session may do. |
 | `redirect.observe` | yes | Observe redirects this instance served, out of band. What crosses is at most what click_events may carry — prefix-derived and country-level, and no client address in any form — so this grant cannot be widened into one by the host implementing it. |
 | `redirect.inline` | **no host grants it yet** | Run inside the redirect path itself, where a module's own latency is added to the response. Distinct from redirect.observe so that a module cannot acquire it by accident, and **no host grants it yet**: it is declared here so the milestone that admits an add-on onto that path enforces behaviour against a permission that is already enforced. |
@@ -563,11 +616,12 @@ A request that reached one of an add-on's routes. The header set is an allowlist
 | `cookies` | object | The cookies whose names begin with one of the prefixes this add-on's manifest declares, by name — and nothing else, so no prefix an add-on may declare reaches a cookie of the host's |
 | `content_type` | string | The request's Content-Type |
 | `accept_language` | string | The request's Accept-Language |
-| `body` | string | The body, base64 when it is not UTF-8 |
+| `body` | string | The body, base64 when body_base64 says so |
+| `body_base64` | boolean | Whether body is base64 rather than text; it is true exactly when the request's own body was not valid UTF-8, and it exists because a guest cannot otherwise tell an encoded body from one that happens to look encoded |
 
 #### `HTTPResponse`
 
-What an add-on answers a request with.
+What an add-on answers a request with, and what the host will let it. `content_type` is a closed vocabulary — text/plain and application/json — and **text/html is deliberately absent**: leaving it empty is the ordinary case and means the host wraps the body in the dashboard's own page, escaped, which is what makes "an add-on cannot inject markup" a property of this record rather than of a filter somewhere. Every bound here is checked when the record is written, so a module learns it was refused from the call it made rather than from a page that differs from what it asked for.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -575,7 +629,21 @@ What an add-on answers a request with.
 | `content_type` | string | The response's Content-Type |
 | `location` | string | For a redirect; never a permanent one, which the host enforces rather than trusts |
 | `set_cookie` | array | Cookies to set, bounded by the same prefixes the manifest declares — a namespace an add-on owns is one it owns in both directions, or it could overwrite a cookie it is not allowed to read; the host applies its own Secure, HttpOnly and SameSite attributes |
-| `body` | string | The body, base64 when it is not UTF-8 |
+| `body` | string | The body, as UTF-8 text — this direction carries no encoded form, because the content types an add-on may name are text and a flag saying otherwise would be a flag with nothing behind it |
+
+#### `SessionContext`
+
+Who is signed in on the request an add-on is answering, and where they are working. It is deliberately not the session: no cookie, no token and no session identifier crosses, because this product's sessions are opaque server-side rows and the cookie *is* the credential (D232) — an add-on handed one could act as whoever is signed in, without escaping the sandbox. What is here is what a page needs in order to be drawn for somebody: who they are, and which tenant and workspace their request landed in. Every field is empty and `signed_in` is false when nobody is, which is the ordinary state of a route that begins an authentication flow.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `signed_in` | boolean | Whether anybody is signed in at all; false makes every field below empty |
+| `user_id` | string | The account, as a UUID — stable, and the only identifier of a person this record carries |
+| `email` | string | The account's email address |
+| `display_name` | string | The person's name, for display |
+| `workspace_id` | string | The workspace this request landed in, as a UUID |
+| `organization_id` | string | The organization that workspace belongs to, as a UUID — the tenant, which a workspace is not |
+| `role` | string | The role held in that organization: owner, admin, editor or viewer |
 
 #### `SessionClaim`
 

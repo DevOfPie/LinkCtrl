@@ -41,6 +41,18 @@ import (
 // bottom — what is deliberately *not* seeded yet — reads as the end of a list
 // rather than as an omission.
 
+// **What M64 deliberately does not add a row for, recorded here because this is
+// where the gate is enforced** (D265). An add-on that serves pages is something
+// somebody can see, and the demo instance shows none of it: an add-on is *files in
+// a directory*, so showing one means building a wasm module, shipping it into the
+// demo image and pointing LINKCTRL_ADDONS_DIR at it — which is a decision about
+// what the demo is, and belongs to M68's manager rather than to the milestone that
+// made a page possible. Every row below is a SQL count against the demo database
+// and there is no table an installed add-on appears in, so a row asserting zero
+// here would be a query about nothing. That is a narrowing of what this list
+// covers, in writing, which is what the paragraph above requires instead of a
+// deletion.
+
 // demoFeature is one thing the demo must show, and the query that proves it does.
 type demoFeature struct {
 	// Milestone is the number that shipped the feature, so a failure says which
