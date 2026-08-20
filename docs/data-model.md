@@ -186,9 +186,12 @@ because a reader finding the column otherwise concludes the feature is there.
 
 Everything above is in the `public` schema and is this product's. An installed
 add-on that declared `storage.own_schema` also has tables, in a schema of its own
-called `addon_<name>`, and **none of them are described here or anywhere else in
-this repository** — they are the add-on author's, they arrive with the module, and
-the host applies their DDL without understanding it.
+called `addon_<name>`, and **none of the add-on's own tables are described here or
+anywhere else in this repository** — they are the add-on author's, they arrive with
+the module, and the host applies their DDL without understanding it. One table in
+that schema is not the author's: `goose_db_version`, which the host creates to
+track the add-on's migrations, and which `docs/operations.md` and
+`docs/SECURITY.md` both describe.
 
 Three consequences worth reading before you meet one:
 

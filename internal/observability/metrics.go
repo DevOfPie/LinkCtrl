@@ -233,8 +233,9 @@ func NewMetrics() *Metrics {
 				"permissions it holds.",
 		}, []string{"addon", "version", "abi_version", "failure_class", "permissions"}),
 
-		// Refused ABI calls (M62). `permission` is addon.abi's closed vocabulary and
-		// is six words, so this is bounded at six series per installed add-on — the
+		// Refused ABI calls (M62). `permission` is the set of distinct Requires values
+		// across addon.abi's functions, which is narrower than the seven-token
+		// vocabulary, so this is bounded at six series per installed add-on — the
 		// same deployment-set bound the pair above carries, times a closed set, which
 		// is why a per-function label was not added: the permission is what an
 		// operator can act on, and the function is in the log line beside it.
@@ -251,7 +252,7 @@ func NewMetrics() *Metrics {
 		}, []string{"addon", "permission"}),
 
 		// How much disk each add-on's own schema holds (M63). One series per add-on
-		// that declared storage, so it is the narrowest of the four and bounded the
+		// that declared storage, so it is among the narrowest here and bounded the
 		// same way.
 		//
 		// **It is the whole of this product's answer to add-on storage quotas**, and

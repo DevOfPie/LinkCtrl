@@ -15,7 +15,8 @@ package abi
 // deliberately rather than by accident, since a module's stdout and stderr are
 // discarded and it is the only way out.
 //
-// Six capability groups, one per limb the phase's milestones land: logging and
+// Eight capability groups across seven declarable permissions, and they do not map
+// one to one onto milestones: logging and
 // config are M61's, storage is M63's, routes and the session *read* are M64's, and
 // all of those work. Template rendering from a module's own files is declared and
 // **still refused** — M64 answered the rendering half by wrapping what a module
@@ -83,8 +84,9 @@ var Functions = []Function{
 			"ask for another add-on's setting or for one of this product's own " +
 			"configuration values. A declared setting with no value yet answers with the " +
 			"default the manifest gave it, and ErrNotFound only when it declared none. " +
-			"Values are edited in the Add-on manager; until a host implements that, every " +
-			"answer is a declared default.",
+			"An operator sets a value with LINKCTRL_ADDON_<NAME>_<SETTING> and it outranks " +
+			"the manifest's default; editing them in the Add-on manager is M68's, and until " +
+			"that lands the environment is the only way to set one.",
 	},
 	{
 		Name: "storage_query", Go: "StorageQuery", Since: "0.1.0", BackedBy: "M63", Live: true,

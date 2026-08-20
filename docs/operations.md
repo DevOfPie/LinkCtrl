@@ -559,7 +559,9 @@ pair. Rename one directory **and** the `name` in its manifest, which must match
 it; if either add-on is `required` the instance does not start until you do.
 
 `storage_failed` as the outcome narrows it further: the module is fine and the
-database is the problem. Five causes, in the order they occur:
+database is the problem. Five causes, most likely first — **not** in the order the
+host reaches them, since it reads and verifies the migration files before it
+creates anything:
 
 - **Your database user cannot create a role.** The host makes one role per add-on,
   and that role is the confinement. `CREATEROLE` or superuser is required, and

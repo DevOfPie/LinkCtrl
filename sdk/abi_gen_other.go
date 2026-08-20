@@ -56,8 +56,10 @@ func Log(level string, message string) error {
 // is no way to ask for another add-on's setting or for one of this
 // product's own configuration values. A declared setting with no value yet
 // answers with the default the manifest gave it, and ErrNotFound only when
-// it declared none. Values are edited in the Add-on manager; until a host
-// implements that, every answer is a declared default.
+// it declared none. An operator sets a value with
+// LINKCTRL_ADDON_<NAME>_<SETTING> and it outranks the manifest's default;
+// editing them in the Add-on manager is M68's, and until that lands the
+// environment is the only way to set one.
 //
 // key is the name of a setting this add-on's manifest declares.
 //

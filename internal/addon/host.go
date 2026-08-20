@@ -11,11 +11,12 @@
 // runtime asked to instantiate it.
 //
 // The imports it may resolve are the ABI, which is authored in
-// internal/addon/abi and registered by hostabi.go. Five of them do something —
-// abi_version, log, config_get, storage_query and storage_exec — and the rest are
-// declared and refused with a status a module can branch on, because the contract
-// crosses a repository boundary before the behaviour behind it exists. Routes,
-// templates, the session hook and redirect observation are M64 to M66's.
+// internal/addon/abi and registered by hostabi.go. Count them from abi.Functions
+// rather than from this comment, which has been wrong once: the live set grows as
+// milestones land, and the rest are declared and refused with a status a module can
+// branch on, because the contract crosses a repository boundary before the
+// behaviour behind it exists. Template rendering, the session hook and redirect
+// observation are the ones still refused.
 //
 // # An add-on's own tables
 //

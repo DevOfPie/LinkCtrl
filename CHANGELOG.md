@@ -365,8 +365,10 @@ migrations run at boot.
   `linkctrl_addon_loads_total{addon,outcome}`,
   `linkctrl_addon_info{addon,version,abi_version,failure_class,permissions}` and
   `linkctrl_addon_refusals_total{addon,permission}`. All three are absent entirely
-  on an instance with no add-ons directory, which makes the series itself the answer
-  to whether this instance is running any.
+  on an instance with no add-ons directory — as are the two later milestones added,
+  `linkctrl_addon_schema_bytes` and `linkctrl_addon_large_objects`, so the presence
+  of any `linkctrl_addon_` series is the answer to whether this instance is running
+  an add-on at all.
 
   **Unset is the default and it costs nothing.** No WASM runtime is constructed,
   no goroutine is started, no route is mounted, no table is created and no metric

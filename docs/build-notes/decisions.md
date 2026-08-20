@@ -430,6 +430,8 @@ file. Append a row when you append an entry.
 | [M64, a request too large to cross is the client's error, and the host says so before the module runs](#2026-08-20--m64-a-request-too-large-to-cross-is-the-clients-error-and-the-host-says-so-before-the-module-runs) | D266 — the request record is bounded at the ABI's single-value bound and answers **413**. Replaces a comment claiming an alignment that measurement refuted: host→guest is bounded by guest memory, not by 64 KiB, so a module could be handed a record it could not answer about and the visitor got a 502 for a body they chose the size of |
 | [M64, two add-on names in a prefix relation are both refused, and three sentences said they could not be](#2026-08-20--m64-two-add-on-names-in-a-prefix-relation-are-both-refused-and-three-sentences-said-they-could-not-be) | D267 — `nameRe` admits `_`, so `oidc` may declare the cookie prefix `oidc_x` and read every cookie of add-on `oidc_x`; the same relation makes `LINKCTRL_ADDON_OIDC_X_KEY` two settings. **Both** names are refused at load — no winner, since picking one is D234's first-come rule with spelling deciding — which closes the cookie case and the settings case together, because both namespaces are `name + "_" + anything`. Claims read from the manifest, not from directory entries; eighth load outcome, `name_collision` |
 | [A code path only CI runs was tested nowhere](#2026-08-20--a-code-path-only-ci-runs-was-tested-nowhere-and-the-gate-that-caught-it-was-ten-days-old) | No milestone — a task-class fix after `make check-ci` went red. `ci-integration` never took `addon-fixtures` (third instance of the shape F259 and F271 record), and the on-demand fixture builder joined `../..` onto an already-stripped path, writing **two levels above the repository**. Every local gate was green because every local gate made the builder unreachable: **a fallback that only fires when the fast path is absent is only tested where the fast path is absent.** `make check-ci`'s first real failure, one commit after it landed |
+| [M64.9: the mid-phase adversarial review — what it checked, what it found, and what it refuted](#2026-08-20--m649-the-mid-phase-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted) | Six readers in fresh contexts, 37 raw findings, every one put to something that tried to kill it. The four that survived nothing and the two the attempt made worse; two readers reaching the identical-nonce defect by different routes without seeing each other; the cross-repo seam recorded as *not yet checkable* rather than passed; the browser check on a rebuilt image. D268: the contract grew 3123 bytes and is defended, and the headline drop of 65 KB is a charging artefact rather than a trimming |
+| [M64.9's triage: five milestones reopened, and the sanitizer fix that is a decision](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision) | D269: M59, M60, M62, M63 and M64 each carry a finding that falsifies their own shipped claim, so all five reopen; the three declined options and what each would have cost. D270, owner-answered: the log sanitizer computes Default_Ignorable properly and exempts the legitimate emoji case by what precedes the selector, rather than escaping all 260 and making a shipped test's assertion false |
 
 ---
 
@@ -34055,3 +34057,179 @@ local gate reported clean, and this is its first real failure: red on the commit
 after it landed, caught at the next boundary, with the run stopping rather than
 building a seventh milestone on top of it. The gate that F255 asked for did the one
 thing F255 said nothing was doing.
+
+## 2026-08-20 — M64.9, the mid-phase adversarial review: what it checked, what it found, and what it refuted
+
+Six milestones, `b9886f5..00d4ed5`, 117 files and +23354/-976 against `v0.3.0`.
+Run to [M32.9](phase-details/m32.9.md)'s specification, as every `X.9` since.
+
+**How independence was bought.** [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+prefers a different model from the writer's *and a more capable one where the
+choice exists*. No more capable one exists — the workers ran on the most capable
+model available — so the rule degrades exactly as that section says it does, to
+fresh contexts that had never seen the workers' reasoning. Six readers, each
+pointed at a dimension and given the standards as files, no conclusions, and no
+hint of which parts anybody thought were weak. That withholding is the
+load-bearing half of the instruction and it paid: the two findings that cost the
+most were in places nobody had flagged.
+
+**37 raw findings. Every one was put to something that tried to kill it** — six
+adversarial refuters for the behavioural claims, and counting for the nineteen
+that were arithmetic, because counting *is* the refutation for a count claim.
+
+**Four survived nothing, and saying so is the point.** A review that confirms
+everything it finds was not adversarial, it was credulous:
+
+- *The concurrency bound is an outage, not a queue.* Refuted. The behaviour is
+  verbatim what `internal/addon/http.go:100-113` predicts — `ErrBusy` after the
+  request's **own** budget, not a fixed 15 s. Against an honest module, 32
+  workers for 3 s produced 1177 completions and **zero** `ErrBusy`: the sixteen
+  slots never bind, the eight-core host does. The finder measured CPU starvation
+  and named it the bound.
+- *An add-on emits a 60 KB cookie value that helps evict the session.* Refuted.
+  The host does emit it; no browser stores it. Chromium's 4096-byte name+value
+  cap, measured — kept at 4000, dropped at 4090. Header bloat that cannot
+  contribute to the eviction it was filed under.
+- *The guest's clock is frozen, and it contradicts `http.go:62-65`.* Refuted
+  twice over. The clock advances 1 ms per reading, and that sentence is about
+  **state isolation** — one visitor's guest memory not being readable by
+  another's request — which the per-request instance genuinely delivers.
+- *The ABI page's four literal denials are false.* Refuted. Under the shipped
+  config a guest gets no preopens, an empty environ, empty args, discarded
+  stdout and no socket fd. "No socket, no file, no shared table, no environment"
+  is **true**. What is false is the sentence after it.
+
+**Two findings were made worse by the attempt to kill them**, which is the
+outcome the refutation pass exists to produce and the reason a review is evidence
+rather than a verdict:
+
+- The memory bound. *"515.5 MiB at load"* did not reproduce — a real fixture
+  measures 2.31 MiB, so `docs/SECURITY.md:83`'s "about 2.4 MB" is accurate as a
+  typical figure and wrong only as a **bound**, and the host reclaims properly
+  with no leak. The refuter then found what the reader had missed:
+  `docs/deployment.md:15` documents the floor as *"1 vCPU and 1 GB RAM is enough
+  to start"*, and **one request is enough to OOM that**.
+- The log sanitizer. *"The test protects the hole"* was too strong —
+  `internal/addon/hostabi_test.go:638` asserts `ok 😀 ❤️` survives byte-identical,
+  and U+2764 U+FE0F is a **legitimate** emoji presentation selector, a defensible
+  requirement rather than cover for a bug. Which makes the remedy a decision
+  instead of a patch, and is why it went to the owner.
+
+**Two readers reached the same defect by different routes, neither told about the
+other.** The reader pointed at the ABI's documentation measured the fake clock
+and random source resetting per request and closed its report, unprompted, saying
+the thing to fix first was the identical `crypto/rand` stream. The reader pointed
+at the host had already filed it. Root cause is `rand.New(rand.NewSource(42))`, a
+compile-time constant in wazero — so every add-on on every machine on every
+deployment draws the same bytes, and D260's fresh instance per request guarantees
+every visitor gets the **same** nonce rather than a fresh one. Independent
+convergence is the strongest signal this review produced.
+
+**The cross-repo seam is *not yet checkable*, and m64.9.md's bullet named that
+outcome itself rather than leaving it to be discovered.** `DevOfPie/LinkCtrl-OIDC`
+holds one commit, `94168a63`, whose entire tree is a 15-byte `README.md`. Nothing
+compiles against the SDK yet. Checked by `gh api` on 2026-08-20; the repository is
+not cloned on this machine. No amendment was needed and none was made.
+
+**The browser check, which [M46.5](phase-details/m46.5.md) obliges every `X.9` to
+answer.** Against an image rebuilt at 05:00:45 — `make up` does not rebuild, and a
+check against stale code passes for the wrong reason. `make verify-ui`: **18
+passed**. Then M64's own surface, driven signed in through a test module installed
+into the composed instance: the add-on page renders inside the dashboard shell,
+**console clean — 0 messages, 0 errors, 0 warnings — on every page walked**, the
+Content-Security-Policy **byte-identical** across `/login`, `/dashboard` and
+`/addons/pages/`, a hostile `<script>alert(1)</script>` rendered as text with the
+two scripts on the page both the host's and none injected, both themes inverting
+correctly, and the echoed request record reading `"cookies":{}` — the session
+cookie did not cross to the module, which is D232 holding where a person can see
+it.
+
+### D268 — the always-read contract grew 3123 bytes, and it is defended rather than trimmed
+
+`workflow.md` +697, the `check-ci` quick-reference line and the Docs gate's
+release-gate clause (F254). `phase-loop.md` +645, step 3.8's CI gate — F255, the
+nine days CI was red across a phase, two adversarial reviews and a release
+candidate while every gate the contract named ran locally and reported green.
+`phase-details/README.md` +1781, Phase 4's status table, Phase 3's having left for
+`phase-3.md`, so it is not pure growth — **and 90 bytes of that 1781 are this
+review's own**, the five status rows D269 turns to `in progress (reopened)`. The
+figure is stated after the edit rather than before it, because a review that
+regenerates the number before making its own changes is measuring the tree it
+walked in on. Two of the three bought the gate that
+closed a nine-day blindness and the third is the file's whole purpose. Realized
+read ratios: `workflow.md` 0.83→0.92, `README.md` 0.80, `phase-loop.md` 0.49.
+
+**The headline number fell and that is not a saving, which is worth more than the
+defence above.** The `/work phase` resume floor reads 132391 → 67066 because
+`scripts/doc-cost.sh:54` charges `Plan.md` at its longest `^| [M` row, and at the
+previous regeneration — `ca8864a`, after Phase 3's tables were archived and before
+Phase 4 was planned — `Plan.md` held no such row and was charged **whole** at
+68770. The pattern matches again now. So the charge silently swings 68 KB on
+whether Plan.md happens to be carrying an ordering table, and a reader comparing
+two regenerations across a phase boundary would read a 65 KB trimming that nobody
+did. Filed rather than fixed, because what the script should charge for a file in
+that state is a question about the measurement and not a bug in it.
+
+## 2026-08-20 — M64.9's triage: five milestones reopened, and the sanitizer fix that is a decision
+
+Owner-answered, both, on the review's triage.
+
+### D269 — M59, M60, M62, M63 and M64 are reopened
+
+Each carries a confirmed finding that falsifies **its own shipped claim**, which
+is the condition [workflow.md](workflow.md) attaches reopening to:
+
+| Milestone | The claim, and what falsifies it |
+| --- | --- |
+| [M59](phase-details/m59.md) | *"the check verifies the row the linking sentence names is in the table under that anchor"* — `scripts/check-links.sh:230` and `:239` reintroduce the `cmd \| grep -q` + `pipefail` SIGPIPE shape the same file forbids at `:102-105`, so present rows are reported missing and the gate exits 1 on a clean tree |
+| [M60](phase-details/m60.md) | *"logs, increments a metric, and the instance serves without it"* — a `degrade`-class module spinning in `init()` hangs boot with no log, no metric and no error. Also `m60.md:32`'s *"the manifest names identity and intent"*, against duplicate and case-variant JSON keys |
+| [M62](phase-details/m62.md) | *"nothing an add-on could use to smuggle a secret past a reader's eye"* — 260 variation selectors reach the log unescaped |
+| [M63](phase-details/m63.md) | D253's *"the load began clearing them"* — a per-database role GUC survives `ALTER ROLE … RESET ALL`, which clears only `pg_roles.rolconfig` |
+| [M64](phase-details/m64.md) | `m64.md:52`'s *"it cannot read the cookie, mint, or **destroy sessions**"* — an add-on holding only `routes.own_prefix` evicts the visitor's session cookie by volume. Also the documented memory bound, against an unbounded guest |
+
+Three options were declined and each is recorded because *we decided this did not
+matter* is the decision this project keeps losing. **Reopen only the four with
+proven one-line fixes** would have left `m62.md` and `m64.md` asserting something
+false while the run moved on. **Defer all seven to M70** would have built M65's
+session hook directly on top of M62's log boundary and M64's cookie handling with
+both known false, and M69's acceptance test is where that compounds. **Route the
+session-adjacent findings into M65** would have fattened the milestone the size
+target already warns about, and left two `done` rows false until it landed.
+
+The cost is accepted and stated: five reopenings before M65 starts, and the
+recommendation came from the actor that also does the work, which is exactly the
+drift [workflow.md](workflow.md#standing-rules) requires naming rather than
+hiding. It was recommended because the alternative leaves five shipped claims
+false **in writing**, not because it is cheap.
+
+### D270 — the sanitizer asks the real property, and legitimate emoji keep working
+
+`internal/addon/hostabi.go:491` asks `unicode.Other_Default_Ignorable_Code_Point`,
+which is Unicode's **residue** property: the real set is
+`Default_Ignorable_Code_Point = Other_DI ∪ Cf ∪ Variation_Selector − White_Space −
+FFF9..FFFB − PCM`. Go's tables were checked against Unicode's rather than assumed —
+`Other_DI` has 3776 members of which 7 are graphic, `Variation_Selector` has 260,
+all graphic, **none of them in `Other_DI`** — so the `!unicode.IsGraphic` fallback
+at `:494` covers `Cf` and cannot reach the selectors. Reproduced end to end twice,
+in separate contexts, through a module declaring **no permissions**: a line reading
+*"everything is fine"* from which `SECRET=hunter2` was recovered, under both the
+text and JSON handlers.
+
+The fix is to compute the property properly and then exempt the legitimate case by
+what **precedes** the selector, so `❤️` survives and a payload does not. The three
+alternatives were declined:
+
+- **Escape all 260 unconditionally** is correct by construction and one predicate,
+  and it makes `hostabi_test.go:638` and
+  `TestOrdinaryMessagesInEveryScriptSurviveTheBoundary` assert something the owner
+  would be choosing to make false.
+- **Bound the count of non-spacing marks** keeps emoji untouched and is a
+  threshold — which is what D242 replaced. Nothing bounds the call rate, so a
+  payload splits across lines.
+- **Record it and leave the boundary** stops the documents lying and leaves a
+  module that declared nothing holding a covert channel into the operator's log,
+  which is the one boundary D240 exists for.
+
+**The recommendation's own con stands and is not softened by having been taken**:
+it is the most complex predicate of the four, *what precedes* is itself a rule that
+can drift, and it adds a stateful check to a path nobody has benchmarked.

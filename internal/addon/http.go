@@ -101,7 +101,7 @@ const PermissionSessionContext = "session.context"
 //
 // A request that cannot get a slot waits, and waits on the request's own
 // context, so what bounds the wait is the deadline every application request
-// already carries (LINKCTRL_REQUEST_TIMEOUT). It is [ErrBusy] after that rather
+// already carries (LINKCTRL_HTTP_REQUEST_TIMEOUT). It is [ErrBusy] after that rather
 // than a page that arrives too late to be read.
 const maxConcurrentRoutes = 16
 
@@ -387,7 +387,7 @@ func (h *Host) Route(ctx context.Context, name string, in RequestIn, sess Sessio
 	fn := mod.ExportedFunction(abi.GuestHTTPHandler)
 	if fn == nil {
 		h.log.Error("an add-on declared the routes permission and exports no handler; "+
-			"its pages answer 500 until it is rebuilt",
+			"its pages answer 502 until it is rebuilt",
 			slog.String("addon", name),
 			slog.String("export", abi.GuestHTTPHandler))
 		return Response{}, ErrNoHandler
@@ -403,7 +403,7 @@ func (h *Host) Route(ctx context.Context, name string, in RequestIn, sess Sessio
 		return Response{}, fmt.Errorf("%w: %w", ErrGuestFailed, err)
 	}
 	// A handler may refuse in the ABI's own vocabulary rather than by trapping,
-	// and a negative answer is that refusal. It is logged and answered 500,
+	// and a negative answer is that refusal. It is logged and answered 502,
 	// because a module that declines to handle its own route has nothing else to
 	// show the person waiting.
 	if len(out) > 0 {

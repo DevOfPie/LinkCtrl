@@ -825,6 +825,8 @@ module it describes:
   oidc/
     addon.json
     oidc.wasm
+    migrations/          # only an add-on that declares storage.own_schema
+      00001_init.sql
 ```
 
 The directory name and the manifest's `name` must match. That is what lets a
@@ -870,6 +872,7 @@ implement.
 | `failure_class` | `required` or `degrade`. No default. |
 | `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the seven below. |
 | `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is what stops an add-on being denied its own by whichever installed first; it does not on its own stop `oidc` declaring `oidc_x`, so the other half of the rule is at load — two installed add-ons whose names stand in a `name + "_"` prefix relation are **both refused**, counted as `name_collision`, and the boot log names the pair. Rename one directory and its manifest. |
+| `migrations` | Optional, and **required in practice for any add-on that declares `storage.own_schema`** — the host applies only what this list names. Each entry is a `file` inside the `migrations/` directory beside the manifest and the `sha256` of its bytes, verified before a schema exists. A file listed but absent, present but unlisted, or whose digest disagrees each refuse the add-on. Filenames follow goose's convention. Declaring migrations without `storage.own_schema` is refused. **This row was missing until 2026-08-20**, so a publisher following this page shipped no `migrations` key and their DDL never ran, while the sentence above told them the field they needed was illegal (F285's review, M64.9) |
 | `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
 
 #### The permissions an add-on may declare
@@ -884,12 +887,12 @@ and generates the same table from the host's own definition.
 | `storage.own_schema` | Read and write the Postgres schema it owns, whole. Not finer, and not another add-on's |
 | `routes.own_prefix` | Serve requests under the path prefix it owns — `/addons/<name>/`, on the dashboard and never on the link host — and have what it answers rendered by this product |
 | `session.context` | Ask who is signed in on the request it is answering: the account, its email and display name, the workspace and organization the request landed in, and the role held there. Nothing else, and nothing that could be replayed — no cookie, no token, no session identifier. It is separate from `routes.own_prefix` deliberately: an add-on that draws a page has not thereby asked to know who is looking at it |
-| `session.mint` | Tell this instance that somebody authenticated, and ask for a session. The highest-value grant here — an add-on holding it decides who is signed in |
-| `redirect.observe` | Watch redirects out of band. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form |
+| `session.mint` | Tell this instance that somebody authenticated, and ask for a session. The highest-value grant here — an add-on holding it decides who is signed in. **No release implements this yet**; the grant is held and the function answers `ErrNotAvailable` until M65 lands |
+| `redirect.observe` | Watch redirects out of band. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form. **No release implements this yet**; the grant is held and the function answers `ErrNotAvailable` until M66 lands |
 | `redirect.inline` | Run inside the redirect path itself. **No release grants this yet**; an add-on declaring it loads, does not hold it, and says so in the boot log |
 
 Two functions cost nothing and need no declaration: asking the host its ABI
-version, and writing a line to your log. Everything else costs one of the six.
+version, and writing a line to your log. Everything else costs one of the seven.
 
 **A refused call is `ErrDenied`, and it is refused before the host says whether it
 implements the function at all** — so an add-on that declared nothing cannot use
@@ -1006,8 +1009,9 @@ Three things worth knowing before you install one:
   `application/json` for its own endpoints; `text/html` is refused.
 - **It may send a visitor off this origin.** Redirecting to an identity provider
   is the point of an authentication add-on, so an add-on holding this grant can
-  redirect a visitor to any address — never permanently, which this product
-  enforces. That is one of the reasons the directory is a trust boundary.
+  redirect a visitor to almost any address — any `http` or `https` URL, or a path.
+  A scheme-relative `//host`, any other scheme, and a control character are each
+  refused, and it is never permanent, which this product enforces. That is one of the reasons the directory is a trust boundary.
 
 Sixteen add-on requests are served at once across the whole instance; a
 seventeenth waits for one of them to finish and gives up when the request's own
