@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -552,6 +553,103 @@ DO $$ BEGIN EXECUTE 'ALTER ROLE ' || current_user || ' SUPERUSER'; END $$;
 				t.Error("the add-on's role is a superuser")
 			}
 		})
+	}
+}
+
+// D273, and it is the one claim in M60's reopening that needs a real database.
+//
+// The load budget F287 added bounds the two steps that run the add-on's **own
+// code** — compiling the module, and instantiating it — and deliberately not the
+// host's work with the database in between. The first fix laid the budget over the
+// whole of the load, which capped a wait m63.md deliberately set to five minutes:
+// `MigrateAddon` asks for the migration lock with `lock.WithLockTimeout(5, 60)`
+// because *a replica arriving mid-migration should wait rather than fail into a
+// crash loop*, and thirty seconds over the whole load makes that unreachable — the
+// second replica reports `load_timeout`, and a `required` add-on then stops the
+// instance. That is F287's repair breaking M63's claim from the other side.
+//
+// Asserted here at a scale a test can afford: a migration that takes longer than
+// the whole budget, under a budget the module's own compile fits inside. The
+// add-on loads, its table exists, and nothing was counted as a timeout.
+//
+// **The budget is measured rather than chosen.** Compiling this fixture is a few
+// hundred milliseconds on this machine and several seconds under `-race` alongside
+// the rest of this package, so a fixed budget picked against either number expires
+// during compilation under the other — and the test would then pass for the wrong
+// reason, having proved only that a short budget refuses a slow compile.
+//
+// Sabotage is the shape of the defect: put the budget back around the whole of
+// `loadOne`, and this fails as `load_timeout` while every other test the reopening
+// added still passes. Which is exactly how it shipped.
+func TestTheLoadBudgetDoesNotCapAMigration(t *testing.T) {
+	code := addonFixture(t, "minimal")
+
+	// One healthy load with no database behind it, to price a compile under
+	// whatever conditions this run is happening in.
+	measured := func() time.Duration {
+		dir := t.TempDir()
+		installAddon(t, dir, "measure", code, nil, nil)
+		start := time.Now()
+		h, err := addon.Open(context.Background(), addon.Options{Dir: dir})
+		took := time.Since(start)
+		if err != nil {
+			t.Fatalf("measuring an ordinary load: %v", err)
+		}
+		_ = h.Close(context.Background())
+		return took
+	}()
+	budget := measured + 2*time.Second
+	// Past the budget by enough that a clock's worth of slack cannot decide the
+	// outcome, and stated in whole seconds because pg_sleep takes one.
+	sleep := int(budget.Seconds()) + 2
+
+	name := addonName(t)
+	pool, dsn, dir := newAddonDB(t, name)
+	installAddon(t, dir, name, code, []string{abi.PermissionStorage},
+		map[string]string{"00001_slow.sql": fmt.Sprintf(`-- +goose Up
+SELECT pg_sleep(%d);
+CREATE TABLE notes (id bigserial PRIMARY KEY, body text NOT NULL);
+`, sleep)})
+
+	sink := &logSink{}
+	metrics := observability.NewMetrics()
+	start := time.Now()
+	h, err := addon.Open(context.Background(), addon.Options{
+		Dir: dir, DB: pool, DSN: dsn, Metrics: metrics,
+		Logger:      slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		LoadTimeout: budget,
+	})
+	if h != nil {
+		t.Cleanup(func() { _ = h.Close(context.Background()) })
+	}
+	took := time.Since(start)
+	if err != nil {
+		t.Fatalf("a %ds migration under a %v budget refused the add-on: %v\n%s",
+			sleep, budget, err, sink.String())
+	}
+	if h.Len() != 1 {
+		t.Fatalf("%d add-ons loaded, want 1\n%s", h.Len(), sink.String())
+	}
+	if took < time.Duration(sleep)*time.Second {
+		t.Errorf("the load returned in %v, inside the %ds the migration sleeps for; "+
+			"the migration cannot have run, so this test is not watching what it claims to",
+			took, sleep)
+	}
+	// The migration ran to completion rather than merely being started, which is
+	// the difference between a wait that was allowed and one that was interrupted
+	// somewhere the host did not notice.
+	var exists bool
+	if err := pool.QueryRow(context.Background(),
+		`SELECT to_regclass($1) IS NOT NULL`, store.AddonSchema(name)+".notes").Scan(&exists); err != nil {
+		t.Fatalf("looking for the add-on's table: %v", err)
+	}
+	if !exists {
+		t.Error("the add-on loaded but its migration left no table")
+	}
+	if body := scrape(t, metrics); !strings.Contains(body,
+		fmt.Sprintf(`linkctrl_addon_loads_total{addon="%s",outcome="%s"} 1`, name, addon.OutcomeLoaded)) {
+		t.Errorf("the load was not counted as a success:\n%s",
+			seriesLike(body, "linkctrl_addon_loads_total"))
 	}
 }
 

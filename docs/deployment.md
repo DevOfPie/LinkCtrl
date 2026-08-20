@@ -164,6 +164,14 @@ docker compose -f docker-compose.yml up -d --wait
 `--wait` blocks until the healthchecks pass. The app waits for Postgres to be
 *healthy*, not merely started, so a cold boot does not race `initdb`.
 
+The healthcheck allows a 30-second start period and five attempts 10 seconds
+apart, which is generous for this product and not for an add-ons directory that
+misbehaves: boot gives each add-on 30 seconds to compile its module and 30 to
+start it, so three
+add-ons that hang exceed the window and `--wait` reports a failed bring-up for an
+instance that comes up behind it. See
+[operations.md](operations.md#add-ons) under `load_timeout`.
+
 Migrations run in-process before the listener opens, serialised across replicas
 by a Postgres session lock. There is no separate migration step, and a request
 can never reach a half-migrated schema.

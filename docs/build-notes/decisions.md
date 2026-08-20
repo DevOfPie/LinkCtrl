@@ -434,6 +434,11 @@ file. Append a row when you append an entry.
 | [M64.9's triage: five milestones reopened, and the sanitizer fix that is a decision](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision) | D269: M59, M60, M62, M63 and M64 each carry a finding that falsifies their own shipped claim, so all five reopen; the three declined options and what each would have cost. D270, owner-answered: the log sanitizer computes Default_Ignorable properly and exempts the legitimate emoji case by what precedes the selector, rather than escaping all 260 and making a shipped test's assertion false |
 | [M59, the row-membership check is not a pipeline, and the failure had to be seen first](#2026-08-20--m59-the-row-membership-check-is-not-a-pipeline-and-the-failure-had-to-be-seen-first) | No new D number — the repair D269 scheduled. `cmd \| grep -q` under `pipefail` is 141 when the match comes early, so the gate reported present rows missing and exited 1 on a clean tree; the fix is the file's own idiom, and the evidence is a red run made green under the load that produced it |
 | [M59, the ninth site of F304 is M59's and the other eight are not](#2026-08-20--m59-the-ninth-site-of-f304-is-m59s-and-the-other-eight-are-not) | No new D number — a scope line drawn by M59's own claim. `release-check`'s integration-test guard ran F291's shape, so a false 141 would have printed *skip Postgres is not running* and cut a release with the tests unrun: the third cause of the lie F253 says stopped, and therefore in spec. The eight remaining sites are the same shape with no shipped claim on them, and stay deferred |
+| [M60, a manifest means what it reads as](#2026-08-20--m60-a-manifest-means-what-it-reads-as) | D271 — the repair D269 scheduled for F286. Keys are matched **exactly** and must appear once, at every level of the document, because `encoding/json` keeps the last repeat and binds a case-variant tag anyway: a manifest could say `"permissions": []` to a reviewer and grant four permissions to the host. Exactness rather than only duplicate-refusal, since nothing hashes `addon.json` and a second accepted spelling is a second way to write the format another repository compiles against. The key set is read from the struct tags, so a field added later is covered without anybody remembering |
+| [M60, one add-on's load is bounded, and the budget is its own](#2026-08-20--m60-one-add-ons-load-is-bounded-and-the-budget-is-its-own) | D272 — the repair D269 scheduled for F287. A **per-add-on** 30 s deadline on the context handed to the load, not one for the directory: a shared budget once spent is spent for everything behind the slow module, which converts a `degrade` hang into a `required` refusal to boot — the very bullet being repaired. 30 s is the number the milestone's own measurement test already called the boundary, and the test now reads the constant. Ninth outcome, `load_timeout`. The log flood the same gap produced is bounded but not fixed, and is deferred rather than folded in |
+| [M60, what the load budget bounds is the add-on's own code](#2026-08-20--m60-what-the-load-budget-bounds-is-the-add-ons-own-code) | D273 — the correction to D272, which laid the 30 s budget over the whole load and thereby capped the **five-minute** migration-lock wait M63 chose so a replica arriving mid-migration waits rather than crash-loops. The budget is now given to the two steps that run the add-on's own code — compiling the module, and instantiating it — and to nothing else, so M63's wait stays reachable and F287's hang stays caught. What it does not bound is named rather than implied: an add-on's migration statements, which is F306 |
+| [M60, the compile step was bounded by nothing](#2026-08-20--m60-the-compile-step-was-bounded-by-nothing) | D274 — the correction to D273, which gave `CompileModule` the budget through `runGuest` and did not get it. wazero checks the context while compiling only on its **multi-worker** path; the single-worker branch it takes by default has no check in it, so a compile past the budget returned a nil error and the load finished late while four documents called it bounded. `compileWorkers` is now on the context the compile runs under, and the bound's granularity — between functions of the code section — is stated rather than rounded up |
+| [M60, one defect gets one row](#2026-08-20--m60-one-defect-gets-one-row) | D275 — F267 and F287 were the same defect filed twice and only F287 was closed, leaving an open row asserting that no milestone owns a load-time deadline; F306 was filed at this reopening against a defect F274 already carried. F267 moves to *Closed* against M60, F306 merges into F274, and F274 is rewritten off the premise it was resting on |
 
 ---
 
@@ -34339,3 +34344,387 @@ not running in project linkctrl-test`; a counter-edit put it back and the run
 branch returned. The three branch runs used a `go` that exits 0, on the
 `PATH`, so that what was being read was which branch fired rather than the
 suite again — the suite's own real result is the whole run above.
+
+## 2026-08-20 — M60, a manifest means what it reads as
+
+The repair [D269](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)
+scheduled for [F286](deferred-findings.md#closed). **D271.**
+
+`m60.md` says the manifest *names identity and intent*. It did not, and the
+mechanism is two documented behaviours of `encoding/json` meeting one file nobody
+hashes:
+
+- a repeated key keeps the **last** occurrence;
+- a key with no exact match binds a struct tag **case-insensitively**.
+
+So `{"permissions": ["session.mint"], "permissions": []}` loaded holding nothing,
+the same pair in the other order loaded holding everything, `"schema_version": 99`
+followed by `"schema_version": 1` walked past the equality check that field exists
+for, and every field spelled in capitals was accepted. Reproduced through the real
+`Open` over a real installed directory, twice, before any of this was written.
+
+**What makes it a boundary rather than pedantry is that nothing covers the
+manifest's own bytes.** The `sha256` field is the digest of the *module*;
+`MigrationFile.SHA256` is the digest of each `.sql`. There is no canonicalization
+and no signature over `addon.json`, and the published-provenance half of that
+question is M69's. The manifest is therefore the trust root, and the only property
+that can make a trust root trustworthy without a signature is that everyone reading
+it reads the same thing. The deceived party was never the operator — the boot log
+and the info gauge report the parsed truth — it was whoever reads the **file**,
+which is the artifact `DevOfPie/LinkCtrl-OIDC` is compiled against and the thing a
+reviewer inspects before installing a module on their own instance.
+
+### Exact spelling, not only duplicate refusal
+
+The finding's own suggested fix was *exact repeats and case-collisions*. Taken
+further, deliberately: a key must be spelled exactly as documented, so a lone
+`"Permissions"` with no lowercase twin is refused too.
+
+That is the rule `DisallowUnknownFields` already states, applied to spelling rather
+than only to identity. The comment above that call says a key this host does not
+know means a manifest written for a schema this host does not implement — and
+`"Permissions"` is not a key this schema documents. The alternative leaves the
+cross-repository format with two accepted spellings of every field, one of them
+undocumented, which is a thing somebody has to hold in their head forever and a
+thing a `grep '"permissions"'` over a directory of installed add-ons silently
+misses. With exactness in place, the remaining collision is exact repeats, and
+refusing those is one map.
+
+### At every level, and derived rather than listed
+
+The walk is type-directed and recursive. Only the top level was reproduced, but a
+`migrations` entry carrying `file` twice names one `.sql` to a reader and hashes
+another — the same deception one level down, with DDL behind it — and a `settings`
+entry can hide its `type` the same way. Refusing at the top and not below would
+have fixed the case that was found rather than the defect.
+
+The key set is read from the struct tags with `reflect` rather than listed beside
+the parser. A list would drift the first time a field is added, and its failure
+would be silent and would look exactly like the defect being fixed here.
+
+### What it cost, and the one thing it changed beside the check
+
+The manifest is now read into memory rather than streamed, because the document is
+walked twice — once decoded, once as a token stream. That introduces an allocation
+an add-on's author controls, so the read is bounded at `maxStringIn`, the 64 KiB
+the ABI already puts on a single value crossing into the host. A real manifest is a
+few hundred bytes; the largest this schema can honestly describe is under 40 KiB.
+Reusing that constant rather than inventing a second one is deliberate — two
+arbitrary numbers answering the same question is two numbers to keep true.
+
+`DisallowUnknownFields` stays, and the check runs after the decode rather than
+before it. A key that is genuinely unknown keeps the decoder's own error message,
+which names the field; a key that is known-but-misspelled is the only thing that
+can survive a successful decode, so the new check only ever sees well-formed input
+and never has to produce a syntax error of its own.
+
+### Sabotage
+
+Every case passed on the first run, so each mechanism was broken separately.
+Bypassing the check: **ten** failures, every case in the battery. Removing the
+duplicate rule alone: exactly the four repeat cases fail and the four case-variant
+cases still pass. Removing the recursion into arrays: exactly the two nested cases
+fail. Removing the size bound: the bound's own test fails. Restored by
+counter-edit each time.
+
+---
+
+## 2026-08-20 — M60, one add-on's load is bounded, and the budget is its own
+
+The repair [D269](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)
+scheduled for [F287](deferred-findings.md#closed). **D272.**
+
+`m60.md`'s failure-class bullet — *logs, increments a metric, and the instance
+serves without it* — was true of every way a load could fail except the one where
+it never fails. `-buildmode=c-shared` makes package initialization run *during*
+instantiation, which is what makes a load-time failure expressible at all; a module
+that loops there returns nothing, and `wazero`'s `InstantiateModule` waits.
+
+**The runtime was already configured correctly.** `WithCloseOnContextDone(true)`
+has been set since the host was written, and its comment says why: a deadline
+enforced by cancelling a context does nothing unless the runtime is watching. What
+was missing was the deadline. Boot's context is
+`signal.NotifyContext(context.Background(), …)`, so nothing the runtime watched had
+one, and the correctly configured mechanism sat there watching a context that would
+never be done. `Open` was measured at 20 s and still going, with no log line, no
+metric and no error — and the listener not yet open, because the host is opened
+before it deliberately, so that a `required` add-on's failure is an exit rather than
+a request meeting a half-built schema.
+
+### Per add-on, and this is the part worth arguing
+
+A single deadline over the whole of `Open` is one line shorter and would have passed
+every other test written here. It is wrong for three reasons and the second is
+disqualifying:
+
+- **Attribution.** One expired context says *something* took too long. F287's own
+  severity line is that the failure is silent — *nothing says which add-on boot is
+  stuck on* — and a shared budget answers that with a shrug. A per-add-on deadline
+  puts the name in the log line and in the `addon` label.
+- **It converts a `degrade` failure into a `required` one.** A shared context, once
+  expired, is expired for every add-on discovered after it. One `degrade` module
+  spinning in `init()` would then fail every add-on behind it, and a `required` one
+  among them stops the instance. That is precisely the bullet this reopening exists
+  to repair, re-broken from the other side. It is asserted rather than asserted
+  about: with a shared budget the test fails with `add-on "zfine": load_timeout`,
+  where `zfine` is a healthy `required` module standing behind the spinner.
+- **Scaling.** Ten installed add-ons would each get a tenth of a budget, so
+  installing an eleventh could refuse the other ten.
+
+The cost is stated rather than hidden: N add-ons that all hang cost N times the
+budget before the listener opens. Each is bounded and each logs as its own budget
+expires, so what an operator sees is progress with names on it rather than silence.
+
+### Thirty seconds, because the milestone already said so
+
+`TestInstantiationCostIsMeasured` has asserted since M60 shipped that loading one
+add-on past 30 s *is not a boot-time cost any more*. The number was already this
+project's answer to *what is too long*; it was an opinion held by a test rather than
+behaviour of the host. The constant makes it behaviour, and the test now measures
+against the constant, so a later edit cannot leave the host refusing loads the test
+calls acceptable.
+
+Measured on this machine, 2026-08-20, to check that the budget is not a bound on
+anything real: a 1.87 MB `GOOS=wasip1` fixture compiles in 380 ms and instantiates
+in 1.6 ms, and the whole of one add-on's load through `Open` is 388 ms — a
+seventy-seventh of the budget.
+
+It is a constant and not a config field. An operator has no information with which
+to choose it: the number is about what the host will wait for rather than about a
+deployment, and a knob here is one more thing to set wrongly in the direction of
+*unbounded*. `Options.LoadTimeout` overrides it for tests, which need a budget they
+can afford to spend in real time.
+
+### A ninth outcome
+
+`load_timeout`, for the reason `abi_unsupported` and `name_collision` are their own
+labels: nothing is malformed and the operator's question is a different one. A
+module that traps is broken and the log carries the trap; a module that never
+returns is *running*, and the only fact anyone has is that the budget ran out.
+Folding the two into `instantiate_failed` would make the one alert an operator needs
+— an add-on is spending boot — indistinguishable from an ordinary bad build.
+
+The relabel is applied wherever in the load the budget ran out, compile or migration
+or instantiation, because the step is not the fact an operator needs. It is applied
+only when the *parent* context is still live: a shutdown signal during boot cancels
+every load, and that is an instance being stopped rather than an add-on being slow.
+
+### The hazard the fix introduces
+
+`WithCloseOnContextDone` cuts both ways. A per-load context that outlived its load
+would close a perfectly healthy add-on the moment its budget expired — an instance
+that boots and then loses every module thirty seconds later, which is a worse defect
+than the one being fixed. wazero's watcher is `defer done()` inside the call
+(`internal/engine/wazevo/call_engine.go:326-328`, v1.12.0), so cancelling after the
+load returns is safe. That is now a property this repository asserts rather than one
+its dependency happens to have: a loaded module is called into after its budget has
+passed, and sabotaging it — closing the module when its context expires — fails that
+test with `module closed with exit_code(0)`.
+
+### Sabotage, and why one of them could not merely fail
+
+A test that has never hung has not been shown to catch a hang. The fixture is a
+module that genuinely spins in `init()` — not a bare `for {}`, which a compiler is
+free to reason about, but an accumulator whose result is exported, because what the
+host interrupts has to be a guest really executing.
+
+Removing the deadline does not make the test fail. It makes it **hang**, which is
+F287 reproduced through the shipped test rather than through a scratch harness;
+`go test -timeout 25s` is what ends the run, and `panic: test timed out after 25s`
+is the evidence.
+
+**The test budget is measured rather than chosen, and the first version of it was
+testing the wrong thing.** A fixed 2 s budget passed on its own and failed the
+package under `-race`: loading one add-on costs 380 ms here and **3.9 s** with the
+race detector alongside the rest of the package, so a healthy `required` module
+standing behind the spinner timed out too. The failure is the useful part. A budget
+shorter than a real load expires during **compilation**, so the fixture never
+reaches the loop it exists for — the two hang tests would have passed against a
+module that does not spin at all, which is the same defect as a test that has never
+failed. The budget is now twice a load measured once per package, plus a second, so
+it is past anything healthy under any conditions and short enough to wait out; it
+scales itself to a two-core CI runner instead of being a constant that is wrong
+under one of the two numbers. The package costs 38 s more under `-race`. The other three sabotages fail in the ordinary way: a shared budget
+refuses a healthy `required` add-on, dropping the relabel breaks all three
+outcome assertions, and closing the module on its expired context breaks the
+survival test.
+
+### What is left, deliberately
+
+The same gap gave an unbounded load-time log flood — `log` is ungated, one line is
+bounded at 4 KiB, the count is not, and `Open` would not return to stop it: 3697
+lines and 14.7 MiB in 2 s. The deadline turns *unbounded* into *bounded by the
+budget*, which is a different problem rather than the same one solved: a module can
+still write roughly 200 MiB into an operator's log before its 30 s runs out, and it
+can do the same from a request. Bounding a module's log **rate** is not this
+milestone's claim — nothing in `m60.md` says anything about log volume — so it is a
+row rather than a silent inclusion, and it is filed naming M60 because M60 is what
+was being built when it was found.
+
+
+---
+
+## 2026-08-20 — M60, what the load budget bounds is the add-on's own code
+
+The correction to [D272](#2026-08-20--m60-one-add-ons-load-is-bounded-and-the-budget-is-its-own),
+made at M60's second worker on the same reopening. **D273.**
+
+D272 got the *shape* of F287's fix right and the *scope* of it wrong, and the
+wrongness is the kind this loop's reviewer step exists to catch: it repaired one
+milestone's claim by falsifying another's.
+
+**What went wrong.** The deadline was applied to the whole of `loadOne`, which is
+the obvious place and reads as the general answer — *one add-on's load is bounded*.
+But a load is not one thing. Between reading the manifest and instantiating the
+module, the host creates the add-on's schema and applies the add-on's migrations,
+and [M63](phase-details/m63.md) gives that step `lock.WithLockTimeout(5, 60)` —
+five minutes — with a comment saying exactly why: *the same five minutes the host's
+own migrations wait. A replica arriving mid-migration should wait rather than fail
+into a crash loop.* The host's own `Migrate` is the twin of it and says the same.
+Thirty seconds over the whole load makes those five minutes unreachable. A second
+replica arriving mid-migration expires at 30 s, reports `load_timeout`, and if the
+add-on is `required` the instance stops — the crash loop M63 chose five minutes to
+prevent, produced by the fix for F287. A first `CREATE INDEX` on a real table at
+upgrade meets the same bound with nothing wrong anywhere.
+
+**What the budget bounds instead.** The two steps that run code the add-on
+supplied: `CompileModule`, and `InstantiateModule`, which is where package
+initialization runs and therefore where F287's hang is. Each gets the budget; the
+host's own work between them does not. That leaves M63's five minutes reachable,
+leaves the hang caught, and — the part that matters for the next person reading a
+boot log — stops the outcome being overwritten. D272's version replaced whatever
+outcome the expiring step had produced with `load_timeout`, so a missing-tables
+upgrade that `docs/operations.md` promises reports `storage_failed` reported
+`load_timeout` instead. Bounding the steps rather than the whole load means the
+outcome is whatever actually failed, with no rewriting.
+
+**Why a bound and not a behaviour change, and therefore the worker's.** Nothing
+about *what happens* when the budget runs out moves: the class the manifest
+declared still decides, the ninth outcome is still `load_timeout`, the number is
+still 30 s and is still the one `TestInstantiationCostIsMeasured` has called the
+boundary since M60 shipped. What moves is which clock the 30 s is on. Choosing
+that is reading two files against each other, not a preference anybody could hold
+differently, which is why it was decided here rather than asked.
+
+**Two consequences, stated rather than discovered.**
+
+- An add-on's *migrations* are code it supplied too, and nothing bounds how long
+  one statement in one of them runs. That bound is Postgres's, on the migration
+  connection, and setting it is a number with a real cost on either side — too
+  tight and a legitimate index build fails an upgrade. It is
+  [F306](deferred-findings.md#open) rather than a silent inclusion.
+- The worst case per add-on is two budgets rather than one. In practice it is one:
+  compiling is a finite pass over a file of finite size, while instantiation runs a
+  loop the add-on wrote. Sixty seconds and thirty seconds are the same answer to
+  the question an operator actually has, which is whether boot ends.
+
+**The aggregate cost is now written where an operator reads.** Per add-on is still
+the right choice, for D272's three reasons, and it prices boot at N budgets for N
+hanging add-ons. Three of them exceed the 80 s `docker-compose.yml`'s healthcheck
+allows — a 30 s start period and five attempts 10 s apart — so `docker compose up
+--wait` reports a failed bring-up for an instance that comes up behind it. That
+arithmetic lived in a code comment, which is not a place an operator meets it;
+`docs/operations.md` now says it under `load_timeout`, with the two remedies.
+
+## 2026-08-20 — M60, the compile step was bounded by nothing
+
+**D274.** The third attempt at M60's reopening, and a correction to
+[D273](#2026-08-20--m60-what-the-load-budget-bounds-is-the-add-ons-own-code)
+rather than to what it decided. D273 is right about *which* steps get the budget.
+It was wrong that both of them had it.
+
+**What was false.** `loadOne` wraps `CompileModule` in `runGuest`, which gives the
+step a context with the budget on it and reports expiry separately. wazero does
+not stop for that context. Its wazevo engine checks cancellation only on the
+**multi-worker** compilation path — the worker loop opens with `ctx.Err()` and the
+caller reports `context.Cause` — while the single-worker branch walks the code
+section with no check anywhere in it, and single-worker is the branch every
+compile here took, because `experimental.GetCompilationWorkers` returns
+`max(workers, 1)` and nothing set the key. A compile that ran past its budget
+therefore returned `err == nil`; expiry is read only when the step returns an
+error; and the `load_timeout` limb for compiling was unreachable. The load did not
+fail late — it **succeeded** late.
+
+Measured on the `minimal` fixture rather than argued: handed a context that was
+already done, `CompileModule` returned success after 377 ms with the default and
+`context deadline exceeded` after 23 ms with two workers. With a budget that
+expires *during* compilation it returns within about a millisecond of the budget,
+at 50 ms, 100 ms and 200 ms.
+
+**Why this is a correction and not a new claim.** Four documents already said the
+compile step was bounded — `docs/operations.md` under `load_timeout` twice,
+`docs/SECURITY.md`'s add-on row, `CHANGELOG.md`, and m60.md's own D273 bullet.
+Narrowing all five to say only instantiation is bounded was the other legitimate
+answer and was weighed. It was declined for one reason: the step being described
+runs code a publisher supplied, from a file this host does not bound the size of,
+and leaving it deliberately unbounded is the exact shape F287 was filed against.
+Making the sentence true was cheaper than making it smaller.
+
+**The fix is a constant on a context.** `compileWorkers = 2`, set where the
+compile runs. Two, because two is the whole of the requirement — anything below it
+lands back on the branch with no check, which is what a `NumCPU`-shaped number
+would do on a one-core container, the machine most likely to need the bound.
+Compiling is also faster with more workers (383 ms, 208 ms and 126 ms at one, two
+and four on this machine, so `TestInstantiationCostIsMeasured` now compiles the
+way `loadOne` does, its number having otherwise stopped describing the host). That
+is a side effect and not the reason.
+
+**What is bounded is stated at its real granularity.** The check sits between
+functions of the code section, so a single function whose compilation is
+pathologically slow overshoots by however long that function takes. "Compilation
+is interruptible" is the rounder claim and the false one; the test is written
+against the enforced one.
+
+**The hazard, named because it is silent.** `experimental` is wazero's own word
+for an API that may move. If the check moves, the budget stops being enforced and
+every test that does not measure it stays green.
+`TestTheCompileStepIsBounded` is what fails at that upgrade — it asserts the
+compile step by name, because the outcome alone does not distinguish the two
+limbs: with the bound gone the add-on still fails as `load_timeout`, one step
+later, having spent a whole compile getting there. Sabotage confirmed the sharper
+thing, that with `compileWorkers` at 1 the load **succeeds** — each step gets its
+own budget, so instantiation's clock starts fresh.
+
+## 2026-08-20 — M60, one defect gets one row
+
+**D275.** Bookkeeping, and it is a decision because
+[deferred-findings.md](deferred-findings.md)'s own rule says removing or moving a
+row is one.
+
+**F267 was F287, two days earlier.** M60's sixth review found that a `degrade`
+add-on whose initialization never returns hangs the boot and filed F267;
+M64.9 found the same thing and filed F287; the reopening D269 scheduled closed
+F287 and left F267 in *Open*. That is not a tidy-up: F267's text says *no
+milestone owns a load-time deadline* and its Severity cell describes the fix as
+*a context with a timeout around instantiation and a class to put the expiry in*,
+which is the diff. An open row asserting the defect is unfixed is worse than no
+row, and three operator-facing documents were still citing it by number —
+`docs/configuration.md`, `docs/SECURITY.md` and `.env.example`, the last of which
+also still said *there is no load-time deadline yet*. F267 moves to *Closed*
+against M60, naming F287 as the duplicate filing and M60 as the work.
+
+**F306 was F274, one day earlier.** F306 was filed at this reopening, from
+D273's scoping — an add-on's migrations are the one piece of its own code the load
+budget does not bound. F274 already said that, from M63, with the same site
+(`MigrateAddon` with no `statement_timeout`), the same evidence and the same fix,
+plus a limb F306 did not have: the migration holds a session-level advisory lock,
+so every other replica blocks in goose's retry and one bad release costs a rolling
+deploy rather than a container. F306 merges into F274 under the file's merge
+convention. F274 survives because it is earlier, better evidenced, and filed
+against the milestone the defect lives in.
+
+**F274 is rewritten off the premise it was resting on.** Its finding opened *which
+is F267's shape with a cluster-wide lock added* and its severity read *higher than
+F267's*. Both cite a row that is now closed and a claim that is now false, so the
+row is restated on its own mechanism and absorbs F306's framing. A surviving row's
+cells are editable; a row that has moved to *Closed* is not, which is why F267 and
+F306 are left exactly as written and only their *Closed by* cells are new.
+
+**D273's entry is left alone**, including its pointer to F306, because this file
+is append-only and an entry rewritten to match a later state stops being a record
+of what was decided when. This entry is the forwarding address.
+
+**What the count says.** Open rows go from 74 to 72, and neither of the two that
+left was fixed by code written today. That is the point worth keeping: the
+duplicate-row failure is invisible to every gate this repository runs, and both
+halves of it were found by a reviewer reading rows against a diff.

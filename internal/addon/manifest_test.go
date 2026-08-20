@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -239,5 +240,158 @@ func TestNoDeclarableCookiePrefixReachesThisProductsCookies(t *testing.T) {
 		if err := m.Validate(); err == nil {
 			t.Errorf("a manifest named linkctrl declaring the cookie prefix %q validated", prefix)
 		}
+	}
+}
+
+// --- F286: the file says what the host reads ---------------------------------
+
+// manifestDoc is a well-formed manifest as JSON text, with the given lines spliced
+// in before the closing brace. Text rather than a marshalled struct, because every
+// case below is about a spelling `encoding/json` will not produce.
+func manifestDoc(extra ...string) string {
+	lines := []string{
+		`"schema_version": 1`,
+		`"name": "clickstats"`,
+		`"version": "0.4.0"`,
+		`"abi_version": 1`,
+		`"module": "clickstats.wasm"`,
+		`"sha256": "` + strings.Repeat("ab", 32) + `"`,
+		`"failure_class": "degrade"`,
+	}
+	return "{" + strings.Join(append(lines, extra...), ",\n") + "}"
+}
+
+// The reference document, so a refusal below is the spliced line's doing and not
+// the frame's.
+func TestTheReferenceDocumentParses(t *testing.T) {
+	m, err := parseManifest(strings.NewReader(manifestDoc()))
+	if err != nil {
+		t.Fatalf("the reference manifest document does not parse: %v", err)
+	}
+	if m.Name != "clickstats" || m.SchemaVersion != SchemaVersion {
+		t.Fatalf("parsed as %+v", m)
+	}
+}
+
+// F286, and it is the whole battery the finding reproduced.
+//
+// `encoding/json` takes the **last** occurrence of a repeated key and binds a
+// struct tag case-insensitively when no exact match exists, so every document
+// here used to load — each of them meaning, to the host, something other than what
+// its text says. The manifest is the artifact another repository compiles against
+// and the thing a reviewer reads before installing, and nothing hashes its bytes,
+// so the parse is the only place the two readings can be made to agree.
+func TestAManifestMeansWhatItReadsAs(t *testing.T) {
+	sum := strings.Repeat("ab", 32)
+	tests := []struct {
+		name string
+		doc  string
+		want string
+	}{
+		{
+			"permissions listed and then emptied, which used to grant nothing",
+			manifestDoc(`"permissions": ["session.mint"]`, `"permissions": []`),
+			`"permissions" appears more than once`,
+		},
+		{
+			"permissions emptied and then listed, which used to grant everything",
+			manifestDoc(`"permissions": []`, `"permissions": ["session.mint", "config.read"]`),
+			`"permissions" appears more than once`,
+		},
+		{
+			"a schema this host does not implement, repeated as one it does",
+			`{"schema_version": 99, ` + manifestDoc()[1:],
+			`"schema_version" appears more than once`,
+		},
+		{
+			"a permission declaration spelled to be missed by a reader grepping for it",
+			manifestDoc(`"Permissions": ["session.mint"]`),
+			`key "Permissions" is not spelled`,
+		},
+		{
+			"the schema version in capitals, alone",
+			`{"SCHEMA_VERSION": 1, ` + manifestDoc()[len(`{"schema_version": 1,`):],
+			`key "SCHEMA_VERSION" is not spelled`,
+		},
+		{
+			"a migration naming one file to a reader and hashing another",
+			manifestDoc(`"permissions": ["storage.own_schema"]`,
+				`"migrations": [{"file": "001_a.sql", "file": "002_b.sql", "sha256": "`+sum+`"}]`),
+			`"file" appears more than once`,
+		},
+		{
+			"a setting whose type is spelled where no reader would look for it",
+			manifestDoc(`"settings": [{"name": "mode", "TYPE": "secret"}]`),
+			`key "TYPE" is not spelled`,
+		},
+		{
+			"a cookie prefix declaration in capitals",
+			manifestDoc(`"COOKIE_PREFIXES": ["clickstats_state"]`),
+			`key "COOKIE_PREFIXES" is not spelled`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m, err := parseManifest(strings.NewReader(tc.doc))
+			if err == nil {
+				t.Fatalf("the manifest parsed, as %+v", m)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("the error does not say %q:\n%v", tc.want, err)
+			}
+		})
+	}
+}
+
+// The message has to name the spelling a publisher should have used, because
+// "Permissions" and "permissions" differ by one character and the eye that wrote
+// the first will not find it by staring.
+func TestACaseVariantKeyIsToldItsDocumentedSpelling(t *testing.T) {
+	_, err := parseManifest(strings.NewReader(manifestDoc(`"Cookie_Prefixes": []`)))
+	if err == nil {
+		t.Fatal("a case-variant key parsed")
+	}
+	if !strings.Contains(err.Error(), `write "cookie_prefixes"`) {
+		t.Errorf("the error does not name the documented spelling:\n%v", err)
+	}
+	// And names the file once. The walk seeds its own path with the filename, so a
+	// caller that wrapped it again produced `addon.json: addon.json: key
+	// "Permissions" is not spelled…` — in a line an operator reads out of the boot
+	// log, on the one refusal whose whole job is to be read carefully.
+	if n := strings.Count(err.Error(), ManifestFile); n != 1 {
+		t.Errorf("the error names %s %d times, want once:\n%v", ManifestFile, n, err)
+	}
+}
+
+// The key rules hold at every nesting level, so the check is walked against the
+// struct rather than listed — a field added to Manifest or Setting is covered
+// without anybody remembering, and this asserts the derivation rather than the
+// list. Every documented key of the two nested types is reachable.
+func TestEveryDocumentedKeyIsExactlyOneSpelling(t *testing.T) {
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[Manifest](), reflect.TypeFor[Setting](), reflect.TypeFor[MigrationFile](),
+	} {
+		fields := jsonFields(typ)
+		if len(fields) != typ.NumField() {
+			t.Errorf("%s has %d fields and %d documented keys", typ, typ.NumField(), len(fields))
+		}
+		for name := range fields {
+			if name != strings.ToLower(name) {
+				t.Errorf("%s documents the key %q, which no lowercase manifest can spell", typ, name)
+			}
+		}
+	}
+}
+
+// The manifest is read into memory to be walked twice, so the size it may reach is
+// now this parser's business rather than the filesystem's.
+func TestAManifestLargerThanTheBoundIsRefused(t *testing.T) {
+	padding := strings.Repeat("x", maxManifestBytes)
+	doc := manifestDoc(`"version": "` + padding + `"`)
+	if _, err := parseManifest(strings.NewReader(doc)); err == nil {
+		t.Fatal("a manifest past the bound parsed")
+	} else if !strings.Contains(err.Error(), "larger than") {
+		t.Errorf("the error does not say the file is too large:\n%v", err)
 	}
 }

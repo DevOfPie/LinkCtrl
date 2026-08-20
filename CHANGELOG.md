@@ -378,7 +378,25 @@ migrations run at boot.
   **What a loaded module can reach is one published list.** `schema_version` is
   checked for equality and unknown manifest fields are refused, deliberately: a
   manifest this host does not fully understand is refused rather than
-  half-honoured.
+  half-honoured. A key must also be spelled exactly as documented and appear
+  once, at every level of the file: nothing hashes `addon.json`, so the manifest
+  is the trust root, and a JSON parser's ordinary tolerance — keeping the last of
+  a repeated key, binding `SCHEMA_VERSION` to `schema_version` anyway — would let
+  a published manifest say one thing to whoever reads it and another to the host.
+  Reading it that carefully means holding the whole file, so a manifest is also
+  refused above **64 KiB** — far past anything the format can mean, and named here
+  because it is a refusal a publisher can meet.
+
+  **An add-on that never finishes loading is skipped rather than waited for.**
+  Each add-on gets 30 seconds to compile its module and 30 more to start it, and a module
+  that spends it is counted as
+  `linkctrl_addon_loads_total{outcome="load_timeout"}`, with the add-on named in
+  the log; the failure class its manifest declares then decides whether the
+  instance stops or serves without it, exactly as for any other load failure. The
+  budget is per add-on, so one module that hangs does not spend anybody else's,
+  and it covers the module rather than the database — an add-on's migrations wait
+  on the migration lock for as long as this product's own do. Compiling and
+  starting an ordinary add-on takes well under a second.
 
   **The trust boundary is the directory.** A module in it is code this instance
   executes; own it, and mount it read-only. See

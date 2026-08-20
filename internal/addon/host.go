@@ -95,10 +95,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
+	"github.com/tetratelabs/wazero/experimental"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
@@ -117,7 +119,7 @@ const StartFunction = "_initialize"
 
 // Outcome is the closed vocabulary of load results, and it is a metric label.
 //
-// Eight values, so the series count is the number of installed add-ons times eight
+// Nine values, so the series count is the number of installed add-ons times nine
 // however many times the instance restarts. No error string is ever a label, and
 // the only filename that can become one is bounded by nameRe or collapsed to
 // InvalidName — see labelFor, which is what keeps the sentence above true of the
@@ -150,7 +152,158 @@ const (
 	// manifest on its own, and the operator's fix is a directory name rather than
 	// anything inside a file.
 	OutcomeNameCollision Outcome = "name_collision"
+	// OutcomeLoadTimeout is an add-on that did not finish loading inside
+	// [DefaultLoadTimeout] — see the deadline there for what that bounds and why.
+	//
+	// Its own label rather than instantiate_failed for the reason abi_unsupported
+	// and name_collision are theirs: nothing is malformed, and the operator's
+	// question is a different one. A module that traps at instantiation is broken
+	// and the log carries the trap; a module that never returns is *running*, and
+	// the only fact anyone has is that the budget ran out. Folding the two together
+	// would have made the one alert an operator needs — an add-on is spending boot
+	// — indistinguishable from the ordinary case of a bad build.
+	OutcomeLoadTimeout Outcome = "load_timeout"
 )
+
+// DefaultLoadTimeout bounds how long an add-on's **own code** may run in one step
+// of its load.
+//
+// **It bounds guest execution, and deliberately not the whole load.** Two steps of
+// loadOne run code the add-on supplied — compiling the module, and instantiating
+// it, which is where package initialization runs and where F287's hang was — and
+// each of the two is given this budget. Nothing else in the load is inside it.
+// The compile half is bounded only because [compileWorkers] is set: wazero's
+// default compilation path does not stop for a context that is done, so the
+// wrapper alone would have been a deadline nobody enforced. That is measured
+// there rather than asserted here.
+//
+// That distinction is the whole of the choice, and it is a choice about what the
+// number *means* rather than about what the host does when it expires. A budget
+// laid over the whole of loadOne is simpler to write and is wrong, because the
+// load's expensive step is not the add-on's at all: applying an add-on's
+// migrations waits up to **five minutes** for the migration lock — store's
+// MigrateAddon, which says "the same five minutes the host's own migrations wait.
+// A replica arriving mid-migration should wait rather than fail into a crash
+// loop", and store's own Migrate is the twin of it. Thirty seconds over the whole
+// load caps that wait at thirty seconds, so a second replica arriving
+// mid-migration fails as load_timeout and a `required` add-on then stops the
+// instance — the crash loop M63 chose five minutes to prevent, produced by the fix
+// for F287. A first `CREATE INDEX` on a real table at upgrade meets the same bound
+// with nothing wrong anywhere. Bounding the guest instead leaves that wait
+// reachable and still catches the module that never returns, which is the only
+// thing F287 ever asked for.
+//
+// What it therefore does **not** bound is named rather than left to be discovered:
+// an add-on's migrations are code it supplied too, and nothing here stops one
+// statement in one of them running forever. The bound for that is Postgres's, on
+// the connection the migration runs on, and it belongs beside where that
+// connection is opened rather than here — F274.
+//
+// **Per add-on, and not for the directory**, which is the other half of F287's fix
+// and the part worth arguing. A single budget shared across the directory has
+// three faults, and the second is disqualifying:
+//
+//   - Attribution. One expired context tells an operator that *something* took too
+//     long. A deadline per add-on names the add-on in the log line and in the
+//     `addon` label of the metric, which is exactly what F287 says was missing —
+//     "nothing says which add-on boot is stuck on".
+//   - **It converts a `degrade` failure into a `required` one.** A shared context,
+//     once expired, is expired for every add-on after it in the directory. One
+//     `degrade` add-on spinning in `init()` would then fail every add-on behind
+//     it, and a `required` one among them stops the instance. That is the precise
+//     bullet this reopening exists to repair, re-broken from the other side.
+//   - Scaling. Ten installed add-ons would each get a tenth of the budget, so
+//     installing an eleventh could refuse the other ten.
+//
+// The cost is stated rather than hidden, and docs/operations.md states it where an
+// operator reads: N add-ons that all hang cost N times this before the listener
+// opens, and an add-on that contrived to hang in both of its steps costs twice it.
+// In practice one — compiling is a finite pass over a file of finite size, while
+// instantiation runs a loop the add-on wrote. Each is still bounded, and each logs
+// as its budget expires, so what an operator sees is progress with names on it
+// rather than the silence F287 measured at twenty seconds and counting.
+//
+// **The number is the one this milestone's own test already called the boundary.**
+// TestInstantiationCostIsMeasured has asserted since M60 shipped that loading one
+// add-on inside `Open` past 30 s "is not a boot-time cost any more"; this makes
+// that assertion the host's behaviour instead of only the test's opinion, and the
+// test now measures against this constant so the two cannot drift apart. Measured
+// on this machine, 2026-08-20, at the two workers this host sets: a 1.87 MB
+// fixture compiles in 211 ms and instantiates in 1.6 ms, so the whole of one
+// add-on's guest execution is 213 ms — about a hundred-and-fortieth of the
+// budget. The 380 ms figure eleven lines below is the same fixture at one
+// worker, which is what the host used to do and no longer does. What this catches is a module that never
+// returns, never a slow machine and never a slow database.
+//
+// It is a constant and not a config field. An operator has no information with
+// which to choose it: the number is about what the host will wait for, not about
+// this deployment, and a knob here would be one more thing to get wrong in the
+// direction of "unbounded". [Options.LoadTimeout] overrides it for tests, which
+// need a budget they can afford to spend.
+const DefaultLoadTimeout = 30 * time.Second
+
+// compileWorkers is how many goroutines wazero compiles a module with, and it is
+// set for a reason that has nothing to do with speed.
+//
+// **It is what makes [DefaultLoadTimeout] bound the compile step at all.** wazero
+// checks the context while compiling only on its *multi-worker* path — wazevo's
+// compileModule in v1.12.0, where the worker loop opens with `ctx.Err()` and the
+// caller then reports `context.Cause`. The single-worker branch, which is the one
+// taken by default, walks the code section with no check in it anywhere, so a
+// compile handed a context that is already done runs to completion and returns a
+// nil error. Measured on the `minimal` fixture, 2026-08-20: with an expired
+// context and the default, CompileModule succeeded after 377 ms; with two workers
+// it returned `context deadline exceeded` after 23 ms. Wrapping the call in
+// [Host.runGuest] without this was a deadline nobody enforced — expiry is read
+// only when the step returns an error, so the load simply finished late.
+//
+// **Two**, because two is the whole of the requirement: experimental's
+// GetCompilationWorkers returns max(workers, 1), so anything below two lands back
+// on the branch with no check — which a NumCPU-shaped number would do on a
+// one-core container, the machine most likely to need the bound. Compiling is
+// also faster with more (383 ms, 208 ms and 126 ms at one, two and four here) and
+// that is a side effect rather than the reason; the price of more is a machine, an
+// SSA builder and a backend compiler per worker for the length of one boot.
+//
+// What this does **not** buy is a bound finer than one function. The check sits
+// between functions of the code section, so a single function whose compilation is
+// pathologically slow overshoots by however long that function takes.
+// TestTheCompileStepIsBounded is written against what is enforced rather than
+// against the rounder claim.
+//
+// It is `experimental`, and that is the hazard worth naming: nothing stops wazero
+// moving the check, and the failure would be silent — a budget that quietly stops
+// being enforced while every test that does not measure it stays green. That test
+// is what fails at such an upgrade.
+const compileWorkers = 2
+
+// runGuest runs one step of an add-on's own code under [Host.loadTimeout].
+//
+// It reports expiry separately from the step's error, because a runtime handed a
+// context that is done reports what it was doing rather than why it stopped: a
+// module closed mid-instantiation returns "module closed with context deadline
+// exceeded" today and something else on the next wazero, and neither is a thing to
+// match on.
+//
+// Expiry is counted only when the **parent** is still live. A shutdown signal
+// during boot cancels every load in flight, and that is an instance being stopped
+// rather than an add-on being slow — the difference between an operator's own
+// SIGTERM and an add-on to go and fix.
+//
+// The context is cancelled the moment the step returns, and that is load-bearing
+// in the other direction: WithCloseOnContextDone means a module is closed when the
+// context it ran under is done, so a per-step context left alive would close a
+// healthy add-on when its budget expired, thirty seconds into an otherwise good
+// boot. wazero's watcher is `defer done()` inside the call, so a step that
+// finished is not closed by the cancel that tidies up after it —
+// TestALoadedModuleOutlivesItsOwnBudget is what makes that a property of this
+// repository rather than of a comment.
+func (h *Host) runGuest(ctx context.Context, step func(context.Context) error) (expired bool, err error) {
+	stepCtx, cancel := context.WithTimeout(ctx, h.loadTimeout)
+	defer cancel()
+	err = step(stepCtx)
+	return errors.Is(stepCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil, err
+}
 
 // InvalidName is the addon label for a directory whose name could never be an
 // add-on's, and it is a bound rather than a nicety.
@@ -242,6 +395,11 @@ type Options struct {
 	// [config.AddonSettings], which is what an instance uses; a test substitutes
 	// values without writing to the process environment.
 	Settings func(addon string, declared []string) map[string]config.Secret
+
+	// LoadTimeout is how long one add-on may take to load. Zero means
+	// [DefaultLoadTimeout], which is what an instance uses; a test sets a budget it
+	// can afford to spend watching a module that will not return.
+	LoadTimeout time.Duration
 }
 
 // Loaded is one add-on that instantiated.
@@ -331,6 +489,12 @@ type Host struct {
 	// instances numbers per-request module names. Monotonic rather than random:
 	// a name that appears in a log is one an operator can order against another.
 	instances atomic.Uint64
+
+	// loadTimeout is Options.LoadTimeout with its default applied. Held rather
+	// than passed because the two steps it bounds are inside loadOne, several
+	// calls below Open, and threading a duration through them would say less
+	// about where it applies than the two call sites do.
+	loadTimeout time.Duration
 }
 
 // Open discovers, verifies and instantiates every add-on in opts.Dir.
@@ -385,10 +549,16 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if settings == nil {
 		settings = config.AddonSettings
 	}
+	timeout := opts.LoadTimeout
+	if timeout <= 0 {
+		timeout = DefaultLoadTimeout
+	}
 	h := &Host{
 		log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN,
 		settings: settings,
 		slots:    make(chan struct{}, maxConcurrentRoutes),
+
+		loadTimeout: timeout,
 	}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
@@ -672,8 +842,24 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 			fmt.Errorf("%s hashes to %s, manifest says %s", m.Module, got, m.SHA256))
 	}
 
-	compiled, err := h.runtime.CompileModule(ctx, code)
+	// The first of the two steps that run the add-on's own code, and so the first
+	// under its own budget. See DefaultLoadTimeout for what the budget covers and,
+	// more to the point, what it does not.
+	var compiled wazero.CompiledModule
+	expired, err := h.runGuest(ctx, func(ctx context.Context) error {
+		var e error
+		// compileWorkers is on the context because that is where wazero reads it,
+		// and it is not a tuning knob: without it the budget above is not enforced
+		// during compilation at all. Its comment is the measurement.
+		compiled, e = h.runtime.CompileModule(
+			experimental.WithCompilationWorkers(ctx, compileWorkers), code)
+		return e
+	})
 	if err != nil {
+		if expired {
+			return fail(OutcomeLoadTimeout, m.FailureClass,
+				fmt.Errorf("did not finish compiling within %v: %w", h.loadTimeout, err))
+		}
 		return fail(OutcomeInstantiateFailed, m.FailureClass, fmt.Errorf("compile: %w", err))
 	}
 
@@ -715,12 +901,22 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	// function does so before this call returns. State registered afterwards would
 	// mean every add-on's first ABI call answered StatusInternal.
 	deregister := h.registerState(m, grants, storage, values)
-	// The compiled form is owned by the runtime and closed with it. Closing it
-	// here would invalidate the instance below.
-	mod, err := h.runtime.InstantiateModule(ctx, compiled,
-		wazero.NewModuleConfig().
-			WithName(m.Name).
-			WithStartFunctions(StartFunction))
+	// The second step under a budget, and the one F287 was filed for: package
+	// initialization is the add-on's own code, and a module that loops there returns
+	// nothing, traps nothing, and — before this — was waited on for as long as the
+	// instance was allowed to live.
+	//
+	// The compiled form is owned by the runtime and closed with it. Closing it here
+	// would invalidate the instance this makes.
+	var mod api.Module
+	expired, err = h.runGuest(ctx, func(ctx context.Context) error {
+		var e error
+		mod, e = h.runtime.InstantiateModule(ctx, compiled,
+			wazero.NewModuleConfig().
+				WithName(m.Name).
+				WithStartFunctions(StartFunction))
+		return e
+	})
 	if err != nil {
 		// wazero returns a non-nil module alongside the error when the start
 		// function traps, and leaving it open would leak the guest's memory for
@@ -738,6 +934,10 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		// however long it runs, and four idle connections per module that would not
 		// start is a pool leak with a schedule.
 		storage.Close()
+		if expired {
+			return fail(OutcomeLoadTimeout, m.FailureClass,
+				fmt.Errorf("did not finish starting within %v: %w", h.loadTimeout, err))
+		}
 		return fail(OutcomeInstantiateFailed, m.FailureClass, err)
 	}
 

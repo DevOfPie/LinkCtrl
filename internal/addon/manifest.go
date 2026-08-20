@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -254,8 +256,40 @@ func ReadManifest(dir string) (Manifest, error) {
 	return parseManifest(f)
 }
 
+// maxManifestBytes bounds the manifest this host will read, and it is documented
+// where a publisher reads — docs/configuration.md's manifest section, beside the
+// other refusals — because meeting an undocumented bound as a boot failure is the
+// same experience as a bug.
+//
+// It exists because the file is read into memory to be walked twice — once decoded
+// into [Manifest], once as a token stream by [checkManifestKeys] — and a reader
+// that streamed is not one an author can make allocate whatever they like. A real
+// manifest is a few hundred bytes; the largest this schema can honestly describe —
+// a `migrations` list of a few hundred entries — is under 40 KiB, so 64 KiB is
+// past anything the format can mean and short of anything worth worrying about.
+//
+// **Its own number, not [maxStringIn]'s**, though the two are the same 64 KiB.
+// They govern unrelated contracts: maxStringIn is the ABI's published bound on one
+// value crossing from a guest into the host (docs/SECURITY.md), and this is what a
+// publisher's manifest may weigh. Aliasing them made one constant the definition
+// of both, so a change made for an ABI reason would silently move what manifests
+// this host accepts — and a change here would move a number the ABI publishes.
+// Equal by coincidence is not the same as equal by contract.
+const maxManifestBytes = 64 << 10
+
 func parseManifest(r io.Reader) (Manifest, error) {
-	dec := json.NewDecoder(r)
+	// One extra byte, so a file that is exactly at the bound is told apart from one
+	// that ran past it.
+	data, err := io.ReadAll(io.LimitReader(r, maxManifestBytes+1))
+	if err != nil {
+		return Manifest{}, fmt.Errorf("%s: %w", ManifestFile, err)
+	}
+	if len(data) > maxManifestBytes {
+		return Manifest{}, fmt.Errorf("%s: larger than %d bytes; a manifest describes an "+
+			"add-on and is not a place to carry data", ManifestFile, maxManifestBytes)
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 
 	var m Manifest
@@ -267,10 +301,174 @@ func parseManifest(r io.Reader) (Manifest, error) {
 	if err := dec.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
 		return Manifest{}, fmt.Errorf("%s: trailing content after the manifest object", ManifestFile)
 	}
+	// After the decode and before Validate, because it is a rule about the *bytes*
+	// and the decode is what proves they are a manifest at all. See below for why
+	// a successful decode is not enough on its own.
+	//
+	// Returned unwrapped: the walk seeds its path with ManifestFile and names every
+	// level below it, so every message already begins `addon.json`. Wrapping it
+	// again said the filename twice in a line an operator reads out of the boot log.
+	if err := checkManifestKeys(data); err != nil {
+		return Manifest{}, err
+	}
 	if err := m.Validate(); err != nil {
 		return Manifest{}, err
 	}
 	return m, nil
+}
+
+// checkManifestKeys refuses a manifest whose keys are not, exactly and once each,
+// the keys this schema documents.
+//
+// **A successful decode is not enough**, which is F286 and the reason this
+// function exists. `encoding/json` takes the **last** occurrence of a repeated key
+// and matches a struct tag case-insensitively when no exact match exists, so
+// `{"permissions": ["session.mint"], "permissions": []}` decodes to no
+// permissions and `{"SCHEMA_VERSION": 7, "schema_version": 1}` decodes to schema
+// 1. Both files load. Neither says what it does to anyone who reads it — and the
+// manifest is read by more parties than this host: it is the artifact another
+// repository is compiled against, and the thing a reviewer inspects before
+// installing an add-on on their own instance.
+//
+// **Nothing covers the manifest's own bytes.** The `sha256` field is the digest of
+// the *module* and `MigrationFile.SHA256` covers the DDL; there is no
+// canonicalization and no signature over `addon.json` itself, and the published-
+// provenance half of that is M69's. So the only thing standing between the file's
+// readable text and what the host acts on is this parse, and it has to be the
+// same reading a person gets.
+//
+// Two rules, and the first is the one that makes the second cheap:
+//
+//   - **A key is spelled exactly as documented.** This is the rule
+//     DisallowUnknownFields already states — a key this host does not know was
+//     written for a schema it does not implement — applied to spelling rather than
+//     only to identity, since a second accepted spelling of `permissions` is a
+//     second way to write the format another repository compiles against.
+//   - **A key appears once.** Exact repeats, which the rule above leaves as the
+//     only remaining collision.
+//
+// The walk is type-directed and recursive, so it holds at every nesting level and
+// not only at the top: a `migrations` entry carrying `file` twice would otherwise
+// name one `.sql` to a reader and hash another, which is the same deception one
+// level down and the one with DDL behind it.
+func checkManifestKeys(data []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	return checkKeys(dec, reflect.TypeFor[Manifest](), ManifestFile)
+}
+
+// checkKeys walks one JSON value against the Go type the manifest decodes it into.
+//
+// Reached only after a successful decode, so the document is well-formed and every
+// key resolves to a field. Anything this function cannot recognise — a value where
+// the type says object, a kind with no keys under it — is skipped rather than
+// refused: the decode has already had its say about shape, and a second opinion
+// here could only disagree with it.
+func checkKeys(dec *json.Decoder, typ reflect.Type, path string) error {
+	switch typ.Kind() {
+	case reflect.Struct:
+		return checkObject(dec, typ, path)
+	case reflect.Slice, reflect.Array:
+		return checkArray(dec, typ.Elem(), path)
+	default:
+		// A scalar, or a named string type like FailureClass. Consumed whole so the
+		// token stream stays aligned with the walk.
+		return dec.Decode(new(json.RawMessage))
+	}
+}
+
+func checkArray(dec *json.Decoder, elem reflect.Type, path string) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '[' {
+		// null, or something the decode already accepted for this field.
+		return nil
+	}
+	for i := 0; dec.More(); i++ {
+		if err := checkKeys(dec, elem, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			return err
+		}
+	}
+	_, err = dec.Token() // the closing ]
+	return err
+}
+
+func checkObject(dec *json.Decoder, typ reflect.Type, path string) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '{' {
+		return nil // null
+	}
+	fields := jsonFields(typ)
+	seen := make(map[string]bool, len(fields))
+	for dec.More() {
+		kt, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := kt.(string)
+		if !ok {
+			return nil // unreachable in well-formed JSON
+		}
+		field, exact := fields[key]
+		switch {
+		case !exact:
+			// Not spelled as documented. The decode accepted it, which means it bound
+			// a field case-insensitively — the only way an unknown key survives
+			// DisallowUnknownFields — so the field it bound is nameable and the
+			// message says which, because a publisher looking at `"Permissions"` will
+			// not otherwise see what is wrong with it.
+			return fmt.Errorf("%s: key %q is not spelled as this schema documents it; "+
+				"write %q — keys are matched exactly, so one field has one spelling",
+				path, key, documentedSpelling(fields, key))
+		case seen[key]:
+			return fmt.Errorf("%s: key %q appears more than once; JSON keeps the last "+
+				"occurrence, so the file would not mean what it reads as", path, key)
+		}
+		seen[key] = true
+		if err := checkKeys(dec, field, path+"."+key); err != nil {
+			return err
+		}
+	}
+	_, err = dec.Token() // the closing }
+	return err
+}
+
+// jsonFields is the exact key set for a struct, mapped to the type behind each.
+//
+// Read from the struct tags rather than listed, so a field added to [Manifest]
+// or [Setting] is covered by this check without anybody remembering to add it
+// here — the failure of a list would be silent and would look exactly like the
+// defect this file is fixing.
+func jsonFields(typ reflect.Type) map[string]reflect.Type {
+	out := make(map[string]reflect.Type, typ.NumField())
+	for i := range typ.NumField() {
+		f := typ.Field(i)
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if name == "" {
+			name = f.Name
+		}
+		if name == "-" {
+			continue
+		}
+		out[name] = f.Type
+	}
+	return out
+}
+
+// documentedSpelling is the key the given one differs from only in case. It is
+// only ever called for a key the decode bound, so one exists; the fallback is
+// there because this function is not the place to discover otherwise.
+func documentedSpelling(fields map[string]reflect.Type, key string) string {
+	for name := range fields {
+		if strings.EqualFold(name, key) {
+			return name
+		}
+	}
+	return strings.ToLower(key)
 }
 
 // Validate reports every problem with a manifest at once.

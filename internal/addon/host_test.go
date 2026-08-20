@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/experimental"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -912,7 +913,13 @@ func TestInstantiationCostIsMeasured(t *testing.T) {
 	}
 
 	start := time.Now()
-	compiled, err := rt.CompileModule(ctx, code)
+	// Compiled the way loadOne compiles, which is what the comment above means by
+	// the configuration Open builds: `compileWorkers` is on the context because
+	// wazero's default compilation path does not stop for a cancelled one, and it
+	// is also the faster of the two, so a number measured without it is not the
+	// number a boot pays.
+	compiled, err := rt.CompileModule(
+		experimental.WithCompilationWorkers(ctx, compileWorkers), code)
 	compile := time.Since(start)
 	if err != nil {
 		t.Fatal(err)
@@ -989,14 +996,335 @@ func TestInstantiationCostIsMeasured(t *testing.T) {
 		t.Errorf("instantiating one module took %v; M66's per-request budget "+
 			"cannot be priced against this", slowest)
 	}
-	if compile > 30*time.Second {
-		t.Errorf("compiling one module took %v; that is not a boot-time cost any more", compile)
+	// Against DefaultLoadTimeout rather than against a literal, because that
+	// constant is now what the host enforces per add-on (F287): a load this test
+	// calls acceptable and the host refuses would be two claims about one number.
+	//
+	// `compile` is the step the budget is actually on. `whole` is the whole of
+	// Open, which is more than the budget covers — the budget bounds each of the
+	// two guest-code steps and not the load (D273) — so it is held to the same
+	// number as the looser of the two claims rather than as an enforcement bound:
+	// a load past 30 s is not a boot-time cost whether or not the host refuses it.
+	if compile > DefaultLoadTimeout {
+		t.Errorf("compiling one module took %v; that is past the budget the host gives it", compile)
 	}
-	if whole > 30*time.Second {
+	if whole > DefaultLoadTimeout {
 		t.Errorf("loading one add-on took %v; that is not a boot-time cost any more", whole)
 	}
 	if mem > 64<<20 {
 		t.Errorf("one instance holds %d bytes of guest memory; M66's per-request "+
 			"budget cannot be priced against this", mem)
+	}
+}
+
+// --- F287: a load that will not finish ---------------------------------------
+
+// loadCost is how long loading one ordinary add-on takes on this machine, right
+// now, measured once for the whole package.
+//
+// Measured rather than assumed, and that is not caution — it is what makes the
+// tests below test what they claim. A budget shorter than a real load expires
+// during **compilation**, so the module never reaches the loop it exists for and
+// the test would pass against a fixture that does not spin at all. The number
+// moves by an order of magnitude with the conditions: 380 ms on this machine, and
+// 3.9 s for the same fixture under `-race` alongside the rest of this package
+// (D225 records what the race detector does to it). A fixed constant chosen
+// against either number is wrong under the other, and wrong again on a CI runner
+// with two cores.
+var loadCost struct {
+	sync.Once
+	d time.Duration
+}
+
+// healthyLoadCost loads one good add-on with the shipped budget and returns what
+// it took.
+func healthyLoadCost(t *testing.T) time.Duration {
+	t.Helper()
+	loadCost.Do(func() {
+		code := fixture(t, "minimal")
+		root := t.TempDir()
+		install(t, root, manifestFor("minimal", ClassRequired, code), code)
+		start := time.Now()
+		h, err := Open(context.Background(), Options{Dir: root})
+		loadCost.d = time.Since(start)
+		if err != nil {
+			t.Fatalf("measuring an ordinary load: %v", err)
+		}
+		_ = h.Close(context.Background())
+	})
+	return loadCost.d
+}
+
+// testLoadTimeout is the budget the tests below spend: twice a real load plus a
+// second, so it is comfortably past anything healthy and short enough to wait out
+// in a test. Every one of them pays it in wall-clock time watching a module that
+// will not stop.
+func testLoadTimeout(t *testing.T) time.Duration {
+	t.Helper()
+	return 2*healthyLoadCost(t) + time.Second
+}
+
+// openHostBounded opens a host with a budget a test can afford, and captures the
+// boot log, because "logs, increments a metric, and the instance serves without
+// it" is three assertions and the first of them is only visible here.
+func openHostBounded(t *testing.T, dir string, m *observability.Metrics, budget time.Duration) (*Host, *logSink, error) {
+	t.Helper()
+	sink := &logSink{}
+	h, err := Open(context.Background(), Options{
+		Dir:         dir,
+		Metrics:     m,
+		Logger:      slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		LoadTimeout: budget,
+	})
+	if h != nil {
+		t.Cleanup(func() { _ = h.Close(context.Background()) })
+	}
+	return h, sink, err
+}
+
+// m60.md's failure-class bullet, against the one failure mode that used not to be
+// a failure at all: a `degrade` add-on spinning in package initialization.
+//
+// Before the deadline this did not log, did not count, and did not return — Open
+// was measured at twenty seconds and still going, with the instance's listener not
+// yet open. Everything asserted here was already true of every *other* way a load
+// can fail, which is what made the bullet false rather than incomplete.
+func TestADegradeAddOnThatNeverFinishesLoadingIsGivenUpOn(t *testing.T) {
+	budget := testLoadTimeout(t)
+	code := fixture(t, "spinning")
+	root := t.TempDir()
+	install(t, root, manifestFor("spinning", ClassDegrade, code), code)
+
+	metrics := observability.NewMetrics()
+	start := time.Now()
+	h, sink, err := openHostBounded(t, root, metrics, budget)
+	took := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("a degrade-class hang stopped the instance: %v", err)
+	}
+	// The instance serves without it. This is the limb that used never to be
+	// reached, so it is checked before the decorations.
+	if h.Len() != 0 {
+		t.Fatalf("%d add-ons loaded; the module never finished starting", h.Len())
+	}
+	if took < budget {
+		t.Errorf("Open returned in %v, inside the %v budget; the module cannot have "+
+			"been interrupted, so this test is not watching what it claims to",
+			took, budget)
+	}
+	// Generous, and the point is the order of magnitude: what this catches is a
+	// deadline that is not enforced at all, which is unbounded rather than late.
+	if took > 4*budget {
+		t.Errorf("Open took %v for one add-on with a %v budget", took, budget)
+	}
+
+	if body := scrape(t, metrics); !strings.Contains(body,
+		`linkctrl_addon_loads_total{addon="spinning",outcome="load_timeout"} 1`) {
+		t.Errorf("the hang was not counted:\n%s", seriesLike(body, "linkctrl_addon_"))
+	}
+	log := sink.String()
+	for _, want := range []string{
+		"add-on failed to load; the instance continues without it",
+		`addon=spinning`,
+		`outcome=load_timeout`,
+		`failure_class=degrade`,
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("the boot log does not carry %q:\n%s", want, log)
+		}
+	}
+}
+
+// The other limb of the same bullet. A hang is a failure like any other, so the
+// class the manifest declared is what decides — and an authentication add-on that
+// never starts must not leave the instance serving as though sign-in worked.
+func TestARequiredAddOnThatNeverFinishesLoadingStopsTheInstance(t *testing.T) {
+	budget := testLoadTimeout(t)
+	code := fixture(t, "spinning")
+	root := t.TempDir()
+	install(t, root, manifestFor("spinning", ClassRequired, code), code)
+
+	metrics := observability.NewMetrics()
+	h, _, err := openHostBounded(t, root, metrics, budget)
+	if err == nil {
+		t.Fatal("a required add-on that never finished loading did not stop the instance")
+	}
+	if h != nil {
+		t.Error("Open returned a host alongside the error; nothing should be left running")
+	}
+	for _, want := range []string{"spinning", "load_timeout", budget.String()} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error does not say %q: %v", want, err)
+		}
+	}
+	if body := scrape(t, metrics); !strings.Contains(body,
+		`linkctrl_addon_loads_total{addon="spinning",outcome="load_timeout"} 1`) {
+		t.Errorf("the hang was not counted:\n%s", seriesLike(body, "linkctrl_addon_"))
+	}
+}
+
+// The budget is per add-on, and this is the assertion that says so.
+//
+// A single deadline over the whole of Open would pass every test above and fail
+// this one: once expired it is expired for everything behind it in the directory,
+// so one `degrade` add-on's hang would refuse a `required` add-on that is perfectly
+// fine — turning a class the manifest declared as survivable into an instance that
+// will not boot. The names are chosen so the spinner is discovered first, since
+// discovery is the directory's sort order.
+func TestOneAddOnsBudgetIsNotAnothers(t *testing.T) {
+	budget := testLoadTimeout(t)
+	spinning := fixture(t, "spinning")
+	minimal := fixture(t, "minimal")
+	root := t.TempDir()
+	install(t, root, manifestFor("aspinner", ClassDegrade, spinning), spinning)
+	install(t, root, manifestFor("zfine", ClassRequired, minimal), minimal)
+
+	metrics := observability.NewMetrics()
+	h, _, err := openHostBounded(t, root, metrics, budget)
+	if err != nil {
+		t.Fatalf("a required add-on behind a hanging one did not load: %v", err)
+	}
+	if h.Len() != 1 || h.Addons()[0].Manifest.Name != "zfine" {
+		t.Fatalf("loaded %d add-ons, want only zfine", h.Len())
+	}
+	body := scrape(t, metrics)
+	for _, want := range []string{
+		`linkctrl_addon_loads_total{addon="aspinner",outcome="load_timeout"} 1`,
+		`linkctrl_addon_loads_total{addon="zfine",outcome="loaded"} 1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the scrape is missing %q:\n%s", want, seriesLike(body, "linkctrl_addon_"))
+		}
+	}
+}
+
+// The compile half of the budget, which was wrapped in `runGuest` and enforced by
+// nothing.
+//
+// `CompileModule` runs code the add-on supplied, so D273 gives it the budget the
+// same as instantiation — but wazero only stops for a cancelled context on its
+// *multi-worker* compilation path, and the single-worker branch it takes by
+// default walks the code section with no check in it. A compile past the budget
+// therefore returned a nil error, expiry is read only when a step errors, and the
+// `load_timeout` limb for compiling was unreachable: the load succeeded late. The
+// host now sets `compileWorkers` on the context it compiles under, and this is the
+// assertion that the setting is doing something.
+//
+// It is written against the compile step by name rather than against
+// `load_timeout`, because the outcome alone does not distinguish the two limbs —
+// with the compile bound gone, this add-on still fails as `load_timeout`, one step
+// later, having spent a whole compile getting there. The message is what tells the
+// two apart, and it is the difference between a budget and a report.
+func TestTheCompileStepIsBounded(t *testing.T) {
+	// A quarter of a real load, so the budget expires while wazero is compiling
+	// rather than before it starts. Both cases are bounded and only one of them
+	// says anything about a *long* compile being interruptible, which is the claim
+	// worth making — a check at the top of CompileModule would satisfy the other.
+	full := healthyLoadCost(t)
+	budget := full / 4
+
+	code := fixture(t, "minimal")
+	root := t.TempDir()
+	install(t, root, manifestFor("minimal", ClassRequired, code), code)
+
+	metrics := observability.NewMetrics()
+	start := time.Now()
+	h, _, err := openHostBounded(t, root, metrics, budget)
+	took := time.Since(start)
+	t.Logf("budget %v, an unbounded load %v, this load %v", budget, full, took)
+
+	if err == nil {
+		t.Fatalf("compiling inside a %v budget succeeded; a compile is not exempt "+
+			"from the budget the add-on's other step gets", budget)
+	}
+	if h != nil {
+		t.Error("Open returned a host alongside the error; nothing should be left running")
+	}
+	// The whole of the point. "starting" here means the compile ran to completion
+	// and the *instantiation* step is what expired — which is the tree as it was
+	// when this was written, and is a load that finished late rather than a load
+	// that was bounded.
+	if !strings.Contains(err.Error(), "did not finish compiling within") {
+		t.Fatalf("the compile step was not what gave up: %v\n"+
+			"wazero checks the context only while compiling with more than one "+
+			"worker; if this says \"starting\", compileWorkers is not reaching "+
+			"CompileModule or wazero has moved the check", err)
+	}
+	// An uninterrupted compile of this fixture costs about `full`. Returning
+	// inside that is what says the compile was stopped part-way rather than
+	// reported on afterwards.
+	if took > full {
+		t.Errorf("Open took %v with a %v budget, which is what an uninterrupted "+
+			"compile costs; the budget bounded nothing", took, budget)
+	}
+	if body := scrape(t, metrics); !strings.Contains(body,
+		`linkctrl_addon_loads_total{addon="minimal",outcome="load_timeout"} 1`) {
+		t.Errorf("the expired compile was not counted:\n%s", seriesLike(body, "linkctrl_addon_"))
+	}
+}
+
+// The hazard the deadline introduces, asserted rather than reasoned about.
+//
+// WithCloseOnContextDone means a module is closed when the context it is running
+// under is done, so a per-step context that outlived its step would close a
+// perfectly good add-on the moment its budget expired — an instance that boots and
+// then loses every module thirty seconds later, which is worse than the defect
+// being fixed. wazero's watcher is `defer done()` inside the call
+// (internal/engine/wazevo/call_engine.go:326-328 in v1.12.0), so cancelling after
+// the step returns is safe; this is what makes that a property of this repository
+// rather than of a comment.
+//
+// The waiting is what the other tests here do not do. runGuest cancels each step's
+// context the moment the step returns, so a watcher that survived the *call* is
+// already caught by TestAModuleLoadsAndStaysInstantiated; what is left, and what
+// this waits for, is a context that is never cancelled at all and fires its
+// deadline later, on a module that has been serving since boot.
+func TestALoadedModuleOutlivesItsOwnBudget(t *testing.T) {
+	budget := testLoadTimeout(t)
+	code := fixture(t, "minimal")
+	root := t.TempDir()
+	install(t, root, manifestFor("minimal", ClassRequired, code), code)
+
+	metrics := observability.NewMetrics()
+	start := time.Now()
+	h, _, err := openHostBounded(t, root, metrics, budget)
+	if err != nil {
+		t.Fatalf("a valid add-on did not load: %v", err)
+	}
+
+	// Past the deadline that load was given — measured from when the load began,
+	// which is where the deadline was set — so anything still watching that context
+	// has fired by now.
+	time.Sleep(time.Until(start.Add(budget)) + 250*time.Millisecond)
+
+	got := h.Addons()[0]
+	if got.MemorySize() == 0 {
+		t.Fatal("the instance reports no guest memory; it was closed after its load returned")
+	}
+	fn := got.Module().ExportedFunction("linkctrl_fixture_ok")
+	if fn == nil {
+		t.Fatal("the module exports nothing callable; it was closed after its load returned")
+	}
+	res, err := fn.Call(context.Background())
+	if err != nil {
+		t.Fatalf("calling into the module after its load budget expired: %v", err)
+	}
+	if len(res) != 1 || res[0] != 1 {
+		t.Errorf("the module returned %v, want [1]", res)
+	}
+}
+
+// The budget and the measurement are one number, so they cannot drift.
+//
+// TestInstantiationCostIsMeasured has asserted since M60 shipped that loading one
+// add-on past 30 s "is not a boot-time cost any more". That was an opinion held by
+// a test; DefaultLoadTimeout makes it the host's behaviour. This is the assertion
+// that the two are the same claim — a shorter default with the test still checking
+// 30 s would pass while the host refused loads the test called acceptable.
+func TestTheMeasuredCeilingIsTheEnforcedBudget(t *testing.T) {
+	if DefaultLoadTimeout != 30*time.Second {
+		t.Errorf("DefaultLoadTimeout is %v; TestInstantiationCostIsMeasured's ceilings "+
+			"are written against it and its comment cites the measurement", DefaultLoadTimeout)
 	}
 }

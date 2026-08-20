@@ -841,6 +841,26 @@ are **refused**, not ignored: `schema_version` is checked for equality, so a fie
 this host does not know means a manifest written for a schema this host does not
 implement.
 
+**A key is spelled exactly as it appears below, and appears once.** `Permissions`
+is not `permissions`, and a key given twice is a refusal rather than a rule about
+which one wins. This is not pedantry about JSON: nothing hashes `addon.json`
+itself — the `sha256` field is the digest of the `.wasm`, and each `migrations`
+entry carries the digest of its own `.sql` — so this file is the trust root, and
+the only thing that makes it trustworthy is that everyone reading it reads the same
+thing. A JSON parser given `{"permissions": ["session.mint"], "permissions": []}`
+keeps the **last** occurrence, and one given `"SCHEMA_VERSION"` binds it to
+`schema_version` anyway; both would have loaded as something no reader of the file
+would have predicted. Both are refused, at every level of the document, and the
+error names the spelling you should have used.
+
+**A manifest is at most 64 KiB**, and a larger file is refused without being
+parsed. The whole file is held in memory and read twice — once as the record
+below, once key by key for the rule above — so the bound is what stops a directory
+deciding how much of this instance's memory boot spends. The largest thing this
+schema can honestly describe, a `migrations` list of a few hundred entries, is
+under 40 KiB; a manifest near the bound is carrying something that is not a
+description of an add-on.
+
 ```json
 {
   "schema_version": 1,
@@ -924,17 +944,26 @@ above is for: see [SECURITY.md](SECURITY.md).
 with the reason on stderr; one saying `degrade` logs an error, increments
 `linkctrl_addon_loads_total`, and the instance serves without it.
 
-**Both of those are about a module that *fails*.** A module that never returns —
-one whose package initialization spins, since initialization runs while the module
-is being instantiated — hangs the boot instead, and `degrade` does not rescue it:
-nothing has classified the failure yet, so no listener comes up and no metric is
-written. There is **no load-time deadline** and the process still answers SIGTERM.
-Filed as F267 in the build notes; until it is fixed, an add-on you did not write is
-an add-on that can stop this instance from starting whatever class it declares.
+**A module that never returns is a failure like any other**, and it did not use to
+be. Package initialization runs while the module is being instantiated, so a module
+that spins there returns nothing and traps nothing; with no deadline on the load,
+no listener came up, no metric was written, and the class the manifest declared was
+never consulted at all. Each add-on's module now gets **30 seconds to compile and
+30 seconds to start**, after which it is refused as `load_timeout` — logged,
+counted, and handed to the class above like any other failure. The budget is **per
+add-on**, so one that hangs does not spend anybody else's; boot pays it once for
+each add-on that hangs.
 
-So does a manifest this host cannot parse — it stops the instance. There is no
-class to honour in that case, and guessing the forgiving one would boot an
-instance with an authentication add-on silently missing.
+**It bounds the add-on's own code and not this host's work with your database.** An
+add-on's migrations wait on the migration lock for as long as this product's own
+do, because a replica arriving mid-migration should wait rather than fail into a
+crash loop — so a slow migration is `storage_failed` or nothing, never
+`load_timeout`. Nothing bounds how long one *statement* in a migration runs.
+
+**A manifest this host cannot parse stops the instance too**, whatever the file
+may have been about to declare. There is no class to honour in that case, and
+guessing the forgiving one would boot an instance with an authentication add-on
+silently missing.
 
 An `abi_version` this build does not serve is a refusal like any other and the
 declared class decides what it costs you, because the manifest parsed and the class
