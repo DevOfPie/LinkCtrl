@@ -345,9 +345,17 @@ step "integration tests"
 # Three outcomes, not two. A skip that cannot say which of "the stack is down"
 # and "I could not build a DSN" it means is the shape of F253: the direct form
 # reported one while the other was true.
+#
+# And not `docker compose ps … | grep -qx postgres`: `grep -q` exits at the first
+# match, the writer upstream takes SIGPIPE, and `pipefail` — `set -uo pipefail`
+# above — reports 141 for a pipeline that matched. That is a third cause for the
+# same false skip, and it cuts a release with the integration tests silently
+# unrun. This is F291's shape at a second gate; F304 tracks the sites that are
+# left, and deliberately no longer names this one. The herestring has no writer
+# to kill.
 if [ -z "${TEST_DATABASE_URL:-}" ]; then
   bad "no TEST_DATABASE_URL and none could be built from $ENV_FILE (make env INSTANCE=$INSTANCE)"
-elif docker compose ps --status running --services 2>/dev/null | grep -qx postgres; then
+elif grep -qx postgres <<<"$(docker compose ps --status running --services 2>/dev/null)"; then
   require "integration tests (race)" go test -tags=integration -race -count=1 ./test/integration/
 else
   printf '  skip  Postgres is not running in project %s (docker compose up -d)\n' "$COMPOSE_PROJECT_NAME"

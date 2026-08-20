@@ -432,6 +432,8 @@ file. Append a row when you append an entry.
 | [A code path only CI runs was tested nowhere](#2026-08-20--a-code-path-only-ci-runs-was-tested-nowhere-and-the-gate-that-caught-it-was-ten-days-old) | No milestone — a task-class fix after `make check-ci` went red. `ci-integration` never took `addon-fixtures` (third instance of the shape F259 and F271 record), and the on-demand fixture builder joined `../..` onto an already-stripped path, writing **two levels above the repository**. Every local gate was green because every local gate made the builder unreachable: **a fallback that only fires when the fast path is absent is only tested where the fast path is absent.** `make check-ci`'s first real failure, one commit after it landed |
 | [M64.9: the mid-phase adversarial review — what it checked, what it found, and what it refuted](#2026-08-20--m649-the-mid-phase-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted) | Six readers in fresh contexts, 37 raw findings, every one put to something that tried to kill it. The four that survived nothing and the two the attempt made worse; two readers reaching the identical-nonce defect by different routes without seeing each other; the cross-repo seam recorded as *not yet checkable* rather than passed; the browser check on a rebuilt image. D268: the contract grew 3123 bytes and is defended, and the headline drop of 65 KB is a charging artefact rather than a trimming |
 | [M64.9's triage: five milestones reopened, and the sanitizer fix that is a decision](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision) | D269: M59, M60, M62, M63 and M64 each carry a finding that falsifies their own shipped claim, so all five reopen; the three declined options and what each would have cost. D270, owner-answered: the log sanitizer computes Default_Ignorable properly and exempts the legitimate emoji case by what precedes the selector, rather than escaping all 260 and making a shipped test's assertion false |
+| [M59, the row-membership check is not a pipeline, and the failure had to be seen first](#2026-08-20--m59-the-row-membership-check-is-not-a-pipeline-and-the-failure-had-to-be-seen-first) | No new D number — the repair D269 scheduled. `cmd \| grep -q` under `pipefail` is 141 when the match comes early, so the gate reported present rows missing and exited 1 on a clean tree; the fix is the file's own idiom, and the evidence is a red run made green under the load that produced it |
+| [M59, the ninth site of F304 is M59's and the other eight are not](#2026-08-20--m59-the-ninth-site-of-f304-is-m59s-and-the-other-eight-are-not) | No new D number — a scope line drawn by M59's own claim. `release-check`'s integration-test guard ran F291's shape, so a false 141 would have printed *skip Postgres is not running* and cut a release with the tests unrun: the third cause of the lie F253 says stopped, and therefore in spec. The eight remaining sites are the same shape with no shipped claim on them, and stay deferred |
 
 ---
 
@@ -34233,3 +34235,107 @@ alternatives were declined:
 **The recommendation's own con stands and is not softened by having been taken**:
 it is the most complex predicate of the four, *what precedes* is itself a rule that
 can drift, and it adds a stateful check to a path nobody has benchmarked.
+
+## 2026-08-20 — M59, the row-membership check is not a pipeline, and the failure had to be seen first
+
+The repair [D269](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)
+scheduled, on [F291](deferred-findings.md#closed). No new D number: the owner
+decided the reopening, and what shape the fix takes was decided by the script's
+own comment eight months of gates ago.
+
+**What was wrong.** M59's row-membership pass asked `cached_rows … | grep -qxF`.
+`grep -q` exits at its first match; the `cat` upstream is then killed by SIGPIPE
+and returns 141; `set -uo pipefail` makes the pipeline 141, which the `if` reads
+as *no match*. The row was there. The gate said it was not, and
+`scripts/check-links.sh` exited 1 on a tree nobody had touched. The same file
+forbids exactly this in the comment above its `slugs`-based anchor pass — named rather than numbered, per D221, this phase being the one editing that file — and that pass obeys the prohibition with
+a herestring — so the defect is not a thing nobody knew, it is a thing the file
+says out loud one screen above where it was written.
+
+**The fix is not a workaround.** The cache is a file. `row_present` greps that
+file. There is no writer to kill, no pipeline to take an exit status from, and
+nothing about the shape depends on which `cat` is installed. What was
+machine-specific was only the *trigger*: `/usr/bin/cat` here is uutils coreutils,
+which `splice()`s and touches the pipe again at EOF, so it notices the closed
+reader that a read/write `cat` never probes for. GNU's `cat` mostly does not
+notice, which is why CI was green throughout and why *it passes on the runner*
+would have been the wrong reason to leave it.
+
+**Why the reproduction came before the fix, and is recorded here.** The
+repository's rule is that a test passing first try gets sabotaged; an
+intermittent defect makes the rule bite harder, because a green run proves
+nothing about a fault that only shows up under load. So the order was fixed in
+advance:
+
+| Step | Load | Result |
+| --- | --- | --- |
+| The tree as shipped | 8 busy loops, 8 cores | **6 of 6 runs red**, 65–211 false FAIL lines each |
+| After the fix | 8 busy loops | 8 of 8 green |
+| After the fix | 12 busy loops | 8 of 8 green |
+| Fix in place, two links sabotaged — one moved to the wrong table, one naming a row no table holds | 8 busy loops | 4 of 4 runs red with **exactly** the two intended FAILs, each naming its own reason |
+
+The last row is the one that keeps the fix from being the trivial one. A
+membership check can be made to stop failing by making it check nothing, and the
+sabotage is what separates the two outcomes: both branches of the pass — the
+match at `row_present`'s first call, and the *which table is it in instead*
+search behind it — were driven and both reported correctly.
+
+**What this does not change.** The defect was a false negative in one direction
+only. SIGPIPE needs an early match, so a genuinely absent row was always
+reported; no wrong link ever passed the gate, and no maintained link that this
+milestone corrected needs re-checking.
+
+## 2026-08-20 — M59, the ninth site of F304 is M59's and the other eight are not
+
+[F304](deferred-findings.md#open) was filed during this reopening: nine places
+where a command is piped into `grep -q` under `pipefail`, any of which can read
+141 as *no match* and branch the wrong way. One of them was
+`scripts/release-check.sh`'s integration-test guard, and it is the only one this
+milestone fixed.
+
+**The line is drawn by the claim, not by the subsystem.** M59's F253 bullet says
+the direct form of `release-check` stops lying about whether the integration
+tests ran. The guard asked `docker compose ps --services` through a pipe into
+`grep -qx postgres`; a false 141 makes the `elif` false, the `else` prints
+`skip  Postgres is not running in project …` on a machine where it is running,
+and the release is cut with a third of the gate unrun. That is a third cause for
+the same false skip F253 named — after the missing `COMPOSE_PROJECT_NAME` and
+the missing DSN — arriving at the same line the milestone had already been asked
+to make honest. A finding that makes the current milestone's claim false is in
+spec whatever it looks like, which is the whole of the justification; the
+comment two lines above the guard has named F253 since this milestone shipped.
+
+**The other eight are not**, and the difference is not effort. `ci-image-smoke`,
+`check-version-stamp`, `load-test` and `single-instance-check` carry the shape
+too, and each repair is the same one line — but no claim M59 makes rests on any
+of them, so pulling them in would be scope the owner did not approve. They stay
+in F304, whose row is narrowed to the eight so it does not keep asserting a site
+that is fixed.
+
+**What the fix is not.** It is not a probe result. F304 records the only
+measurement anyone has taken at these sites — that same `docker compose ps`
+pipeline, 100 runs idle and under load, **0 nonzero** — so this site was changed
+because the shape is wrong under `pipefail`, not because it was caught. The
+existence proof is [F291](deferred-findings.md#closed) one file away, where the
+identical shape needed eight background loops before it failed at all. The
+hazard is demonstrable without docker: under `set -uo pipefail`, `yes postgres`
+piped into `grep -qx postgres` is nonzero **50 of 50** runs on this machine,
+where the herestring over 2000 lines of the same text is nonzero **0 of 50**.
+What `docker compose ps` supplies that `yes` does not is a writer small enough
+to usually finish before grep exits — a property of the output, not a guarantee
+about it. A herestring has no writer to kill, so the question stops being about
+which `cat` or which `docker` is installed.
+
+**How the repaired guard was shown to work.** Both branches were driven through
+the shipped script rather than a copy of it. `bash scripts/release-check.sh
+v0.3.0` — the direct form F253 is about — was run whole against the up
+`linkctrl-test` stack: `ok    integration tests (race)`, the suite compiled and
+run for real under `-race`. The four failures in that run are the tree being
+dirty, the tag already existing, `[Unreleased]` being full and the 0.3.0
+section's date; a mid-phase tree, and none of them this step. `make
+release-check` took the same branch. Then the guard's service name was
+sabotaged to one no stack has, and the same script printed `skip  Postgres is
+not running in project linkctrl-test`; a counter-edit put it back and the run
+branch returned. The three branch runs used a `go` that exits 0, on the
+`PATH`, so that what was being read was which branch fired rather than the
+suite again — the suite's own real result is the whole run above.

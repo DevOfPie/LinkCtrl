@@ -37,7 +37,7 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 
 | # | Milestone | Depends on | Status |
 | --- | --- | --- | --- |
-| [M59](m59.md) | Process debt: the gates that were not watching | — | in progress (reopened) |
+| [M59](m59.md) | Process debt: the gates that were not watching | — | done |
 | [M60](m60.md) | The host: a module loads, or is refused | M59 *(ordering)* | in progress (reopened) |
 | [M61](m61.md) | The ABI: what an add-on may import, written down and versioned | M60 | done |
 | [M62](m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | in progress (reopened) |

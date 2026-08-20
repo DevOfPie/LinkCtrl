@@ -185,8 +185,14 @@ while IFS= read -r spec; do
   rows_under "$rt_file" "$rt_anchor" > "$rowdir/$(basename "$rt_file").$rt_anchor"
 done <<<"$row_tables"
 
-cached_rows() { # cached_rows FILE ANCHOR
-  cat "$rowdir/$(basename "$1").$2" 2>/dev/null
+# Not `cached_rows … | grep -qxF`, for the reason given above the anchor pass:
+# `grep -q` exits at the first match, the `cat` upstream takes SIGPIPE, and
+# `pipefail` reports 141 for a pipeline that succeeded. That shape shipped here
+# anyway and turned present rows into FAILs on a clean tree, a different set each
+# run (F291). The cache is a file, so grep reads it and there is no writer to
+# kill. A missing cache file exits 2, which is "not present", as the `cat` was.
+row_present() { # row_present FILE ANCHOR KEY
+  grep -qxF "$3" "$rowdir/$(basename "$1").$2" 2>/dev/null
 }
 
 while IFS= read -r file; do
@@ -227,7 +233,7 @@ while IFS= read -r file; do
     [ -n "$key" ] || continue
 
     memchecked=$((memchecked + 1))
-    if cached_rows "$target" "$anchor" | grep -qxF "$key"; then
+    if row_present "$target" "$anchor" "$key"; then
       continue
     fi
 
@@ -236,7 +242,7 @@ while IFS= read -r file; do
       rt_file=${spec%%|*}; rest=${spec#*|}; rt_anchor=${rest%%|*}
       [ "$rt_file" = "$target" ] || continue
       [ "$rt_anchor" = "$anchor" ] && continue
-      if cached_rows "$target" "$rt_anchor" | grep -qxF "$key"; then
+      if row_present "$target" "$rt_anchor" "$key"; then
         where="$rt_anchor"
       fi
     done <<<"$row_tables"
