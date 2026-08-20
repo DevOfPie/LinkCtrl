@@ -429,6 +429,7 @@ file. Append a row when you append an entry.
 | [M64, the demo shows no add-on page, and the coverage test cannot say so](#2026-08-20--m64-the-demo-shows-no-add-on-page-and-the-coverage-test-cannot-say-so) | D265 — an add-on is files, not rows: showing one on the demo means a wasm module in the demo image, which is M68's question. `demoCoverage()` is SQL-only, so the record is this entry and a comment where the gate is enforced |
 | [M64, a request too large to cross is the client's error, and the host says so before the module runs](#2026-08-20--m64-a-request-too-large-to-cross-is-the-clients-error-and-the-host-says-so-before-the-module-runs) | D266 — the request record is bounded at the ABI's single-value bound and answers **413**. Replaces a comment claiming an alignment that measurement refuted: host→guest is bounded by guest memory, not by 64 KiB, so a module could be handed a record it could not answer about and the visitor got a 502 for a body they chose the size of |
 | [M64, two add-on names in a prefix relation are both refused, and three sentences said they could not be](#2026-08-20--m64-two-add-on-names-in-a-prefix-relation-are-both-refused-and-three-sentences-said-they-could-not-be) | D267 — `nameRe` admits `_`, so `oidc` may declare the cookie prefix `oidc_x` and read every cookie of add-on `oidc_x`; the same relation makes `LINKCTRL_ADDON_OIDC_X_KEY` two settings. **Both** names are refused at load — no winner, since picking one is D234's first-come rule with spelling deciding — which closes the cookie case and the settings case together, because both namespaces are `name + "_" + anything`. Claims read from the manifest, not from directory entries; eighth load outcome, `name_collision` |
+| [A code path only CI runs was tested nowhere](#2026-08-20--a-code-path-only-ci-runs-was-tested-nowhere-and-the-gate-that-caught-it-was-ten-days-old) | No milestone — a task-class fix after `make check-ci` went red. `ci-integration` never took `addon-fixtures` (third instance of the shape F259 and F271 record), and the on-demand fixture builder joined `../..` onto an already-stripped path, writing **two levels above the repository**. Every local gate was green because every local gate made the builder unreachable: **a fallback that only fires when the fast path is absent is only tested where the fast path is absent.** `make check-ci`'s first real failure, one commit after it landed |
 
 ---
 
@@ -34006,3 +34007,51 @@ enumeration found the same claim in `docs/addon-abi.md`, `docs/configuration.md`
 closed — the refusal itself cannot be asserted there, since `internal/addon` imports
 `internal/config` and not the other way round.
 
+
+## 2026-08-20 — A code path only CI runs was tested nowhere, and the gate that caught it was ten days old
+
+**No milestone: a task-class fix, made because `make check-ci` reported red on
+`c59404e` and step 8 makes that a prompt the owner answered.**
+
+CI's integration job failed on every add-on storage test with one cause: the test
+module was *"still not readable after building it"*. Two defects compounded, and
+the second is the one worth the entry.
+
+**The prerequisite.** `ci-integration` — the only target CI actually runs for
+integration — never took `addon-fixtures`, while `test`, `ci-test` and
+`single-instance` all did. That is the third instance of one shape in this phase:
+[F259](deferred-findings.md#open) is the Taskfile mirror missing `check-links`,
+[F271](deferred-findings.md#open) is the SDK registered in one gate of three, and
+this is a Makefile family that grew a prerequisite while one caller kept the old
+signature. Each was found by something other than the change that caused it.
+
+**The path, and why nothing local could see it.** `test/integration`'s on-demand
+fixture builder sets `cmd.Dir` to the repository root **and** joined `..`, `..`
+onto a path whose own `../../` had already been stripped, so `go build -o` wrote
+two levels **above** the repository. The read then looked in the right place and
+found nothing. Reproduced by sabotage after the fix, and the sabotage run left a
+directory at `/home/whippy/repos/internal` — the bug's own footprint, outside the
+tree, which is how far off the target was.
+
+**Every local gate was green because every local gate made the builder
+unreachable.** `make test-integration` takes `addon-fixtures`, so the artifact
+always existed and `addonFixture` returned on its first `os.ReadFile`. The builder
+was written at [D220](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run)
+precisely so that no caller could fail for want of an artifact — and the callers
+that could not fail were the ones that never exercised it. **CI was the only place
+that ran that code, and CI was the only place it was broken.**
+
+That is [F255](deferred-findings.md#closed)'s shape exactly, one layer in: not a
+gate reporting green without checking, but a **code path with no local reader at
+all**. The generalisation is worth more than the fix: *a fallback that only fires
+when the fast path is absent is only tested where the fast path is absent*, and if
+every local target guarantees the fast path, the fallback ships unexecuted. The
+cheap discipline is what this fix now does — wipe the artifact and run the test, so
+the slow path is exercised on purpose rather than by accident of environment.
+
+**`make check-ci` earned its milestone here.** It was built at
+[M59](phase-details/m59.md) because a build had been red for nine days while every
+local gate reported clean, and this is its first real failure: red on the commit
+after it landed, caught at the next boundary, with the run stopping rather than
+building a seventh milestone on top of it. The gate that F255 asked for did the one
+thing F255 said nothing was doing.

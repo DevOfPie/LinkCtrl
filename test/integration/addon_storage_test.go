@@ -80,8 +80,16 @@ func addonFixture(t *testing.T, name string) []byte {
 	if err := os.MkdirAll(fixtureRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// cmd.Dir is the repository root, so both paths are relative to it — the
+	// `../../` these constants carry is for this package's own working
+	// directory and must not be joined on a second time. It was, and the
+	// artifact landed two levels above the repository: every local gate stayed
+	// green because `make test-integration` takes `addon-fixtures`, so the file
+	// already existed and this builder never ran. CI's target did not take it,
+	// so CI was the only place that ever exercised this path — F255's shape, and
+	// what `make check-ci` caught.
 	cmd := exec.Command("go", "build", "-buildmode=c-shared",
-		"-o", filepath.Join("..", "..", fixtureRoot[6:], name+".wasm"),
+		"-o", filepath.Join(fixtureRoot[6:], name+".wasm"),
 		"./"+filepath.Join(fixtureSrc[6:], name))
 	cmd.Dir = "../.."
 	cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm")

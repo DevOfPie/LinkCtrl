@@ -382,7 +382,7 @@ ci-lint: shellcheck htmx swagger-ui css ## The CI lint job's steps, short of gol
 # tests that never ran claim to cover the cache — so an unset variable fails here
 # instead of passing quietly.
 .PHONY: ci-integration
-ci-integration: ## Integration tests against caller-provided services — what CI runs
+ci-integration: addon-fixtures ## Integration tests against caller-provided services — what CI runs
 	@test -n "$(TEST_DATABASE_URL)" || { \
 		echo "TEST_DATABASE_URL is not set — refusing to run against an unknown database."; \
 		exit 1; \
