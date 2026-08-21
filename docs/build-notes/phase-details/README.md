@@ -43,7 +43,7 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 | [M62](m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | done |
 | [M63](m63.md) | An add-on's tables: a schema of its own, migrated by the host | M62 | done |
 | [M64](m64.md) | An add-on reaches the page: routes, templates, config | M62 · M63 *(ordering)* | done |
-| [M64.9](m64.9.md) | Mid-phase adversarial review | M59–M64 | in progress |
+| [M64.9](m64.9.md) | Mid-phase adversarial review | M59–M64 | done |
 | [M65](m65.md) | The authentication hook: a session minted on an add-on's word | M61 · M62 · M64 | not started |
 | [M66](m66.md) | Add-ons on the redirect path: two classes, a deadline, and a promise rescoped | M60 · M62 | not started |
 | [M67](m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 | not started |
