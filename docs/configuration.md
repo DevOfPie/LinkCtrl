@@ -891,7 +891,7 @@ description of an add-on.
 | `sha256` | The digest of that file, 64 lowercase hex characters — what `sha256sum` prints. Verified before the module is compiled; a mismatch means it is never parsed, let alone run. |
 | `failure_class` | `required` or `degrade`. No default. |
 | `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the seven below. |
-| `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is what stops an add-on being denied its own by whichever installed first; it does not on its own stop `oidc` declaring `oidc_x`, so the other half of the rule is at load — two installed add-ons whose names stand in a `name + "_"` prefix relation are **both refused**, counted as `name_collision`, and the boot log names the pair. Rename one directory and its manifest. |
+| `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. The names are the add-on's; the cookies a browser holds are not — LinkCtrl carries the whole set inside one cookie of its own, described [below](#the-pages-an-add-on-serves). An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is what stops an add-on being denied its own by whichever installed first; it does not on its own stop `oidc` declaring `oidc_x`, so the other half of the rule is at load — two installed add-ons whose names stand in a `name + "_"` prefix relation are **both refused**, counted as `name_collision`, and the boot log names the pair. Rename one directory and its manifest. |
 | `migrations` | Optional, and **required in practice for any add-on that declares `storage.own_schema`** — the host applies only what this list names. Each entry is a `file` inside the `migrations/` directory beside the manifest and the `sha256` of its bytes, verified before a schema exists. A file listed but absent, present but unlisted, or whose digest disagrees each refuse the add-on. Filenames follow goose's convention. Declaring migrations without `storage.own_schema` is refused. **This row was missing until 2026-08-20**, so a publisher following this page shipped no `migrations` key and their DDL never ran, while the sentence above told them the field they needed was illegal (F285's review, M64.9) |
 | `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
 
@@ -1044,10 +1044,23 @@ Three things worth knowing before you install one:
 
 Sixteen add-on requests are served at once across the whole instance; a
 seventeenth waits for one of them to finish and gives up when the request's own
-timeout does. Each in-flight request holds about 2.4 MB while it runs, because a
-request gets an instance of the module to itself — which is also why an add-on
+timeout does. Each in-flight request gets an instance of the module to itself,
+and each instance is bounded at **8 MiB** of memory — which is why an add-on
 cannot keep anything in memory between two requests of one flow, and has to keep
-it in the schema it owns.
+it in the schema it owns. Sixteen instances of 8 MiB is a ceiling of **128 MiB**,
+and it is a ceiling rather than an estimate: a module asking for more is stopped
+by the runtime, its request answers 502, and the instance goes on serving. A
+typical module holds far less — the test fixtures measure 2.4 MB at load — but
+what an operator sizes a host by is the ceiling.
+
+**An add-on's cookies live in one cookie of the host's.** Whatever a module names
+its cookies, LinkCtrl packs them into `linkctrl_addon_<name>` — a second,
+`…_kept`, when the module asked for a lifetime that outlives the browser being
+closed — scoped to the add-on's own path. So an add-on occupies at most two slots
+of a visitor's cookie store however many cookies it sets and however many times
+it is visited, and cannot crowd out this instance's session cookie. Each jar
+holds up to 3 KiB; past that an add-on's oldest values are dropped and the log
+says which add-on ran out of room.
 
 ### The trust boundary
 

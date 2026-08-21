@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -241,24 +242,57 @@ func TestAnAddonsRedirectIsFound(t *testing.T) {
 	}
 }
 
-// A cookie an add-on sets is scoped by the host: to the add-on's own path, with
-// the host's own attributes. A module cannot opt out of HttpOnly, and cannot
-// widen the path to the origin.
-func TestTheHostScopesACookieAnAddonSets(t *testing.T) {
+// The cookie an add-on's response writes is scoped by the host: to the add-on's
+// own path, with the host's own attributes. A module cannot opt out of HttpOnly,
+// and cannot widen the path to the origin.
+//
+// What it writes is the *jar* — internal/addon packs a module's own cookies into
+// it and empties the list they came from (F289) — so the name here is the host's
+// and the value is opaque. The attributes are what this file has always been
+// about, and they did not change.
+func TestTheHostScopesTheJarItWritesForAnAddon(t *testing.T) {
 	web := addonWeb(t, &stubAddonRouter{resp: addon.Response{
-		Body:      "ok",
-		SetCookie: []addon.Cookie{{Name: "probe_state", Value: "abc", MaxAge: 300}},
+		Body: "ok",
+		Jar:  []addon.JarCookie{{Name: "linkctrl_addon_probe_kept", Value: "packed", MaxAge: 300}},
 	}})
 	web.Config.SecureCookies = true
 	rec := serveAddon(t, web, http.MethodGet, "probe", "start")
 
 	set := rec.Header().Get("Set-Cookie")
 	for _, want := range []string{
-		"probe_state=abc", "Path=/addons/probe/", "HttpOnly", "Secure", "SameSite=Lax", "Max-Age=300",
+		"linkctrl_addon_probe_kept=packed", "Path=/addons/probe/", "HttpOnly", "Secure",
+		"SameSite=Lax", "Max-Age=300",
 	} {
 		if !strings.Contains(set, want) {
 			t.Errorf("Set-Cookie %q is missing %q", set, want)
 		}
+	}
+}
+
+// The structural half of F289, asserted where the header is written rather than
+// where the jar is packed.
+//
+// A response arrives here carrying twelve hundred cookies a module named — the
+// flood that evicted `linkctrl_session` in Chromium at n=180 — and *nothing* is
+// written, because this writer has no path to a module's own list at all. That
+// is the property the fix rests on: not that some bound was applied upstream,
+// but that a caller here cannot write an add-on's cookies even by trying, so a
+// later milestone adding a second writer cannot reintroduce the flood by
+// forgetting a check it never had to know about.
+func TestTheWriterCannotWriteACookieAModuleNamed(t *testing.T) {
+	flood := make([]addon.Cookie, 1200)
+	for i := range flood {
+		flood[i] = addon.Cookie{Name: "probe_flood_" + strconv.Itoa(i), Value: "x", MaxAge: 31536000}
+	}
+	web := addonWeb(t, &stubAddonRouter{resp: addon.Response{Body: "ok", SetCookie: flood}})
+	rec := serveAddon(t, web, http.MethodGet, "probe", "start")
+
+	if got := rec.Header()["Set-Cookie"]; len(got) != 0 {
+		t.Errorf("%d Set-Cookie headers reached the browser from a module's own list; "+
+			"the first is %q", len(got), got[0])
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status %d: the page itself still answers", rec.Code)
 	}
 }
 

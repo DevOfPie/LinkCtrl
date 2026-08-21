@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/tetratelabs/wazero"
@@ -64,9 +65,12 @@ import (
 // which for an authentication add-on is the difference between a nonce and a
 // vulnerability — and it means an add-on keeping state between two requests of
 // one flow has to put it in its own schema, where it survives a restart and is
-// visible to every replica. The cost is that memory, about 2.4 MB of guest
-// linear memory per in-flight request, which is what [maxConcurrentRoutes]
-// bounds.
+// visible to every replica. The cost is that memory: a fixture holds about
+// 2.4 MB of it at load, the host allows one instance [maxGuestMemoryPages], and
+// [maxConcurrentRoutes] bounds how many instances are alive at once. The two
+// bounds multiply into the ceiling an operator sizes a host by; the 2.4 MB is a
+// measurement of one fixture, which is a different kind of sentence and was for a
+// while being read as this one.
 
 // RoutePrefix is the path every add-on's routes live under. One segment, so the
 // reserved-word list needs exactly one entry for the whole feature.
@@ -92,18 +96,60 @@ const PermissionSessionContext = "session.context"
 // across every add-on.
 //
 // It exists because add-on routes are reachable without a session (D261) and
-// each in-flight request holds an instance's linear memory — about 2.4 MB
-// measured at M60. Unbounded, a flood of anonymous requests to an add-on's
-// prefix is a memory exhaustion with no session to rate-limit against; bounded,
-// it is a queue. Sixteen is the number: about 38 MB of guest memory at
-// saturation, which is affordable on the smallest deployment this product
-// documents, and well above what a dashboard's add-on pages see.
+// each in-flight request holds an instance's linear memory. Unbounded, a flood
+// of anonymous requests to an add-on's prefix is a memory exhaustion with no
+// session to rate-limit against; bounded, it is a queue.
 //
 // A request that cannot get a slot waits, and waits on the request's own
 // context, so what bounds the wait is the deadline every application request
 // already carries (LINKCTRL_HTTP_REQUEST_TIMEOUT). It is [ErrBusy] after that rather
 // than a page that arrives too late to be read.
 const maxConcurrentRoutes = 16
+
+// maxGuestMemoryPages is how much linear memory one instance may hold, in
+// WebAssembly pages of 64 KiB — 8 MiB, and it is the other half of the price
+// [maxConcurrentRoutes] was chosen to bound.
+//
+// **This is the bound F289's sibling F290 found missing.** Until it existed the
+// runtime carried wazero's default of 65536 pages, so the "about 2.4 MB per
+// in-flight request" this file used to state as the cost was a *typical* figure
+// and not a bound at all: one request that allocated took the host from 78 MB
+// resident to 1604 MB, and sixteen concurrent reached 4332 MB, on a product whose
+// documented floor is 1 GB. The typical figure was never wrong — a real fixture
+// measures 2.31 MiB of linear memory at load — and a typical figure is not what
+// an operator sizing a host needs.
+//
+// The two numbers multiply, and their product is the sentence docs/SECURITY.md,
+// docs/deployment.md, docs/configuration.md and CHANGELOG.md now make: **16 x
+// 8 MiB = 128 MiB of guest memory at saturation**, whatever the modules are.
+// TestTheGuestMemoryCeilingIsTheOneDocumented holds all three numbers against
+// every sentence that states one — **each part where it is stated, not only the
+// product**, because 32 instances of 4 MiB is also 128 MiB and those files state
+// the concurrency and the per-instance bound in their own words. Which sentences
+// those are is not a list anybody maintains by remembering to:
+// TestEveryDocumentedNumberIsTied sweeps the documentation for these numbers and
+// fails on an occurrence the first test does not account for.
+//
+// Eight is measured rather than guessed, from both directions. The fixture the
+// standard toolchain produces holds 2.4 MB at load, allocates a 4 MiB block on top
+// and answers, and traps at 5 MiB — and 4 MiB of working room is well past what a
+// handler needs, since the largest request that can cross this boundary is 64 KiB
+// and the largest response 256 KiB. From the other direction, eight is what keeps
+// the whole ceiling inside the 1 GB floor docs/deployment.md documents. A module
+// wanting more is refused where an operator can act on it: a memory section
+// declaring a *minimum* over this bound fails at load with the add-on named, and
+// a module that grows past it traps mid-request and answers 502. Neither is
+// silent, which is the difference between a bound and a cliff.
+//
+// A declared **maximum** over the bound is the case four documents got wrong, and
+// it is neither of those: wazero does not refuse it, it *replaces* it with the
+// runtime's limit while decoding (internal/wasm/binary/decoder.go:224), so the
+// module loads and its instance is held to 128 pages anyway. Nothing is lost by
+// that — a module held to the bound is bounded — but "refused at load" was not
+// what happened, and nothing checked. TestWhatAMemorySectionMayDeclare measures
+// both limbs now, on wasm written by hand because Go emits no maximum at all,
+// which is why no fixture in this repository could ever have shown either.
+const maxGuestMemoryPages = 128
 
 // maxResponseBody bounds what one add-on response may carry.
 //
@@ -164,7 +210,7 @@ type RequestIn struct {
 
 // record turns a request into the HTTPRequest a guest sees, keeping only what
 // the ABI says crosses.
-func (in RequestIn) record(prefixes []string) Request {
+func (in RequestIn) record(addon string, prefixes []string) Request {
 	body, encoded := EncodeRequestBody(in.Body)
 	req := Request{
 		Method:         in.Method,
@@ -177,12 +223,18 @@ func (in RequestIn) record(prefixes []string) Request {
 		BodyBase64:     encoded,
 	}
 	for _, c := range in.Cookies {
-		for _, p := range prefixes {
-			if strings.HasPrefix(c.Name, p) {
-				req.Cookies[c.Name] = c.Value
-				break
-			}
+		if ownedName(c.Name, prefixes) {
+			req.Cookies[c.Name] = c.Value
 		}
+	}
+	// And the jar, which is where an add-on's cookies actually live since M64 was
+	// reopened. It is read after the loop above rather than instead of it: the
+	// loop is what keeps "no cookie of the host's crosses" true of the raw
+	// header, and a value the host wrote for this add-on outranks a same-named
+	// one the browser holds from anywhere else.
+	session, kept := jarsFrom(addon, in.Cookies, prefixes, time.Now())
+	for _, e := range append(session, kept...) {
+		req.Cookies[e.Name] = e.Value
 	}
 	return req
 }
@@ -252,6 +304,16 @@ type Response struct {
 	Location    string   `json:"location"`
 	SetCookie   []Cookie `json:"set_cookie"`
 	Body        string   `json:"body"`
+	// Jar is what the host writes to the browser for the cookies above, and it
+	// is not part of the record: a module neither sends it nor sees it.
+	//
+	// [Host.Route] fills it and **empties SetCookie doing so**, which is the
+	// structural half of F289's fix. The list a module wrote is gone by the time
+	// a response leaves this package, so a writer — the one in internal/httpx, or
+	// one a later milestone adds without having read this comment — has nothing
+	// to loop over but the jar, and the jar is at most two cookies however many a
+	// module named.
+	Jar []JarCookie `json:"-"`
 }
 
 // ContentTypeWrapped is the empty content type: the host wraps the body in the
@@ -330,7 +392,7 @@ func (h *Host) route(ctx context.Context, name string, in RequestIn, sess Sessio
 		// no future edit to that check can turn into a disclosure.
 		sess = SessionContext{}
 	}
-	req := in.record(target.Manifest.CookiePrefixes)
+	req := in.record(name, target.Manifest.CookiePrefixes)
 	st := base.forRequest(&req, sess)
 
 	// The record has to fit one value, and this is where that is decided.
@@ -436,7 +498,24 @@ func (h *Host) route(ctx context.Context, name string, in RequestIn, sess Sessio
 			slog.String("addon", name))
 		return Response{}, ErrNoResponse
 	}
-	return *st.response, nil
+	// The jar, and the emptying that makes it the only thing there is to write.
+	// Here rather than in internal/httpx because this is the code that knows the
+	// manifest, and because a response leaving this package still carrying a
+	// module's own cookie list is a response some other caller could write
+	// verbatim — which is exactly what F289 was.
+	resp := *st.response
+	jar, dropped := jarCookies(name, in.Cookies, target.Manifest.CookiePrefixes,
+		resp.SetCookie, time.Now())
+	if dropped > 0 {
+		h.log.Warn("an add-on's cookie jar is full and its oldest values were dropped; "+
+			"an add-on keeps at most a few kilobytes in a browser, and anything larger "+
+			"belongs in its own schema",
+			slog.String("addon", name),
+			slog.Int("dropped", dropped))
+	}
+	resp.SetCookie = nil
+	resp.Jar = jar
+	return resp, nil
 }
 
 // RoutedAddons is every loaded add-on holding the routes grant, in discovery
@@ -523,7 +602,41 @@ func decodeResponse(raw []byte, prefixes []string) (Response, error) {
 			return Response{}, fmt.Errorf("set_cookie[%d]: %w", i, err)
 		}
 	}
+	// What a module set, packed as though the browser held nothing, so that a
+	// response nobody could store is refused at the call the module made rather
+	// than at the moment the host writes the answer. This is where the flood
+	// stops being possible to *ask* for: 1200 cookies are far past the jar's
+	// bound, and the module is told so and can answer something smaller.
+	//
+	// It is not the only check — [jarCookies] packs again with what the browser
+	// already held, where an add-on filling its jar over many responses is
+	// bounded by eviction rather than by refusal, because by then the response is
+	// written and the module has nothing left to decide.
+	if err := checkJarFits(r.SetCookie); err != nil {
+		return Response{}, err
+	}
 	return r, nil
+}
+
+// checkJarFits refuses a set of cookies that would not pack into a jar even on
+// an empty browser.
+func checkJarFits(set []Cookie) error {
+	if len(set) == 0 {
+		return nil
+	}
+	now := time.Now()
+	var session, kept []jarEntry
+	for _, c := range set {
+		session, kept = applyToJar(session, kept, c, now)
+	}
+	for _, entries := range [][]jarEntry{session, kept} {
+		if _, err := packJar(entries); err != nil {
+			return fmt.Errorf("set_cookie: %w; an add-on's cookies are carried in one "+
+				"cookie of the host's, so what bounds them is what a browser will store "+
+				"for one", err)
+		}
+	}
+	return nil
 }
 
 // checkContentType holds the response to [ResponseMediaTypes], and normalizes
@@ -586,6 +699,9 @@ func checkLocation(loc string) error {
 // checkCookie holds a response's cookies to the namespace the manifest declared,
 // which is the outbound half of D232: a namespace an add-on owns is one it owns
 // in both directions, or it could overwrite a cookie it is not allowed to read.
+//
+// It bounds the lifetime as well, and [maxCookieAge] says why that one is
+// arithmetic rather than policy.
 func checkCookie(c Cookie, prefixes []string) error {
 	if c.Name == "" {
 		return errors.New("a cookie needs a name")
@@ -596,18 +712,442 @@ func checkCookie(c Cookie, prefixes []string) error {
 	if strings.ContainsAny(c.Value, "\r\n\x00 ;,\"\\") {
 		return fmt.Errorf("cookie %q: the value carries a character a cookie value may not", c.Name)
 	}
-	var owned bool
-	for _, p := range prefixes {
-		if strings.HasPrefix(c.Name, p) {
-			owned = true
-			break
-		}
+	if c.MaxAge > maxCookieAge {
+		return fmt.Errorf("cookie %q: max_age %d is longer than the %d seconds (%d days) a "+
+			"cookie may live here; a browser would not keep it that long either, and the "+
+			"host refuses rather than quietly writing something else",
+			c.Name, c.MaxAge, maxCookieAge, maxCookieAge/86400)
 	}
-	if !owned {
+	if !ownedName(c.Name, prefixes) {
 		return fmt.Errorf("cookie %q is outside the prefixes this add-on declared (%v); "+
 			"a namespace is owned in both directions", c.Name, prefixes)
 	}
 	return nil
+}
+
+// --- the jar: how many cookies an add-on occupies ---------------------------
+
+// A browser's cookie store is a shared, small, evictable resource, and until
+// M64 was reopened an add-on could fill it. `set_cookie` is an array, the host
+// wrote every entry of it, and nothing bounded the array or the number of
+// requests an add-on could answer — so 180 cookies inside the add-on's **own**
+// declared namespace overflowed Chromium's per-domain cap and the eviction took
+// `linkctrl_session`, signing the visitor out of LinkCtrl on every visit to the
+// add-on's page. Measured in real Chromium against a real signed-in account:
+// n=179 stays on /dashboard, n=180 lands on /login (F289).
+//
+// # Why the fix is not a number
+//
+// The obvious answer is a bound on the array, and it is the wrong shape. A
+// browser cookie is *persistent* — the add-on's occupancy is the sum over every
+// response it has ever given, not the size of one — so a cap of eight per
+// response is a cap of eight per response times however many times somebody
+// visits the page, which the add-on also controls, because it can answer with a
+// redirect back to itself. A total-bytes bound has the same hole for the same
+// reason. Any threshold on one response is a threshold an add-on sits just under
+// and repeats.
+//
+// So the host stopped writing an add-on's cookies at all. What it writes is a
+// **jar**: one cookie of the host's own, named for the add-on and outside every
+// namespace an add-on may declare, carrying the add-on's cookies inside its
+// value. A module still names its cookies, still reads them back by name, and
+// still gets the lifetimes it asked for; what it no longer has is a say in how
+// many *slots* of the browser's store it occupies. That number is now a property
+// of the code — at most one jar per lifetime class, so at most two — and it does
+// not move when a module answers a thousand cookies or is visited a thousand
+// times.
+//
+// The count an operator's browser can be made to hold is therefore
+// installed-add-ons times two, and installing an add-on is the operator's act.
+// An add-on cannot raise its own occupancy at all, which is the property F289
+// needed and the reason this is not a threshold.
+//
+// # Two jars, because a lifetime is not decoration
+//
+// [Cookie.MaxAge] is zero for a session cookie and positive for a persistent
+// one, and one jar cannot be both: a session entry packed beside a year-long one
+// would outlive the browser being closed, which is the opposite of what the
+// module asked for. So entries are partitioned by lifetime class and each class
+// gets its own jar — the session jar written with no Max-Age, the kept jar
+// written with the longest lifetime any entry in it still has. Inside the kept
+// jar every entry carries its own absolute expiry, so a ten-minute value in a
+// jar held open by a year-long one is still gone in ten minutes: the host drops
+// it on the way in.
+//
+// # What an add-on can still do to itself
+//
+// Fill its own jar. maxCookieJar bounds the packed value, because a cookie a
+// browser will not store is not storage; over it, the oldest entries are dropped
+// and the operator's log says which add-on did it. That is a threshold, and it is
+// named as one here — but it bounds only what the add-on can keep for itself, and
+// no value of it changes how many slots the store gives up.
+
+// cookieJarPrefix is the host's name for an add-on's jar. Inside this product's
+// own `linkctrl_` namespace, which no manifest may declare a cookie prefix
+// inside (reachesHostCookie, manifest.go), so a module can neither read its own
+// jar nor forge another add-on's.
+const cookieJarPrefix = "linkctrl_addon_"
+
+// keptJarSuffix distinguishes the persistent jar from the session one. Two
+// add-ons cannot collide here for the reason they cannot collide over a cookie
+// namespace: `a` and `a_kept` would produce the same name, and two names standing
+// in a `name + "_"` prefix relation are both refused at load (nameCollisions,
+// host.go — D267).
+const keptJarSuffix = "_kept"
+
+// maxCookieJar bounds one packed jar value.
+//
+// 3 KiB, under the 4096 bytes browsers give a cookie's name and value together —
+// measured at M64.9's reproduction, where Chromium kept a 4000-byte cookie and
+// dropped a 4090-byte one — with the jar's own name and the encoding's overhead
+// inside the difference. A jar a browser silently refuses to store is worse than
+// a small one, because a module would read back nothing and be told nothing.
+const maxCookieJar = 3072
+
+// maxCookieAge bounds [Cookie.MaxAge], and it is here because the arithmetic
+// underneath that field was not total.
+//
+// applyToJar turns a lifetime into an absolute expiry with
+// `now.Add(time.Duration(c.MaxAge) * time.Second)`. A time.Duration is int64
+// nanoseconds, so above about 9.2e9 seconds that multiplication wraps: measured,
+// `max_age=10000000000` produced an expiry 8446744074 seconds *before* now and
+// `max_age=1<<62` produced one exactly equal to it. Both entries were then
+// dropped by keepLive on the very next read, and the module was told 200 — a
+// cookie it was informed it had set, which silently did not exist. It was also a
+// regression, because before the jar the same value went to http.SetCookie and
+// the browser clamped it, so the cookie worked.
+//
+// The published contract decides the shape of the fix rather than leaving it to
+// taste: http_response_write says every bound on this record is *ErrInvalid
+// rather than a silently corrected response*, so an over-long lifetime is
+// refused at the call the module made. A clamp is the one answer that sentence
+// forbids.
+//
+// 400 days, 34560000 seconds. Not a safe-looking round number: it is the limit
+// draft-ietf-httpbis-rfc6265bis puts on a cookie's age, which a user agent MUST
+// reduce a longer lifetime to, and which Chromium has applied since 2022. So a
+// module inside the bound loses nothing it used to have, and one outside it was
+// never going to get what it asked for from any browser. It clears the overflow
+// point by a factor of 266 — 3.456e7 seconds against the 9.223e9 where int64
+// nanoseconds wrap — which is what makes the arithmetic total; being the number
+// browsers already enforce is why it costs a publisher nothing.
+//
+// That margin is the whole of the safety here, so it is stated as the number it
+// is. This comment said "four orders of magnitude" and the margin is nearer two
+// and a half: still total, and still a sentence claiming more than it had, which
+// in this milestone is not a small kind of wrong.
+//
+// Negative is untouched, and deliberately: a negative max_age is a deletion, and
+// applyToJar removes the entry without doing any arithmetic on the number, so
+// its magnitude reaches nothing.
+const maxCookieAge = 400 * 24 * 60 * 60
+
+// JarCookie is one cookie the **host** writes for an add-on: the jar, not
+// anything a module named.
+//
+// internal/httpx writes these and nothing else — [Response.SetCookie] is emptied
+// by the time a response leaves [Host.Route], so a caller that reaches for the
+// module's own list finds it gone rather than finding it writable. The path and
+// every attribute are the writer's, as they always were.
+type JarCookie struct {
+	Name  string
+	Value string
+	// MaxAge is seconds, and follows the same convention a [Cookie] does: zero is
+	// a session cookie, negative deletes. Negative is how an emptied jar is
+	// cleared from a browser that still holds one.
+	MaxAge int
+}
+
+// jarEntry is one add-on cookie inside a jar. Short field names because they are
+// paid for in every request that carries the jar.
+type jarEntry struct {
+	Name  string `json:"n"`
+	Value string `json:"v"`
+	// Exp is the absolute unix second this entry dies, and is zero in the session
+	// jar, where the browser's own session is the lifetime.
+	Exp int64 `json:"e,omitempty"`
+}
+
+// jarName is the cookie name for one add-on's jar of one lifetime class.
+func jarName(addon string, kept bool) string {
+	if kept {
+		return cookieJarPrefix + addon + keptJarSuffix
+	}
+	return cookieJarPrefix + addon
+}
+
+// packJar encodes a jar, and refuses one no browser would keep.
+//
+// base64 because a cookie value may not carry a comma, a semicolon, a space or a
+// quote, and JSON carries all four; RawURLEncoding because padding is one of the
+// characters at issue.
+func packJar(entries []jarEntry) (string, error) {
+	if len(entries) == 0 {
+		return "", nil
+	}
+	raw, err := json.Marshal(entries)
+	if err != nil {
+		return "", err
+	}
+	value := base64.RawURLEncoding.EncodeToString(raw)
+	if len(value) > maxCookieJar {
+		return "", fmt.Errorf("the cookie jar is %d bytes packed and the bound is %d",
+			len(value), maxCookieJar)
+	}
+	return value, nil
+}
+
+// unpackJar decodes what a browser sent back, and answers nothing for anything
+// it does not understand.
+//
+// Silent, deliberately. The value is under the visitor's hand — an old jar from
+// before a format change, a truncated one, one somebody edited — and none of
+// those is the add-on's fault or the operator's problem. A module reads its
+// cookies back as absent, which is the state it has to handle anyway, because a
+// browser that never stored them looks the same.
+func unpackJar(value string) []jarEntry {
+	if value == "" || len(value) > maxCookieJar {
+		return nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return nil
+	}
+	var entries []jarEntry
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil
+	}
+	return entries
+}
+
+// jarsFrom reads both of an add-on's jars off a request, dropping what has
+// expired and what the manifest no longer declares.
+//
+// The prefix filter is the same one the request record applies, and it is here
+// as well because a manifest can lose a prefix between two visits: a value
+// written when the add-on declared `pages_` is not one it may read after it
+// stopped, and the browser is under no obligation to have forgotten it.
+//
+// **One name can arrive twice, and the host does not get to assume otherwise.**
+// The jar is written at the add-on's own path, and a visitor can plant a cookie
+// of the same name at `/` — which the writer, scoped as it is, then has no way
+// to delete. So the jars are merged rather than assigned.
+func jarsFrom(addon string, sent []*http.Cookie, prefixes []string, now time.Time) (session, kept []jarEntry) {
+	for _, c := range sent {
+		switch c.Name {
+		case jarName(addon, false):
+			session = mergeJar(session, unpackJar(c.Value))
+		case jarName(addon, true):
+			kept = mergeJar(kept, unpackJar(c.Value))
+		}
+	}
+	return keepLive(session, prefixes, now), keepLive(kept, prefixes, now)
+}
+
+// mergeJar folds a second jar of the same name into the first, and the first
+// wins every name the two share.
+//
+// Assigning per match instead — which is what this did until the finding — made
+// the *last* cookie of a name win, so a jar a visitor planted at `/` shadowed
+// the host's own on every later visit and the add-on's state was permanently
+// void, unreadable and unclearable. First-wins is RFC 6265 §5.4's order, in
+// which a user agent sends the more specifically scoped cookie first, so the one
+// the host wrote at `/addons/<name>/` is the one that survives.
+//
+// What a planted jar can still do is carry names the real jar does not hold. That
+// is not a hole this closes and is not one it opens: a value under a declared
+// prefix already reaches the module from the plain cookie header, by design, and
+// a visitor's own browser is the one place their own add-on state was always
+// theirs to write. Nothing here crosses to another add-on or to another visitor.
+func mergeJar(first, second []jarEntry) []jarEntry {
+	if len(second) == 0 {
+		return first
+	}
+	held := make(map[string]bool, len(first))
+	for _, e := range first {
+		held[e.Name] = true
+	}
+	for _, e := range second {
+		if !held[e.Name] {
+			held[e.Name] = true
+			first = append(first, e)
+		}
+	}
+	return first
+}
+
+// keepLive drops entries that have expired or left the add-on's namespace.
+func keepLive(entries []jarEntry, prefixes []string, now time.Time) []jarEntry {
+	live := entries[:0]
+	for _, e := range entries {
+		if e.Exp != 0 && e.Exp <= now.Unix() {
+			continue
+		}
+		if !ownedName(e.Name, prefixes) {
+			continue
+		}
+		live = append(live, e)
+	}
+	return live
+}
+
+// ownedName reports whether a cookie name is inside one of the declared
+// prefixes. The one place that question is answered — [RequestIn.record] and
+// [keepLive] on the way in, [checkCookie] on the way out — so the read half and
+// the write half cannot drift apart. checkCookie kept its own copy of this loop
+// until the reopening, which is how a comment came to claim a uniqueness the
+// package did not have.
+func ownedName(name string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyToJar folds one cookie a module set into the jars, and returns them.
+//
+// Setting a name it already holds replaces the value **and** moves the entry to
+// the end, so that the eviction packJar's bound forces takes the least recently
+// written rather than the alphabetically unlucky. A name changing lifetime class
+// moves between jars rather than existing in both.
+func applyToJar(session, kept []jarEntry, c Cookie, now time.Time) (_, _ []jarEntry) {
+	session = withoutName(session, c.Name)
+	kept = withoutName(kept, c.Name)
+	switch {
+	case c.MaxAge < 0:
+		// A deletion, and it is already done: the entry is out of both jars.
+	case c.MaxAge == 0:
+		session = append(session, jarEntry{Name: c.Name, Value: c.Value})
+	default:
+		kept = append(kept, jarEntry{
+			Name: c.Name, Value: c.Value,
+			Exp: now.Add(time.Duration(c.MaxAge) * time.Second).Unix(),
+		})
+	}
+	return session, kept
+}
+
+func withoutName(entries []jarEntry, name string) []jarEntry {
+	out := entries[:0]
+	for _, e := range entries {
+		if e.Name != name {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// packWithEviction packs a jar, dropping the oldest entries until it fits, and
+// returns what survived along with the value.
+//
+// **The survivors are returned because they are not the entries it was handed**,
+// and the difference reaches a browser. [jarMaxAge] writes the kept jar's own
+// lifetime from the longest-lived entry in it; given the list before eviction it
+// writes a lifetime for an entry that is no longer there, which is exactly the
+// cookie-kept-in-order-to-hand-back-nothing that function exists to avoid. The
+// oldest entry goes first and the longest-lived one is often the oldest — a
+// 400-day value set once at the start of a flow, then buried under short-lived
+// ones — so this is the ordinary case rather than a contrived one.
+//
+// It returns how many it dropped so the caller can say so once, in the log,
+// naming the add-on: an add-on that overfills its own jar is losing values it
+// thinks it wrote, and the only person who can act on that is the operator who
+// installed it.
+func packWithEviction(entries []jarEntry) (string, []jarEntry, int, error) {
+	dropped := 0
+	for {
+		value, err := packJar(entries)
+		if err == nil {
+			return value, entries, dropped, nil
+		}
+		if len(entries) == 0 {
+			// One entry, alone, over the bound. Not reachable through the routing
+			// path — decodeResponse packs a module's own cookies before the response
+			// is accepted, so a value this large was refused at the call the module
+			// made — and answered rather than looped on.
+			return "", nil, dropped, err
+		}
+		entries = entries[1:]
+		dropped++
+	}
+}
+
+// jarCookies is the whole of what the host writes for one add-on's response:
+// what the browser already held, with what the module just set folded in,
+// packed, and expressed as at most one cookie per lifetime class.
+//
+// A jar that has become empty is written as a deletion when the browser sent one
+// and omitted entirely when it did not, so the count of Set-Cookie headers on an
+// add-on's response is at most two whatever happens, and is zero on the ordinary
+// response that sets nothing.
+func jarCookies(addon string, sent []*http.Cookie, prefixes []string, set []Cookie,
+	now time.Time) (out []JarCookie, dropped int) {
+	if len(set) == 0 {
+		return nil, 0
+	}
+	session, kept := jarsFrom(addon, sent, prefixes, now)
+	for _, c := range set {
+		session, kept = applyToJar(session, kept, c, now)
+	}
+	held := func(name string) bool {
+		for _, c := range sent {
+			if c.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	for _, class := range []struct {
+		kept    bool
+		entries []jarEntry
+	}{{false, session}, {true, kept}} {
+		name := jarName(addon, class.kept)
+		value, survived, lost, err := packWithEviction(class.entries)
+		dropped += lost
+		if err != nil || value == "" {
+			if held(name) {
+				out = append(out, JarCookie{Name: name, MaxAge: -1})
+			}
+			continue
+		}
+		c := JarCookie{Name: name, Value: value}
+		if class.kept {
+			c.MaxAge = jarMaxAge(survived, now)
+		}
+		out = append(out, c)
+	}
+	return out, dropped
+}
+
+// jarMaxAge is how long the kept jar has to live: as long as the longest-lived
+// thing in it, and no longer. A jar outliving every entry it holds would be a
+// cookie a browser keeps in order to hand back nothing.
+//
+// *In it* is the load-bearing word and is why the entries reach here from
+// [packWithEviction] rather than from the list handed to it. Given the list
+// before eviction this wrote a lifetime for a value the browser was not being
+// sent — the sentence above, made false by the line that called it.
+//
+// Held to [maxCookieAge] at the top, and that is not the same check checkCookie
+// makes. An entry's Exp reaches this function from one of two places: applyToJar,
+// where checkCookie has already bounded it, or a jar the visitor's browser handed
+// back — which is a value under the visitor's hand, so an Exp of 1<<62 is a thing
+// to write a sane attribute for rather than a thing to refuse. This is the host's
+// own cookie and its own attribute; the ABI's no-silent-correction promise is
+// about a module's record, and no module wrote this one.
+func jarMaxAge(entries []jarEntry, now time.Time) int {
+	longest := 1
+	for _, e := range entries {
+		if remaining := int(e.Exp - now.Unix()); remaining > longest {
+			longest = remaining
+		}
+	}
+	if longest > maxCookieAge {
+		return maxCookieAge
+	}
+	return longest
 }
 
 // EncodeRequestBody is how internal/httpx puts a body into a [Request]: as text

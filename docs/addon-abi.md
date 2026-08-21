@@ -537,8 +537,24 @@ wraps your body in the dashboard's own page, escaped. `text/html` is refused —
 the host owns the HTML, which is what makes "an add-on cannot inject markup" a
 property of this boundary rather than of a filter. A `location` is answered `302`
 and never a permanent redirect; a `set_cookie` name has to begin with one of your
-declared `cookie_prefixes`, and the host applies its own `Path`, `Secure`,
-`HttpOnly` and `SameSite`.
+declared `cookie_prefixes`, its `max_age` may be at most **400 days** — the limit
+RFC 6265bis has a browser reduce a longer one to, so nothing is lost by being
+refused it — and the host applies its own `Path`, `Secure`, `HttpOnly` and
+`SameSite`.
+
+**Your cookies are carried in one cookie of the host's.** You name them, you read
+them back by name, and their lifetimes are the ones you asked for — but LinkCtrl
+does not write them to the browser individually. It packs them into
+`linkctrl_addon_<your name>`, and into a second `…_kept` for the ones whose
+`max_age` outlives the browser being closed. Two things follow, and the second is
+why. Your add-on occupies two slots of a visitor's cookie store rather than as
+many as it has set, which is what stops any add-on filling that store until the
+browser evicts *this product's* session cookie — an eviction that signs the
+visitor out and never names a cookie it was not allowed to name. And a jar holds
+about 3 KiB: a set of cookies that would not pack into one is `ErrInvalid` at the
+call you made, and an add-on that fills its jar over many responses loses its
+oldest values, with the operator's log saying so. Keep a flow's state in your own
+schema and a key to it in a cookie; the cookie is not the storage.
 
 ## What is not promised
 
@@ -564,6 +580,17 @@ declared `cookie_prefixes`, and the host applies its own `Path`, `Secure`,
 - **Anything about a module's own contents.** An add-on's version, its language,
   its dependencies and its release numbering are its author's business. Only the
   boundary is versioned here.
+- **Memory beyond what the host allows one instance.** A module gets **8 MiB** of
+  linear memory — 128 pages — and a request gets an instance to itself. Growing
+  past it traps, which answers that one request `502` and leaves the host serving;
+  a memory section *demanding* more than that as its **minimum** is refused at
+  load, with your add-on named. A larger **maximum** is not refused — the runtime
+  substitutes its own limit for it while decoding — so a toolchain that pins one
+  costs you nothing and buys you nothing: 8 MiB is what your instance gets either
+  way. The fixtures this ABI is tested
+  against hold 2.4 MB at load and still allocate 4 MiB on top, so the room is for
+  a request's work rather than for a cache: what an add-on wants to keep goes in
+  its own schema, which is also the only thing that survives the instance.
 - **A raw client address, ever.** Not a promise of restraint — a property of the
   surface. No function in the table below hands a module a client's address in
   any form, and the record that carries redirect data is bound to what
@@ -600,7 +627,7 @@ The ABI is **0.1.0**, generation **1**, and this host loads generation 1 or newe
 | `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed — ErrDenied, which is distinguishable from ErrInvalid so that a module can tell confinement from its own mistake. One statement per call: the host parses through the extended protocol, so a payload carrying two is refused. The read is a read at the server, in a READ ONLY transaction, so this function cannot be used to write. Arguments are a JSON array of strings, numbers, booleans and nulls; pass JSON as a string and cast it. Rows come back as a JSON array of objects keyed by column name, and a result with two columns of one name is refused rather than collapsed. |
 | `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep — the add-on ships them in its own `migrations/` directory and names each with its digest in the manifest, and the host applies them at load inside the same schema this function writes to. Everything StorageQuery says about the boundary, the single statement and the arguments applies here too; what differs is that the transaction is not read-only. |
 | `http_request_read`<br>`sdk.HTTPRequestRead()` | 0.1.0 | `routes.own_prefix` | **live** | HTTPRequestRead reads the request that reached one of this add-on's routes. It answers ErrNotFound outside a request, which is what a module calling it from package initialization gets — an instance is made per request and its initialization runs before the request is attached, so this is the ordinary answer during init rather than an edge case. Read twice in one request it answers the same record twice: the host holds it, the guest does not consume it. |
-| `http_response_write`<br>`sdk.HTTPResponseWrite(response []byte)` | 0.1.0 | `routes.own_prefix` | **live** | HTTPResponseWrite answers the request that reached one of this add-on's routes. Called twice for one request it is ErrInvalid: a response is one record, not a stream, because a module that can hold a connection open is a module that can hold every connection open. What the record may carry is bounded by the host and not by the module: `content_type` is a closed vocabulary that does not include text/html, because the host wraps a page and an add-on that could choose the type could choose markup; `location` is answered 302 and never a permanent redirect; and `set_cookie` is bounded by the prefixes the manifest declares, with the host's own Secure, HttpOnly and SameSite attributes applied. Each of those is ErrInvalid rather than a silently corrected response. |
+| `http_response_write`<br>`sdk.HTTPResponseWrite(response []byte)` | 0.1.0 | `routes.own_prefix` | **live** | HTTPResponseWrite answers the request that reached one of this add-on's routes. Called twice for one request it is ErrInvalid: a response is one record, not a stream, because a module that can hold a connection open is a module that can hold every connection open. What the record may carry is bounded by the host and not by the module: `content_type` is a closed vocabulary that does not include text/html, because the host wraps a page and an add-on that could choose the type could choose markup; `location` is answered 302 and never a permanent redirect; and `set_cookie` is bounded by the prefixes the manifest declares and by a `max_age` of at most 400 days, with the host's own Secure, HttpOnly and SameSite attributes applied. Each of those is ErrInvalid rather than a silently corrected response. The cookies themselves are carried in one cookie of the host's rather than written individually, so what an add-on occupies in a browser does not grow with what it sets or with how often it is visited — a set too large to pack into one is ErrInvalid at this call. |
 | `template_render`<br>`sdk.TemplateRender(name string, data []byte)` | 0.1.0 | `routes.own_prefix` | declared, refused | TemplateRender renders one of this add-on's own templates through the host's renderer, so a page an add-on draws inherits the product's escaping, its theme tokens and its Content-Security-Policy. It is also how an add-on reaches the page without bringing a front-end toolchain: it renders nothing itself. A host that does not implement it yet answers ErrNotAvailable. |
 | `session_context`<br>`sdk.SessionContextRead()` | 0.1.0 | `session.context` | **live** | SessionContextRead asks the host who is signed in on the request this add-on is answering. It is the *read* half of the session boundary and the whole of it: what comes back is an identity and where it is working, never a cookie, a token or a session row, so an add-on can draw a page for the person in front of it and cannot act as them anywhere else. Nobody signed in is not an error — add-on routes are reachable without a session, because a sign-in flow could not otherwise begin — so the record's `signed_in` is false and every other field is empty. Outside a request it is ErrNotFound, which is what a module calling it from package initialization gets. Minting a session is session_mint and is a different grant. |
 | `session_mint`<br>`sdk.SessionMint(claim []byte)` | 0.1.0 | `session.mint` | declared, refused | SessionMint tells the host that this add-on authenticated somebody, and asks for a session. The add-on does not make a session and never sees a token: it makes an assertion, the host decides whether an account exists for it and what the session may do, and the cookie is written by the host. That split is what keeps the host, and not an add-on, the authority over who is signed in. What comes back is a MintedSession, and it is enumerated for the same reason the claim is: an answer described only as "a JSON object" is an answer the credential assertion over this surface cannot read. A host that does not implement it yet answers ErrNotAvailable. |
@@ -683,7 +710,7 @@ What an add-on answers a request with, and what the host will let it. `content_t
 | `status` | number | The HTTP status code |
 | `content_type` | string | The response's Content-Type |
 | `location` | string | For a redirect; never a permanent one, which the host enforces rather than trusts |
-| `set_cookie` | array | Cookies to set, bounded by the same prefixes the manifest declares — a namespace an add-on owns is one it owns in both directions, or it could overwrite a cookie it is not allowed to read; the host applies its own Secure, HttpOnly and SameSite attributes |
+| `set_cookie` | array | Cookies to set, bounded by the same prefixes the manifest declares — a namespace an add-on owns is one it owns in both directions, or it could overwrite a cookie it is not allowed to read; the host applies its own Secure, HttpOnly and SameSite attributes, and packs the whole set into one cookie of its own so that an add-on's share of a browser's cookie store is fixed rather than chosen |
 | `body` | string | The body, as UTF-8 text — this direction carries no encoded form, because the content types an add-on may name are text and a flag saying otherwise would be a flag with nothing behind it |
 
 #### `SessionContext`

@@ -174,9 +174,13 @@ var Functions = []Function{
 			"vocabulary that does not include text/html, because the host wraps a page " +
 			"and an add-on that could choose the type could choose markup; `location` is " +
 			"answered 302 and never a permanent redirect; and `set_cookie` is bounded by " +
-			"the prefixes the manifest declares, with the host's own Secure, HttpOnly and " +
-			"SameSite attributes applied. Each of those is ErrInvalid rather than a " +
-			"silently corrected response.",
+			"the prefixes the manifest declares and by a `max_age` of at most 400 days, " +
+			"with the host's own Secure, HttpOnly and SameSite attributes applied. Each of " +
+			"those is ErrInvalid rather than a " +
+			"silently corrected response. The cookies themselves are carried in one cookie " +
+			"of the host's rather than written individually, so what an add-on occupies in " +
+			"a browser does not grow with what it sets or with how often it is visited — a " +
+			"set too large to pack into one is ErrInvalid at this call.",
 	},
 	{
 		Name: "template_render", Go: "TemplateRender", Since: "0.1.0", BackedBy: "M64",
@@ -316,7 +320,9 @@ var Records = []Record{
 			{"set_cookie", "array", "cookies to set, bounded by the same prefixes the manifest " +
 				"declares — a namespace an add-on owns is one it owns in both directions, or " +
 				"it could overwrite a cookie it is not allowed to read; the host applies its " +
-				"own Secure, HttpOnly and SameSite attributes"},
+				"own Secure, HttpOnly and SameSite attributes, and packs the whole set into " +
+				"one cookie of its own so that an add-on's share of a browser's cookie store " +
+				"is fixed rather than chosen"},
 			{"body", "string", "the body, as UTF-8 text — this direction carries no encoded " +
 				"form, because the content types an add-on may name are text and a flag " +
 				"saying otherwise would be a flag with nothing behind it"},

@@ -79,6 +79,14 @@
 // instance and the host heap grows about 5.4 MB with it. M66 prices a per-request
 // budget against those numbers rather than against a guess. D225 records them,
 // including what the race detector does to the two durations.
+//
+// Those are measurements of one fixture, and a measurement is not a bound. What
+// bounds an instance is WithMemoryLimitPages below, added when M64 was reopened:
+// before it, a module that asked for more simply got more, and the concurrency
+// bound priced sixteen instances of whatever the module chose (F290). It binds
+// however the module's memory section is written — an over-large *minimum* is
+// refused at load, an over-large *maximum* is replaced by this limit while the
+// section is decoded, and TestWhatAMemorySectionMayDeclare measures both.
 package addon
 
 import (
@@ -583,8 +591,18 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// because it is what lets M66 interrupt a module that will not return: a
 	// deadline enforced by cancelling a context does nothing unless the runtime
 	// is watching for it.
+	//
+	// WithMemoryLimitPages is set at birth for the same kind of reason and it is
+	// F290's fix: wazero's default is 65536 pages, 4 GiB per instance, so without
+	// this line the concurrency bound priced sixteen instances of an amount the
+	// module chose. It is a property of the *runtime* rather than of a module
+	// config, so it holds for every instance this host will ever make — the ones
+	// load makes below, the per-request ones internal/addon/http.go makes, and any
+	// a later milestone adds without knowing this line is here.
 	h.runtime = wazero.NewRuntimeWithConfig(ctx,
-		wazero.NewRuntimeConfig().WithCloseOnContextDone(true))
+		wazero.NewRuntimeConfig().
+			WithCloseOnContextDone(true).
+			WithMemoryLimitPages(maxGuestMemoryPages))
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, h.runtime); err != nil {
 		_ = h.runtime.Close(ctx)
 		return nil, fmt.Errorf("wasi preview 1: %w", err)

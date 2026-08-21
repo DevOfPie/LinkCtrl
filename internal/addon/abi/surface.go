@@ -335,5 +335,7 @@ var CookieFields = map[string]string{
 		"reach a cookie of the host's",
 	"set_cookie": "outbound, and bounded by the same declared prefixes, because a " +
 		"namespace an add-on owns is one it owns in both directions; the host " +
-		"applies its own Secure, HttpOnly and SameSite attributes",
+		"applies its own Secure, HttpOnly and SameSite attributes, and carries the " +
+		"whole set inside one cookie of its own, so an add-on cannot fill a browser's " +
+		"cookie store until this product's session cookie is evicted from it",
 }

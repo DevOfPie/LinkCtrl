@@ -21,6 +21,7 @@ package main
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/DevOfPie/LinkCtrl/sdk"
 )
@@ -112,6 +113,55 @@ func handle() int32 {
 			SetCookie: []cookie{{Name: "pages_state", Value: "abc123", MaxAge: 300}},
 		})
 
+	case "/cookie-flood":
+		// F289, from the guest's side: the flood that used to reach a browser. Two
+		// hundred rather than the twelve hundred the finding drove through the host's
+		// own handler, because twelve hundred cookies is a *record* over the ABI's
+		// 64 KiB single-value bound and would be refused by a bound that was already
+		// there. This set fits the record and does not fit a jar, which is the
+		// refusal M64's reopening added — and the module is told at the call it
+		// made, which is the difference between a bound and a surprise.
+		flood := make([]cookie, 200)
+		for i := range flood {
+			flood[i] = cookie{
+				Name:   "pages_flood_" + strconv.Itoa(i),
+				Value:  "0123456789012345678901234567890123456789012345678901234567890123",
+				MaxAge: 31536000,
+			}
+		}
+		err := write(response{Body: "flood", SetCookie: flood})
+		report("cookie_flood_refused", err)
+		return answer(response{Body: "flood refused: " + errText(err)})
+
+	case "/cookie-named":
+		// One cookie, named by the caller, so a test can measure what many visits
+		// setting many *different* names cost a browser. That is the shape F289
+		// exploited: a per-response bound is no bound at all when the add-on also
+		// decides how many responses there are.
+		return answer(response{
+			Body:      "named cookie set",
+			SetCookie: []cookie{{Name: "pages_" + req.Query, Value: "v", MaxAge: 31536000}},
+		})
+
+	case "/cookie-two":
+		// One of each lifetime class, which the host keeps in separate jars because
+		// a session cookie packed beside a year-long one would outlive the browser
+		// being closed.
+		return answer(response{
+			Body: "two cookies set",
+			SetCookie: []cookie{
+				{Name: "pages_session", Value: "s1"},
+				{Name: "pages_kept", Value: "k1", MaxAge: 600},
+			},
+		})
+
+	case "/cookie-clear":
+		// A deletion, in the ABI's own vocabulary: a negative max_age.
+		return answer(response{
+			Body:      "cookie cleared",
+			SetCookie: []cookie{{Name: "pages_state", Value: "", MaxAge: -1}},
+		})
+
 	case "/redirect":
 		return answer(response{Location: "https://idp.test/authorize?state=abc"})
 
@@ -127,6 +177,22 @@ func handle() int32 {
 			return answer(response{Body: "session unavailable: " + errText(err)})
 		}
 		return answer(response{Body: "session " + string(raw)})
+
+	case "/grow":
+		// F290, from the guest's side: linear memory is bounded, so a module asking
+		// for more than the host allows is stopped by the runtime rather than by the
+		// operating system's out-of-memory killer. The size is in the query so one
+		// fixture can measure both sides of the bound — a modest allocation has to
+		// still work, or the test would be measuring "any allocation fails".
+		mb, _ := strconv.Atoi(req.Query)
+		block := make([]byte, mb<<20)
+		// Touched, because linear memory is only allocated when it is written to and
+		// an untouched slice would measure nothing.
+		for i := 0; i < len(block); i += 65536 {
+			block[i] = byte(i)
+		}
+		_ = sdk.Log(sdk.LevelInfo, "pages: grew by "+strconv.Itoa(mb)+" MiB")
+		return answer(response{Body: "grew " + strconv.Itoa(len(block)) + " bytes"})
 
 	case "/nothing":
 		// A handler that answers nothing at all, which the host has to turn into a

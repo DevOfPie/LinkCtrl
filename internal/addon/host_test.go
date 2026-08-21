@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -472,6 +473,112 @@ func TestOneCorruptedByteRefusesTheModule(t *testing.T) {
 	}
 }
 
+// What a memory section can and cannot declare, measured rather than believed.
+//
+// **Four documents said a module declaring more memory than the bound is refused
+// at load, and nothing asserted it. Half of that was false.** wazero v1.12.0
+// treats the two limbs of a declaration differently, and neither this test nor
+// the sentences it now backs would exist if either had been checked:
+//
+//   - A **minimum** over the bound is refused, at CompileModule.
+//     internal/wasm.Memory.Validate returns "min N pages over limit of M pages"
+//     and the load fails with the add-on named.
+//   - A **maximum** over the bound is **not** refused. The decoder returns the
+//     runtime's limit in its place — internal/wasm/binary/decoder.go:224, whose
+//     own comment reads *"This is a valid value, but it goes over the run-time
+//     limit: return the limit"* — so the module loads and its instance is held
+//     to the bound anyway. (A maximum over WebAssembly's own 65536 is refused,
+//     but by the format rather than by anything this host chose.)
+//
+// The documents now say that, which is the direction the correction went: the
+// behaviour is right — a module held to the bound is bounded, and refusing a
+// declaration that changes nothing would refuse a module that is safe — and it
+// was the sentence that overclaimed. Hand-written wasm, because Go emits no
+// maximum at all, which is why no fixture in this repository could have shown
+// either half.
+func TestWhatAMemorySectionMayDeclare(t *testing.T) {
+	// The whole of the binary format that matters here: the preamble, section 5
+	// holding one memory with both limits, and section 7 exporting it so the
+	// second half below can ask the instance how far it may grow.
+	module := func(minPages, maxPages uint32) []byte {
+		leb := func(v uint32) []byte {
+			var out []byte
+			for {
+				b := byte(v & 0x7f)
+				if v >>= 7; v != 0 {
+					out = append(out, b|0x80)
+					continue
+				}
+				return append(out, b)
+			}
+		}
+		limits := append([]byte{0x01, 0x01}, leb(minPages)...) // one memory, a maximum follows
+		limits = append(limits, leb(maxPages)...)
+		export := []byte{0x01, 0x06, 'm', 'e', 'm', 'o', 'r', 'y', 0x02, 0x00}
+		out := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00} // "\0asm", version 1
+		out = append(out, append([]byte{0x05, byte(len(limits))}, limits...)...)
+		return append(out, append([]byte{0x07, byte(len(export))}, export...)...)
+	}
+
+	// The minimum: refused, named, counted.
+	over := module(maxGuestMemoryPages+1, maxGuestMemoryPages+1)
+	root := t.TempDir()
+	install(t, root, manifestFor("greedy", ClassRequired, over), over)
+	metrics := observability.NewMetrics()
+	_, err := openHost(t, root, metrics)
+	// t.Error and not t.Fatal, so that the second half below is still measured on
+	// a run where this one has already gone red. One sabotage — the runtime's
+	// limit — turns both halves red, and only one of them would be seen.
+	if err == nil {
+		t.Error("a module demanding more memory than the host allows was loaded")
+	} else {
+		if !strings.Contains(err.Error(), "greedy") {
+			t.Errorf("the refusal does not name the add-on, which is what an operator "+
+				"acts on: %v", err)
+		}
+		if !strings.Contains(err.Error(), "over limit") ||
+			!strings.Contains(err.Error(), strconv.Itoa(maxGuestMemoryPages)) {
+			t.Errorf("the refusal is not the memory bound's, so this test is measuring "+
+				"some other reason a hand-written module fails: %v", err)
+		}
+	}
+	if body := scrape(t, metrics); !strings.Contains(body,
+		`linkctrl_addon_loads_total{addon="greedy",outcome="instantiate_failed"} 1`) {
+		t.Errorf("the refusal was not counted:\n%s", seriesLike(body, "linkctrl_addon_"))
+	}
+
+	// The maximum: loads, and the bound holds regardless — which is the half the
+	// documents had backwards. Instantiated through the host's **own** runtime, so
+	// what is measured is the limit this host set and not one the test configured.
+	optimistic := module(1, maxGuestMemoryPages*8)
+	root = t.TempDir()
+	install(t, root, manifestFor("hopeful", ClassRequired, optimistic), optimistic)
+	h, err := openHost(t, root, observability.NewMetrics())
+	if err != nil {
+		t.Fatalf("a module declaring a maximum over the bound was refused, and wazero "+
+			"clamps that declaration rather than refusing it: %v", err)
+	}
+	ctx := context.Background()
+	mod, err := h.runtime.InstantiateWithConfig(ctx, optimistic,
+		wazero.NewModuleConfig().WithName(""))
+	if err != nil {
+		t.Fatalf("instantiate: %v", err)
+	}
+	defer func() { _ = mod.Close(ctx) }()
+	mem := mod.ExportedMemory("memory")
+	if mem == nil {
+		t.Fatal("the hand-written module exports no memory, so nothing below measures anything")
+	}
+	if _, ok := mem.Grow(maxGuestMemoryPages - mem.Size()/65536); !ok {
+		t.Errorf("a module declaring %d pages could not reach the %d it is allowed",
+			maxGuestMemoryPages*8, maxGuestMemoryPages)
+	}
+	if _, ok := mem.Grow(1); ok {
+		t.Errorf("a module that *declared* %d pages was given more than the %d the "+
+			"host bounds an instance at", maxGuestMemoryPages*8, maxGuestMemoryPages)
+	}
+}
+
 // The directory is the add-on's identity. Two directories claiming one name would
 // be two add-ons contending for one Postgres schema at M63.
 //
@@ -561,7 +668,7 @@ func TestPrefixRelatedNamesCannotBothLoad(t *testing.T) {
 		t.Fatalf("oidc_x is refused by Validate: %v", err)
 	}
 	sent := &http.Cookie{Name: "oidc_x_state", Value: "oidc_x's own session state"}
-	if crossed := (RequestIn{Cookies: []*http.Cookie{sent}}).record(a.CookiePrefixes); len(crossed.Cookies) != 1 {
+	if crossed := (RequestIn{Cookies: []*http.Cookie{sent}}).record(a.Name, a.CookiePrefixes); len(crossed.Cookies) != 1 {
 		t.Errorf("oidc's prefixes no longer admit %s, so the cookie half of the "+
 			"collision is gone and the refusal below has one reason fewer", sent.Name)
 	}

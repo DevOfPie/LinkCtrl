@@ -278,9 +278,13 @@ func HTTPRequestRead() ([]byte, error) {
 // vocabulary that does not include text/html, because the host wraps a page
 // and an add-on that could choose the type could choose markup; `location`
 // is answered 302 and never a permanent redirect; and `set_cookie` is
-// bounded by the prefixes the manifest declares, with the host's own
-// Secure, HttpOnly and SameSite attributes applied. Each of those is
-// ErrInvalid rather than a silently corrected response.
+// bounded by the prefixes the manifest declares and by a `max_age` of at
+// most 400 days, with the host's own Secure, HttpOnly and SameSite
+// attributes applied. Each of those is ErrInvalid rather than a silently
+// corrected response. The cookies themselves are carried in one cookie of
+// the host's rather than written individually, so what an add-on occupies
+// in a browser does not grow with what it sets or with how often it is
+// visited — a set too large to pack into one is ErrInvalid at this call.
 //
 // response is the response, as an HTTPResponse record.
 //

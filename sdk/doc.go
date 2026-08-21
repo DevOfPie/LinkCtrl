@@ -32,6 +32,22 @@
 // such function yet, which is a real limitation and not an omission from this
 // paragraph.
 //
+// A module also gets a bounded amount of memory — 8 MiB of linear memory, with a
+// fresh instance per request — and growing past it traps, which the host answers
+// as a 502 for that one request. It is room for a request's work rather than for
+// a cache: what an add-on wants to keep goes in the schema its storage grant
+// gives it, which is also the only thing that outlives the instance. A module
+// whose memory section *demands* more than the bound as its minimum is refused at
+// load, with the add-on named. A toolchain that pins a larger maximum instead
+// costs nothing and changes nothing: the runtime substitutes its own limit for
+// that declaration, and the instance gets 8 MiB either way.
+//
+// Cookies are bounded in a way worth knowing before you design a flow. You name
+// them and read them back by name, but the host carries the whole set inside one
+// cookie of its own, so an add-on's share of a browser's cookie store is fixed
+// rather than chosen — about 3 KiB, past which the oldest values are dropped. A
+// key to your own storage fits; a flow's state does not belong there.
+//
 // Every function returns an error from the closed set in this package. A function
 // this ABI declares and this host has not implemented yet answers
 // [ErrNotAvailable], which is a fact a module may branch on: the ABI is complete

@@ -67,22 +67,41 @@ migrations run at boot.
   routes grant can **redirect a visitor anywhere**, since sending somebody to an
   identity provider is the point of one; LinkCtrl enforces only that the redirect
   is never permanent. And sixteen add-on requests run at once across the instance,
-  a further one waiting on the request's own timeout: each holds about 2.4 MB while
-  it runs, because a request gets an instance of the module to itself. That
+  a further one waiting on the request's own timeout: each gets an instance of the
+  module to itself and each instance is capped at **8 MiB** of memory, so add-ons
+  add at most **128 MiB** to what this instance holds while they are working. That
   isolation is deliberate — one visitor's state cannot be left where another
   visitor's request can read it — and it means an add-on keeping state between two
   requests of one flow keeps it in the schema it owns, where it survives a restart
-  and every replica can see it. A request too large to cross into a module answers
-  **413** and never reaches it, so a body somebody chose the size of cannot be
-  reported in your log as the add-on failing.
+  and every replica can see it. A module that asks for more memory than its cap is
+  stopped by the runtime and answers 502 for that one request; one whose memory
+  section *demands* more than the cap as its minimum is refused at load, with the
+  add-on named. A module that merely declares a larger *maximum* loads and is held
+  to the cap regardless, so a toolchain's choice there changes nothing. A request
+  too large to cross into a module answers **413** and never reaches it, so a body
+  somebody chose the size of cannot be reported in your log as the add-on failing.
 
   A cookie an add-on sets is bounded by the same declared prefixes as the ones it
   may read, scoped to its own path, with `Secure`, `HttpOnly` and `SameSite`
-  applied by LinkCtrl. An add-on's configured secret is held in the type that
-  refuses to print itself, whatever the manifest called the setting, so it cannot
-  reach a log through a line about the add-on. Editing settings from the dashboard
-  is the Add-on manager's job and is not built yet; until then the environment is
-  the whole of it, and changing one takes a restart.
+  applied by LinkCtrl — and **how many it sets is not something it decides**.
+  LinkCtrl carries an add-on's cookies inside one cookie of its own,
+  `linkctrl_addon_<name>`, with a second for the ones that outlive the browser
+  being closed, so an add-on occupies two slots of a visitor's cookie store no
+  matter how many cookies it sets or how often somebody visits its page. Browsers
+  evict when that store fills, and the cookie evicted need not be the one that
+  filled it: without this, an add-on holding nothing but the routes grant could
+  sign a visitor out of LinkCtrl on every visit to its page, without ever naming a
+  cookie it was not allowed to name. A cookie's `max_age` is bounded too, at 400
+  days — the longest lifetime a browser would honour anyway — and a longer one is
+  refused rather than quietly written as something else. Each jar holds about
+  3 KiB; past that an add-on's oldest values go and the log says which add-on ran
+  out of room.
+
+  An add-on's configured secret is held in the type that refuses to print itself,
+  whatever the manifest called the setting, so it cannot reach a log through a
+  line about the add-on. Editing settings from the dashboard is the Add-on
+  manager's job and is not built yet; until then the environment is the whole of
+  it, and changing one takes a restart.
 
   **Two add-ons cannot both load when one's name plus an underscore begins the
   other's** — `oidc` and `oidc_x`. Both are refused, counted as

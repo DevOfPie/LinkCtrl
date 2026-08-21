@@ -449,6 +449,9 @@ file. Append a row when you append an entry.
 | [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
 | [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
 | [M62, the boundary is a handler, because a list of log sites is a claim about code nobody has written](#2026-08-21--m62-the-boundary-is-a-handler-because-a-list-of-log-sites-is-a-claim-about-code-nobody-has-written) | D286 — two more log sites were found off the enumerated three, one of them on `store.MigrateAddon`'s **success** path in another package, so the rule *neutralize where you log* became a `slog.Handler` every logger in the subsystem is wrapped in and a single neutralizing exit on `Route`: there is no site to miss and no list to get wrong. Also here: the escaping and the log line's 4 KiB bound split apart, so an operator's aggregated manifest error is neither cut nor run-on; the read-end test's behaviour limb driven with its dependencies satisfied and counting **writes** rather than declarations; and *no preopened file, discarded streams* asserted from inside a guest rather than left resting on wazero's defaults |
+| [M64, an add-on's cookies go in a jar, because a count it can repeat is not a bound](#2026-08-21--m64-an-add-ons-cookies-go-in-a-jar-because-a-count-it-can-repeat-is-not-a-bound) | D287 — F289's fix, and why every threshold shape was wrong: a browser cookie is persistent and the add-on also decides how many responses there are, so the host stopped writing an add-on's cookies at all and carries them inside one cookie of its own, per lifetime class. `Route` empties the module's list as it packs, so the writer has no path to it — asserted by handing the real handler 1200 cookies and getting no header at all. Also here: the 3 KiB jar named as the one threshold, the two-jar partition and why a session cookie cannot share a jar with a year-long one, and what it costs a publisher |
+| [M64, guest memory gets a bound, and the number quoted as one was a measurement](#2026-08-21--m64-guest-memory-gets-a-bound-and-the-number-quoted-as-one-was-a-measurement) | D288 — F290's fix: `WithMemoryLimitPages(128)` on the runtime, 8 MiB an instance, a 128 MiB ceiling with `maxConcurrentRoutes`, and a test that reads the three documents stating that number. Why the 2.4 MB figure was accurate and still false as a bound, why eight rather than sixteen — measured: 4 MiB allocates, 5 MiB traps — and the resident-size measurement that made `docs/deployment.md` say 2 GB under load rather than pretend the guest ceiling was the whole arithmetic |
+| [M64, a sentence is only as true as what checks it, and one bound was not total](#2026-08-21--m64-a-sentence-is-only-as-true-as-what-checks-it-and-one-bound-was-not-total) | D289 — the reopening's second and third passes, and four of the nine findings across them are one defect: a claim resting on nothing. The doc-tie test pinned only the *product* of two constants, so a compensating pair moved neither number an operator reads; *a module declaring more memory is refused at load* shipped in four documents and turned out **false for a declared maximum**, which wazero silently replaces with its own limit rather than refusing. Also here: `max_age` overflowing int64 nanoseconds into an expiry before `now`, refused at the module's own call because the ABI promises `ErrInvalid` and forbids a clamp; and a jar planted at a broader path that shadowed the host's own for good. **Corrected in place before it landed**, three findings later: the doc tie's own *every file* claim was still one file short — `Plan.md`, written by this same diff — so a sweep now checks it rather than a sweeper; the cookie bound's margin is 266x and not four orders of magnitude; and `jarMaxAge` read the jar from before eviction, writing a lifetime for a value the browser was not being handed |
 
 ---
 
@@ -35585,3 +35588,372 @@ writing a secret in plain text, which `log` being ungated permits by design and 
 already concedes. And it does not make the enumeration in `docs/SECURITY.md` and
 `CHANGELOG.md` longer: those now state the property instead, because an enumeration
 that has been wrong in two consecutive rounds is not made right by a third entry.
+
+## 2026-08-21 — M64, an add-on's cookies go in a jar, because a count it can repeat is not a bound
+
+**D287.** F289 reopened M64: an add-on holding nothing but `routes.own_prefix`
+could sign a visitor out of LinkCtrl, by volume rather than by naming. It set 180
+cookies inside its **own** declared namespace, the browser's per-domain cap
+overflowed, and the eviction took `linkctrl_session`. Reproduced twice in real
+Chromium against a real signed-in account: n=179 stays on `/dashboard`, n=180
+lands on `/login?next=/dashboard`, and `linkctrl_theme` goes with it. That
+falsified this milestone's own sentence — *it cannot read the cookie, mint, or
+destroy sessions*.
+
+**What the fix could not be.** The obvious answer is a bound on the array, and
+every shape of it is wrong for one reason: a browser cookie is *persistent*, so
+an add-on's occupancy is the sum over every response it has ever given, and the
+add-on also decides how many responses there are — its page can redirect to
+itself. Eight cookies per response is eight per response times however many times
+somebody visits. A total-bytes bound has the same hole. A bound on *distinct
+names* would have to be remembered somewhere, and the only durable place is the
+browser, which is the thing being filled. Every threshold here is a threshold an
+add-on sits just under and repeats, which is what this repository has been bitten
+by before.
+
+**What it is.** The host stopped writing an add-on's cookies at all. It writes a
+**jar**: one cookie of its own, `linkctrl_addon_<name>`, carrying the add-on's
+cookies inside its value, path-scoped to the add-on's prefix as before. A module
+still names its cookies, still reads them back by name, and still gets the
+lifetimes it asked for. What it no longer has is a say in how many *slots* of the
+browser's store it occupies. That number is a property of the code — at most one
+jar per lifetime class — and it does not move when a module answers a thousand
+cookies or is visited a thousand times. The count an operator's browser can be
+made to hold is installed-add-ons times two, and installing an add-on is the
+operator's act.
+
+**Two jars, not one.** `max_age` zero is a session cookie and positive is a
+persistent one, and a single jar cannot be both: a session entry packed beside a
+year-long one would outlive the browser being closed, which is the opposite of
+what the module asked for. So entries are partitioned by lifetime class, the
+session jar is written with no `Max-Age` and the kept jar with the longest
+lifetime anything in it still has. Inside the kept jar each entry carries its own
+absolute expiry and the host drops it on the way in, so a ten-minute value in a
+jar held open by a year-long one is still gone in ten minutes.
+
+**The structural half, which is the part that answers the review's standing
+lesson.** *An enumeration of sites has been wrong every time it was written*, so
+the fix is not *these places now bound the cookies*. `Host.Route` fills
+`Response.Jar` and **empties `Response.SetCookie` doing so**. A module's own list
+is gone by the time a response leaves `internal/addon`, so the writer in
+`internal/httpx` — and any writer a later milestone adds without having read a
+word of this — has nothing to loop over but the jar, and the jar is at most two
+cookies. The test for it hands the real handler a response carrying 1200 cookies
+a module named and asserts that **nothing** is written: not that a bound was
+applied, but that this code has no path to a module's own list at all.
+
+**What an add-on can still do to itself**, and it is the one threshold in the
+fix, named as one: fill its own jar. A packed jar is bounded at 3 KiB, under the
+4096 bytes browsers give a cookie's name and value together — M64.9 measured
+Chromium keeping a 4000-byte cookie and dropping a 4090-byte one. A set that
+would not pack even into an empty jar is `ErrInvalid` at the call the module
+made, which is the rule the whole response record already follows; an add-on that
+fills its jar over many responses loses its oldest values and the log names it.
+Neither can touch anything outside the add-on's namespace.
+
+**What was measured, and where.** In Go, against the real wasm fixture and a
+model of a browser's store carrying answers forward: 200 visits, each setting a
+name the module had never used, leave the store holding the session cookie and
+two jars, and the module can still read back what it just wrote. In Chromium,
+against the running test instance with the flooding module installed: the tab
+stays signed in where the same module signed it out before. The Go test is what
+CI runs; the browser is what the finding was made in, and a claim measured on one
+configuration and asserted for another has been this phase's defect three times.
+
+**What it costs.** An operator debugging an add-on sees one opaque cookie rather
+than named ones. An add-on's total cookie storage is 3 KiB per lifetime class
+instead of whatever a browser would have allowed. The jar's name sits in this
+product's own `linkctrl_` namespace, which no manifest may declare a prefix
+inside, so a module can neither read its own jar nor forge another's; two add-ons
+cannot collide over the `_kept` suffix either, because two names standing in a
+`name + "_"` prefix relation are already both refused at load (D267). And the ABI
+docs, the SDK's package documentation, `docs/SECURITY.md`, `docs/configuration.md`
+and `CHANGELOG.md` all say the shape out loud, because a publisher who thinks
+cookies are free storage will design a flow around one.
+
+**What it does not close.** An add-on can still occupy its two slots forever, and
+an operator installing ninety add-ons is back at the browser's cap by their own
+hand. Nothing here bounds how many add-ons an instance loads, which is the
+directory and therefore the trust boundary. The session cookie is also still
+evictable by any *other* origin-sharing thing that fills the store; what changed
+is that an add-on is no longer one of them.
+
+## 2026-08-21 — M64, guest memory gets a bound, and the number quoted as one was a measurement
+
+**D288.** F290, the other finding that reopened M64. The runtime was built with
+no `WithMemoryLimitPages`, so wazero's default of 65536 pages — 4 GiB per
+instance — applied, and no container bound existed either. One request that
+allocated 512 MiB took the host from 78 MB resident to 1604 MB; sixteen
+concurrent at 128 MiB reached 4332 MB with zero failures.
+
+**The claim that was false was not the number.** `maxConcurrentRoutes` prices
+sixteen in flight at *about 2.4 MB each*, and 2.4 MB is right: a real fixture
+measures 2.31 MiB of linear memory at load, the host reclaims properly, and there
+is no leak. It was right as a **typical cost** and was being quoted as a
+**bound**, which is a different kind of sentence, and the difference is the whole
+finding. `docs/deployment.md` documented the floor as *1 vCPU and 1 GB RAM is
+enough to start*, and one request could exhaust it.
+
+**The bound.** 128 pages, 8 MiB per instance, set on the runtime rather than on a
+module config so it holds for every instance this host will ever make — the ones
+made at load, the per-request ones, and any a later milestone adds. Sixteen in
+flight times 8 MiB is a **128 MiB** ceiling, and that product is the sentence
+`docs/SECURITY.md`, `docs/deployment.md` and `docs/configuration.md` now make.
+`TestTheGuestMemoryCeilingIsTheOneDocumented` reads those three files and asserts
+the arithmetic against them, so changing either constant without changing what an
+operator was told fails — which is the tie the old sentence never had.
+
+**Why eight and not sixteen.** Measured on the fixture the standard toolchain
+produces: it holds 2.4 MB at load, allocates a 4 MiB block on top and succeeds,
+and traps at 5 MiB. Four megabytes of working room is more than a page handler
+needs — the largest request that can cross this boundary is 64 KiB and the
+largest response 256 KiB — and eight is the number that keeps the whole add-on
+ceiling inside the 1 GB floor this product documents, alongside Postgres. Sixteen
+per instance would have been 256 MiB and would have required rewriting the floor
+rather than keeping it true. Raising the constant later is one edit and one test
+failure, which is the right cost for a decision that changes what an operator has
+to buy.
+
+**What the bound is a bound on, stated exactly.** Live guest memory at any
+instant. It is not a bound on the process's resident size, and the honest
+measurement says so: 200 requests at sixteen concurrent, each allocating 4 MiB,
+peaked at **406 MB resident** against a 103 MB idle and returned to 48 MB after a
+forced collection, with the live heap at 10 MB. That is Go's collector working at
+its ordinary ratio over garbage the bound makes finite, and it is the reason
+`docs/deployment.md` now says a host serving add-on pages under load wants 2 GB
+rather than pretending 128 MiB is the whole arithmetic. Before the bound the same
+shape had no ceiling at all.
+
+**Both directions are visible to somebody who can act.** A module that grows past
+its 8 MiB traps: the request answers 502, the instance is closed, the host goes
+on serving, and the operator's log carries the failure. A module whose memory
+section *declares* more than the bound is refused at **load**, with the add-on
+named — wazero validates the section at decode — so a toolchain that pins a
+maximum is a packaging problem an operator meets at install time rather than
+under load. Neither is silent, which is the difference between a bound and a
+cliff.
+
+**What it does not close.** Nothing here bounds the host's own heap, which is
+what `GOMEMLIMIT` or a container limit would do, and both are deployment
+decisions rather than this milestone's; F290 named their absence and this entry
+does not claim to have answered it. Nothing bounds CPU either — that is M66's
+deadline, and a module spinning inside 8 MiB is still a module spinning.
+
+
+## 2026-08-21 — M64, a sentence is only as true as what checks it, and one bound was not total
+
+**D289.** The second pass over the reopened M64. Six findings came back against
+the first worker's tree; the cookie jar and the memory ceiling were both sound
+and both stayed. Three of the six are one defect wearing three coats, and it is
+the same defect that reopened this milestone: **a sentence claiming more than
+anything checks.**
+
+**This entry was corrected in place, and says so because the file it sits in is
+append-only.** Three findings came back against this same *uncommitted* tree: the
+doc tie's own *every file* claim was still false and `Plan.md` was the
+counter-example this change had itself written; the margin under the cookie bound
+was two and a half orders of magnitude rather than four; and `jarMaxAge` computed
+a jar's lifetime from entries eviction had already dropped. Nothing here had
+landed, so the established exception applies — an entry is corrected before it
+lands, and a D290 correcting a D289 that no commit ever carried would be a record
+of a paragraph rather than of a decision. The three corrections are in the
+paragraphs below, and each says which of them it is.
+
+**The doc tie pinned the product and the file said it pinned the parts.**
+`TestTheGuestMemoryCeilingIsTheOneDocumented` computed `maxConcurrentRoutes *
+maxGuestMemoryPages / 16` and looked for `"128 MiB"` in three files, and m64.md
+concluded from it that *neither constant can move without the operator-facing
+sentence moving with it*. False for a compensating pair — thirty-two instances of
+4 MiB is also 128 MiB — while `docs/SECURITY.md`, `docs/deployment.md`,
+`docs/configuration.md` and `CHANGELOG.md` each state the concurrency and the
+per-instance bound **separately**, so both would have gone quietly wrong and the
+test would have stayed green.
+
+Fixed by making the check match the sentence, which is the cheaper of the two
+honest directions here because the sentences are already right. The test holds
+each number where it is stated, in the sentence that states it. Whitespace,
+emphasis and `//` are flattened, so where a sentence happened to wrap is not part
+of the claim. It carries a spelling table for the concurrency because every one
+of those documents writes that number as a word, and a constant with no spelling
+in the table fails the test loudly rather than asserting nothing.
+
+**That fix then made the same mistake one size smaller, and the correction to it
+is the more useful half of this entry.** It listed eight sentences in six files
+and said of itself that its claim was *every file outside build-notes that states
+any of the three*. It was not, and the counter-example was in the same diff:
+`Plan.md` states all three in the limitation row this change had just edited,
+`docs/operations.md` states the concurrency in the 503 row an operator reads when
+an add-on's page fails, and four of the six files it *did* list state one of the
+numbers a **second** time in a sentence no anchor covered — `docs/SECURITY.md`
+three times over, `docs/configuration.md`, `docs/addon-abi.md` and `sdk/doc.go`
+once each. Seventeen sentences, not eight.
+
+Adding the nine missing anchors makes the claim true today and does nothing
+about why it was false twice: *every file* was being kept true by whoever last
+thought to read every file, which is the same shape as a sentence kept true by
+whoever last thought to check it. So the claim is now checked.
+`TestEveryDocumentedNumberIsTied` walks every Markdown file outside build-notes
+plus `sdk/doc.go`, finds every occurrence of any of the three numbers, and fails
+on one no anchored sentence spans. An occurrence that is not the bound — sixteen
+bytes of domain challenge in `docs/SECURITY.md`, sixteen cached runs in
+`docs/slo.md`, sixteen milestones inside a `Plan.md` link anchor — is listed as
+*untied* with what it is about instead, and that list is checked in the other
+direction too, so a phrase the prose no longer contains fails rather than quietly
+excusing nothing.
+
+Four exclusions, written into the test rather than left to be discovered, since
+an unwritten exception is the thing this is over. **build-notes** is the record:
+its entries quote what a number was when they were written, and an append-only
+file whose past has to be rewritten when a constant moves is not append-only.
+**Go source under `internal/`** states these numbers beside the constants that
+produce them, so the edit that moves one has the sentence about it already on the
+screen; the failure this is for is a sentence in a different file from the
+constant it describes. **`.claude/` and build output** are not the product's
+documentation. And **a number spelled in digits** is outside it: the sweep looks
+for how these documents actually write these numbers — the concurrency as a word,
+the memory in MiB — so *"16 add-on requests"* would pass it. That last one is
+narrow because the spelling table sits in front of it: a concurrency constant
+with no word in that table fails the first test outright, so writing the digit is
+not a quiet option, it is one nobody can reach without going through the table.
+
+Measured on the tree, eight ways. With the constants set to 32 and 64 pages —
+product unchanged at 128 MiB, which is exactly what the first version checked —
+**sixteen of the seventeen** anchors go red, and the one that stays green is
+`Plan.md`'s *the two bounds multiply into the 128 MiB ceiling*: the pure product,
+and the blind spot the other sixteen exist to cover. With only the per-instance
+constant moved, **thirteen** go red and the four naming the concurrency alone
+stay green. Deleting `Plan.md`'s two anchors reproduces the review finding
+exactly, three occurrences named with the sentence around each. Rewording
+`docs/operations.md`'s row, appending an unanchored *capped at 8 MiB* to
+`README.md`, deleting an untied entry, and rewording the `docs/slo.md` sentence
+an untied entry quotes each go red where they should. And a walk that reaches no
+file at all is caught by an occurrence count, rather than passing every assertion
+by reaching none of them.
+
+The cost is stated rather than hidden: rewording one of those sentences now fails
+a test, and fixing it is one line. Writing a *new* sentence that quotes one of
+these numbers costs one line too — an anchor, or an untied entry saying what the
+number is about there. That is the tie, and a tie nobody can feel is not one.
+
+**Four documents said a memory declaration over the bound is refused at load, and
+half of it was untrue.** `CHANGELOG.md`, `docs/SECURITY.md`, `docs/addon-abi.md`
+and `sdk/doc.go` all carried it; nothing asserted it. The review that raised it
+believed it was true-but-unchecked. It is not. Measured against wazero v1.12.0
+with `WithMemoryLimitPages(128)`:
+
+- a declared **minimum** over the bound is refused at `CompileModule` —
+  `internal/wasm.Memory.Validate` answers *"min N pages over limit of 128 pages"*
+  — and the load fails with the add-on named;
+- a declared **maximum** over the bound is **not** refused. The decoder
+  substitutes the runtime's limit for it
+  (`internal/wasm/binary/decoder.go:224`, whose own comment reads *"This is a
+  valid value, but it goes over the run-time limit: return the limit"*), so the
+  module loads and its instance is held to 128 pages anyway. A maximum over
+  WebAssembly's own 65536 is refused, but by the format rather than by anything
+  this host chose.
+
+Here the honest direction is the other one: **the sentence changes, not the
+check.** The behaviour is already right — a module held to the bound is bounded,
+and refusing a declaration that changes nothing would refuse a module that is
+perfectly safe — and building a memory-section parser into the load path to make
+a sentence true would be spending code to preserve a wording. All four documents
+now say which limb does which. `TestWhatAMemorySectionMayDeclare` measures both,
+on wasm written byte by byte in the test, because the Go toolchain emits no
+maximum at all and therefore no fixture in this repository could ever have shown
+either half — which is precisely why nobody noticed. The second limb instantiates
+through the **host's own** runtime and grows the memory to the bound and one page
+past it, so what it measures is this host's limit and not one the test set up.
+
+**A cookie's `max_age` was not bounded, and the arithmetic under it was not
+total.** `applyToJar` turns a lifetime into an absolute expiry with
+`now.Add(time.Duration(c.MaxAge) * time.Second)`, and a `time.Duration` is int64
+nanoseconds. Measured: `max_age=10000000000` produced an expiry **8446744074
+seconds before now**, and `max_age=1<<62` produced one exactly equal to now.
+Neither was an error. The module was answered 200, `keepLive` dropped the entry
+on the very next read, and the cookie the module had been told it set did not
+exist — and where such an entry was alone in the kept jar, `jarMaxAge` wrote
+`Max-Age=1`. It was also a regression: before the jar the same value went to
+`http.SetCookie`, the browser clamped it, and the cookie worked.
+
+The shape of the fix is not a matter of taste, because the ABI already published
+it. `http_response_write` says every bound on that record is *ErrInvalid rather
+than a silently corrected response* — in `internal/addon/abi/functions.go`, in
+both generated SDK files and in `docs/addon-abi.md` — so a clamp is the one
+answer that sentence forbids. `checkCookie` refuses at the module's own call, and
+the ABI sentence now names the bound alongside the prefixes rather than leaving
+it implied.
+
+**400 days**, 34560000 seconds. Not a safe-looking round number: it is the limit
+`draft-ietf-httpbis-rfc6265bis` puts on a cookie's age, which a user agent MUST
+reduce a longer lifetime to, and which Chromium has applied since 2022. A module
+inside the bound loses nothing it had; one outside it was never going to be
+honoured by any browser. It clears the overflow point by a factor of 266 —
+3.456e7 seconds against the 9.223e9 where int64 nanoseconds wrap — which is what
+makes the arithmetic total; being the number browsers already enforce is why it
+costs a publisher nothing. A negative `max_age` is untouched, because it is a
+deletion and no arithmetic is done on it.
+
+**The margin was first written here and in `http.go` as *four orders of
+magnitude*, and it is nearer two and a half** — the second of the three
+corrections above. The bound is still comfortably total; the sentence justifying
+it still claimed more than it had, which is this entry's own subject arriving a
+third time, in the paragraph that named it.
+
+**`jarMaxAge` was also reading a jar it was not writing** — the third correction.
+`jarCookies` packs the kept jar with eviction and then computed the cookie's own
+`Max-Age` from `class.entries`, the list from *before* the eviction. The
+function's own comment says the jar lives *"as long as the longest-lived thing in
+it, and no longer. A jar outliving every entry it holds would be a cookie a
+browser keeps in order to hand back nothing"*, and the line calling it made that
+false. Reachable with nothing hostile and no forged jar: set one value at the
+400-day bound at the start of a flow, write short-lived ones on top until the jar
+fills, and the 400-day entry is the oldest, is evicted first, and its lifetime
+stays on the cookie. Measured — `Max-Age=34560000` written for a jar whose
+longest surviving entry had an hour left. No security consequence and nothing
+crossed a boundary; what was wrong was the sentence beside the code.
+`packWithEviction` returns the survivors now, which is the shape that cannot
+drift back: there is no pre-eviction list in scope at the call site to reach for.
+
+`jarMaxAge` is clamped to 400 days as well, and that one **is** a silent
+correction — deliberately, and it is not the same promise. An expiry reaching it
+from a jar the browser handed back is a value under the visitor's hand, and
+`unpackJar` has been silent about those since it was written, for the reason
+recorded in D287: an edited or stale jar is neither the add-on's fault nor the
+operator's problem. No module wrote that attribute, so no module is being
+corrected.
+
+**A jar planted at a broader path shadowed the real one, permanently.**
+`jarsFrom` assigned per matching cookie name rather than merging, so where a
+browser sent two cookies named `linkctrl_addon_<name>` — the host writes its own
+at `/addons/<name>/`, and a visitor can set one at `/`, which the writer then has
+no path to delete — the last one won. The add-on's state was void on every later
+visit and the host could not clear it. Self-inflicted and reaching no other
+add-on, so it is the smallest of the six; it is fixed here rather than deferred
+because it is [an abuse path in the code this milestone
+wrote](workflow.md#standing-rules), which is in a fix milestone's scope by
+default.
+
+Merged now, first-wins, which is RFC 6265 §5.4's order — a user agent sends the
+more specifically scoped cookie first — so the host's own jar survives. What a
+planted jar can still do is carry names the real one does not hold, and that is
+stated in the code rather than papered over: a value under a declared prefix
+already reaches the module straight off the cookie header, by design, and a
+visitor's own browser was always theirs to write.
+
+**Two smaller ones, and one of them is why the first three were possible.**
+`ownedName`'s comment claimed to be *the one place that question is answered*
+while `checkCookie` still carried its own copy of the prefix loop; it uses
+`ownedName` now, and the comment names its three callers so the claim is
+checkable rather than asserted. And 129 characters of `CHANGELOG.md` and a double
+space in `docs/configuration.md` were caught by no gate, which is worth recording
+as the standing state rather than fixed and forgotten: this repository has no
+prose formatter, and every long line in those files was written by an agent that
+meant to wrap at eighty.
+
+**What none of this changes.** The jar, the two lifetime classes, the structural
+occupancy bound and the 3 KiB threshold are D287's and stand untouched. The
+128 MiB ceiling, the eight-pages-per-instance measurement and everything D288
+says about resident size stand too. D288's one sentence that does not survive is
+its last paragraph's *a module whose memory section declares more than the bound
+is refused at load* — corrected above, and left in place there because this file
+is append-only and a later entry is how it corrects an earlier one.

@@ -196,7 +196,16 @@ func (h *Web) writeAddonResponse(w http.ResponseWriter, r *http.Request,
 	name string, resp addon.Response) {
 	// The cookies first, because a redirect writes its header immediately below
 	// and a Set-Cookie added after that is a Set-Cookie nobody receives.
-	for _, c := range resp.SetCookie {
+	//
+	// **This loop writes the host's jar and never a module's own list** (F289).
+	// What a module named is inside `resp.Jar`'s value by the time it arrives
+	// here, and `resp.SetCookie` is empty — so the number of Set-Cookie headers
+	// an add-on's response carries is at most two, whatever the module answered
+	// and however many times it is visited, and a browser's cookie store cannot
+	// be filled by an add-on until it evicts this product's own session cookie.
+	// internal/addon owns that packing because it owns the manifest; what is left
+	// here is the scoping, which was always the host's.
+	for _, c := range resp.Jar {
 		http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure is config-driven, like every other cookie this product sets; HttpOnly and SameSite are hardcoded two lines below and an add-on cannot opt out of either
 			Name:  c.Name,
 			Value: c.Value,

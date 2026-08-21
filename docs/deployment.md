@@ -12,7 +12,7 @@ future version will do.
 
 | | |
 | --- | --- |
-| A host | 1 vCPU and 1 GB RAM is enough to start. Postgres wants the RAM; the app is idle between requests. |
+| A host | 1 vCPU and 1 GB RAM is enough to start. Postgres wants the RAM; the app is idle between requests. Add-ons are the one feature that changes this arithmetic, and by a bounded amount: sixteen add-on requests run at once and each is capped at 8 MiB of guest memory, so **128 MiB** is the ceiling they add while they are in flight. Under sustained saturation the process holds several times that resident before Go's collector returns it — measured at a 406 MB peak against a 103 MB idle, returning to 48 MB — so a host serving add-on pages under load wants 2 GB. |
 | Docker Engine + Compose v2 | `docker compose version` should print v2.x |
 | A domain | With an A/AAAA record pointing at the host |
 | Ports 80 and 443 | For the reverse proxy. LinkCtrl itself listens on 8080 and never needs to be exposed directly. |
