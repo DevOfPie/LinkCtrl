@@ -29,6 +29,7 @@ package main
 
 import (
 	"errors"
+	"os"
 
 	"github.com/DevOfPie/LinkCtrl/sdk"
 )
@@ -89,7 +90,56 @@ func init() {
 	// neutralized, which is the host-side test's assertion.
 	err = sdk.Log(sdk.LevelInfo, hostile)
 	check("hostile_message_accepted", err == nil, "err "+errText(err))
+
+	writeOnlyLog()
 }
+
+// writeOnlyLog is the other two facts the read-end claim rests on, asserted from
+// inside a guest.
+//
+// `docs/SECURITY.md`, the `log` entry in the published ABI and the residue argument
+// in `sanitizeLogMessage` all say four things: log declares no out-parameter, no ABI
+// function hands log content back, **a guest gets no preopened file**, and **its
+// stdout and stderr are discarded**. The first two are asserted host-side. The last
+// two rested on wazero's `NewModuleConfig()` defaults and on nobody adding
+// `WithFSConfig` or `WithStdout` — true by omission, which is not a test (F-4, D286).
+//
+// They are asserted from here rather than by reading the host's config because the
+// config is exactly what a later milestone would change. What a guest can see is
+// whether a path opens; what it cannot see is where a stream goes, so it writes a
+// marker to both and the host-side test asserts the marker reaches neither an
+// operator's log nor this process's own streams.
+func writeOnlyLog() {
+	// No filesystem at all: with no preopened directory, wasip1 resolves nothing, so
+	// the root itself does not open. Both are checked because a host that preopened a
+	// single file rather than a tree would pass one and fail the other.
+	_, err := os.ReadDir("/")
+	check("no_preopened_root", err != nil, "listing / succeeded, so this guest has a filesystem")
+	_, err = os.Open("/etc/hostname")
+	check("no_preopened_file", err != nil, "opening a host file succeeded")
+	// The add-on's own directory, by the name the host mounts it under. A host that
+	// gave a module its own files would give it the one it least should have.
+	_, err = os.Open("undeclared/" + ManifestFileName)
+	check("no_preopened_own_dir", err != nil, "opening this add-on's own manifest succeeded")
+
+	// Written, not checked: a discarded stream and a captured one both accept bytes,
+	// so the assertion is the host's. The markers are spelled out on both sides
+	// rather than shared, since neither package can import the other.
+	_, _ = os.Stdout.WriteString(stdoutMarker + "\n")
+	_, _ = os.Stderr.WriteString(stderrMarker + "\n")
+	check("wrote_to_both_streams", true, "")
+}
+
+// ManifestFileName is addon.ManifestFile, spelled here because a wasip1 fixture
+// cannot import the host package.
+const ManifestFileName = "addon.json"
+
+// The two markers the host-side test looks for the absence of. Distinctive enough
+// that finding one anywhere is proof rather than coincidence.
+const (
+	stdoutMarker = "UNDECLARED-STDOUT-2f9c41"
+	stderrMarker = "UNDECLARED-STDERR-2f9c41"
+)
 
 // hostile is one message carrying every class of byte the host must neutralize. It
 // is a constant so the host-side test can name the same code points without either
@@ -107,7 +157,27 @@ const hostile = "undeclared: hostile=" +
 	// real newline's escape reaches it as. Carried from this side because the claim is
 	// about what a *module* can spell, and the host-side test tells the two apart by how
 	// many backslashes survive the handler.
-	`\nliteral`
+	`\nliteral` +
+	// F285, end to end and from the side that found it: a module declaring no
+	// permission wrote a line whose visible text said nothing was wrong and whose
+	// variation selectors carried a secret out. Every selector is deleted at the
+	// boundary now (D283), and the host-side test asserts the channel rather than any
+	// of these spellings — that no selector reaches the log at all.
+	//
+	// Three schemes, because each uses a different part of the property and each
+	// defeated something. The nibble scheme puts one U+FE0x after each letter. The
+	// byte-per-selector scheme stacks U+E01xx above the BMP, so it does not depend on
+	// plane-14 support. And the progress bar hangs U+FE0E and U+FE0F off Block
+	// Elements — category So, with no registered emoji variation sequence — which is
+	// the carrier that went through the first proposed fix byte for byte. Its visible
+	// text is the point: it says the deployment is fine.
+	"\u0073\ufe00\ufe05\ufe03\u0072\ufe04\ufe07" +
+	"\u6f22\U000e0100\U000e0141\U000e01ef" +
+	"migrating: [\u2588\ufe0e\u2588\ufe0f\u2591\ufe0f\u2591\ufe0e] everything is fine" +
+	// And the case stripping was chosen for, on the path a module actually uses: a
+	// heart loses its selector and stays a heart. Escaping would have put `\ufe0f`
+	// through the middle of it, which is the cost the owner declined to pay (D283).
+	"\u2764\ufe0f"
 
 // denied is the check every gated function gets, named so the host-side test can
 // count the reports and compare them against the ABI's own set of gated

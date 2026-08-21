@@ -28,19 +28,40 @@ func HostABIVersion() (string, error) {
 // character reaches the line as itself, in any script, and everything else
 // becomes its escape — a newline, a control character, an ANSI escape,
 // every format and bidirectional control, every unassigned or private-use
-// code point, and the few characters that are graphic by category and
-// render as nothing. So an invisible code point appears in the line rather
-// than acting on whoever reads it, and a code point Unicode adds after the
-// host was built is escaped rather than let through. One graphic character
-// does not reach the line as itself: a backslash is doubled, so that the
-// two characters \ and n cannot be mistaken for an escaped newline, and a
-// module cannot spell the host's own truncation mark. The named exceptions
-// run the other way: Unicode's prepended concatenation marks — the
-// Arabic, Syriac and Kaithi signs that scope the digits after them — are
-// left alone, read from Unicode's property rather than from a list, so a
-// host built against a newer revision carries the marks it added. Nothing
-// is refused for any of it, and a message that needed none arrives as it
-// was written, backslashes aside.
+// code point, and the 268 graphic code points this host treats as
+// invisible: the 267 graphic members of Unicode's derived
+// Default_Ignorable_Code_Point, which the host computes rather than reads
+// because Go ships only the residue property the derivation subtracts from,
+// plus U+2800 BRAILLE PATTERN BLANK, the one blank that is not whitespace.
+// One class is deleted rather than escaped, and it is the only one: every
+// variation selector is removed from the message. So a heart written as
+// U+2764 U+FE0F arrives as U+2764 and is still a heart, an emoji that
+// carries no selector is untouched, and a selector hung off a letter, a
+// space, an ideograph or a block element takes nothing with it when it
+// goes. There is no exemption and no base list: a selector after a
+// character the reader's renderer does not vary is invisible, and no
+// property tells the host which those are. That set is a published property
+// and not the set of characters that render as nothing, because Unicode
+// publishes no such property: eight combining marks it annotates as not
+// visibly rendered — U+2D7F, U+17D2, U+10A3F, U+1107F, U+11A47, U+11A99,
+// U+11F42 and U+16FE4 — reach the line as themselves, as do seventeen
+// space characters and the prepended concatenation marks named below. What
+// bounds that residue is that this log is write-only to you: Log declares
+// no out-parameter, no function in this ABI hands log content back, your
+// module gets no preopened file and its stdout and stderr are discarded,
+// and your storage is a schema this log does not live in. So a character
+// that survives is one an operator can still see; it is not a channel you
+// can read back. A code point Unicode adds after the host was built is
+// escaped rather than let through. One graphic character does not reach the
+// line as itself: a backslash is doubled, so that the two characters \ and
+// n cannot be mistaken for an escaped newline, and a module cannot spell
+// the host's own truncation mark. The named exceptions run the other way:
+// Unicode's prepended concatenation marks — the Arabic, Syriac and Kaithi
+// signs that scope the digits after them — are left alone, read from
+// Unicode's property rather than from a list, so a host built against a
+// newer revision carries the marks it added. Nothing is refused for any of
+// it, and a message that needed none arrives as it was written, backslashes
+// aside.
 //
 // level is one of the Level constants; message is the line, without a
 // trailing newline.

@@ -295,16 +295,61 @@ refused the log still runs, and now silently.
 `log` — including one whose `permissions` array is empty — the host neutralizes the
 message before the line is written, and bounds it at 4 KiB.
 
+The same neutralization covers everything else of yours the host says out loud —
+a manifest field it refused, a directory name, a migration filename as it is applied,
+the text of a trap — because it is applied by the logger the host writes through
+rather than by each line that writes one. Nothing about that is yours to arrange or
+avoid; it is here because the escaping is also why a value of yours can look odd in
+a log that quotes it, and the reason is always this one.
+
 **The rule is stated as what survives, not as what is caught.** A **graphic**
 character reaches the line as itself — every letter, mark, digit, punctuation mark,
-symbol and space, in every script, with the one exception named below — and anything
+symbol and space, in every script, with the two exceptions named below — and anything
 else becomes its escape: a
 newline, a control character, an ANSI escape, every format and bidirectional
-control, every unassigned or private-use code point, and the few characters that
-are graphic by category yet render as nothing. Two consequences are worth knowing
-before you write a message. The zero-width joiner and non-joiner are format
-characters, so an emoji sequence or an Indic conjunct built from them arrives
-escaped; write the text, not the joiner. And a code point assigned by a Unicode
+control, every unassigned or private-use code point, and the 268 graphic code points
+the host treats as invisible — the 267 graphic members of Unicode's
+`Default_Ignorable_Code_Point`, which the host derives rather than reads because Go
+ships only the residue property the derivation subtracts from, and `U+2800 BRAILLE
+PATTERN BLANK`, which that property does not carry and which is the one blank
+nothing treats as whitespace.
+
+**That set is a published property, and it is not every character that renders as
+nothing** — Unicode publishes no property for that, and this document does not claim
+one. Eight combining marks the UCD annotates as *"shape shown is arbitrary and is not
+visibly rendered"* are outside the property and reach the line as themselves:
+`U+2D7F`, `U+17D2`, `U+10A3F`, `U+1107F`, `U+11A47`, `U+11A99`, `U+11F42` and
+`U+16FE4`. So do seventeen space characters, `U+00A0` among them and pixel-identical
+to a space, and the thirteen prepended concatenation marks named below.
+
+**What bounds that residue is that the log is write-only to your module.** `log`
+takes a level and a message and declares no out-parameter; no function in this ABI
+hands log content back; your module gets no preopened file and its stdout and stderr
+are discarded; and your storage is a schema of your own that this log does not live
+in. A character that survives the boundary is one an operator can still see. It is
+not a channel you can read back, and it stops being residue only if an operator hands
+you the log file.
+
+**One class is deleted rather than escaped, and it is the only one**: every
+**variation selector** is removed from your message. `U+2764 U+FE0F` arrives as
+`U+2764` and is still a heart; `😀` is untouched, because `U+1F600` has emoji
+presentation by default and carries no selector to lose; and a selector hung off a
+letter, a space, an ideograph or a block element takes nothing with it when it goes.
+There is no exemption and no list of bases that keep theirs. Two were tried and both
+were broken: whether a selector is *visible* depends on the reader's renderer and
+the font in front of them, and no Unicode property tells the host which characters
+those are. Escaping them instead would put `\ufe0f` through the middle of every
+emoji anyone logs, which buys a reader nothing. Write the emoji; the presentation is
+the terminal's business, not the log's.
+
+Three more consequences are worth knowing before you write a message. The zero-width
+joiner and non-joiner are format characters, so an emoji sequence or an Indic
+conjunct built from them arrives escaped; write the text, not the joiner. A skin-tone
+or national flag sequence survives — a skin-tone modifier is category `Sk` and a
+regional indicator `So`, so both are ordinary graphic code points — while anything
+joined with `U+200D` does not. **A subdivision flag does not survive either**:
+`🏴󠁧󠁢󠁳󠁣󠁴󠁿` is `U+1F3F4` followed by tag characters from `U+E0020`–`U+E007F`, and those
+are format characters, so what arrives is the black flag and six escapes. And a code point assigned by a Unicode
 revision newer than the host's Go toolchain is not yet a graphic character to it, so
 it arrives escaped until that host is rebuilt.
 
@@ -323,10 +368,20 @@ mangles Arabic is worse than the thing it prevents. It is read from the property
 not from a list, so a host built against a newer Unicode carries whatever that
 revision added to it: the enumerated form of this list shipped two members short.
 
-A module cannot forge a record that reads as the host's, cannot arrange bytes in
-front of a reader to be overlooked, and cannot make a complete message read as a
-truncated one. Nothing is refused for any of it and a message needing none of it
-arrives as it was written, backslashes aside, so this costs a well-behaved add-on
+A module cannot forge a record that reads as the host's, cannot make a complete
+message read as a truncated one, and **cannot put a default-ignorable character in
+front of a reader** — every one of Unicode's 4174 is either deleted or shown as its
+code point, so nothing in your message is invisible by design. That last claim is
+deliberately narrower than *cannot hide anything*, which no rule that keeps text
+could support: seventeen `Zs` code points survive as themselves and `U+00A0` is
+pixel-identical to a space, the thirteen prepended concatenation marks survive by
+name, and `U+00C5` and `U+212B` are canonically equivalent and render the same. This
+boundary answers invisibility, not deception, and it is not a redaction pass either
+— `log` costs no permission, so an add-on that wants to put a secret in an
+operator's log can simply write one.
+
+Nothing is refused for any of it and a message needing none of it arrives as it was
+written, backslashes and selectors aside, so this costs a well-behaved add-on
 nothing.
 
 A grant is **held, never inferred**. Nothing about an add-on's code, its name, its
@@ -540,7 +595,7 @@ The ABI is **0.1.0**, generation **1**, and this host loads generation 1 or newe
 | Function | Since | Requires | Status | What it is |
 | --- | --- | --- | --- | --- |
 | `abi_version`<br>`sdk.HostABIVersion()` | 0.1.0 | — | **live** | HostABIVersion is the ABI version of the host this module is running in. A module's manifest declares the generation it was built against and the host refuses a mismatch before instantiation, so this is not how a module checks compatibility — it is how one logs what it is talking to, and how it decides whether a function added in a later patch is worth probing for. |
-| `log`<br>`sdk.Log(level string, message string)` | 0.1.0 | — | **live** | Log writes one line to the host's logger, attributed to this add-on. It is the only way out: a module's stdout and stderr are discarded, because routing them into an operator's log is a capability and the host grants none it was not asked for. The host adds the add-on's name; a message that repeats it is noise. An unknown level is ErrInvalid rather than a silent default, so a typo does not become a line nobody greps for. The message is neutralized before it is written and bounded at 4 KiB, and the rule is stated as what survives rather than as what is caught: a graphic character reaches the line as itself, in any script, and everything else becomes its escape — a newline, a control character, an ANSI escape, every format and bidirectional control, every unassigned or private-use code point, and the few characters that are graphic by category and render as nothing. So an invisible code point appears in the line rather than acting on whoever reads it, and a code point Unicode adds after the host was built is escaped rather than let through. One graphic character does not reach the line as itself: a backslash is doubled, so that the two characters \ and n cannot be mistaken for an escaped newline, and a module cannot spell the host's own truncation mark. The named exceptions run the other way: Unicode's prepended concatenation marks — the Arabic, Syriac and Kaithi signs that scope the digits after them — are left alone, read from Unicode's property rather than from a list, so a host built against a newer revision carries the marks it added. Nothing is refused for any of it, and a message that needed none arrives as it was written, backslashes aside. |
+| `log`<br>`sdk.Log(level string, message string)` | 0.1.0 | — | **live** | Log writes one line to the host's logger, attributed to this add-on. It is the only way out: a module's stdout and stderr are discarded, because routing them into an operator's log is a capability and the host grants none it was not asked for. The host adds the add-on's name; a message that repeats it is noise. An unknown level is ErrInvalid rather than a silent default, so a typo does not become a line nobody greps for. The message is neutralized before it is written and bounded at 4 KiB, and the rule is stated as what survives rather than as what is caught: a graphic character reaches the line as itself, in any script, and everything else becomes its escape — a newline, a control character, an ANSI escape, every format and bidirectional control, every unassigned or private-use code point, and the 268 graphic code points this host treats as invisible: the 267 graphic members of Unicode's derived Default_Ignorable_Code_Point, which the host computes rather than reads because Go ships only the residue property the derivation subtracts from, plus U+2800 BRAILLE PATTERN BLANK, the one blank that is not whitespace. One class is deleted rather than escaped, and it is the only one: every variation selector is removed from the message. So a heart written as U+2764 U+FE0F arrives as U+2764 and is still a heart, an emoji that carries no selector is untouched, and a selector hung off a letter, a space, an ideograph or a block element takes nothing with it when it goes. There is no exemption and no base list: a selector after a character the reader's renderer does not vary is invisible, and no property tells the host which those are. That set is a published property and not the set of characters that render as nothing, because Unicode publishes no such property: eight combining marks it annotates as not visibly rendered — U+2D7F, U+17D2, U+10A3F, U+1107F, U+11A47, U+11A99, U+11F42 and U+16FE4 — reach the line as themselves, as do seventeen space characters and the prepended concatenation marks named below. What bounds that residue is that this log is write-only to you: Log declares no out-parameter, no function in this ABI hands log content back, your module gets no preopened file and its stdout and stderr are discarded, and your storage is a schema this log does not live in. So a character that survives is one an operator can still see; it is not a channel you can read back. A code point Unicode adds after the host was built is escaped rather than let through. One graphic character does not reach the line as itself: a backslash is doubled, so that the two characters \ and n cannot be mistaken for an escaped newline, and a module cannot spell the host's own truncation mark. The named exceptions run the other way: Unicode's prepended concatenation marks — the Arabic, Syriac and Kaithi signs that scope the digits after them — are left alone, read from Unicode's property rather than from a list, so a host built against a newer revision carries the marks it added. Nothing is refused for any of it, and a message that needed none arrives as it was written, backslashes aside. |
 | `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it, and ErrNotFound only when it declared none. An operator sets a value with LINKCTRL_ADDON_<NAME>_<SETTING> and it outranks the manifest's default; editing them in the Add-on manager is M68's, and until that lands the environment is the only way to set one. |
 | `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed — ErrDenied, which is distinguishable from ErrInvalid so that a module can tell confinement from its own mistake. One statement per call: the host parses through the extended protocol, so a payload carrying two is refused. The read is a read at the server, in a READ ONLY transaction, so this function cannot be used to write. Arguments are a JSON array of strings, numbers, booleans and nulls; pass JSON as a string and cast it. Rows come back as a JSON array of objects keyed by column name, and a result with two columns of one name is refused rather than collapsed. |
 | `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep — the add-on ships them in its own `migrations/` directory and names each with its digest in the manifest, and the host applies them at load inside the same schema this function writes to. Everything StorageQuery says about the boundary, the single statement and the arguments applies here too; what differs is that the transaction is not read-only. |

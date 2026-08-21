@@ -440,17 +440,33 @@ Invariants:
   cannot enumerate what a build can do. Running inside the redirect path is a
   separate declaration no release grants yet. **The two functions that cost nothing
   are not the two that are trusted**: writing to the log is ungated on purpose, so
-  the host neutralizes and bounds the message at the boundary rather than at the
-  logger, which is where a module that declared nothing would otherwise be able to
-  forge a record that reads as this product's own. What survives that boundary is
+  the host neutralizes what a module wrote, which is where a module that declared
+  nothing would otherwise be able to forge a record that reads as this product's own.
+  **The neutralization is the logger's and not a rule each call site follows**, since
+  that rule was enumerated wrongly twice — most recently missing the line naming a
+  migration as it is applied, which another package writes on the path that runs when
+  nothing is wrong. The 4 KiB bound is the log line's alone: the aggregated reason a
+  manifest was refused reaches an operator whole. What survives that boundary is
   the set of graphic characters, in any script, and what does not is escaped — a
   default-deny, because a list of invisible characters is behind the next Unicode
-  revision the day it is written. The one graphic character escaped anyway is the
-  backslash, so that a reader can tell a literal `\n` from an escaped newline and a
-  module cannot spell the mark on a truncated line; the carve-out running the other
-  way is Unicode's prepended concatenation marks, read from the property rather than
-  copied out of it, for the same reason the escape set is not a list (M62, D240,
-  D241, D242, D243, D244).
+  revision the day it is written. Graphic characters the host treats as invisible are
+  escaped too — 268 of them: Unicode's `Default_Ignorable_Code_Point`, **derived** rather
+  than asked of the residue property Go ships under a nearly identical name, plus
+  `U+2800 BRAILLE PATTERN BLANK`, which the property does not carry and which is the
+  one blank that is not whitespace. **The claim is that property and not *invisible***,
+  which is not a property anybody publishes: eight combining marks Unicode annotates as
+  not visibly rendered stay outside it, and what bounds them is that an add-on may post
+  to the log and cannot read it back. The derivation reaches 398 members the residue property never had,
+  and the 260 of them a reader could ever have seen are the variation selectors: a
+  module that declared nothing used those to carry a secret out of an
+  ordinary-looking line; **they are deleted rather than escaped**, unconditionally and
+  with no exemption for the emoji case, because a selector has no appearance of its
+  own and no property says which bases a renderer will vary. The one graphic character
+  escaped anyway is the backslash, so that a reader can tell a literal `\n` from an
+  escaped newline and a module cannot spell the mark on a truncated line; the carve-out
+  running the other way is Unicode's prepended concatenation marks, read from the
+  property rather than copied out of it, for the same reason the escape set is not a
+  list (M62, D240, D241, D242, D243, D244, D283).
 - The HTTP layer is two handler trees. The redirect tree carries no session
   lookup, CSRF check or template rendering. Enforced by test.
 - The redirect pool is separate from the application pool.

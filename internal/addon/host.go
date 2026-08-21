@@ -355,11 +355,27 @@ type LoadError struct {
 	class FailureClass
 }
 
+// Error neutralizes the directory name and nothing else: Err is neutralized where
+// it is constructed, and this escaping doubles a backslash, so applying it twice
+// would double it twice. The composition with %q is deliberate and is the one place
+// a reader sees it — a directory name carrying a backslash reads as four, which is
+// odd and is the safe direction to be odd in.
+//
+// **Unbounded, and that is the fix F-5 named** (D286). This is what cmd/linkctrl
+// prints when a `required` add-on refuses to load, and Manifest.Validate aggregates
+// every problem with the manifest into one error precisely so that the person
+// publishing an add-on for the first time sees the whole list. A 4 KiB cap belongs
+// to a log line and was imported onto this path with the escaping; the two are
+// separate concerns now, and only a log record gets the cap.
 func (e *LoadError) Error() string {
-	return fmt.Sprintf("add-on %q: %s: %v", e.Addon, e.Outcome, e.Err)
+	return fmt.Sprintf("add-on %q: %s: %v", moduleText(e.Addon), e.Outcome, e.Err)
 }
 
 func (e *LoadError) Unwrap() error { return e.Err }
+
+// neutralized marks the sentence above as already escaped, so that logging a
+// LoadError folds and bounds it rather than escaping it again. See logsafe.go.
+func (*LoadError) neutralized() {}
 
 // Options is what a host needs. Everything but Dir is optional.
 type Options struct {
@@ -512,10 +528,12 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if opts.Dir == "" {
 		return nil, nil
 	}
-	log := opts.Logger
-	if log == nil {
-		log = slog.New(slog.DiscardHandler)
-	}
+	// Wrapped before anything else holds it, and this is the whole of how the
+	// neutralization reaches a call site nobody has written yet: every logger this
+	// subsystem uses is derived from this one, including the one openStorage hands
+	// to internal/store, so a log line added there is neutralized without that
+	// package importing anything. See logsafe.go, and D286.
+	log := neutralizingLogger(opts.Logger)
 
 	dir, err := filepath.Abs(opts.Dir)
 	if err != nil {
@@ -602,11 +620,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			// initialization has run.
 			err = &LoadError{
 				Addon: name, Outcome: OutcomeNameCollision, class: classes[name],
-				Err: fmt.Errorf("%q cannot load beside %s: one name plus an underscore "+
+				Err: neutralize(fmt.Errorf("%q cannot load beside %s: one name plus an underscore "+
 					"is a prefix of the other, so the cookie prefixes and the %s "+
 					"variables derived from the two names overlap. Rename one directory "+
 					"and the add-on's manifest with it; neither loads until then",
-					name, quoteAll(others), config.AddonEnvPrefix),
+					name, quoteAll(others), config.AddonEnvPrefix)),
 			}
 		} else {
 			loaded, err = loadOne(ctx, h, filepath.Join(dir, name), name)
@@ -616,7 +634,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			if !errors.As(err, &le) {
 				// loadOne returns nothing else; belt, so a future edit that
 				// forgets cannot lose the metric label.
-				le = &LoadError{Addon: name, Outcome: OutcomeManifestInvalid, Err: err}
+				le = &LoadError{Addon: name, Outcome: OutcomeManifestInvalid, Err: neutralize(err)}
 			}
 			// labelFor, not name: this is the one label in the file taken from a
 			// directory entry rather than from a validated manifest.
@@ -626,6 +644,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 				return nil, err
 			}
 			log.Error("add-on failed to load; the instance continues without it",
+				// The raw entry, like every other value logged here: the neutralization
+				// is the handler's and a site that did it too would double it. This is
+				// the one addon label in the file taken from a directory entry rather
+				// than from a validated manifest, and a directory name is as much the
+				// publisher's as a manifest field is.
 				slog.String("addon", name),
 				slog.String("outcome", string(le.Outcome)),
 				slog.String("failure_class", string(ClassDegrade)),
@@ -800,8 +823,13 @@ func quoteAll(names []string) string {
 // step's failure the cheapest one available: the manifest before the module, the
 // digest before the runtime.
 func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
+	// Every LoadError this function makes is built here, which is what makes one
+	// neutralization enough. A validation error embeds the value it refused with
+	// %q, and %q escapes on unicode.IsPrint — so a manifest field carrying
+	// U+3164, U+FE0F or U+E0100 reached an operator's log through it untouched
+	// until this line existed.
 	fail := func(o Outcome, class FailureClass, err error) (Loaded, error) {
-		return Loaded{}, &LoadError{Addon: entry, Outcome: o, Err: err, class: class}
+		return Loaded{}, &LoadError{Addon: entry, Outcome: o, Err: neutralize(err), class: class}
 	}
 
 	m, err := ReadManifest(dir)
@@ -1151,7 +1179,10 @@ func (h *Host) Close(ctx context.Context) error {
 	for _, l := range h.loaded {
 		l.storage.Close()
 	}
-	err := h.runtime.Close(ctx)
+	// Neutralized on the way out, like Route's: wazero's close error names the
+	// modules it was closing, and the caller logs this through its own logger rather
+	// than through the one Open wrapped.
+	err := neutralize(h.runtime.Close(ctx))
 	h.runtime = nil
 	h.loaded = nil
 	h.mu.Lock()

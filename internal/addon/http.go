@@ -276,7 +276,23 @@ var ResponseMediaTypes = []string{"text/plain", "application/json"}
 //
 // Nil-safe: an instance with no add-ons directory answers ErrNoRoute, which is
 // the 404 a visitor typing the path gets.
+//
+// **Every error out of here is neutralized, at the exit and not at the site that
+// built it** (D286). What internal/httpx does with one is log it, and a failure on
+// this path carries the module's own text more often than not: a wasm trap names
+// the guest's symbols out of a name section nothing constrains, and so does the
+// instantiation failure a module can arrange for the per-request instance alone —
+// hostState is registered before InstantiateModule and carries the request, so a
+// guest can read that it is answering one and trap only then, loading clean and
+// failing per visit. Neutralizing at each site was the shape that missed that one.
+// Unwrap survives, so errors.Is on ErrNoRoute, ErrBusy and the rest still decides
+// what it decided.
 func (h *Host) Route(ctx context.Context, name string, in RequestIn, sess SessionContext) (Response, error) {
+	resp, err := h.route(ctx, name, in, sess)
+	return resp, neutralize(err)
+}
+
+func (h *Host) route(ctx context.Context, name string, in RequestIn, sess SessionContext) (Response, error) {
 	if h == nil {
 		return Response{}, ErrNoRoute
 	}
@@ -396,7 +412,8 @@ func (h *Host) Route(ctx context.Context, name string, in RequestIn, sess Sessio
 	if err != nil {
 		// A trap, or the context closing the instance. The detail goes to the log
 		// and not to the visitor: a wasm trace names the guest's own symbols, and
-		// an error page is not where an add-on's stack belongs.
+		// an error page is not where an add-on's stack belongs. Neutralized by the
+		// handler on the way to the log, and by Route on the way out.
 		h.log.Error("an add-on's request handler failed",
 			slog.String("addon", name),
 			slog.Any("error", err))

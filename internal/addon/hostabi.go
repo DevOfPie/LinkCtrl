@@ -103,10 +103,12 @@ var hostFuncs = map[string]hostFunc{
 			// can fix it.
 			return int32(abi.StatusInvalid)
 		}
-		// Neutralized here, on the way in, and never by whatever writes the line —
-		// see sanitizeLogMessage. The level needs none of it: it is compared against
-		// a closed vocabulary one line above rather than passed through.
-		st.log.Log(context.Background(), slogLevels[level], sanitizeLogMessage(message))
+		// Handed over as the module wrote it, and neutralized by the handler st.log
+		// is built on — see logsafe.go. Escaping it here as well would double every
+		// backslash twice, which is why the boundary is one place and not two. The
+		// level needs none of it: it is compared against a closed vocabulary one line
+		// above rather than passed through.
+		st.log.Log(context.Background(), slogLevels[level], message)
 		return 0
 	},
 
@@ -221,6 +223,9 @@ var hostFuncs = map[string]hostFunc{
 			// Debug, and the reason never crosses: the guest gets StatusInvalid and
 			// the detail goes where an operator can read it. A module looping on a
 			// malformed record would otherwise decide how much an instance logs.
+			// decodeResponse names what it refused and what it refused is the
+			// module's — a header name, a cookie name, a status — and hostLog is a
+			// neutralizing logger, so the raw error is what goes in.
 			st.hostLog.Debug("refused an add-on's response",
 				slog.String("addon", st.manifest.Name),
 				slog.Any("error", err))
@@ -308,6 +313,9 @@ func (s *hostState) storageFailed(function string, err error) int32 {
 		// volume is already the smaller problem.
 		level = slog.LevelWarn
 	}
+	// A Postgres error quotes the fragment of the statement it failed on, and the
+	// statement is the module's. Logged raw and neutralized by the handler; errors.Is
+	// above is asked of the error itself and so does not depend on any of it.
 	s.hostLog.Log(context.Background(), level,
 		"an add-on's statement failed",
 		slog.String("addon", s.manifest.Name),
@@ -349,41 +357,91 @@ const maxLogMessage = 4 << 10
 // to make it.
 const logTruncated = `…\(truncated)`
 
-// sanitizeLogMessage neutralizes a message a module handed over, before the logger
-// sees it.
+// sanitizeLogMessage is one log record's worth of neutralized text: the escaping,
+// plus the bound that belongs to a log line and to nothing else.
 //
-// D240's requirement, and the reason it lives here rather than in the logger: log
-// is ungated, so every loaded module can reach it including one that declared no
-// permission at all, which makes this the widest untrusted input this host has —
-// and there is no second boundary between this function and an operator's screen.
-// Two harms follow, and a permission check would have stopped neither. A message
-// carrying a newline can close the host's own record and open one that reads as the
-// host's, and log records are what an operator reasons from when something has gone
-// wrong. A message carrying an ANSI escape, a zero-width character or a bidi
-// override can put bytes in front of a reader arranged to be overlooked.
+// It is what neutralizingHandler applies to every message and every attribute this
+// subsystem logs — **not** what a call site applies to its own argument. That
+// inversion is D286: the rule *neutralize module text where you log it* was written
+// down three times and enumerated wrongly twice, most recently missing a migration
+// filename on store.MigrateAddon's success path, in another package entirely.
+// logsafe.go is where the property lives now.
+//
+// D240's requirement, and the reason it is a boundary at all: log is ungated, so
+// every loaded module can reach it including one that declared no permission at all,
+// which makes it the widest untrusted input this host has — and there is no second
+// boundary between here and an operator's screen. Two harms follow, and a permission
+// check would have stopped neither. A message carrying a newline can close the
+// host's own record and open one that reads as the host's, and log records are what
+// an operator reasons from when something has gone wrong. A message carrying an ANSI
+// escape, a zero-width character or a bidi override can put bytes in front of a
+// reader arranged to be overlooked.
 //
 // Escaped rather than dropped, because what a module tried to write is evidence: a
 // reader who sees \n knows more than one handed a message with a hole in it. Not
 // delegated to slog either, though both handlers NewLogger builds do quote what
 // they write: which handler an operator configured is not something this boundary
 // may depend on, and neither of them bounds a length.
-func sanitizeLogMessage(s string) string {
+//
+// **One class is dropped, and it is the exception that names its own reason** — see
+// strippedRune. Evidence is why everything else is escaped; a variation selector is
+// evidence of nothing, since it has no appearance of its own to report and every
+// spelling of one costs a reader the emoji it was riding on (D283).
+//
+// **What this function does not do is bounded by something outside it, and that is
+// deliberate** (D285). It neutralizes a published Unicode property and not every
+// character that renders as nothing, because no property names that set — see
+// escapedRune for what is left over. A covert channel needs an end to write bits and
+// an end to read them back. The write end is open by construction, since log costs no
+// permission. **The read end is closed**: log takes a level and a message and declares
+// no out-parameter, no ABI function hands log content back, a guest gets no preopened
+// file and its stdout and stderr are discarded, and an add-on's storage is a schema of
+// its own that this log does not live in. So the residue only pays out if an operator
+// hands the log to the add-on's author, which is a person's decision rather than a
+// capability this host grants. TestAnAddonPostsToTheLogAndCannotReadItBack is that
+// property as assertions, over every function in the ABI rather than over log alone.
+func sanitizeLogMessage(s string) string { return escapeModuleText(s, maxLogMessage) }
+
+// unbounded is what escapeModuleText is given when the text is not going into a log
+// line. See moduleText for why that is a case at all.
+const unbounded = 0
+
+// escapeModuleText is the neutralization itself, with the bound as a parameter
+// rather than as part of it.
+//
+// **The two were one function and F-5 is what that cost** (D286). A manifest error
+// is not a log line: Manifest.Validate aggregates with errors.Join precisely so that
+// somebody publishing an add-on for the first time sees every problem at once, and
+// running that list through the log line's 4 KiB cap cut it silently at the point a
+// long list becomes worth reading. The escaping is a claim about what a reader may
+// be shown; the cap is a claim about how much of an operator's log one call may
+// occupy. Only the second belongs to a logger.
+func escapeModuleText(s string, max int) string {
 	var b strings.Builder
-	// Sized to what will be written, not to what arrived: the input may be maxStringIn
-	// and the output cannot exceed maxLogMessage, and Builder.String does not copy — so
-	// growing to the input would leave a 4 KiB line holding a 64 KiB array for as long
-	// as the log record lives.
-	b.Grow(min(len(s), maxLogMessage))
-	// The mark is reserved rather than appended over the bound, so maxLogMessage is
-	// the size of what gets written and not the size of most of it.
-	limit := maxLogMessage - len(logTruncated)
+	// Sized to what will be written, not to what arrived: on the log path the input may
+	// be maxStringIn and the output cannot exceed maxLogMessage, and Builder.String does
+	// not copy — so growing to the input would leave a 4 KiB line holding a 64 KiB array
+	// for as long as the log record lives.
+	if max > unbounded {
+		b.Grow(min(len(s), max))
+	} else {
+		b.Grow(len(s))
+	}
+	// The mark is reserved rather than appended over the bound, so max is the size of
+	// what gets written and not the size of most of it.
+	limit := max - len(logTruncated)
 	for _, r := range s {
+		if strippedRune(r) {
+			// Deleted rather than escaped, and it is the only class handled that way
+			// (D283). Nothing is written, so nothing is counted against the limit either.
+			continue
+		}
 		esc := escapeLogRune(r)
 		n := len(esc)
 		if esc == "" {
 			n = utf8.RuneLen(r)
 		}
-		if b.Len()+n > limit {
+		if max > unbounded && b.Len()+n > limit {
 			b.WriteString(logTruncated)
 			break
 		}
@@ -397,6 +455,129 @@ func sanitizeLogMessage(s string) string {
 		b.WriteString(esc)
 	}
 	return b.String()
+}
+
+// foldToLogLine puts already-neutralized text into one log record: it folds the
+// newlines the host's own aggregation put there and applies the log line's bound.
+//
+// Nothing here escapes anything, and that is the point — the text has been through
+// escapeModuleText already and a second pass would double every backslash a second
+// time. What is left to do is the part that belongs to the log and not to the
+// neutralization: an error carrying a joined list is many lines for an operator
+// reading a fatal message and must be one record for an operator reading a log.
+//
+// The `\n` it writes is a lone backslash, which is the same signature logTruncated
+// relies on: every backslash a module writes is doubled by escapeLogRune, so a lone
+// one in a written line can only have come from this file.
+func foldToLogLine(s string) string {
+	if !strings.ContainsRune(s, '\n') && len(s) <= maxLogMessage {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(min(len(s), maxLogMessage))
+	limit := maxLogMessage - len(logTruncated)
+	for _, r := range s {
+		esc := ""
+		n := utf8.RuneLen(r)
+		if r == '\n' {
+			esc = `\n`
+			n = len(esc)
+		}
+		if b.Len()+n > limit {
+			b.WriteString(logTruncated)
+			break
+		}
+		if esc == "" {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(esc)
+	}
+	return b.String()
+}
+
+// moduleText neutralizes a string a module supplied, for a reader who is not
+// reading a log.
+//
+// **sanitizeLogMessage was the boundary for one function and the claim was made for
+// the module** (docs/SECURITY.md). Those are not the same statement, and the gap was
+// real: manifest validation embeds the offending value with `%q`, a load failure
+// logs the resulting error, and `%q` escapes on unicode.IsPrint — which is true of
+// every mark and every letter, so `U+3164 HANGUL FILLER`, `U+FE0F`, `U+E0100` and
+// `U+2D7F` all passed through it unchanged. migrationFileRe admits every code point
+// but a newline, so a filename is a 4 KiB channel with nothing between it and an
+// operator's screen.
+//
+// The **log** half of that is logsafe.go's now. What is left here is the other
+// destination: the fatal message cmd/linkctrl prints when a `required` add-on
+// refuses to load, which is a page of stderr rather than a record and takes no cap
+// — see escapeModuleText, and D286.
+//
+// Applied **once** either way: the escaping doubles a backslash, so a second
+// application would double it again.
+func moduleText(s string) string { return escapeModuleText(s, unbounded) }
+
+// neutralize wraps an error whose text a module had a hand in, so that Error()
+// answers the neutralized form wherever it is printed — an slog attribute, a
+// wrapped error a caller formats, or the fatal message cmd/linkctrl prints when a
+// `required` add-on refuses to load.
+//
+// Unwrap is kept, because the status a call answers with is decided by errors.Is on
+// the error underneath — store.ErrAddonDenied is the one that matters — and a
+// neutralization that changed which status a module got would be a different defect
+// than the one it fixes.
+func neutralize(err error) error {
+	if err == nil {
+		return nil
+	}
+	return moduleErr{err: err}
+}
+
+type moduleErr struct{ err error }
+
+func (e moduleErr) Error() string { return neutralizedErrText(e.err) }
+func (e moduleErr) Unwrap() error { return e.err }
+
+// neutralized marks moduleErr as carrying text that has already been through
+// escapeModuleText, so that neutralizingHandler folds and bounds it for a log record
+// instead of escaping it a second time. Nothing calls it.
+func (moduleErr) neutralized() {}
+
+// neutralizedErrText neutralizes an error's text without flattening the structure
+// the *host* put there.
+//
+// errors.Join's Error() is its branches separated by newlines, and Manifest.Validate
+// aggregates with it deliberately: the person reading the output is publishing an
+// add-on for the first time and should see the whole list (F-5, D286). Escaping the
+// aggregate whole turned every one of those separators into the two characters `\`
+// and `n`, so the list arrived as one run-on line — the host's own formatting
+// destroyed by a boundary meant for the module's text.
+//
+// So a join is descended into and each branch neutralized on its own, and the
+// separators are put back as themselves. A branch that is not a join is a leaf and
+// is escaped whole, which is what keeps a newline a *module* supplied from becoming
+// a separator: only the host's aggregation makes one here.
+//
+// **fmt.Errorf with two %w verbs also answers Unwrap() []error and is not a join**,
+// which is why the shape is checked rather than the type: errors.Join's own text is
+// exactly its branches joined by newlines, and fmt.Errorf's is a sentence the host
+// wrote. Anything that is not that join is treated as a leaf.
+func neutralizedErrText(err error) string {
+	j, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		return moduleText(err.Error())
+	}
+	branches := j.Unwrap()
+	raw := make([]string, len(branches))
+	safe := make([]string, len(branches))
+	for i, b := range branches {
+		raw[i] = b.Error()
+		safe[i] = neutralizedErrText(b)
+	}
+	if err.Error() != strings.Join(raw, "\n") {
+		return moduleText(err.Error())
+	}
+	return strings.Join(safe, "\n")
 }
 
 // escapeLogRune is the escape for a rune that may not reach a log line as itself,
@@ -461,6 +642,12 @@ func hexRune(r rune, digits int) string {
 // Three corrections sit on top, each a named case rather than a category, and each
 // one a place default-deny alone answers wrongly.
 //
+// **This function decides between reaching the line and being escaped, and there is
+// a third answer it never gives.** sanitizeLogMessage deletes a variation selector
+// before asking (D283, strippedRune), so on that path this function is asked about
+// one only if the strip is ever removed — and it answers *escape*, which is what
+// makes the removal loud instead of silent.
+//
 // **What the inversion costs**, stated because it is the mirror of what the
 // enumeration cost: Cn means unassigned *in the Unicode tables this Go was built
 // with*, so a code point assigned after them is escaped until Go catches up. The
@@ -484,14 +671,138 @@ func escapedRune(r rune) bool {
 	if r == '\u2800' {
 		return true
 	}
-	// Seven code points are letters or marks by category — the Hangul fillers, the
-	// Khmer inherent vowels, the combining grapheme joiner — and render as nothing, so
-	// IsGraphic says yes where a reader sees no. Unicode has a property for exactly
-	// this class and Go carries its non-Cf residue under this name.
-	if unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r) {
+	// Some code points are letters or marks by category — the Hangul fillers, the Khmer
+	// inherent vowels, the combining grapheme joiner — and render as nothing, so
+	// IsGraphic says yes where a reader sees no. Unicode has a property for exactly this
+	// class, and asking Go for the table whose name most resembles it was F285.
+	//
+	// **It is not a property for every character that renders as nothing, and no such
+	// property exists** — which is the answer four attempts at this milestone were
+	// looking for. Eight combining marks the UCD annotates as "shape shown is arbitrary
+	// and is not visibly rendered" sit outside it and reach a line as themselves:
+	// U+2D7F, U+17D2, U+10A3F, U+1107F, U+11A47, U+11A99, U+11F42 and U+16FE4. So do
+	// seventeen Zs and thirteen prepended concatenation marks. That residue is
+	// conceded in writing rather than chased, it is pinned by
+	// TestTheResidualClassIsWhatTheDocumentsConcede, and what bounds it is
+	// sanitizeLogMessage's last paragraph: a module can write into this log and cannot
+	// read out of it.
+	if defaultIgnorable(r) {
 		return true
 	}
 	return !unicode.IsGraphic(r)
+}
+
+// strippedRune reports whether a rune is deleted on its way to a log line rather
+// than escaped. It is one class — Unicode's Variation_Selector, 260 code points —
+// and it is the only thing this boundary removes (D283).
+//
+// **The threat is legibility, not confidentiality.** log is ungated, so a module may
+// write a secret in plain text whenever it likes and nothing here stops it. What this
+// boundary owes a reader is narrower and checkable: that what they see is what is
+// there. A variation selector breaks exactly that. It is category Mn, so IsGraphic
+// says yes; it has no appearance of its own; and it acts on the character before it,
+// or on nothing at all when that character has no sequence registered for it. F285
+// was 260 of them carrying `SECRET=hunter2` out of a line reading *everything is
+// fine*, from a module that declared no permission at all.
+//
+// **Removing the bit does not require making logs ugly**, which is what decided the
+// shape. Stripping removes it and costs the reader nothing: `❤️` becomes `❤`, still a
+// heart, and `😀` is untouched because U+1F600 has emoji presentation by default and
+// carries no selector to lose. Escaping would instead put `\ufe0f` through the
+// middle of every emoji anybody logs.
+//
+// **There is no base set, and that is where two attempts at an exemption died.** The
+// first asked category So: 6304 of the 6634 symbols have no registered emoji
+// variation sequence, so a progress bar drawn from U+2588 and U+2591 carried the
+// secret through byte-identical at log₂3 bits per cell. 6634 is the size of the
+// category and is pinned by TestNoDefaultIgnorableCharacterReachesALogLine like every
+// other number this file prints. **6304 is attributed rather than pinned**, and the
+// difference is stated because D284 forbids a stated number with nothing under it: it
+// is not computable from the tables Go ships, having been measured against the UCD's
+// emoji-variation-sequences.txt on 2026-08-20, on the parked branch that vendored
+// that file. It survives here as the reason an attempt failed and not as a claim
+// about this boundary, which has no base set for it to be about. The second asked Unicode's
+// registered sequences, read from the UCD's own file, and a reviewer defeated that
+// too — by building the channel out of registered bases whose selector a renderer
+// ignores. An exemption is only safe over bases where a reader can see the selector
+// act, and no set of those exists to name. So none is named. Both attempts are on a
+// parked branch and neither shipped.
+//
+// **What is lost is injectivity, and nothing rested on it** — proved in
+// TestStrippingIsLossyAndForgesNothing rather than asserted here. Two messages
+// differing only in their selectors now produce one line, which the escaping form
+// did not permit. It shrinks what a module can put in front of a reader rather than
+// widening it: this function deletes and never inserts, so every line the boundary
+// can emit was emittable before, and the two marks a reader leans on — the escape's
+// own backslash and logTruncated behind it (D244) — stay out of reach either way.
+func strippedRune(r rune) bool {
+	return unicode.Is(unicode.Variation_Selector, r)
+}
+
+// defaultIgnorable is Unicode's `Default_Ignorable_Code_Point`, derived rather than
+// asked for.
+//
+// **Go ships no table under that name.** It ships
+// `Other_Default_Ignorable_Code_Point`, and the first form of escapedRune asked for
+// that one — which is Unicode's *residue* property, the members left over once the
+// derivation's other terms are removed, and so is smaller than the property whose
+// name it nearly has. The real definition is
+//
+//	Other_DI ∪ Cf ∪ Variation_Selector − White_Space − FFF9..FFFB − 13430..13440 − PCM
+//
+// and the missing Variation_Selector term was the whole of F285. That line is
+// transcribed term for term from the `Generated from` block above
+// Default_Ignorable_Code_Point in Unicode 15.0's DerivedCoreProperties.txt, which is
+// the file this claim answers to.
+//
+// **The same failure shape as the list D242 replaced, one level up.** A property
+// whose name begins with `Other_` is incomplete by construction — it exists to be
+// unioned, not to be asked — and this file had already learned twice that the way to
+// carry a claim about a Unicode set is to compute the set Unicode defines.
+//
+// **The first fix for F285 wrote six of the seven terms**, dropping 13430..13440 —
+// the Egyptian hieroglyph format characters — and so claiming 4190 members where the
+// property has 4174. Behaviour was untouched, since the sixteen the union carries are
+// Cf and the !IsGraphic fallback escapes them either way; what was wrong was the
+// claim, which is this milestone's deliverable. It is F285's own shape a third level
+// in: a derivation trimmed to the terms that change an answer is not the property,
+// and the paragraph below — already in the file — is the argument against doing
+// exactly that.
+//
+// Three of the four subtractions change no answer downstream, and are written anyway
+// because this function's claim is that it *is* the property rather than that it
+// happens to agree with one: FFF9..FFFB are Cf, so are the sixteen members of
+// 13430..13440 that the union reaches (U+13440 itself is Mn and never enters it), and
+// the !IsGraphic fallback escapes all nineteen regardless; PCM never reaches
+// escapedRune, being answered one limb earlier. The White_Space subtraction is the
+// derivation's, and no member of the union carries that property in the tables this
+// Go was built with.
+//
+// **The Variation_Selector term decides nothing on the sanitizer's own path**, since
+// sanitizeLogMessage strips those before asking (D283). It is written in for two
+// reasons. A derivation trimmed to its caller's reach is one nobody can check
+// against the standard, and checking it against the standard is the entire lesson of
+// F285. And escapeLogRune is package-visible and is called on its own: with the term
+// present, a caller that forgets to strip escapes a selector instead of passing it,
+// which fails loudly rather than reopening the channel.
+//
+// Numbers, since a set claim without one is not a claim: 4174 members, 267 of them
+// graphic, against the residue property's 3776 and 7 — and 4174 is what the UCD file
+// totals for the property itself, arrived at independently. Pinned as **equalities**
+// by TestNoDefaultIgnorableCharacterReachesALogLine, against unicode.Version 15.0. A
+// floor is what let 4190 sit inside an enforcing test for a whole round, so a
+// toolchain whose Unicode revision moves fails here and the numbers in this comment
+// and in the six documents that print them move with it.
+func defaultIgnorable(r rune) bool {
+	if unicode.Is(unicode.White_Space, r) ||
+		(r >= '\ufff9' && r <= '\ufffb') ||
+		(r >= '\U00013430' && r <= '\U00013440') ||
+		unicode.Is(unicode.Prepended_Concatenation_Mark, r) {
+		return false
+	}
+	return unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r) ||
+		unicode.Is(unicode.Cf, r) ||
+		unicode.Is(unicode.Variation_Selector, r)
 }
 
 // meaningfulFormatRune is the allowlist D241 argued for: format characters that
@@ -604,6 +915,10 @@ func (s *hostState) marshalFailed(function string, err error) int32 {
 
 func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
 	values map[string]config.Secret, log *slog.Logger) *hostState {
+	// Open has wrapped this already and wrapping is idempotent; it is repeated here
+	// because a state built directly — which is what a test does — must be as safe as
+	// one built through a load.
+	log = neutralizingLogger(log)
 	settings := make(map[string]Setting, len(m.Settings))
 	for _, s := range m.Settings {
 		settings[s.Name] = s

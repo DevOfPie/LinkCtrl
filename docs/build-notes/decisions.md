@@ -444,6 +444,11 @@ file. Append a row when you append an entry.
 | [M63, a prefix is not a proof of ownership](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership) | D280 — the correction to D279's last two paragraphs, which argued that a role named `addon_*` that no module claims can only be this product's. A reviewer created `addon_reporting` by hand and the sweep took its settings, so the argument was false and the code was writing outside what this product owns. The sweep now asks the catalogue for the two facts only this product's installer writes; a failure on one role no longer stops the rest; it runs before the load loop and off the directory rather than off what loaded; a database dropped mid-reset no longer fails a load; and docs/deployment.md gains the cluster-wide blast radius it did not state |
 | [M63, a prefix is not a proof of ownership: the amendment](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership-the-amendment) | D281, owner-answered: the sweep's identification clause quoted as it stood and as amended, the hand-made role a reviewer had it wipe, the two catalogue facts an add-on can neither manufacture nor revoke, and the two answers declined — not sweeping at all, and sweeping everything and saying so |
 | [M63, detect and refuse; the sweep is removed](#2026-08-21--m63-detect-and-refuse-the-sweep-is-removed) | D282, owner-answered, reversing D281: `ClearOrphanedAddonRoleSettings` and its boot call are removed, because the `pg_auth_members` fact D281 rested on is written automatically for a `NOSUPERUSER CREATEROLE` creator — measured — so it proves nothing on the shipped privilege. The post-condition's `pg_db_role_setting` branch already refuses an add-on that parked anything, which needs no proof of ownership; the residue an uninstalled add-on leaves is inert and is stated in four documents rather than swept |
+| [M62, strip the variation selectors; there is no base set](#2026-08-21--m62-strip-the-variation-selectors-there-is-no-base-set) | D283, owner-answered, superseding D270's remedy: every variation selector is deleted from an add-on's log message rather than escaped, and there is no exemption for the emoji case. D270's carve-out and the two predicates written under it, D276 and D277, are withdrawn — and never landed, being on the unmerged branch `wip/m62-sanitizer`. Why the threat is legibility rather than confidentiality, why there is no base set that two attempts could have found, what the ~354 monochrome symbols cost, and the proof that nothing rested on the injectivity stripping gives up |
+
+| [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
+| [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
+| [M62, the boundary is a handler, because a list of log sites is a claim about code nobody has written](#2026-08-21--m62-the-boundary-is-a-handler-because-a-list-of-log-sites-is-a-claim-about-code-nobody-has-written) | D286 — two more log sites were found off the enumerated three, one of them on `store.MigrateAddon`'s **success** path in another package, so the rule *neutralize where you log* became a `slog.Handler` every logger in the subsystem is wrapped in and a single neutralizing exit on `Route`: there is no site to miss and no list to get wrong. Also here: the escaping and the log line's 4 KiB bound split apart, so an operator's aggregated manifest error is neither cut nor run-on; the read-end test's behaviour limb driven with its dependencies satisfied and counting **writes** rather than declarations; and *no preopened file, discarded streams* asserted from inside a guest rather than left resting on wazero's defaults |
 
 ---
 
@@ -35170,3 +35175,413 @@ admin_option = t` — the exact row D281 required as proof that this product's l
 had adopted the role. The same statement as superuser produced no row, which is
 the only case D280 measured. Both probe roles were dropped after measuring;
 `SELECT rolname FROM pg_roles WHERE rolname LIKE '%d282%'` returns 0 rows.
+
+## 2026-08-21 — M62, strip the variation selectors; there is no base set
+
+**D283, owner-answered, superseding [D270](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)'s
+remedy.** Every variation selector is **deleted** from an add-on's log message
+rather than escaped, and there is no exemption for the legitimate emoji case.
+D270's *exempt the legitimate emoji case by what precedes the selector* is
+withdrawn. So are the two predicates written under it, D276 and D277 — **neither
+of which ever landed**: they live on the local branch `wip/m62-sanitizer`, which
+is not merged, and [D278](#2026-08-20--m649-m62-is-parked-and-m63-and-m64-go-ahead-of-it)
+is the entry that reserved their numbers. This file is append-only, so D270 stands
+as the record of what was decided; what follows is what replaced it.
+
+**The finding is unchanged.** F285: `escapedRune` asked
+`unicode.Other_Default_Ignorable_Code_Point`, Unicode's *residue* property, where
+the real set is `Other_DI ∪ Cf ∪ Variation_Selector − White_Space − FFF9..FFFB −
+13430..13440 − PCM`, all **seven** terms of the derivation Unicode publishes. The
+260 selectors are category `Mn`, so `unicode.IsGraphic` says yes and the
+default-deny fallback could not reach one. The derivation is kept and is the half
+of D270 that was never in doubt — 4174 members, 267 graphic, against the residue's
+3776 and 7, counted by `TestNoDefaultIgnorableCharacterReachesALogLine`.
+
+*(This paragraph first wrote six of the seven terms and put the size at 4190. It was
+corrected here **before either entry landed**, and [D284](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer)
+is the entry that says what the mistake was and what rule it produced. Append-only
+protects committed history; two new entries contradicting each other inside one
+commit is a thing to fix rather than a thing to preserve.)*
+
+**What changed is the remedy, and the owner's reasoning is the shape of it.**
+
+- **The threat is legibility, not confidentiality.** `log` is ungated, so a module
+  may write a secret in plain text whenever it likes and nothing at this boundary
+  stops it. What the boundary owes a reader is narrower and checkable: *what you
+  see is what is there*. D270 read the finding as a disclosure channel and looked
+  for a predicate that closed it while keeping every legitimate rendering; read as
+  a legibility rule instead, the selector simply has no business being in the line.
+- **Removing the covert bit does not require making logs ugly**, which is what
+  made D270's carve-out feel necessary. Stripping removes the bit and costs the
+  reader nothing: `❤️` becomes `❤`, still a heart; `😀` is untouched, because
+  `U+1F600` already defaults to emoji presentation and carries no selector.
+  Escaping would instead have put a literal `\ufe0f` through the middle of every emoji
+  anybody logs — which is the cost D270 declined, and stripping does not pay it
+  either.
+- **There is no base set**, and this is where both attempts died. Attempt 1 keyed
+  the exemption on category `So`: 6304 of the 6634 symbols carry no registered
+  emoji variation sequence, so `migrating: [████░░░░] everything is fine`, drawn
+  from `U+2588` and `U+2591`, went through byte-identical at log₂3 bits per
+  symbol. Attempt 2 keyed it on Unicode's own registered sequences, read from the
+  UCD's `emoji-variation-sequences.txt` — and a reviewer defeated that too, by
+  building the channel out of registered bases whose selector a renderer ignores.
+  Whether a selector is visible depends on the font in front of the reader, and
+  Unicode publishes no property that names that set. A carve-out has to name
+  characters where a reader can *see* the selector act, and there is nothing to
+  name.
+
+**Three declined answers, and why each loses to stripping.** Escaping all 260
+unconditionally is correct by construction and is what D270 declined; it is
+declined again for the same reason and stripping costs nothing it cost. A third
+attempt at a narrower base predicate is declined because the two attempts did not
+fail on their choice of set but on the premise that a safe set exists. Leaving the
+boundary and correcting the documents is declined because a module that declared
+nothing would keep a covert channel into the operator's log, which is the one
+boundary D240 exists for.
+
+**The cost, stated because it is real.** About 354 symbols render in whatever
+presentation the reader's font defaults to rather than the one the add-on asked
+for — a monochrome `❤` where an add-on wrote `❤️`. Nobody reads a log for
+typography, and this is the whole of what the exemption was protecting.
+
+**The cost that had to be proved rather than stated: stripping is lossy, and
+escaping was not.** The escaping form is injective (D244) and a reviewer verified
+it; deleting a class breaks that, so `hello` and `hel<FE0F>lo` are now one line.
+Four properties could have rested on injectivity and none does.
+
+| Property | What it actually rests on |
+| --- | --- |
+| No forged record boundary | `\n` and `\r` being escaped. A deletion cannot produce one |
+| Attribution — a line cannot read as the host's or as another add-on's | The `addon` and `source` **attributes** `newHostState` sets, never message text. A module's whole message is one field's value |
+| `…\(truncated)` is the host's alone | Every module backslash being doubled. The forgery needs `\(`; the escapes emitted are `\n \r \t \\ \uXXXX \UXXXXXXXX`, so the character after an emitted backslash is always one of `\nrtuU`, and a deletion cannot split an escape that is written whole |
+| Evidential fidelity — the reader can tell what the module wrote | **This is the one that is lost**, and it is bounded to characters that have no appearance to report |
+
+The general argument is one line: this boundary is the escaping form composed
+after a deletion, so its image is a **subset** of the escaping form's. Whatever
+line a module gets, it is the line it would already have got by writing the same
+message with its selectors removed — a message it could always have written. A
+module can therefore reach strictly *fewer* distinct log lines than before, so
+anything it could not forge under an injective map it still cannot.
+`TestStrippingIsLossyAndForgesNothing` is that argument as assertions, including
+the attribution half read back through the JSON handler and decoded, because a
+substring search for `source=host` also matches a module's own message and that is
+exactly the confusion at issue.
+
+**`prev` is gone, and with it the question it forced.** D270's predicate decided a
+selector by what preceded it, so sanitizeLogMessage carried the previous decoded
+rune through the loop and owed a statement about what that rune is when the input
+is not valid UTF-8 — `for range` yields U+FFFD, and so does the WriteRune that
+follows, so the value was the character the reader would see rather than the byte
+that arrived. Stripping decides a code point on its own, so `escapeLogRune` keeps
+its one-argument signature, the loop carries no state, and that note has nothing
+left to be about.
+
+**What this decision deletes from the tree that was never in it.** Under stripping
+there is nothing to look up, so attempt 2's vendored
+`assets/unicode/emoji-variation-sequences.txt`, its `EMOJIVS_*` pins,
+`scripts/get-emoji-variation-sequences.sh`, `internal/addon/emojibasegen` and
+`emojibase_gen.go` are surplus — superseded by this decision rather than merely
+unused. None of it is carried onto `phase-4`.
+
+**Two absolute claims were corrected rather than restated.** `docs/SECURITY.md`
+and `CHANGELOG.md` shipped *cannot arrange bytes in an operator's log to be
+overlooked*; the rejected second attempt replaced that with *cannot put invisible
+bytes in an operator's log*, which never shipped and is worse. Both are false and
+cheap to falsify: 17 `Zs` code points survive as
+themselves and `U+00A0` is pixel-identical to a space; 13 `Cf` survive by the
+`Prepended_Concatenation_Mark` allowlist, two of which the same cell names by hand
+three sentences later; and `U+00C5` and `U+212B` are canonically equivalent and
+render identically. No escaping rule that keeps text can support an absolute
+claim. What both documents now claim is about **default-ignorable** characters,
+and a test walks the whole range asserting it.
+
+
+## 2026-08-21 — M62, the seventh term: a derivation is not the terms that change an answer
+
+**D284, the correction to [D283](#2026-08-21--m62-strip-the-variation-selectors-there-is-no-base-set).**
+D283's *The finding is unchanged* paragraph wrote the real set as
+`Other_DI ∪ Cf ∪ Variation_Selector − White_Space − FFF9..FFFB − PCM` and put its
+size at 4190 members. Both were wrong. Unicode 15.0's `DerivedCoreProperties.txt`
+generates `Default_Ignorable_Code_Point` from **seven** terms, and the one nobody
+wrote is the subtraction of `13430..13440`, the Egyptian hieroglyph format
+characters. The property has **4174** members, which is also the total printed at the
+foot of its own section in that file.
+
+**D283's own sentence is corrected in place rather than left standing wrong**, and
+that is a deliberate exception with a narrow reason: D283 and this entry are both new
+in the same commit, so nothing that was ever published said 4190. Append-only exists
+so that a reader of committed history is never shown a decision rewritten under them;
+it does not oblige a commit to ship two entries that contradict each other on their
+first line. What D283 records is the *decision* — strip the selectors, no base set —
+and that is untouched. What this entry records is the mistake and the rule it
+produced, which is why it is still a numbered entry and not an edit.
+
+**The code was right and the sentence was wrong, which is the whole of the defect.**
+The sixteen code points `defaultIgnorable` over-counted are `U+13430`–`U+1343F`, all
+category `Cf`, none of them graphic, so `escapeLogRune`'s `!unicode.IsGraphic`
+fallback escaped every one of them regardless — and a case in
+`TestSanitizeLogMessageNeutralizesEveryClassOfByte` already named `U+13430` by hand. No payload
+claim moves, the graphic count of 267 does not move, and neither does the 268 that
+three documents print. What moves is a number stated in eight places.
+
+**It is F285's own shape, a level further in than the function written to end it.**
+F285 was *a property whose name begins with `Other_` is incomplete by construction*.
+This is *a derivation trimmed to the terms that change an answer is not the
+property*, and `defaultIgnorable`'s own comment had already made that argument: it
+says the two behaviourally-inert subtractions are written in **because** the
+function's claim is that it *is* the property rather than that it happens to agree
+with one. A third inert subtraction was then left out of the same expression.
+
+**The remedy is not the term. It is that the counts stop being floors.**
+
+- `TestNoDefaultIgnorableCharacterReachesALogLine` asserted `derived < 4190`. That is
+  an enforcing test containing a wrong constant and passing, because a floor cannot
+  tell a number that is wrong from a number a Unicode revision moved. The floor was
+  chosen deliberately, to absorb toolchain upgrades; what it actually absorbed was
+  the defect.
+- Every count the code or a document states is now an **equality**: 4174 members and
+  267 graphic, the residue property's 3776 and 7, the 268 graphic-yet-invisible, the
+  260 variation selectors, the thirteen prepended concatenation marks, the seventeen
+  `Zs` that survive as themselves, and the derivation's gain over the residue — 398
+  members, of which 138 are `Cf` and 260 are the selectors.
+- The cost is real and is accepted: a Go toolchain built against a newer Unicode
+  fails this test rather than absorbing the change. The test names
+  `unicode.Version`, says it measured 15.0.0, and lists the seven files to move. A
+  toolchain bump is a thing somebody does on purpose; a wrong constant is not.
+
+**A number and a floor is not a claim.** The rule this milestone has now been
+corrected under twice — *if a sentence states a number, a named test asserts that
+exact number* — was already written down after the fourth review, and was satisfied
+in form by an assertion that could not have failed on the value it was guarding.
+The rule is therefore stated the stricter way: the assertion is an equality, or the
+sentence does not state the number.
+
+**Two smaller corrections ride with it, both about the same paragraph's history.**
+
+- `CHANGELOG.md` attributed the block-element progress bar to the **second** rejected
+  attempt. It broke the **first**, which keyed its exemption on category `So`. It
+  could not have broken the second: `U+2588` and `U+2591` carry no registered emoji
+  variation sequence, so the registration-keyed exemption escaped them. Every other
+  record had the attribution right, so this was one sentence out of step rather than
+  a misunderstanding.
+- `CHANGELOG.md` and `Plan.md` called the 260 selectors *the difference* between the
+  residue property and the derived one. The difference is 398. 260 is the difference
+  a reader could ever have seen — the graphic part of it — and the other 138 are
+  format characters that were escaped by either property. Both sentences now say
+  which of the two they mean, and both numbers are asserted.
+
+
+---
+
+## 2026-08-21 — M62, invisible is not a property, so the claim narrows and the residue is stated
+
+**D285, owner-answered, ending F285's fourth round.** Four workers built a denylist
+over invisible characters and four reviewers defeated them, each time with a code
+point the current property missed. The owner's answer is not a fifth predicate. It is
+that the claim narrows to exactly what is enforced, the residual class is stated, and
+the channel is filed as a row.
+
+**The conclusion is categorical, and it is why a fifth attempt was refused.**
+*Invisible* is not a Unicode property. `Other_Default_Ignorable_Code_Point` is the
+*residue* of one. `Default_Ignorable_Code_Point` is a rendering *default*, not the
+statement *renders as nothing*. And the survivors that carry bits are combining marks
+the UCD annotates as **"shape shown is arbitrary and is not visibly rendered"** —
+`U+2D7F`, `U+17D2`, `U+10A3F`, `U+1107F`, `U+11A47`, `U+11A99`, `U+11F42` and
+`U+16FE4`. Three properties in a row were chosen because the name resembled the
+threat. **The eight are not added to a list**, and the owner declined that
+explicitly: it is the hand-written enumeration D242 replaced, one more level in, and
+it would be behind the next Unicode revision the day it was written.
+
+**The residue is acceptable because of a second property, and that is the load-bearing
+half of this entry.** An add-on may *post* to the log and may not *read* it, so a
+value accidentally logged cannot be retrieved by the module that wants it. A covert
+channel needs both ends. The write end is open on purpose — `log` is ungated, and a
+module that wants a secret in an operator's log writes one in plain text — so the
+whole of the defence has always been the read end, and the read end was closed by
+accident rather than by assertion. It is now four facts, checked before this was
+written: `log` takes a level and a message and declares no out-parameter; no function
+in `abi.Functions` returns log content; a guest gets no WASI preopen and its stdout
+and stderr are discarded; and an add-on's storage is a Postgres schema of its own that
+the log does not live in.
+
+`TestAnAddonPostsToTheLogAndCannotReadItBack` is that property as assertions, and its
+shape is deliberate. It posts a secret through `log`, clears the bytes it put in the
+guest's memory to do so, then drives **every** function the ABI declares — from a
+state holding every grant, past the dispatch that would otherwise refuse most of them
+— and sweeps each declared out-buffer and the whole of the guest's linear memory. A
+function added later that hands log content back fails it without anybody
+remembering the rule. Verified red four ways: an out-parameter added to `log`, and
+`abi_version` rewired to return the last line logged, each failing the limb written
+for it.
+
+**So the residue pays out only if an operator hands the log to the add-on's author**,
+which is a decision a person makes and not a capability this host grants. That is the
+sentence the documents now carry beside the concession, because a stated residue with
+nothing bounding it is a disclosure, not a decision. The row is
+[F310](deferred-findings.md#open), open, and what it watches for is any milestone that
+gives a module a way back into log content.
+
+**The 268 claim was false in the ordinary way, and its test could not have said so.**
+`TestNoDefaultIgnorableCharacterReachesALogLine` computed the count from the
+boundary's own behaviour and then asserted the documents' number against that count,
+so a graphic code point the boundary let through was invisible to the test **by
+construction** — D284's rule broken in form one entry after it was written. The fix is
+the shape and not the number: the expectation is now built from Unicode's side (the
+graphic members of the derived property, plus `U+2800`, which `escapedRune` names for
+a reason of its own), the boundary's behaviour is asserted **equal** to it for every
+code point in both directions, and 268 is the size of that set rather than a tally of
+what the code did. The prose moves with it — *the 268 graphic code points the host
+treats as invisible*, never *that render as nothing*.
+
+**A boundary is not a function, and this milestone had been claiming one for the
+other.** `docs/SECURITY.md` says a *module* cannot put a default-ignorable character
+in front of a reader; `sanitizeLogMessage` is the boundary for `log` and for nothing
+else. `Manifest.validate` embeds every value it refuses with `%q`, and `%q` escapes on
+`unicode.IsPrint`, which is true of every mark and every letter — measured, `U+3164
+HANGUL FILLER`, `U+FE0F`, `U+E0100` and `U+2D7F` all pass through it unchanged — while
+`migrationFileRe` admits every code point but a newline. That text reached an operator
+twice: logged as a load failure, and printed as the fatal message a `required` add-on
+produces. This is not residue. It is a path with no boundary on it.
+
+*(Corrected before this entry landed, by [D286](#2026-08-21--m62-the-boundary-is-a-handler-because-a-list-of-log-sites-is-a-claim-about-code-nobody-has-written) — see the entry itself, which is
+where the correction lives. It reached an operator **four** times, not twice: the two
+here, plus `store.MigrateAddon`'s success-path line and a per-request instantiation
+failure. The list below is what D286 replaced with a `slog.Handler`, and it is kept as
+written because the diagnosis above is the part that stands. Both entries are new in
+one commit, so this is the D284 exception and not an append-only breach.)*
+
+The remedy is one escaping applied **once**, where module-supplied text is first put
+into a sentence: a `LoadError`'s `Err` at construction, its `Addon` where `Error()`
+formats it, and an slog attribute at the call for a refused response, a failed
+statement and a trapped guest handler. Once, because the escaping doubles a backslash
+and a second application would double it again — which is also why the composition
+with `%q` is stated rather than hidden: a directory name carrying a backslash reads as
+four, and that is the safe direction to be odd in. `errors.Is` is preserved through
+`Unwrap`, so which status a guest gets does not depend on any of this.
+
+**Three smaller things the fourth reviewer was owed, and they are the same rule each
+time.** 6634 is the size of category `So` and is now pinned as an equality; 6304 is
+marked **attributed rather than pinned**, because it cannot be computed from the
+tables Go ships — it was measured against the UCD's `emoji-variation-sequences.txt` on
+the parked branch — and D284's rule is satisfied by saying which of the two a number
+is, not by pretending every number can be a test. The toolchain guard named seven
+files and omitted `abi/functions.go` and the two generated copies that each print 268;
+it now names the source and the `make abi-sdk` target that carries it. And a sentence
+M61 published — that a flag sequence survives, being made of ordinary graphic code
+points — is true of a national flag and false of a **subdivision** one, which is
+`U+1F3F4` followed by tag characters from `U+E0020`–`U+E007F`; those are `Cf`, so
+`🏴󠁧󠁢󠁳󠁣󠁴󠁿` arrives as the black flag and six escapes. All three sequences are pinned.
+
+**D283 was corrected in place rather than superseded, and that is a deliberate
+exception.** D283 and D284 are both new in this commit, and D283 stated the six-term
+derivation and 4190 which D284 corrects a hundred lines below it. Append-only exists so
+that a reader of *committed* history is never shown a decision rewritten under them; it
+does not oblige one commit to ship two entries that contradict each other on their
+first line. D283's decision — strip the selectors, no base set — is untouched, D284
+still records the mistake and the rule it produced, and D283 now says it was corrected
+before it landed.
+
+**What this does not do.** It does not make the log unreadable to an attacker who
+already has it; it does not redact secrets, which is a separate request the owner sent
+to the queue; and it does not claim the eight are the last of the residue. It claims
+the property the code computes, states what that leaves out, and asserts the thing
+that makes what it leaves out survivable.
+
+
+---
+
+## 2026-08-21 — M62, the boundary is a handler, because a list of log sites is a claim about code nobody has written
+
+**D286.** Five findings against M62's fifth attempt, and three of them are one
+defect. This entry is the answer to that one and to the two that stand alone.
+
+**Two more sites, and the enumeration was the problem rather than the sites.**
+The round before this fixed the manifest-validation path and wrote down three
+places module-supplied text reached an operator. The list was wrong. It missed
+`store.MigrateAddon`'s `slog.String("name", r.Source.Path)`, which fires when a
+migration **applies** — the success path, the one that runs when nothing is wrong —
+carrying a filename `migrationFileRe` admits every code point but a newline into,
+from a package that cannot import the neutralizer because the dependency runs the
+other way. And it missed the per-request instantiation failure, where the trap
+twelve lines below it was neutralized and this one was not, although both carry
+wazero text built out of the module's own name section. That one is deterministically
+reachable: the per-request `hostState` is registered **before** `InstantiateModule`
+and carries the request, so a guest can read that it is answering one and trap only
+there — loading clean, failing per visit.
+
+Two rounds, two wrong lists, both written carefully. So the shape was wrong.
+
+**The property is now structural.** `Open` wraps the logger it is given in a
+`slog.Handler` that neutralizes the message and every attribute — string, error,
+Stringer, string slice, group, `With` attribute, group name, resolved `LogValuer` —
+and every logger this subsystem uses is derived from that one, including the one
+`openStorage` hands to `internal/store`. A log call added tomorrow in a file nobody
+has thought of is neutralized without its author knowing the boundary exists. There
+is no site to miss, so there is no list to get wrong. `Route` gets the mirror of it:
+one wrapper at the exit rather than a `neutralize` at each of its return statements,
+so which of its failures carried the module's text stopped being a question anybody
+has to answer correctly. `Unwrap` is preserved at both, so `errors.Is` decides what
+it decided.
+
+**Escaping exactly once, kept by a marker and not by discipline.** The escaping
+doubles a backslash, so applying it twice is lossy. Every call site now logs the
+**raw** value and lets the handler escape it; the two types whose text must already
+be neutralized because they are *also* printed outside a log — `moduleErr` and
+`LoadError`, which is what `cmd/linkctrl` prints fatally — say so by implementing a
+marker interface, and the handler then only folds their newlines and bounds them. A
+type that carries neutralized text and forgets the marker is escaped twice: a line
+that reads worse, never a line carrying what it should not. That is the direction to
+be wrong in, and it is why the marker means *already safe* rather than *needs work*.
+
+**Neutralization and length-bounding were one function and that cost M60 a
+behaviour.** `neutralize` was `sanitizeLogMessage` under another name, so the 4 KiB
+cap that belongs to a log line was imported onto the path that prints why a
+`required` add-on refused to load. `Manifest.Validate` aggregates with `errors.Join`
+precisely so that somebody publishing an add-on for the first time sees every
+problem at once; past 4 KiB that list was cut with nothing to say it had been. The
+two are separate now — `escapeModuleText` takes the bound as a parameter and
+`moduleText` passes none — and the aggregate's own newlines survive to the operator,
+because `moduleErr.Error()` descends into a join and neutralizes each branch rather
+than escaping the whole. A join is told from `fmt.Errorf`'s two-`%w` form by
+**shape** and not by type: `errors.Join`'s text is exactly its branches separated by
+newlines, and anything else is a sentence the host wrote and is escaped as a leaf.
+The same error still arrives in a log as one bounded record, marked as cut. Two
+destinations, two treatments, one escaping.
+
+**The read-end test's behaviour limb was near-vacuous and its docstring said the
+opposite.** It built its state as `newHostState(Manifest{Name: "reader"}, Grants{},
+nil, nil, …)` and drove every function against it, so `config_get` answered Denied on
+an empty settings map, `storage_query` answered Internal on a nil storage, and both
+request functions answered NotFound on a nil request. Of five live out-parameters
+exactly one was ever written — four buffers of filler swept and one host write — and
+the guard could not see it, because it counted out-parameters **declared** rather
+than bytes written. The docstring's *"a function added later that hands log content
+back fails this"* was false for any function shaped like every gated one in the file.
+The state now carries a declared setting with a default, a request and a session;
+each input parameter is given an argument by the ABI's own name for it, so a function
+added later that reuses a name is driven correctly and one that introduces a name
+gets a placeholder, refuses, and fails the count; and the count is over buffers whose
+filler actually changed. The expectation is derived from `abi.Functions` — every live
+out-parameter except the ones behind the storage permission, which a unit test has no
+database for — and those two are asserted to answer `StatusInternal` so that the
+reason they wrote nothing is named rather than assumed.
+
+**Two of the read-end claim's four facts were true by omission.** *A guest gets no
+preopened file* and *its stdout and stderr are discarded* rested entirely on wazero's
+`NewModuleConfig()` defaults at the two instantiation sites; nothing failed if a
+later milestone added `WithFSConfig` or `WithStdout`. They are asserted from inside a
+guest now, because the config is what would change: the `undeclared` fixture tries to
+list `/`, to open a host file and to open its own manifest, and panics on any that
+succeeds — which fails instantiation, so a host that grew a filesystem cannot load it
+at all. Where a stream goes is not something a guest can see, so that half is the
+host's: the fixture writes a marker to each, and the test swaps this process's own
+`os.Stdout` and `os.Stderr` for pipes across the load, so `WithStdout(os.Stdout)`
+fails as readily as `WithStdout(logWriter)`.
+
+**What this does not do.** It does not neutralize what other packages log through
+their own loggers — `internal/httpx` logs an error it got from `Route`, and what
+makes that safe is `Route`'s exit and not this handler. It does not stop a module
+writing a secret in plain text, which `log` being ungated permits by design and D285
+already concedes. And it does not make the enumeration in `docs/SECURITY.md` and
+`CHANGELOG.md` longer: those now state the property instead, because an enumeration
+that has been wrong in two consecutive rounds is not made right by a third entry.

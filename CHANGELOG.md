@@ -268,8 +268,73 @@ migrations run at boot.
   punctuation mark, symbol and space, in every script, with one exception — and
   everything else appears in the line as its escape: a newline, a control character,
   an ANSI escape, every format and bidirectional control, every unassigned or
-  private-use code point, and the few characters that are graphic by category and
-  render as nothing. The exception is the **backslash**, which is doubled, because
+  private-use code point, and the 268 graphic code points the host treats as
+  invisible — 267 of them Unicode's default-ignorable characters, which the
+  host works out from Unicode's own definition rather than asking for the one table
+  Go ships under a nearly identical name, and the 268th `U+2800 BRAILLE PATTERN
+  BLANK`, which that definition does not carry and which is escaped as the one blank
+  nothing treats as whitespace.
+
+  **That is a published property and not every character that renders as nothing**,
+  and the difference is stated because Unicode publishes nothing for the second.
+  Eight combining marks it annotates as *"shape shown is arbitrary and is not visibly
+  rendered"* — `U+2D7F`, `U+17D2`, `U+10A3F`, `U+1107F`, `U+11A47`, `U+11A99`,
+  `U+11F42` and `U+16FE4` — reach a line as themselves, as do seventeen space
+  characters and thirteen prepended concatenation marks. **What bounds that is that
+  the log is write-only to a module**: an add-on may post a line to it and has no way
+  to read one back — `log` returns a status and no bytes, no other function in the ABI
+  hands log content back, a module gets no preopened file and its output streams are
+  discarded, and its storage is a schema of its own that the log does not live in. So
+  what survives is something an operator can see, and it becomes a channel only if an
+  operator sends the log to the add-on's author. All four are asserted, and the two
+  about files and streams are asserted from inside a module rather than by reading the
+  host's own settings, since the settings are what a later change would move.
+
+  **The neutralization is the module's boundary and not one function's**, which is a
+  correction to what the previous entry implied. A manifest that fails validation is
+  reported with the value it failed on, and Go's `%q` leaves every mark and every
+  letter alone, so a hostile name, version or migration filename reached an operator's
+  log and an instance's fatal message untouched.
+
+  **It is enforced by the logger and not by a rule about which lines to write
+  carefully.** The host wraps the logger it is given, and everything in the add-on
+  subsystem writes through one derived from it — including the line that names a
+  migration as it is applied, which is written by a different package on the path that
+  runs when nothing is wrong. Two earlier rounds fixed the places they could find and
+  wrote the list down, and the list was wrong both times; there is no list now,
+  because there is no place that can be missed. An error handed back to the page layer
+  is neutralized the same way, once, where it leaves the subsystem rather than at each
+  of the points one is built.
+
+  **An operator's manifest error is not a log line and no longer carries a log
+  line's bound.** The host reports every problem with a manifest at once, so somebody
+  publishing an add-on for the first time fixes them in a single pass instead of one
+  per restart. The escaping used to bring the log's 4 KiB limit along with it, cutting
+  that list with nothing to say it had been cut and running the whole of it onto one
+  line. The escaping and the limit are separate things now: the list arrives whole and
+  line by line, while the same failure still occupies exactly one bounded record in
+  the log.
+
+  The residue property Go ships is the leftovers of that definition and not the
+  definition, and it falls 398 code points short of it. The 260 of those that a
+  reader could ever have seen are the **variation selectors**: invisible marks that
+  ride on the character before them, which a module could have used to carry text out
+  of a log line that read as ordinary. The other 138 are format characters, which were
+  escaped either way.
+
+  **Those 260 are deleted rather than escaped, and they are the only thing this
+  boundary removes.** A selector has nothing of its own to show a reader, so spelling
+  it out would put `\ufe0f` through the middle of every emoji anybody logs and buy
+  nothing; deleting it costs nothing either. `❤️` arrives as `❤` and is still a heart,
+  `😀` is untouched because it carries no selector to lose, and a selector hung off a
+  letter, a space or a block-drawing character takes nothing with it when it goes.
+  There is no exemption for the legitimate emoji case: whether a selector is visible
+  at all depends on the font in front of the reader, and Unicode publishes no property
+  that says which characters those are — two narrower rules were written and both were
+  broken before release: the **first** by a progress bar drawn from `█` and `░` that
+  carried a secret through byte for byte, and the second by a channel built out of the
+  very emoji Unicode registers, whose selector a renderer is free to ignore. The
+  exception is the **backslash**, which is doubled, because
   it introduces every escape the host writes: without that, a module writing `\`
   and `n` produced the line a real newline produced, and the mark on a truncated
   line was something a message could end with itself. **The carve-outs run the
@@ -279,10 +344,16 @@ migrations run at boot.
   against a newer revision carries what it added. Stated as what is *permitted*
   rather than as a list of what is caught, because a list of invisible characters is
   behind the next Unicode revision the day it is written. So an add-on cannot forge
-  a record that reads as this product's own, cannot arrange bytes in an operator's
-  log to be overlooked, and cannot make a complete message read as a truncated one.
-  Nothing is refused for it — a module whose message needed neutralizing still gets
-  to speak, which is the whole reason the log costs nothing.
+  a record that reads as this product's own, cannot make a complete message read as a
+  truncated one, and cannot put a character that renders as nothing in front of a
+  reader. That last is stated narrowly on purpose: it is about characters Unicode
+  defines as ignorable, not about anything an add-on might write to mislead. A
+  no-break space still looks like a space, and two spellings of Å still look alike.
+  And writing to the log costs no permission, so an add-on that wants a secret in an
+  operator's log can simply write one — what this bounds is what a reader cannot see,
+  not what an add-on chooses to say. Nothing is refused for it — a module whose
+  message needed neutralizing still gets to speak, which is the whole reason the log
+  costs nothing.
 
   **The refusal comes before the availability status.** A module that declared
   nothing is refused for want of a declaration, not told that the host has not

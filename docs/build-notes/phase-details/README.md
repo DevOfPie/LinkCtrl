@@ -40,7 +40,7 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 | [M59](m59.md) | Process debt: the gates that were not watching | — | done |
 | [M60](m60.md) | The host: a module loads, or is refused | M59 *(ordering)* | done |
 | [M61](m61.md) | The ABI: what an add-on may import, written down and versioned | M60 | done |
-| [M62](m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | in progress (reopened) |
+| [M62](m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | done |
 | [M63](m63.md) | An add-on's tables: a schema of its own, migrated by the host | M62 | done |
 | [M64](m64.md) | An add-on reaches the page: routes, templates, config | M62 · M63 *(ordering)* | in progress (reopened) |
 | [M64.9](m64.9.md) | Mid-phase adversarial review | M59–M64 | in progress |

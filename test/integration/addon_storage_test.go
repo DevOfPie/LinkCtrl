@@ -415,6 +415,73 @@ func TestTheStorageFunctionsAreLive(t *testing.T) {
 	}
 }
 
+// F-1, at the site itself: a migration filename reaches an operator's log on the
+// **success** path, and the filename is the module's.
+//
+// `store.MigrateAddon` logs `slog.String("name", r.Source.Path)` for every migration
+// it applies, `migrationFileRe` admits every code point but a newline, and
+// `internal/store` cannot import the neutralizer because `internal/addon` imports
+// `internal/store`. What closes it is the logger the host hands over — D286 wraps it
+// in `Open`, so every line any package writes with it is neutralized without that
+// package knowing. This drives the real function against a real database, because
+// the unit test that drives the same shape through `h.log` cannot reach goose.
+//
+// The success path is the one that matters: three log sites were enumerated in five
+// documents last round and this was not one of them, precisely because it is the
+// line that fires when nothing is wrong.
+func TestAMigrationFilenameReachesAnOperatorNeutralized(t *testing.T) {
+	name := addonName(t)
+	pool, dsn, dir := newAddonDB(t, name)
+
+	// A right-to-left override, a zero-width space and an ANSI erase, inside a name
+	// the manifest's own pattern accepts. What a reader would otherwise see is a line
+	// that says a migration called `everything is fine` was applied.
+	const hostile = "00001_\u202eeverything is fine\u200b\x1b[2KSECRET=hunter2.sql"
+	code := addonFixture(t, "storage")
+	installAddon(t, dir, name, code, []string{abi.PermissionStorage},
+		map[string]string{hostile: ownSchemaMigration})
+
+	h, _, sink, err := openAddonHost(t, dir, pool, dsn)
+	if err != nil {
+		t.Fatalf("the add-on did not load: %v\n%s", err, sink.String())
+	}
+	if h.Len() != 1 {
+		t.Fatalf("loaded %d add-ons, want 1", h.Len())
+	}
+	logs := sink.String()
+	if !strings.Contains(logs, "add-on migration applied") {
+		t.Fatalf("no migration was applied, so the line under test never happened\n%s", logs)
+	}
+	for what, r := range map[string]rune{
+		"a right-to-left override": '\u202e',
+		"a zero-width space":       '\u200b',
+		"an ANSI escape":           '\x1b',
+	} {
+		if strings.ContainsRune(logs, r) {
+			t.Errorf("%s in a migration filename reached an operator's log as itself", what)
+		}
+	}
+	// **The ANSI escape is the discriminating one and the others are not**, which is
+	// worth saying rather than leaving to be rediscovered: slog's text handler quotes
+	// with strconv, which spells a `Cf` code point `\u202e` on its own — so the two
+	// invisible characters look escaped whether or not this boundary ran. strconv
+	// spells `U+001B` as `\x1b`; only the host's escaping spells it `\u001b`. Both
+	// are asserted, the second as an absence, so what this test measures is this
+	// boundary and not the handler underneath it.
+	if !strings.Contains(logs, `\u001b`) {
+		t.Errorf("the filename did not go through the host's escaping\n%s", logs)
+	}
+	if strings.Contains(logs, `\x1b`) {
+		t.Errorf("the ANSI escape reached the log in strconv's spelling, which means the "+
+			"handler quoted it and the host did not escape it\n%s", logs)
+	}
+	for _, want := range []string{"u202e", "u200b"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("the filename did not arrive escaped; want %s in the log\n%s", want, logs)
+		}
+	}
+}
+
 // m63.md's *versioned like the host's own*: the migration state lives in a goose
 // table inside the add-on's schema, so loading the same module twice applies
 // nothing the second time.
