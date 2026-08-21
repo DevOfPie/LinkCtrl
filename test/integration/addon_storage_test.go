@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1503,9 +1504,21 @@ func TestATempRelationIsRefusedAndSeenAnyway(t *testing.T) {
 // resident against 31 MB for the same query at the 4 MB default, which spills to
 // disk instead.
 //
-// The repair is one statement — `ALTER ROLE … RESET ALL` before the search-path pin
-// — and it is the only narrowing in this family conditional on neither superuser
-// nor database ownership. D253.
+// The repair is a reset before the search-path pin, and it is the only narrowing in
+// this family conditional on neither superuser nor database ownership. D253.
+//
+// **`ALTER ROLE … RESET ALL` was not the whole of it, and this test could not have
+// said so.** It set one variant and asked `pg_roles`, which holds the
+// `pg_db_role_setting` rows whose `setdatabase` is 0 and no others — so the
+// `IN DATABASE` row the add-on can write beside it was outside the catalogue this
+// test reads, and it passed for the whole life of the defect. F288. It now sets
+// three variants and reads `pg_db_role_setting` itself, which is the only
+// catalogue that can be asked *is there anything left*.
+//
+// The third variant is the one that decides the repair's shape: `IN DATABASE
+// postgres` is accepted by a role that has no business in that database, so a
+// second reset scoped to `current_database()` is evaded by naming any other name.
+// D279.
 //
 // **Both halves are asserted here and the order matters**: that the role can still
 // set the parameter, because a refusal would make the rest of the test prove
@@ -1527,13 +1540,28 @@ func TestARoleSettingTheAddonMadeDoesNotSurviveTheNextLoad(t *testing.T) {
 	}
 	t.Cleanup(confined.Close)
 
-	if err := confined.Exec(ctx, `ALTER ROLE CURRENT_USER SET work_mem = '4GB'`, nil); err != nil {
-		t.Fatalf("the confined role could not set a parameter on itself, so this "+
-			"test's subject does not exist: %v", err)
+	own := dbNameOf(t, pool)
+	// Three scopes, and the third is not this add-on's database. `postgres` is a
+	// database the confined role has no reason to reach and need not be able to
+	// reach: `IN DATABASE` takes a name, not a connection.
+	for _, stmt := range []string{
+		`ALTER ROLE CURRENT_USER SET work_mem = '4GB'`,
+		`ALTER ROLE CURRENT_USER IN DATABASE ` + own + ` SET work_mem = '4GB'`,
+		`ALTER ROLE CURRENT_USER IN DATABASE postgres SET work_mem = '2GB'`,
+	} {
+		if err := confined.Exec(ctx, stmt, nil); err != nil {
+			t.Fatalf("the confined role could not run %q, so this test's subject "+
+				"does not exist: %v", stmt, err)
+		}
 	}
-	if got := roleConfig(t, pool, name); !slices.Contains(got, "work_mem=4GB") {
-		t.Fatalf("rolconfig is %v, want the add-on's own setting in it — without "+
-			"which the reset below proves nothing", got)
+	before := roleSettings(t, pool, name)
+	for _, where := range []string{"", own, "postgres"} {
+		if !slices.ContainsFunc(before[where], func(e string) bool {
+			return strings.HasPrefix(e, "work_mem=")
+		}) {
+			t.Fatalf("pg_db_role_setting holds %v, want a work_mem parked in %q — "+
+				"without which the reset below proves nothing", before, where)
+		}
 	}
 
 	// The next load, which is the only thing that clears it: nothing on the request
@@ -1541,9 +1569,15 @@ func TestARoleSettingTheAddonMadeDoesNotSurviveTheNextLoad(t *testing.T) {
 	if _, err := store.EnsureAddonSchema(ctx, pool, name, nil); err != nil {
 		t.Fatalf("re-running the load: %v", err)
 	}
-	want := []string{"search_path=" + store.AddonSchema(name)}
-	if got := roleConfig(t, pool, name); !slices.Equal(got, want) {
-		t.Fatalf("rolconfig is %v after the load, want exactly %v", got, want)
+	want := map[string][]string{"": {"search_path=" + store.AddonSchema(name)}}
+	if got := roleSettings(t, pool, name); !maps.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("pg_db_role_setting holds %v after the load, want exactly %v", got, want)
+	}
+	// The catalogue is the claim; this is the consequence, asked in the database the
+	// add-on does not run in and where no connection of this test's will ever look
+	// again.
+	if got := roleSettings(t, pool, name)["postgres"]; len(got) != 0 {
+		t.Errorf("the load left %v parked in another database", got)
 	}
 
 	// A pool of its own, so these are new backends reading the role's defaults
@@ -1577,17 +1611,176 @@ func TestARoleSettingTheAddonMadeDoesNotSurviveTheNextLoad(t *testing.T) {
 	}
 }
 
-// roleConfig is what `rolconfig` holds for an add-on's role: the settings the role
-// carries into every connection made as it.
-func roleConfig(t *testing.T, pool *pgxpool.Pool, name string) []string {
+// roleSettings is every session default an add-on's role carries, keyed by the
+// database it applies in — "" for the cluster-wide row.
+//
+// **It reads `pg_db_role_setting` and not `pg_roles`**, which is the difference
+// between this helper and the one it replaces. `pg_roles.rolconfig` is that
+// catalogue filtered to `setdatabase = 0`, so a verifier built on it cannot see an
+// `IN DATABASE` row however many assertions are stacked on top of it — F288's
+// second half, and the reason the test above passed throughout the defect's life.
+func roleSettings(t *testing.T, pool *pgxpool.Pool, name string) map[string][]string {
 	t.Helper()
-	var config []string
-	if err := pool.QueryRow(context.Background(),
-		`SELECT coalesce(rolconfig, '{}') FROM pg_roles WHERE rolname = $1`,
-		store.AddonSchema(name)).Scan(&config); err != nil {
+	rows, err := pool.Query(context.Background(), `
+		SELECT coalesce(d.datname, ''), s.setconfig
+		  FROM pg_db_role_setting s
+		  LEFT JOIN pg_database d ON d.oid = s.setdatabase
+		 WHERE s.setrole = (SELECT oid FROM pg_roles WHERE rolname = $1)`,
+		store.AddonSchema(name))
+	if err != nil {
 		t.Fatalf("reading %s's role settings: %v", store.AddonSchema(name), err)
 	}
-	return config
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var db string
+		var config []string
+		if err := rows.Scan(&db, &config); err != nil {
+			t.Fatalf("reading %s's role settings: %v", store.AddonSchema(name), err)
+		}
+		out[db] = config
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reading %s's role settings: %v", store.AddonSchema(name), err)
+	}
+	return out
+}
+
+// The post-condition on a setting, which is the half of F288's answer that does not
+// depend on the reset being right.
+//
+// A setting is not an object, so the five ownership and grant branches of
+// [store.AddonConfinementViolations] cannot see one however carefully they
+// enumerate — the same shape of blindness that let the defect ship, one catalogue
+// over. The sixth branch reads `pg_db_role_setting`, and what it must do is report
+// every scope while permitting exactly the row the load itself writes.
+//
+// Both directions are asserted, because a check that reported the pin would refuse
+// every add-on on every boot and a check that permitted a parked row would report
+// nothing ever. Then the load, which repairs what the report named: in ordinary
+// operation this branch is silent, and it is a regression detector rather than a
+// gate the add-on trips today. D279.
+func TestSettingsParkedInAnyDatabaseAreReportedByTheConfinementCheck(t *testing.T) {
+	name := addonName(t)
+	pool, dsn, dir := newAddonDB(t, name)
+	ctx := context.Background()
+
+	installAddon(t, dir, name, addonFixture(t, "minimal"), []string{abi.PermissionStorage},
+		map[string]string{"00001_own.sql": "-- +goose Up\nCREATE TABLE mine (x int);\n"})
+	if _, _, sink, err := openAddonHost(t, dir, pool, dsn); err != nil {
+		t.Fatalf("the add-on did not load: %v\n%s", err, sink.String())
+	}
+	confined, err := store.OpenAddonDB(ctx, pool, dsn, name, mustResetPassword(t, pool, name), nil)
+	if err != nil {
+		t.Fatalf("opening the add-on's own connection: %v", err)
+	}
+	t.Cleanup(confined.Close)
+
+	// The pin is in place and nothing else is, so the empty answer below is a claim
+	// about the check rather than about an empty catalogue.
+	violations, err := store.AddonConfinementViolations(ctx, pool, name)
+	if err != nil {
+		t.Fatalf("checking the confinement: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("a freshly loaded add-on is already in violation: %v", violations)
+	}
+
+	own := dbNameOf(t, pool)
+	for _, stmt := range []string{
+		`ALTER ROLE CURRENT_USER SET statement_timeout = '1h'`,
+		`ALTER ROLE CURRENT_USER IN DATABASE ` + own + ` SET work_mem = '4GB'`,
+		`ALTER ROLE CURRENT_USER IN DATABASE postgres SET work_mem = '2GB'`,
+	} {
+		if err := confined.Exec(ctx, stmt, nil); err != nil {
+			t.Fatalf("the confined role could not run %q: %v", stmt, err)
+		}
+	}
+
+	violations, err = store.AddonConfinementViolations(ctx, pool, name)
+	if err != nil {
+		t.Fatalf("checking the confinement: %v", err)
+	}
+	want := []string{
+		"it has parked statement_timeout in every database",
+		"it has parked work_mem in database " + own,
+		"it has parked work_mem in database postgres",
+	}
+	slices.Sort(want)
+	if got := slices.Clone(violations); !slices.Equal(got, want) {
+		t.Fatalf("the post-condition answered %v, want %v", got, want)
+	}
+
+	// And the load repairs every one of them, which is why an operator never sees
+	// this finding unless the reset has stopped working.
+	if _, _, sink, err := openAddonHost(t, dir, pool, dsn); err != nil {
+		t.Fatalf("the add-on did not load over its own parked settings: %v\n%s",
+			err, sink.String())
+	}
+	violations, err = store.AddonConfinementViolations(ctx, pool, name)
+	if err != nil {
+		t.Fatalf("checking the confinement: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("the load left %v behind", violations)
+	}
+}
+
+// The invariant the load's tolerance of a vanished database rests on.
+//
+// `resetRoleSettings` enumerates the databases a role has settings in and then
+// resets each, and a `DROP DATABASE` between the two answers `3D000` — which
+// inside the load's transaction is an abort rather than a row to skip, so it used
+// to stop a `required` add-on's instance over a drop anywhere in the cluster. The
+// repair tolerates that one code, and what makes tolerating it lossless is this:
+// the drop takes the role's rows for that database with it, so there was nothing
+// left for the statement to clear.
+//
+// The window itself has no test. It is between two statements this code issues and
+// there is no seam a test can hold it open at; what is asserted here is the fact
+// the argument rests on, and the load surviving the state that follows. D280.
+func TestDroppingADatabaseTakesTheRoleSettingsParkedInItWithIt(t *testing.T) {
+	name := addonName(t)
+	pool, dsn, _ := newAddonDB(t, name)
+	ctx := context.Background()
+
+	other := "t_" + strings.ReplaceAll(uuid.Must(uuid.NewV7()).String(), "-", "")[:20]
+	admin, err := pgxpool.New(ctx, dsnFor("postgres"))
+	if err != nil {
+		t.Fatalf("connect to maintenance database: %v", err)
+	}
+	defer admin.Close()
+	if _, err := admin.Exec(ctx, `CREATE DATABASE `+other); err != nil {
+		t.Fatalf("creating a second database: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = admin.Exec(context.Background(), `DROP DATABASE IF EXISTS `+other+` WITH (FORCE)`)
+	})
+
+	confined, err := store.OpenAddonDB(ctx, pool, dsn, name, mustResetPassword(t, pool, name), nil)
+	if err != nil {
+		t.Fatalf("opening the add-on's own connection: %v", err)
+	}
+	if err := confined.Exec(ctx,
+		`ALTER ROLE CURRENT_USER IN DATABASE `+other+` SET work_mem = '4GB'`, nil); err != nil {
+		t.Fatalf("parking a setting in the second database: %v", err)
+	}
+	confined.Close()
+	if got := roleSettings(t, pool, name)[other]; len(got) != 1 {
+		t.Fatalf("the setting did not land in %s: %v", other, roleSettings(t, pool, name))
+	}
+
+	if _, err := admin.Exec(ctx, `DROP DATABASE `+other+` WITH (FORCE)`); err != nil {
+		t.Fatalf("dropping the second database: %v", err)
+	}
+	if got := roleSettings(t, pool, name)[other]; len(got) != 0 {
+		t.Errorf("dropping %s left %v in pg_db_role_setting — the load's tolerance of "+
+			"3D000 would then be losing a row rather than skipping a no-op", other, got)
+	}
+	// And the load still runs over the state the drop left.
+	if _, err := store.EnsureAddonSchema(ctx, pool, name, nil); err != nil {
+		t.Fatalf("the load did not survive a dropped database: %v", err)
+	}
 }
 
 // --- the direction a restore breaks ------------------------------------------

@@ -439,6 +439,11 @@ file. Append a row when you append an entry.
 | [M60, what the load budget bounds is the add-on's own code](#2026-08-20--m60-what-the-load-budget-bounds-is-the-add-ons-own-code) | D273 — the correction to D272, which laid the 30 s budget over the whole load and thereby capped the **five-minute** migration-lock wait M63 chose so a replica arriving mid-migration waits rather than crash-loops. The budget is now given to the two steps that run the add-on's own code — compiling the module, and instantiating it — and to nothing else, so M63's wait stays reachable and F287's hang stays caught. What it does not bound is named rather than implied: an add-on's migration statements, which is F306 |
 | [M60, the compile step was bounded by nothing](#2026-08-20--m60-the-compile-step-was-bounded-by-nothing) | D274 — the correction to D273, which gave `CompileModule` the budget through `runGuest` and did not get it. wazero checks the context while compiling only on its **multi-worker** path; the single-worker branch it takes by default has no check in it, so a compile past the budget returned a nil error and the load finished late while four documents called it bounded. `compileWorkers` is now on the context the compile runs under, and the bound's granularity — between functions of the code section — is stated rather than rounded up |
 | [M60, one defect gets one row](#2026-08-20--m60-one-defect-gets-one-row) | D275 — F267 and F287 were the same defect filed twice and only F287 was closed, leaving an open row asserting that no milestone owns a load-time deadline; F306 was filed at this reopening against a defect F274 already carried. F267 moves to *Closed* against M60, F306 merges into F274, and F274 is rewritten off the premise it was resting on |
+| [M64.9, M62 is parked and M63 and M64 go ahead of it](#2026-08-20--m649-m62-is-parked-and-m63-and-m64-go-ahead-of-it) | D278, owner-answered: why M62 stays reopened while two milestones that name it in their dependency column land, where attempt 2's work is kept and what restoring it will cost, and why D276 and D277 are a deliberate gap |
+| [M63, the reset the load ran cleared one scope of two](#2026-08-20--m63-the-reset-the-load-ran-cleared-one-scope-of-two) | D279 — the correction to D253, whose heading says the load *clears every role-level setting* and whose fix was one statement. `ALTER ROLE … RESET ALL` clears `pg_roles.rolconfig` and not the `pg_db_role_setting` rows an add-on writes with `IN DATABASE`, which survived every load for a phase. Scoping a second reset to `current_database()` is not the repair either — `IN DATABASE` names a database rather than reaching one, accepted against `template0` — so the databases are read from the catalogue, the load's post-condition reports a row that survived, and the boot-time sweep it also built over roles no add-on claims — **which D282 then removed**, so read that entry before acting on this one |
+| [M63, a prefix is not a proof of ownership](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership) | D280 — the correction to D279's last two paragraphs, which argued that a role named `addon_*` that no module claims can only be this product's. A reviewer created `addon_reporting` by hand and the sweep took its settings, so the argument was false and the code was writing outside what this product owns. The sweep now asks the catalogue for the two facts only this product's installer writes; a failure on one role no longer stops the rest; it runs before the load loop and off the directory rather than off what loaded; a database dropped mid-reset no longer fails a load; and docs/deployment.md gains the cluster-wide blast radius it did not state |
+| [M63, a prefix is not a proof of ownership: the amendment](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership-the-amendment) | D281, owner-answered: the sweep's identification clause quoted as it stood and as amended, the hand-made role a reviewer had it wipe, the two catalogue facts an add-on can neither manufacture nor revoke, and the two answers declined — not sweeping at all, and sweeping everything and saying so |
+| [M63, detect and refuse; the sweep is removed](#2026-08-21--m63-detect-and-refuse-the-sweep-is-removed) | D282, owner-answered, reversing D281: `ClearOrphanedAddonRoleSettings` and its boot call are removed, because the `pg_auth_members` fact D281 rested on is written automatically for a `NOSUPERUSER CREATEROLE` creator — measured — so it proves nothing on the shipped privilege. The post-condition's `pg_db_role_setting` branch already refuses an add-on that parked anything, which needs no proof of ownership; the residue an uninstalled add-on leaves is inert and is stated in four documents rather than swept |
 
 ---
 
@@ -34728,3 +34733,440 @@ of what was decided when. This entry is the forwarding address.
 left was fixed by code written today. That is the point worth keeping: the
 duplicate-row failure is invisible to every gate this repository runs, and both
 halves of it were found by a reviewer reading rows against a diff.
+
+## 2026-08-20 — M64.9, M62 is parked and M63 and M64 go ahead of it
+
+Owner-answered, and it is a scheduling decision rather than a technical one, so
+it is recorded here before anything acts on it.
+
+**D278 — M62 stays reopened and unfinished while M63 and M64's reopenings land.**
+Its remedy has now produced two carve-outs and a reviewer smuggled a payload
+through both — the second at three times the first's rate, because the ten ASCII
+digits are registered keycap bases and bare `1 FE0F` renders exactly as `1`. The
+options put to the owner were: escape all 260 unconditionally (recommended, and
+previously declined at D270 on less evidence); narrow a third time to require the
+complete `base FE0F 20E3` keycap sequence; accept the residue and state it
+truthfully; or park it and take the two independent reopenings first. The owner
+took the fourth.
+
+**The recommendation against it is recorded because it was made and overruled,
+not because it was right.** Parking leaves `M62` un-`done` while `M63` names it
+in its `Depends on` column, so the loop is taking a row whose dependency is not
+`done` — permitted here only because the owner scheduled it, and because what
+M63 depends on is M62's *function*, which shipped and is in the tree; what is
+under repair is one claim about its log boundary. The ordering table is not
+amended and no dependency edge is removed.
+
+**Where the work went, because uncommitted work does not survive this
+repository.** Attempt 2 is a real commit on the local branch `wip/m62-sanitizer`,
+never pushed and never a milestone commit. `make demo-update` and
+`release-check` both refuse a dirty tree, so M63 and M64 could not have landed
+around it. Restoring it will conflict in `decisions.md`, `deferred-findings.md`,
+`CHANGELOG.md`, `Plan.md` and `docs/SECURITY.md`, which M63 and M64 also touch —
+that cost was stated when the option was offered and is repeated here so whoever
+resumes M62 expects it rather than discovers it.
+
+**D276 and D277 are reserved.** Attempt 2 spent those numbers on the branch. The
+next entry on `phase-4` therefore takes **D279**, and a gap at 276-277 is
+deliberate rather than a lost decision — this is the line that says so.
+
+## 2026-08-20 — M63, the reset the load ran cleared one scope of two
+
+**D279 — the correction to [D253](#2026-08-19--m63-the-load-clears-every-role-level-setting-before-pinning-the-search-path).**
+That entry is headed *the load clears every role-level setting before pinning the
+search path* and it is not true; this file is append-only, so the heading stays
+where it is and this entry is what corrects it. The two other written claims that
+rest on it are corrected in place, because they are prose in files that are not
+append-only: `internal/store/addons.go`'s *Everything the role has been told
+about itself, cleared*, and `docs/SECURITY.md`'s *every load now clears the
+role's settings*. F288, on M64.9's triage, reopening M63 under D269.
+
+**What `RESET ALL` clears is one scope of the two Postgres keeps.**
+`pg_db_role_setting` is a shared catalogue holding a row per role per database,
+plus one row per role with `setdatabase = 0` for the cluster-wide default.
+`pg_roles.rolconfig` *is* that catalogue filtered to `setdatabase = 0`, and
+`ALTER ROLE … RESET ALL` writes only there. So:
+
+```
+as the confined role:
+  ALTER ROLE CURRENT_USER SET work_mem = '4GB'                      -> accepted
+  ALTER ROLE CURRENT_USER IN DATABASE linkctrl SET work_mem = '4GB' -> accepted
+after the load's RESET ALL and search-path pin:
+  pg_db_role_setting                 -> linkctrl: {work_mem=4GB}
+  a fresh login, SHOW work_mem       -> 4GB, src = database user
+```
+
+Live rather than nominal: a confined `READ ONLY` sort of 400,000 rows ran fully
+in memory, `Sort Method: quicksort Memory: 12289kB`, where the 4 MB default
+spills to disk — times `AddonMaxConns`, surviving every reboot. Every obvious
+defence was tried and none of them is one. A non-superuser alters its own
+per-database settings with no grant, because these are `PGC_USERSET`. There is no
+`SET ROLE` escape hatch, because the pool logs in **as** the role, which is the
+whole reason startup applies the rows. `AddonDB.pin` pins `search_path` and
+`statement_timeout` and nothing else, and replaying the read inside that
+transaction still gets 4 GB.
+
+**The repair is not a second reset with a scope on it, and that is the decision
+this entry exists for.** `IN DATABASE` takes a *name*. It is not a connection and
+needs no privilege on what it names: measured as the confined role, the row lands
+for a database with `CONNECT` revoked from `PUBLIC`, and for `template0`, whose
+`datallowconn` is false. A repair scoped to `current_database()` therefore closes
+the shape F288 was first filed as and leaves the same lever one word away, and
+Postgres offers no `IN ALL DATABASES` to widen it with. What holds instead is to
+**stop naming databases**: the catalogue is shared, so one connection sees every
+row wherever it was written, and `ALTER ROLE … IN DATABASE d RESET ALL` is
+accepted for a database the *application* cannot connect to either — measured as
+a NOSUPERUSER CREATEROLE role with no `CONNECT` on `d`. The load enumerates,
+resets each database it finds, resets the cluster-wide row, and then pins. There
+is no name left to evade with, and the privilege is still the `CREATEROLE`
+D253 measured, so this stays the one narrowing in the family conditional on
+neither superuser nor database ownership.
+
+**The test that guarded this could not have caught it, which is a separate
+failure from the reset being short.** It set the plain variant and its verifier
+read `pg_roles` — the filtered view — so the row the defect lived in was outside
+the catalogue the assertion looked at, and it passed on every run for the whole
+life of the defect. A repair verified the same way would have passed over the fix
+exactly as it passed over the defect. The test now sets all three scopes,
+including one in a database the add-on does not run in, and reads
+`pg_db_role_setting` itself; and `AddonConfinementViolations` gains a fifth
+branch reading the same catalogue, permitting exactly the row the load writes —
+the search-path pin — and reporting every other. A setting is not an object, so
+the four `pg_shdepend` and `pg_depend` branches that shipped could not have seen
+one however carefully they enumerate: this is the same shape as D255's grant, one
+catalogue over. The cost is D255's too — an add-on that parks a setting between
+the load's reset and the check refuses itself, and a `required` one stops the
+instance — and it is accepted for the same reason, that the host noticing is
+worth more than an add-on being able to sabotage its own confinement quietly.
+
+**And nothing in this product drops a role, so a per-add-on repair does not
+finish the job.** The only `DROP ROLE` in the tree is the purge an operator types
+out of `docs/operations.md`. Delete a module's directory and nothing will ever
+call `EnsureAddonSchema` for that role again, so a setting parked before it went
+is repaired by no load that will ever run. The boot that already enumerates
+orphaned schemas now also clears the session defaults on every `addon_*` role no
+loaded add-on claims, and logs what it cleared.
+
+Two lines were drawn around that, and both are deliberate. It is **not** M63's
+*nothing is deleted here*, which is about the add-on's data — a schema, its
+tables, its rows, which an operator may want back and which M68's purge asks
+about first; a session default is the host's own confinement state, the host is
+the only party with a reason to write one, and there is nothing an operator could
+have meant by one on a role no module claims. And it **puts the search-path pin
+back**, so it removes only what an add-on wrote about itself: an instance is not
+alone in its cluster, `pg_db_role_setting` and `pg_roles` are shared across every
+database in it, and *unclaimed here* is not *unclaimed anywhere* — a replica
+rolling forward onto an image a release behind sees another replica's live add-on
+as an orphan. Keeping the pin makes that case a no-op on a well-behaved role
+rather than a judgement call. A role whose only row is the pin is skipped
+outright, so the second boot finds nothing and says nothing.
+
+**What this does not do.** It does not stop the role parking a row a second
+later; `PGC_USERSET` has no per-role deny, and what the host does is notice at the
+next load and refuse. It does not touch the role's `LOGIN` or its password — an
+add-on can set its own password and that outlives an uninstall too, which is
+[F280](deferred-findings.md#open) and is not this. And it clears nothing for a
+role whose name is not one this product could have created: the sweep reads names
+from a catalogue rather than from a manifest, so it runs each one through the same
+regexp the load runs before it creates a role and skips anything that fails.
+
+## 2026-08-21 — M63, a prefix is not a proof of ownership
+
+**D280 — the correction to [D279](#2026-08-20--m63-the-reset-the-load-ran-cleared-one-scope-of-two)'s
+last two paragraphs.** Everything that entry says about the reset and the
+post-condition stands and is in the tree. What does not is its account of the
+*sweep*: that a session default on an `addon_*` role no module claims is
+necessarily this product's, that *there is nothing an operator could have meant by
+one*, and that running the name through the load's own regexp is what keeps the
+sweep to roles *this product could have created*. A name a product could have
+created is not a name it did create, and the distance between the two is the whole
+of this entry. D279 was never committed; it is left as written because this file is
+append-only and the two entries land in the same commit, which is also the record
+of what the first attempt argued.
+
+**The falsification was a reviewer typing six words.** `CREATE ROLE addon_reporting`
+— `NOLOGIN`, no schema, no module, never created by LinkCtrl — with settings in two
+scopes, then this milestone's own boot test. Both rows were gone. That is this
+product reaching outside its own database and mutating a catalogue the whole
+cluster shares, on the strength of a string prefix, and it is why the milestone was
+rejected a second time.
+
+**What entitles the sweep now is two facts, asked of the catalogue, that only
+`EnsureAddonSchema` writes.** A schema of exactly the role's name exists **in this
+database and the role owns it** — `CREATE SCHEMA … AUTHORIZATION` and the
+`ALTER SCHEMA … OWNER TO` beside it. And **this application's own database user is
+a member of the role** — the `GRANT … TO CURRENT_USER` the load runs, which is a
+row in `pg_auth_members` rather than an implication of superuser. The identifier
+regexp stays, because the name still becomes DDL, but it is a bound on what may be
+written rather than a claim about who wrote it.
+
+Both facts were measured on Postgres 17.10 rather than reasoned about:
+
+```
+CREATE ROLE addon_probe …              as superuser  -> pg_auth_members: 0 rows
+GRANT addon_probe TO CURRENT_USER      as superuser  -> member linkctrl, admin f
+CREATE ROLE addon_mine …               as CREATEROLE -> member m63app,  admin t
+as addon_selfrevoke: REVOKE addon_selfrevoke FROM linkctrl
+                                       -> permission denied to revoke role
+```
+
+So the row is present exactly when this product's load put it there, on both
+deployment shapes docs/deployment.md documents, and the add-on cannot remove it to
+dodge the sweep, because no role holds `ADMIN OPTION` over itself. The whole sweep
+was then replayed end to end on the shape that is not the compose file's — a
+`NOSUPERUSER CREATEROLE` application that does not own the cluster, its own
+`addon_x` beside a superuser-made `addon_stranger` that owns a schema of its own
+name in the same database. The candidate query returned `addon_x`'s two rows and
+neither of the stranger's, and both `ALTER ROLE addon_x IN DATABASE postgres RESET
+ALL` and the cluster-wide reset were accepted — the `ADMIN OPTION` Postgres 16 and
+newer give a `CREATEROLE` creator automatically is what makes the privilege claim
+hold there as well as under the superuser the compose file ships. It *can* drop its
+own schema and lose the other fact — and that is the safe direction, since the sweep
+then skips it and the add-on has destroyed its own data to arrange it.
+
+**A false positive now costs a role its session defaults and nothing else**: the
+search-path pin goes back inside the same transaction, and the schema, its tables
+and its rows are untouched. That is the blast radius, and docs/deployment.md states
+it in a paragraph it did not have — *One database-wide change* was a shipped
+operator claim and the sweep made it false, which is the second half of the
+rejection and the reason this is a decision rather than a patch.
+
+**The sweep is the smaller half of the answer, and saying which half is which is
+what stops it being written too wide again.** A session default applies only to a
+session that **logs in** as the role: measured, `SET ROLE addon_probe` and
+`SET SESSION AUTHORIZATION addon_probe` both leave `work_mem` at the cluster
+default of 4 MB, while a login reads back the parked value with
+`source = database user`. This product opens such a session only from a load, and a
+load clears every scope before it opens one. So a row on a role nothing connects as
+is **inert**, and the case the sweep is genuinely for is the one where *unclaimed
+here* is not *unclaimed anywhere* — a replica a release behind, whose neighbour
+still has the module loaded and whose pool would otherwise inherit what the add-on
+parked. Detection is the larger half and it is
+`AddonConfinementViolations`'s sixth branch, which refuses the add-on rather than
+repairing it quietly.
+
+**Three other defects the same rejection named, each fixed at its own level.**
+
+- **One role's failure was every role's.** The old loop returned on the first
+  error, `Open` logged it at `Debug` and threw the partial result away. Measured:
+  `ALTER ROLE addon_revother RESET ALL` answers `42501 permission denied to alter
+  role … Only roles with CREATEROLE and the ADMIN option may alter this role`, and
+  rows sweep in name order, so a stranger's role sorting early stopped every
+  genuine orphan behind it, at a log level nobody reads. Each role is now its own
+  transaction, failures are joined rather than returned, and the boot logs them at
+  `Warn` naming the roles still carrying something.
+- **The sweep did not reach the two cases it most needed to.** It sat after the
+  load loop, which a `required` add-on's failure returns from — so an instance held
+  down by one module repaired none of the others — and it subtracted what *loaded*,
+  so an add-on with a broken module was swept as though it had been uninstalled. It
+  now runs before the loop and subtracts what is **installed in the directory**.
+  The bound that remains is `Open` returning early when no add-ons directory is
+  configured, which is [F308](deferred-findings.md#open): closing it means the
+  add-on host touching the database on an instance that configured no add-ons, and
+  *off costs nothing* is a claim `internal/config` states and `internal/addon`'s
+  tests assert. The inertness measurement above is what makes leaving it a bound
+  rather than a hole.
+- **A database dropped between the enumeration and the reset failed the load.**
+  Two round trips against a shared catalogue: measured, the reset answers
+  `3D000 database "x" does not exist`, and inside `EnsureAddonSchema`'s transaction
+  that is an abort rather than a row to skip — so a concurrent `DROP DATABASE`
+  anywhere in the cluster stopped a `required` add-on's instance. Each per-database
+  reset now runs in a savepoint and tolerates that one code, which loses nothing:
+  `DROP DATABASE` deletes the role's `pg_db_role_setting` rows for that database,
+  measured, so a database that has gone has taken the thing the statement was going
+  to clear with it. **This branch has no automated test and that is stated rather
+  than hidden** — the window is between two statements this code issues and there
+  is no seam a test can hold it open at; what is asserted instead is the invariant
+  that makes tolerating it safe.
+
+**And the doc comment miscounted its own query.** It read *the fourth branch is the
+only one that sees it* over a query with six branches. Corrected in the comment and
+in the test that repeated it, which is the same class of error as the one this
+milestone was reopened for, one directory over.
+
+**What did not change.** The load's own reset still enumerates the catalogue and
+resets every database it finds — D279's argument for that stands, and it is not the
+same question as the sweep's, because `EnsureAddonSchema` holds its proof of
+ownership by construction: it creates the role in that transaction, or adopts one
+whose `GRANT … TO CURRENT_USER` succeeded, which fails for a role belonging to
+somebody else. The post-condition still reports every row but the pin, in every
+database, at the cost D255 accepted for grants.
+
+## 2026-08-21 — M63, a prefix is not a proof of ownership: the amendment
+
+An amendment, owner-answered, made at [step 3.4](phase-loop.md#3-land) rather
+than at validation — because it was reading the tree against the bullet that
+surfaced it, which is the case that step exists for. Only the orchestrator
+amends; the worker carried it and stopped, correctly.
+
+### D281 — the sweep's identification clause
+
+**The bullet as it stood**, at `m63.md`'s third F288 entry:
+
+> Done is that the boot which already enumerates orphaned schemas also **clears
+> the session defaults on every `addon_*` role no loaded add-on claims**, and
+> says what it cleared. … A session default is not the add-on's data: it is the
+> host's own confinement state, **the host is the only party with a reason to
+> write one** … So the sweep removes only what an add-on wrote about itself …
+> and leaves nothing an operator could have meant.
+
+**The bullet as amended:**
+
+> Done is that the boot which already enumerates orphaned schemas also **clears
+> the session defaults on every add-on role it can prove it created and no
+> *installed* add-on claims, and says what it cleared — and what it could not**.
+> … **A name beginning `addon_` is not a proof of ownership.** What the sweep
+> asks for instead is the two facts `EnsureAddonSchema` writes and nothing else
+> in this product does — a schema of that name in this database that the role
+> owns, and a `pg_auth_members` row making this application's own database user a
+> member.
+
+**The tree fact that forced it.** A reviewer created `addon_reporting` by hand —
+`NOLOGIN`, no schema, no module, never made by this product — gave it settings in
+two scopes, and ran this milestone's own boot test. Both rows were gone
+afterwards. So *the host is the only party with a reason to write one* is false,
+and the identification clause that rested on it was mutating a cluster-shared
+catalogue on the strength of a string. Measured again from the other side: a
+superuser's `CREATE ROLE addon_x` records **no** `pg_auth_members` row while this
+product's own `GRANT … TO CURRENT_USER` does, and as the add-on's role
+`REVOKE addon_selfrevoke FROM linkctrl` answers *permission denied to revoke
+role* — so the evidence the sweep now requires is evidence an add-on cannot
+manufacture and cannot destroy.
+
+**Why it was a prompt and not a correction.** The stated reason was a fact and
+was false; but *what the sweep clears* is a thing somebody could decide
+differently, and the loop is not allowed to decide it. Two other answers were
+put to the owner and declined. **Not sweeping at all** was real — the
+post-condition already reads `pg_db_role_setting` and refuses an add-on that
+parked anything, so a parked setting earns its author nothing, and a row on a
+role nothing logs in as is inert (measured: `SET ROLE` and
+`SET SESSION AUTHORIZATION` both leave `work_mem` at its default; only a login
+reads the parked value). Its cost is that an uninstalled add-on's settings stay
+forever on a role this product never drops. **Sweeping everything and documenting
+it** was declined because it makes the reviewer's case shipped behaviour and
+hands a naming convention to everyone sharing the cluster.
+
+The cost of the answer taken is stated in the bullet rather than absorbed: a role
+whose schema an operator dropped by hand keeps its parked settings, because the
+proof of ownership is what was dropped with it.
+
+## 2026-08-21 — M63, detect and refuse; the sweep is removed
+
+### D282 — the reversal of [D281](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership-the-amendment)
+
+**Owner-answered: detect and refuse, do not sweep.** `ClearOrphanedAddonRoleSettings`
+and its call from `internal/addon/host.go`'s `Open` are removed outright. What
+stays is the confinement post-condition's `pg_db_role_setting` branch, which reads
+that catalogue at every load and refuses an add-on whose role carries any row but
+the search-path pin, in any database. A load resets every scope **before** it
+checks, so a setting parked from an ordinary query is cleared rather than refused
+and one parked inside the add-on's own migrations — which run between the two —
+is refused; either way parking earns its author nothing, and **no proof of role
+ownership is needed
+anywhere**. This file is append-only: D281 stands as the record of what was
+decided and on what evidence, and this entry is the reversal.
+
+**D281's proof had two legs and the load-bearing one is false.** It rested on two
+facts said to be written only by `EnsureAddonSchema`: a schema of the role's name
+in this database that the role owns, and a `pg_auth_members` row making the
+application's own database user a member of the role. The membership leg does not
+hold on the privilege this product asks for. Measured on PostgreSQL 17.10 in
+`linkctrl-test-postgres-1`, as a `NOSUPERUSER CREATEROLE` role — which is what
+docs/deployment.md requires and what D253 measured the rest of this family
+against:
+
+```
+as d282app (LOGIN CREATEROLE NOSUPERUSER):
+  CREATE ROLE addon_d282probe NOLOGIN            -- no GRANT typed
+  -> pg_auth_members: addon_d282probe / d282app, admin_option = t
+
+as linkctrl (superuser, which is what the compose file ships):
+  CREATE ROLE addon_d282super NOLOGIN
+  -> pg_auth_members: no row
+```
+
+D280 measured only that a **superuser**'s bare `CREATE ROLE` records no row, and
+concluded the row was present *exactly when this product's load put it there*. On
+the `CREATEROLE` shape the row arrives automatically, with `ADMIN OPTION`, from
+six words an operator typed. A reviewer then built the whole counterexample by
+hand in five ordinary statements and the sweep's own `SELECT` returned it. So the
+test that guarded the leg — `TestTheSweepLeavesARoleThisProductDidNotMake` —
+passed only because this machine's compose application user happens to be
+superuser: the one deployment shape on which the false leg looks true.
+
+**Sweeping was never the larger half, which is what makes removing it cheap.**
+D280 already said so and the measurement stands, re-taken here: a session default
+is read only by a session that **logs in** as the role. `SET ROLE addon_x` and
+`SET SESSION AUTHORIZATION addon_x` both leave `work_mem` at the cluster default
+of 4 MB; a login reads the parked value back as `source = user` for the
+cluster-wide row and `source = database user` for a per-database one. Nothing logs
+in as an add-on's role except a load, and a load clears every scope first. So the
+detection half was carrying the security property all along and the repair half
+was tidying.
+
+**The residue the owner accepted, stated rather than absorbed.** An uninstalled
+add-on's parked settings stay forever on a role this product never drops. It is
+inert by the measurement above, it is cleared by the add-on's next load if the
+add-on returns, and an operator who wants it gone types one
+`ALTER ROLE … RESET ALL` per scope. That is said in `phase-details/m63.md`, in
+`docs/deployment.md` before an operator installs anything, in
+`docs/operations.md` where they meet it — with the query that lists the scopes —
+and in `Plan.md`'s known-limitations row.
+
+**What survives untouched.** The load's own reset: enumerating
+`pg_db_role_setting`, resetting each database, the savepoint tolerating `3D000`,
+then the cluster-wide reset and the pin. D279's argument for it stands and its
+proof of ownership is by construction rather than by catalogue —
+`EnsureAddonSchema` creates the role in that transaction, or adopts one whose
+`GRANT … TO CURRENT_USER` succeeded, which fails for a role belonging to somebody
+else. The post-condition's sixth branch survives untouched too, and is now the
+whole of the answer rather than half of it.
+
+**Four written claims went with the sweep, because each stated its false half as
+measured.** `internal/store/addons.go`'s membership bullet, `docs/SECURITY.md`'s
+*a bare `CREATE ROLE addon_anything` produces neither, measured on Postgres 17.10
+for both a superuser and a `CREATEROLE` creator*, and the operator paragraphs in
+`docs/deployment.md` and `docs/operations.md` that told an operator their own
+`addon_*` role was safe because of those two checks. `docs/operations.md` also
+carried `ALTER ROLE addon_<name> IN DATABASE <name> RESET ALL`, one placeholder
+standing for both the add-on and the database — wrong as written and copied as
+written, now two placeholders with the difference spelled out.
+
+### The bullet as it stood, and as amended
+
+This is the [amendment](phase-loop.md#amending-a-bullet) D281 made, made again in
+the other direction. It is written by the worker by explicit owner exception: the
+owner has just decided the assertion the bullet carries, so there is nothing left
+for the orchestrator to decide.
+
+**The bullet as it stood**, at `m63.md`'s third F288 entry — D281's text:
+
+> Done is that the boot which already enumerates orphaned schemas also **clears
+> the session defaults on every add-on role it can prove it created and no
+> *installed* add-on claims, and says what it cleared — and what it could not**.
+> … **A name beginning `addon_` is not a proof of ownership.** What the sweep
+> asks for instead is the two facts `EnsureAddonSchema` writes and nothing else
+> in this product does — a schema of that name in this database that the role
+> owns, and a `pg_auth_members` row making this application's own database user a
+> member. A bare `CREATE ROLE` produces neither, and an add-on cannot revoke the
+> membership to hide from it.
+
+**The bullet as amended:**
+
+> **Done is detect and refuse, not sweep.** The confinement post-condition's
+> `pg_db_role_setting` branch — the bullet above — reads that catalogue and
+> refuses an add-on whose role carries any row but the search-path pin, in any
+> database. So parking a setting buys its author a failed load rather than a
+> lever, and no proof of role ownership is needed anywhere, which is what makes
+> this the shape that holds: **a name beginning `addon_` is not a proof of
+> ownership, and neither is the `pg_auth_members` row that looked like one.** …
+> **The residue is stated rather than absorbed.** An uninstalled add-on's parked
+> settings stay forever on a role this product never drops.
+
+**The tree fact that forced it.** `CREATE ROLE addon_d282probe NOLOGIN`, typed as
+a `NOSUPERUSER CREATEROLE` role against PostgreSQL 17.10 with no `GRANT`
+following it, produced `pg_auth_members` row `addon_d282probe / d282app,
+admin_option = t` — the exact row D281 required as proof that this product's load
+had adopted the role. The same statement as superuser produced no row, which is
+the only case D280 measured. Both probe roles were dropped after measuring;
+`SELECT rolname FROM pg_roles WHERE rolname LIKE '%d282%'` returns 0 rows.

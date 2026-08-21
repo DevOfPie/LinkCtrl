@@ -181,9 +181,10 @@ func checkAddonName(name string) error {
 // cannot meet it cannot load an add-on that asks for storage, and the failure
 // says so rather than degrading into an unconfined one.
 //
-// It also **clears every role-level setting** before pinning the search path, so
-// a parameter the add-on set on its own role does not outlive the load that found
-// it — the reason is at the statement.
+// It also **clears every role-level setting, in every database**, before pinning
+// the search path, so a parameter the add-on set on its own role does not outlive
+// the load that found it — [resetRoleSettings] is that, and *in every database* is
+// the half this sentence claimed for a phase without doing.
 //
 // And it narrows the database once, which is the one statement here that is not
 // about this add-on alone — see [restrictDatabaseTemp].
@@ -262,9 +263,16 @@ func EnsureAddonSchema(ctx context.Context, admin *pgxpool.Pool, name string, lo
 	if _, err := tx.Exec(ctx, fmt.Sprintf(`REVOKE ALL ON SCHEMA public FROM %s`, schema)); err != nil {
 		return "", fmt.Errorf("revoke %s's access to the public schema: %w", schema, err)
 	}
-	// Everything the role has been told about itself, cleared — then the one setting
-	// this product chooses put back on top. Order is the whole of it: setting the
-	// search path first and resetting afterwards would clear the pin as well.
+	// Everything the role has been told about itself, in every database, cleared —
+	// then the one setting this product chooses put back on top. Order is the whole
+	// of it: setting the search path first and resetting afterwards would clear the
+	// pin as well.
+	//
+	// **This comment said *everything … cleared* while it ran one statement that
+	// clears one scope**, which is F288 and is why the work is now in
+	// [resetRoleSettings] rather than here. The paragraphs below are D253's
+	// measurement and stand; what they do not cover is the `IN DATABASE` variant,
+	// and D279 is where that is written down.
 	//
 	// The add-on's role may `ALTER ROLE CURRENT_USER SET` any `PGC_USERSET`
 	// parameter on itself, and there is no per-role deny for that any more than for
@@ -290,8 +298,8 @@ func EnsureAddonSchema(ctx context.Context, admin *pgxpool.Pool, name string, lo
 	// docs/deployment.md already asks for: measured as a NOSUPERUSER CREATEROLE role
 	// that does not own the database, against a role it had created and that had set
 	// `work_mem` on itself. D253.
-	if _, err := tx.Exec(ctx, fmt.Sprintf(`ALTER ROLE %s RESET ALL`, schema)); err != nil {
-		return "", fmt.Errorf("clear %s's role settings: %w", schema, err)
+	if err := resetRoleSettings(ctx, tx, schema); err != nil {
+		return "", err
 	}
 	// The role's own default, so a connection that somehow arrives without the
 	// runtime parameter below still resolves unqualified names inside the add-on's
@@ -311,6 +319,141 @@ func EnsureAddonSchema(ctx context.Context, admin *pgxpool.Pool, name string, lo
 		return "", fmt.Errorf("commit: %w", err)
 	}
 	return password, nil
+}
+
+// resetRoleSettings clears every session default an add-on's role carries, in
+// every database, so that a parameter the add-on set on itself does not outlive
+// the load that found it.
+//
+// **It is only ever called for a role the caller has already proved belongs to
+// this product**, and that is the whole of why it may write a catalogue the whole
+// cluster shares. [EnsureAddonSchema] is the only caller and it holds that proof
+// by construction **only where this product connects as a non-superuser**: the
+// `GRANT %s TO CURRENT_USER` a few lines above it refuses a role somebody else
+// owns when the grantor is a CREATEROLE principal, and succeeds for a superuser.
+// The shipped compose file connects as the image's superuser, so on that shape an
+// add-on named `reporting` adopts an operator's hand-made `addon_reporting` — and
+// this reset then clears its settings in every database rather than the one row
+// `RESET ALL` took before. Measured on 17.10 both ways. That is F309, filed rather
+// than fixed here: adoption predates this milestone and narrowing it is the
+// owner's to schedule. A boot-time sweep over roles no add-on
+// claims was built here and removed: it had no such construction, and reading the
+// proof out of the catalogue instead was measured to be unsound on the privilege
+// this product asks for — D282, which reverses D281.
+//
+// **`ALTER ROLE … RESET ALL` is not this**, which is what M63 shipped for a phase
+// and what F288 measured. It clears `pg_roles.rolconfig` — the `pg_db_role_setting`
+// rows whose `setdatabase` is 0 — and nothing else. `ALTER ROLE CURRENT_USER IN
+// DATABASE linkctrl SET work_mem = '4GB'` writes a row with `setdatabase = <db
+// oid>`, which that statement never touches: reproduced statement for statement
+// through the load, the row survived every reset and a fresh login read
+// `work_mem=4194304 src=database user`, times [AddonMaxConns].
+//
+// **A second reset scoped to `current_database()` would not have been the repair
+// either.** `IN DATABASE` takes any database name and needs no privilege on it:
+// measured as the confined role, the row lands for a database with `CONNECT`
+// revoked from `PUBLIC`, and for `template0`, whose `datallowconn` is false. A
+// per-database repair that names a database is therefore evaded by naming another
+// one, and there is no `IN ALL DATABASES` to name instead. So the databases are
+// **read from the catalogue rather than named**: `pg_db_role_setting` is shared
+// across the cluster, so one connection sees every row wherever it was written,
+// and the reset is accepted for a database the *application* cannot connect to —
+// measured as a NOSUPERUSER CREATEROLE role with no `CONNECT` on it. Enumerate
+// and reset, and there is no name left to evade with.
+//
+// The privilege is the one D253 measured, `CREATEROLE` over the add-on's own role,
+// which docs/deployment.md already asks for. So this is still the one narrowing in
+// this family that needs neither superuser nor ownership of the database.
+//
+// What it cannot do is stop the role parking a row again a moment later — these
+// are `PGC_USERSET` parameters and Postgres has no per-role deny.
+// [AddonConfinementViolations] is the other half of the answer, and since D282 it
+// is the *whole* of the other half: a row that survived is a refused load rather
+// than a silence, so parking one earns the add-on nothing.
+//
+// **The residue that leaves, stated rather than absorbed.** Nothing in this
+// product drops an add-on's role — the only `DROP ROLE` is the purge an operator
+// types out of docs/operations.md — so an add-on deleted from the directory leaves
+// a role no load will ever reset again, carrying whatever it parked, forever. What
+// bounds that is measured rather than assumed: a session default is read only by a
+// session that **logs in** as the role, and `SET ROLE` and
+// `SET SESSION AUTHORIZATION` both leave `work_mem` at the cluster default. Once
+// the module is gone nothing logs in as that role, so the row is inert; and if the
+// add-on is re-installed, this function is what clears it before its pool opens a
+// connection. D279, D282.
+func resetRoleSettings(ctx context.Context, db pgx.Tx, schema string) error {
+	rows, err := db.Query(ctx, `
+		SELECT d.datname
+		  FROM pg_db_role_setting s
+		  JOIN pg_database d ON d.oid = s.setdatabase
+		 WHERE s.setrole = (SELECT oid FROM pg_roles WHERE rolname = $1)
+		 ORDER BY d.datname`, schema)
+	if err != nil {
+		return fmt.Errorf("look for %s's per-database settings: %w", schema, err)
+	}
+	var databases []string
+	for rows.Next() {
+		var datname string
+		if err := rows.Scan(&datname); err != nil {
+			rows.Close()
+			return fmt.Errorf("look for %s's per-database settings: %w", schema, err)
+		}
+		databases = append(databases, datname)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("look for %s's per-database settings: %w", schema, err)
+	}
+	for _, name := range databases {
+		if err := resetRoleSettingsIn(ctx, db, schema, name); err != nil {
+			return err
+		}
+	}
+	// Last, and unconditional: the cluster-wide row is the scope this statement was
+	// always right about, and it is the scope the search-path pin is written into a
+	// line later.
+	if _, err := db.Exec(ctx, fmt.Sprintf(`ALTER ROLE %s RESET ALL`, schema)); err != nil {
+		return fmt.Errorf("clear %s's role settings: %w", schema, err)
+	}
+	return nil
+}
+
+// resetRoleSettingsIn clears one role's settings in one named database, and
+// tolerates the database having gone since it was enumerated.
+//
+// **The enumeration and the reset are two round trips against a catalogue every
+// database in the cluster writes to, and a `DROP DATABASE` between them used to
+// fail the load.** Measured: the reset answers `3D000 database "x" does not
+// exist`, and inside [EnsureAddonSchema]'s transaction that is not a row to skip
+// but an aborted transaction, so a concurrent drop anywhere in the cluster stopped
+// a `required` add-on's instance. Hence the savepoint — `Begin` on the load's own
+// [pgx.Tx] is one — and hence tolerating that code and no other: `DROP DATABASE`
+// deletes the
+// role's `pg_db_role_setting` rows for it, measured, so a database that has gone
+// has taken the thing this statement was going to clear with it. Nothing is
+// skipped; there is nothing left to skip.
+func resetRoleSettingsIn(ctx context.Context, db pgx.Tx, schema, database string) error {
+	sp, err := db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("clear %s's settings in database %s: %w", schema, database, err)
+	}
+	defer func() { _ = sp.Rollback(ctx) }()
+	// Sanitized rather than trusted for the reason [restrictDatabaseTemp]
+	// sanitizes: a database name is an identifier, no parameter can carry it, and
+	// this one was read from a catalogue an operator writes to by creating
+	// databases.
+	if _, err := sp.Exec(ctx, fmt.Sprintf(`ALTER ROLE %s IN DATABASE %s RESET ALL`,
+		schema, pgx.Identifier{database}.Sanitize())); err != nil {
+		var pgErr *pgconn.PgError
+		// The bare code, the way [isPasswordFailure] and [classify] carry theirs:
+		// this package already spells a SQLSTATE as a string in the two other places
+		// it names one.
+		if errors.As(err, &pgErr) && pgErr.Code == "3D000" {
+			return nil
+		}
+		return fmt.Errorf("clear %s's settings in database %s: %w", schema, database, err)
+	}
+	return sp.Commit(ctx)
 }
 
 // restrictDatabaseTemp removes PUBLIC's TEMPORARY privilege on this database, so
@@ -652,7 +795,7 @@ func AddonLargeObjects(ctx context.Context, pool *pgxpool.Pool, name string) (in
 }
 
 // AddonConfinementViolations is everything about an add-on's schema that the
-// confinement forbids, in three directions: what the role owns outside its own
+// confinement forbids, in four directions: what the role owns outside its own
 // schema, what sits inside its schema that the role does not own, and what it has
 // granted on its schema to anybody but itself.
 //
@@ -774,6 +917,37 @@ func AddonLargeObjects(ctx context.Context, pool *pgxpool.Pool, name string) (in
 // add-on's role is created by `CREATE ROLE` and is never pinned, so everything it
 // owns is recorded — five rows for five objects, measured.
 //
+// # A setting is not an object, and the sixth branch is the only one that sees it
+//
+// The query below has six branches: what the role owns outside its schema, what
+// is inside its schema that it does not own, a schema it does not own that is its
+// own, `nspacl`, `relacl`, and this one. `pg_shdepend` records a role's *objects*
+// and a session default is not one, so the first three cannot see the thing F288
+// found however carefully they enumerate, and the two ACL branches read a
+// privilege rather than a parameter. **This comment said *the fourth of five* for
+// exactly as long as it took a reviewer to count**, which is the same class of
+// error one directory over from the one the milestone was reopened for. The sixth
+// reads `pg_db_role_setting` directly, which
+// is the catalogue that holds both scopes: the cluster-wide row `RESET ALL`
+// clears, and the `IN DATABASE` row it does not — see [resetRoleSettings] for why
+// that distinction cost this milestone a reopening. The one row it permits is the
+// search-path pin the load itself writes.
+//
+// In ordinary operation the branch is silent, because [EnsureAddonSchema] ran
+// moments earlier in the same load and left exactly the pin. What it catches is a
+// repair that stopped working — a scope nobody swept, a statement that failed
+// while the load carried on — and it catches it as a refused add-on rather than as
+// a number nobody reads. **The shipped test could not have caught either**: it set
+// the cluster-wide variant and read `pg_roles`, so it was blind to the whole
+// catalogue the defect lived in.
+//
+// The cost is the one D255 already accepted for grants: an add-on that parks a
+// setting between this load's reset and this query refuses itself, and a
+// `required` one stops the instance. That is the same trade — the host notices,
+// and an add-on that sabotages its own confinement does not load — and the remedy
+// is the same shape, one `ALTER ROLE … RESET ALL` per scope the report named,
+// which docs/operations.md spells out. D279.
+//
 // Indexes are in neither set and need not be: `ALTER INDEX … OWNER TO` answers
 // *cannot change owner of index*, and `ALTER TABLE … OWNER TO` moves the table's
 // indexes and its owned sequences with it — measured both ways.
@@ -795,7 +969,7 @@ func AddonConfinementViolations(ctx context.Context, pool *pgxpool.Pool, name st
 		return nil, err
 	}
 	schema := AddonSchema(name)
-	// One statement for all three directions, so a load costs one round trip. `dbid = 0`
+	// One statement for all four directions, so a load costs one round trip. `dbid = 0`
 	// is a shared object — a database, a tablespace — which this role cannot create
 	// and which is included anyway, because the point of the shape is that no
 	// *catalogued* kind of object is left to be looked for later. What is not
@@ -862,6 +1036,14 @@ func AddonConfinementViolations(ctx context.Context, pool *pgxpool.Pool, name st
 		  LEFT JOIN pg_roles g ON g.oid = a.grantee
 		 WHERE c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $1)
 		   AND a.grantee IS DISTINCT FROM (SELECT oid FROM role_oid)
+		 UNION ALL
+		SELECT 'it has parked ' || split_part(entry, '=', 1) ||
+		       coalesce(' in database ' || d.datname, ' in every database')
+		  FROM pg_db_role_setting s
+		  LEFT JOIN pg_database d ON d.oid = s.setdatabase
+		  CROSS JOIN LATERAL unnest(s.setconfig) AS entry
+		 WHERE s.setrole = (SELECT oid FROM role_oid)
+		   AND (s.setdatabase <> 0 OR entry <> 'search_path=' || $1)
 		 ORDER BY 1`, schema)
 	if err != nil {
 		return nil, fmt.Errorf("check %s's confinement: %w", schema, err)

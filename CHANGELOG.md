@@ -195,7 +195,25 @@ migrations run at boot.
   connection the add-on's pool opens — `work_mem = '4GB'` was accepted and read back
   by a fresh session — so each load now clears the role's settings before re-pinning
   its search path. That one needs nothing more than the `CREATEROLE` this release
-  already asks for, and a restore does not undo it.
+  already asks for, and a restore does not undo it. **Clearing them means in every
+  database**, which is not what the statement that does it clears: Postgres keeps a
+  role's defaults once for the cluster and again for each database, the confined
+  role can write the second kind for *any* database — including one it cannot
+  connect to — and those outlived every reboot until this release. The load now
+  reads the databases a role has settings in out of the catalogue and resets each,
+  rather than naming one and being evaded by another, and the load's post-condition
+  refuses an add-on whose role still carries one — so parking a setting earns the
+  add-on nothing either way: the load resets every scope before it checks, so a
+  setting parked from a query is cleared and one parked inside the add-on's own
+  migrations is refused. **The repair is per add-on and runs at
+  that add-on's load; nothing sweeps roles no add-on claims.** Removing an add-on
+  never removes its role, so a setting it parked before it went stays in the
+  cluster. That leftover is inert — a session default is read only by a session
+  that logs in as the role, and nothing logs in as an add-on's role once its module
+  is gone — and re-installing the add-on clears it. Clearing it by hand is one
+  `ALTER ROLE … RESET ALL` per scope, in `docs/operations.md` with the query that
+  lists them. LinkCtrl does not do it for you, because a name beginning `addon_` is
+  not evidence LinkCtrl created the role and a cluster's roles are not all its own.
 
   **Removing an add-on does not remove its data.** Delete a module's directory and
   the schema stays; the next boot enumerates `addon_*` schemas nothing claims and

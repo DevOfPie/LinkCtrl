@@ -590,7 +590,7 @@ first hang, is spent for every add-on behind it, which turns one `degrade`
 add-on's hang into a `required` add-on's refusal to boot.
 
 `storage_failed` as the outcome narrows it further: the module is fine and the
-database is the problem. Five causes, most likely first — **not** in the order the
+database is the problem. Six causes, most likely first — **not** in the order the
 host reaches them, since it reads and verifies the migration files before it
 creates anything:
 
@@ -625,6 +625,29 @@ creates anything:
   Fix it by restoring the roles and re-owning the tables — the procedure and the
   reason are in [deployment.md](deployment.md#5-back-it-up) — not by dropping the
   schema, which drops the add-on's data.
+- **The add-on parked a Postgres setting on its own role.** The refusal reads
+  `it has parked <parameter> in database <name>`, or `in every database`. Any role
+  may set a user-settable parameter on itself and Postgres offers no way to forbid
+  it, so the host clears them at every load instead — including the per-database
+  ones, which are a second set the role can write for *any* database and which
+  outlived every boot until this release. This message means one survived that,
+  which is the host's own repair having failed rather than an ordinary add-on
+  fault: the load resets before it checks, so in normal operation you will never
+  see it. Report it, and clear it by hand — one statement per line the refusal
+  printed, each naming that line's own scope:
+
+  ```sql
+  ALTER ROLE addon_<name> IN DATABASE <database> RESET ALL;  -- in database <name>
+  ALTER ROLE addon_<name> RESET ALL;                         -- in every database
+  ```
+
+  `<name>` is the add-on's and `<database>` is the database the refusal named —
+  two different placeholders, and the second is not necessarily the database
+  LinkCtrl runs in, because an add-on can park a setting for any database in the
+  cluster, including one it cannot connect to. The second statement also clears
+  the search path LinkCtrl pinned on the role; the next load puts it back, and
+  putting it back by hand is `ALTER ROLE addon_<name> SET search_path =
+  addon_<name>`.
 
 ### Removing an add-on leaves its schema
 
@@ -634,7 +657,42 @@ Deleting a module's directory does not delete its data. The next boot warns:
 add-on schemas with no loaded module; their data is still on disk and nothing here deletes it
 ```
 
-That is deliberate. Purging an add-on's schema destroys rows nothing else can
+**Its role stays too, and so does anything the add-on parked on that role.**
+Removing an add-on never removes its role — the `DROP ROLE` below is the only one
+there is, and it is yours to run — so a Postgres setting the add-on set on itself
+sits in the cluster after the module is gone, with no load left that would ever
+clear it. LinkCtrl clears those settings at every load of that add-on and nowhere
+else, and it does not sweep roles no add-on claims: it cannot tell a role it made
+from one you made that happens to be named the same way, and mutating a
+cluster-shared catalogue on the strength of a name is worse than the leftover.
+
+**What is left is inert, and that is measured rather than assumed.** A session
+default is read only by a session that **logs in** as the role: on Postgres 17.10,
+`SET ROLE` and `SET SESSION AUTHORIZATION` both leave `work_mem` at the cluster
+default of 4 MB, and only a login reads back the parked value — `source = user`
+for the cluster-wide row, `source = database user` for a per-database one. Nothing logs in as an add-on's role once its module is gone, so the row
+costs nothing while it sits there. Re-install the add-on and its next load clears
+every scope before its pool opens a connection.
+
+If you want it gone anyway, one statement per scope, against any database in the
+cluster:
+
+```sql
+SELECT coalesce(d.datname, '(every database)') AS scope, s.setconfig
+  FROM pg_db_role_setting s
+  LEFT JOIN pg_database d ON d.oid = s.setdatabase
+  JOIN pg_roles r ON r.oid = s.setrole
+ WHERE r.rolname = 'addon_<name>';
+
+ALTER ROLE addon_<name> IN DATABASE <database> RESET ALL;  -- one per named scope
+ALTER ROLE addon_<name> RESET ALL;                         -- the (every database) row
+```
+
+The last statement also drops the search path LinkCtrl pinned on the role. That is
+harmless while the add-on is uninstalled, and the next load puts it back; the purge
+below drops the role outright and makes the question moot.
+
+Leaving the schema is deliberate. Purging one destroys rows nothing else can
 recreate, and doing it because a file went missing would make an accidentally
 unmounted volume into data loss. The schema is `addon_<name>`, it still costs disk,
 and it still holds whatever the add-on stored.

@@ -34,7 +34,9 @@ boundary, and an instance quietly running an unconfined add-on is worse than one
 that refuses to run it. Everything else in this product needs neither.
 
 **One database-wide change, and it is worth knowing if this database has another
-tenant.** Installing a storage add-on revokes `TEMPORARY` on the database from
+tenant** — and one more that reaches the whole cluster, in the two paragraphs
+after it.
+Installing a storage add-on revokes `TEMPORARY` on the database from
 `PUBLIC` and grants it back to LinkCtrl's own user, because a temporary table is a
 place an add-on's role could otherwise put data outside its schema. Postgres has no
 per-role deny for that privilege, so `PUBLIC` is the only lever and every other role
@@ -45,6 +47,34 @@ statement is a no-op, the boot log says so at warn, and nothing else changes —
 add-on that creates a temporary relation is still refused at its next load, which is
 what the boundary actually rests on. Nothing carries the revoke through a restore
 either, so it is re-applied at the next load of a storage add-on.
+
+**One cluster-wide change, and it only ever names the add-on's own role.** A
+Postgres role is not a thing a database owns — it belongs to the cluster, and so do
+the session defaults attached to it, which Postgres keeps once per role and again
+per role *per database* in a catalogue every database shares. An add-on's role can
+write both kinds about itself for **any** database in the cluster, including one it
+cannot connect to, so every load of a storage add-on clears both kinds for that
+add-on's own role, wherever they were written, before pinning its search path.
+Nothing but that add-on's own role is altered — the catalogue read that finds the
+databases is filtered to that role's OID — so no other role, database or
+application on this cluster is affected — but the statements are cluster-scoped
+rather than scoped to this database, which matters if your Postgres user is shared
+with something else that audits them.
+
+**Removing an add-on does not clear what it parked**, and this is a residue rather
+than a repair LinkCtrl performs. Nothing here drops an add-on's role — the only
+`DROP ROLE` is the purge you type yourself — so a setting an add-on left on its own
+role stays in the cluster after its module is gone, and no load will ever run to
+clear it. LinkCtrl does **not** sweep roles no add-on claims, deliberately: a name
+beginning `addon_` is not evidence LinkCtrl created the role, and mutating a
+catalogue the whole cluster shares on the strength of a name would reach roles that
+are yours. What holds instead is measured: a session default is read only by a
+session that **logs in** as the role — `SET ROLE` and `SET SESSION AUTHORIZATION`
+both leave it at the cluster default on Postgres 17.10 — and nothing logs in as an
+add-on's role once its module is gone, so the leftover is inert. Re-installing the
+add-on clears it at the next load; clearing it by hand is one
+`ALTER ROLE … RESET ALL` per scope, and [operations.md](operations.md) has the
+query that lists them and the purge that drops the role outright.
 
 **Running more than one replica needs nothing extra**, and one detail is worth
 knowing before you read a log line about it: each replica mints that role's password
