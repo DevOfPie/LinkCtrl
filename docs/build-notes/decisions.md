@@ -452,6 +452,7 @@ file. Append a row when you append an entry.
 | [M64, an add-on's cookies go in a jar, because a count it can repeat is not a bound](#2026-08-21--m64-an-add-ons-cookies-go-in-a-jar-because-a-count-it-can-repeat-is-not-a-bound) | D287 — F289's fix, and why every threshold shape was wrong: a browser cookie is persistent and the add-on also decides how many responses there are, so the host stopped writing an add-on's cookies at all and carries them inside one cookie of its own, per lifetime class. `Route` empties the module's list as it packs, so the writer has no path to it — asserted by handing the real handler 1200 cookies and getting no header at all. Also here: the 3 KiB jar named as the one threshold, the two-jar partition and why a session cookie cannot share a jar with a year-long one, and what it costs a publisher |
 | [M64, guest memory gets a bound, and the number quoted as one was a measurement](#2026-08-21--m64-guest-memory-gets-a-bound-and-the-number-quoted-as-one-was-a-measurement) | D288 — F290's fix: `WithMemoryLimitPages(128)` on the runtime, 8 MiB an instance, a 128 MiB ceiling with `maxConcurrentRoutes`, and a test that reads the three documents stating that number. Why the 2.4 MB figure was accurate and still false as a bound, why eight rather than sixteen — measured: 4 MiB allocates, 5 MiB traps — and the resident-size measurement that made `docs/deployment.md` say 2 GB under load rather than pretend the guest ceiling was the whole arithmetic |
 | [M64, a sentence is only as true as what checks it, and one bound was not total](#2026-08-21--m64-a-sentence-is-only-as-true-as-what-checks-it-and-one-bound-was-not-total) | D289 — the reopening's second and third passes, and four of the nine findings across them are one defect: a claim resting on nothing. The doc-tie test pinned only the *product* of two constants, so a compensating pair moved neither number an operator reads; *a module declaring more memory is refused at load* shipped in four documents and turned out **false for a declared maximum**, which wazero silently replaces with its own limit rather than refusing. Also here: `max_age` overflowing int64 nanoseconds into an expiry before `now`, refused at the module's own call because the ABI promises `ErrInvalid` and forbids a clamp; and a jar planted at a broader path that shadowed the host's own for good. **Corrected in place before it landed**, three findings later: the doc tie's own *every file* claim was still one file short — `Plan.md`, written by this same diff — so a sweep now checks it rather than a sweeper; the cookie bound's margin is 266x and not four orders of magnitude; and `jarMaxAge` read the jar from before eviction, writing a lifetime for a value the browser was not being handed |
+| [M65, the callback arrives as a redirect, and the guest gets a real random source](#2026-08-21--m65-the-callback-arrives-as-a-redirect-and-the-guest-gets-a-real-random-source) | D291, owner-answered: an add-on's callback is a GET redirect and `form_post` is unsupported, with the two exemptions declined and the cost to publish; D292, owner-answered: the ABI grows a real random source and clock inside M65 rather than as a planned insertion, and what skipping planning.md §7's review on a published contract costs |
 
 ---
 
@@ -35957,3 +35958,74 @@ says about resident size stand too. D288's one sentence that does not survive is
 its last paragraph's *a module whose memory section declares more than the bound
 is refused at load* — corrected above, and left in place there because this file
 is append-only and a later entry is how it corrects an earlier one.
+
+## 2026-08-21 — M65, the callback arrives as a redirect, and the guest gets a real random source
+
+Both owner-answered at M65's validation, which raised them rather than picking:
+neither had a `D` and `upcoming-decisions.md` carried no entry for either.
+
+### D291 — an add-on's callback is a GET redirect, and `response_mode=form_post` is not supported
+
+[F284](deferred-findings.md#open) established that `http.CrossOriginProtection`
+refuses **every** cross-site unsafe request rather than only a cookie-authenticated
+one, and that M64 mounted add-on routes inside that chain. Measured through
+`NewRouter` with a real module behind the route: `Sec-Fetch-Site: cross-site`
+**403**, `same-site` **403**, `same-origin` **200**, `none` **200**, header absent
+**200**. The module is not entered in either 403.
+
+**The answer is the stance rather than an exemption.** An add-on's callback
+arrives as a GET redirect carrying `code` in the query, which is OIDC's
+authorization-code default. Nothing is exempted from the cross-site refusal, so
+there is no carve-out to get wrong — and this phase has just spent four workers
+watching carve-outs leak in M62, which is the argument that decided it.
+
+Two options were declined and are recorded because *we decided this did not
+matter* is the decision this project keeps losing. **Trusted origins the manifest
+declares** would have been general, and it is a trust decision an add-on makes
+about itself that the host cannot verify and an operator has no way to judge —
+the shape this phase has now found wrong in a manifest three times. **An
+exemption bounded to one declared callback path** is narrower and is still a CSRF
+carve-out on a route anything holding `routes.own_prefix` can serve.
+
+**The cost is real and is stated rather than absorbed**: an identity provider
+that offers only `form_post` cannot be used with this product. That is a
+limitation to publish, not a gap to leave for somebody to discover, and
+[M69](phase-details/m69.md)'s provider has to be checked against it **before**
+M69 rather than at it. The recommendation came from the actor that also does the
+work and it was the cheapest option to build, which is named here because
+[workflow.md](workflow.md#standing-rules) requires naming it rather than because
+it changes the answer.
+
+### D292 — the ABI grows a real random source and a real clock, inside M65
+
+[F292](deferred-findings.md#open): a guest's `crypto/rand` is
+`rand.New(rand.NewSource(42))` in wazero's `internal/platform`, a **compile-time
+constant**, so the stream is identical across requests, add-ons, host processes,
+machines and deployments — measured across three `Host.Route` calls, a second
+independently-opened `Host`, and two separate processes. The clock is wazero's
+fake one, advancing 1 ms per reading from 2022-01-01. D260's fresh instance per
+request therefore hands **every visitor the same nonce** rather than a fresh one.
+
+Found independently by two readers that could not see each other's work, one
+pointed at the host and one at the ABI's documentation — the second closed its
+report naming this as the thing to fix before the four findings it had been
+given. That convergence is why it outranked the milestone's planned scope.
+
+**It lands inside M65 rather than as its own milestone.** An add-on that cannot
+generate a unique nonce is not an authentication add-on, so M65's *sabotage-verified
+end to end* bullet is not honestly satisfiable without it. The ABI is `0.x` and
+the declared-and-refused pattern is established, so adding functions is the
+precedented move rather than a new shape.
+
+**The declined option is the one this repository's own process specifies**, and
+that is worth stating plainly: [planning.md](planning.md) says added scope is a
+numbered insertion with its own definition of done, reviewed before anything is
+built against it. Taking the scope into M65 skips that review on a change to a
+**published contract another repository compiles against**. The owner chose it
+knowing the phase already carries fourteen milestones. The mitigation is that
+M65's own reviewer reads the ABI change against the tree, which is not the same
+thing as an independent review of a plan and is not claimed to be.
+
+The third option — documenting the constant loudly and letting M69 force it —
+was declined because M65, M67 and M68 would each be built on a foundation whose
+acceptance test is known in advance to fail.
