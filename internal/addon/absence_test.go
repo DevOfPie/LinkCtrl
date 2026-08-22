@@ -3,6 +3,7 @@ package addon
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -79,14 +80,53 @@ func mentionsAddOns(t *testing.T, rel string, exts ...string) []string {
 	return hits
 }
 
-// No table. An add-on's schema is M63's, created for an add-on that exists rather
-// than migrated into every instance in advance — which is what "DDL is additive"
-// would otherwise be spent on for a feature nobody has enabled.
-func TestNoMigrationMentionsAddOns(t *testing.T) {
-	if hits := mentionsAddOns(t, "internal/store/migrations", ".sql"); len(hits) > 0 {
-		t.Errorf("migrations mention add-ons: %v\n"+
-			"M60 creates no table. If this is M63 or later, narrow this test "+
-			"deliberately rather than deleting it", hits)
+// migrationsMentioningAddOns is every migration allowed to know add-ons exist,
+// and it is the narrowed form of M60's "no table" absence.
+//
+// **Narrowed at M65, deliberately and in writing, which is what the header above
+// requires of this file.** The claim it held was that an add-on's *own* tables are
+// created for an add-on that exists rather than migrated into every instance in
+// advance, and that claim is unchanged and still worth having — a module's schema
+// is M63's, made at load, and no migration in this directory creates one.
+//
+// What broke it is a table that is not an add-on's: `addon_identity_links` is
+// LinkCtrl's own, in LinkCtrl's own schema, holding rows about LinkCtrl accounts.
+// It has to be a migration for the reason every other table here is one — the
+// product reads it whether or not any add-on is installed, and an assertion
+// resolving against a table an add-on created would be an add-on deciding who it
+// is allowed to be.
+//
+// So the absence becomes a bound: the *host's* tables about add-ons live in the
+// files named here and nowhere else, and a second one arriving without being named
+// is this test failing. That is the property left to keep — an instance with no
+// add-ons pays for one small empty table, not for a schema per capability.
+var migrationsMentioningAddOns = []string{
+	// M65's linking table, and the account-deletion statement it joins is in
+	// internal/store/query rather than here.
+	"internal/store/migrations/04500_addon_identity_links.sql",
+	// M65's provenance columns. **It creates nothing** — two nullable columns on
+	// `mfa_pending_logins`, which is M53's table and is not about add-ons — so it
+	// costs an instance with no add-ons two null columns on a table that lapses in
+	// minutes. Named here rather than exempted by pattern, because *the migration
+	// only adds columns* is exactly the sentence a migration that creates a table
+	// would also be able to claim.
+	"internal/store/migrations/04600_addon_mint_provenance.sql",
+}
+
+func TestNoMigrationCreatesAnAddOnsOwnTables(t *testing.T) {
+	hits := mentionsAddOns(t, "internal/store/migrations", ".sql")
+	for _, hit := range hits {
+		if !slices.Contains(migrationsMentioningAddOns, hit) {
+			t.Errorf("%s mentions add-ons and is not one of the migrations allowed to: %v\n"+
+				"An add-on's own schema is made at load, for an add-on that exists. A "+
+				"migration about add-ons is the host's own table and is a decision — "+
+				"name it here rather than deleting this test", hit, migrationsMentioningAddOns)
+		}
+	}
+	for _, allowed := range migrationsMentioningAddOns {
+		if !slices.Contains(hits, allowed) {
+			t.Errorf("%s is listed here and no longer mentions add-ons; the list is stale", allowed)
+		}
 	}
 }
 

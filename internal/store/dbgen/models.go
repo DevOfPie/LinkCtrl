@@ -10,6 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type AddonIdentityLink struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Addon      string
+	Issuer     string
+	Subject    string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
 type AnalyticsSalt struct {
 	ValidOn   time.Time
 	Salt      []byte
@@ -305,14 +315,16 @@ type Membership struct {
 }
 
 type MfaPendingLogin struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	TokenHash  []byte
-	IpPrefix   *string
-	UserAgent  *string
-	CreatedAt  time.Time
-	ExpiresAt  time.Time
-	ConsumedAt *time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	TokenHash      []byte
+	IpPrefix       *string
+	UserAgent      *string
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	ConsumedAt     *time.Time
+	MintedByAddon  *string
+	MintedByIssuer *string
 }
 
 type MfaRecoveryCode struct {

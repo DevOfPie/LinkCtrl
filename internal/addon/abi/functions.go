@@ -10,19 +10,25 @@ package abi
 //
 // Each function names the [Permission] it costs in Requires, or names none — the
 // vocabulary is [Permissions] and the host refuses a call whose grant the calling
-// add-on's manifest did not declare. Two functions are ungated on purpose:
-// abi_version reports a constant, and log is the capability that was granted
-// deliberately rather than by accident, since a module's stdout and stderr are
-// discarded and it is the only way out.
+// add-on's manifest did not declare. Four functions are ungated on purpose, and
+// permissions_test.go names them rather than counting them: abi_version reports a
+// constant; log is the capability that was granted deliberately rather than by
+// accident, since a module's stdout and stderr are discarded and it is the only way
+// out; and random_bytes and time_now are host facts a module already reaches
+// through crypto/rand and time.Now, which the host wires to the same sources, so a
+// grant on either would be a line in every manifest that bought an operator
+// nothing.
 //
-// Eight capability groups across seven declarable permissions, and they do not map
+// Nine capability groups across seven declarable permissions, and they do not map
 // one to one onto milestones: logging and
-// config are M61's, storage is M63's, routes and the session *read* are M64's, and
-// all of those work. Template rendering from a module's own files is declared and
+// config are M61's, storage is M63's, routes and the session *read* are M64's, the
+// session *hook* and the two ungated host facts — entropy and the clock — are
+// M65's, and all of those work. Template rendering from a module's own files is
+// declared and
 // **still refused** — M64 answered the rendering half by wrapping what a module
 // returns rather than by parsing markup a module ships, which is D259 and is why
 // the function that would parse it did not land with the milestone that backs it.
-// The session *hook* is M65's and redirect observation M66's, and each of those is
+// Redirect observation is M66's, and it is
 // **declared here and refused at runtime** with
 // StatusNotAvailable. That order is deliberate — a module written against the
 // whole contract compiles today, and the milestone that implements a limb turns
@@ -90,6 +96,32 @@ var Functions = []Function{
 			"Unicode's property rather than from a list, so a host built against a newer " +
 			"revision carries the marks it added. Nothing is refused for any of it, and a " +
 			"message that needed none arrives as it was written, backslashes aside.",
+	},
+	{
+		Name: "random_bytes", Go: "RandomBytes", Since: "0.1.1", BackedBy: "M65", Live: true,
+		Params: []Param{
+			{Name: "count", Kind: Int32, Doc: "how many bytes to draw, at most 4096"},
+			{Name: "bytes", Kind: OutBytes, Doc: "the bytes, drawn from the host's own source"},
+		},
+		Doc: "RandomBytes draws bytes from the operating system's entropy source, through " +
+			"the host. It is what a nonce, a `state` parameter or a PKCE verifier is built " +
+			"from. A count outside 1..4096 is ErrInvalid rather than a clamped answer, " +
+			"because a caller that asked for the wrong number of bytes wanted a different " +
+			"number and not a shorter one. Nothing about this function is a permission: " +
+			"every module already reaches the same source through crypto/rand, which the " +
+			"host wires to the same reader, so gating it would buy an operator nothing and " +
+			"cost every manifest a line.",
+	},
+	{
+		Name: "time_now", Go: "TimeNow", Since: "0.1.1", BackedBy: "M65", Live: true,
+		Params: []Param{
+			{Name: "now", Kind: OutString, Doc: "the host's wall clock, RFC 3339 with nanoseconds, in UTC"},
+		},
+		Doc: "TimeNow is the host's wall clock, which is this machine's. It is what an " +
+			"expiry is compared against and what a record's timestamp is stamped from. " +
+			"UTC and RFC 3339, so there is one spelling to parse and no zone to guess. " +
+			"Ungated for the reason random_bytes is: a module already reads the same clock " +
+			"through time.Now, and this is the same value with a documented shape.",
 	},
 	{
 		Name: "config_get", Go: "ConfigGet", Since: "0.1.0", BackedBy: "M61", Live: true,
@@ -215,7 +247,7 @@ var Functions = []Function{
 			"session_mint and is a different grant.",
 	},
 	{
-		Name: "session_mint", Go: "SessionMint", Since: "0.1.0", BackedBy: "M65",
+		Name: "session_mint", Go: "SessionMint", Since: "0.1.0", BackedBy: "M65", Live: true,
 		Requires: "session.mint",
 		Params: []Param{
 			{Name: "claim", Kind: Bytes, Doc: "who authenticated, as a SessionClaim record"},
@@ -229,8 +261,53 @@ var Functions = []Function{
 			"keeps the host, and not an add-on, the authority over who is signed in. What " +
 			"comes back is a MintedSession, and it is enumerated for the same reason the " +
 			"claim is: an answer described only as \"a JSON object\" is an answer the " +
-			"credential assertion over this surface cannot read. A host that does not " +
-			"implement it yet answers ErrNotAvailable.",
+			"credential assertion over this surface cannot read. Four host rules decide " +
+			"whether anything is minted, and each is a status rather than a page: the claim " +
+			"must name a subject and an issuer (ErrInvalid); that subject must already be " +
+			"linked to an account, through a linking flow the host owns and this function is " +
+			"not (ErrNotFound); the account must be active and not locked out (ErrDenied); " +
+			"and nobody may already be signed in on the request, because a mint is how " +
+			"somebody signs in and not how a browser changes who it is (ErrDenied). Called " +
+			"twice in one request the second is ErrInvalid, for the reason " +
+			"http_response_write is. An account with a second factor enrolled meets it after " +
+			"this call rather than instead of it: the host answers with " +
+			"second_factor_required set, and sends the visitor to its own prompt before your " +
+			"response's location. **What that replaces is your response, and not your " +
+			"cookies**: every set_cookie you made on the request is written to the browser " +
+			"either way, so a callback that clears the `state` cookie it set at the start " +
+			"clears it for an account with a second factor exactly as for one without. You " +
+			"cannot see which kind of account you asserted about, so nothing about your " +
+			"flow's own state may depend on it. **The out buffer is checked before anything is minted**, " +
+			"which is the one place this ABI's retry convention needs saying twice: a " +
+			"buffer too small for the record answers with the size to retry at and mints " +
+			"nothing, so the retry is the first mint rather than a second one and the " +
+			"sentence above about the second call keeps meaning what it says. A buffer of " +
+			"zero, offered to ask for the size, costs nothing for the same reason. The " +
+			"generated SDK starts larger than the record and never sees it.",
+	},
+	{
+		Name: "identity_link", Go: "IdentityLink", Since: "0.1.1", BackedBy: "M65", Live: true,
+		Requires: "session.mint",
+		Params: []Param{
+			{Name: "claim", Kind: Bytes, Doc: "who was authenticated, as a SessionClaim record"},
+		},
+		Carries: []string{"SessionClaim"},
+		Doc: "IdentityLink connects an external identity to the account of the person who " +
+			"is **already signed in** on this request, and it is the only way anything an " +
+			"add-on does writes that mapping. It is session_mint's mirror and its " +
+			"precondition: a subject nobody has linked mints nothing, and a subject can " +
+			"only be linked while its owner is in front of the browser. So the two " +
+			"functions have opposite requirements — this one is ErrDenied when nobody is " +
+			"signed in, and session_mint is ErrDenied when somebody is — which is what " +
+			"stops either being used to do the other's job. Linking the same subject to " +
+			"the same account twice succeeds and changes nothing; linking one another " +
+			"account already holds is ErrDenied and never moves it, because a link is a " +
+			"credential and re-pointing one is the takeover this table exists to prevent. " +
+			"An API key is not a person and cannot be the signed-in party. " +
+			"**Your callback still needs its own CSRF defence.** The host's guarantee is " +
+			"that a link is only ever made for whoever is signed in, in their own " +
+			"browser, at that moment; whether that browser meant to be there is what " +
+			"OAuth's `state` parameter is for, and it is yours.",
 	},
 	{
 		Name: "redirect_event_read", Go: "RedirectEventRead", Since: "0.1.0", BackedBy: "M66",
@@ -264,7 +341,7 @@ var Records = []Record{
 		Fields: []Field{
 			{"link_id", "string", "the link, as a UUID"},
 			{"workspace_id", "string", "the workspace the link belongs to, as a UUID"},
-			{"occurred_at", "string", "RFC 3339, from the host's clock and not the guest's fake one"},
+			{"occurred_at", "string", "RFC 3339, from the host's clock — the instant this instance served the redirect, not the instant a module read the record"},
 			{"visitor_hash", "string", "the daily-salted visitor hash, hex — irreversible once the day's salt is purged, and not joinable across workspaces"},
 			{"is_first_visit", "boolean", "as stored: dormant, and therefore always false"},
 			{"country", "string", "ISO 3166-1 alpha-2, and the finest location this ABI carries"},

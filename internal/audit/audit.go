@@ -361,6 +361,22 @@ const (
 	ActionMFARecoveryCodesRegenerated = "mfa.recovery_codes_regenerated"
 )
 
+// ActionSessionMintedByAddon is a session minted on an add-on's word (M65).
+//
+// The one action in this vocabulary whose *authority* is not this product's. Every
+// other record here says a person or a key did something; this one says a module
+// an operator installed vouched for somebody and the host believed it, which is a
+// different fact and is why it is a different action rather than a metadata key on
+// something existing.
+//
+// Two events under one action, told apart by `second_factor_required` in the
+// metadata: the mint that produced a session, and the one that stopped at the
+// second-factor prompt. Both are worth a record — the second is where an operator
+// sees that a provider is asserting identities whose accounts then fail to
+// complete — and splitting them into two actions would put the same question in
+// two places.
+const ActionSessionMintedByAddon = "session.minted_by_addon"
+
 // Event is one thing that happened.
 //
 // The actor is not a field: it is taken from the *auth.Identity passed to
@@ -684,6 +700,42 @@ func (s *Service) RecordMFAChange(
 	})
 }
 
+// RecordAddonSessionMint satisfies auth.SessionAuditor.
+//
+// It lives here for the reason RecordAPIKeyRotation and RecordMFAChange do: this
+// package imports internal/auth to resolve an actor into the label it stores, so
+// internal/auth cannot import this one, and the narrow interface is declared on
+// that side.
+//
+// **The metadata carries provenance and no identity.** `minted_by` is the string
+// m65.md names — `addon:<name>` — and `issuer` is the provider as it named itself.
+// The external *subject*, the address the assertion carried and the display name
+// are all deliberately absent: the erasure sweep scrubs this column by the keys it
+// knows about, its coverage was counted site by site when F177 closed, and a
+// writer that put a person's provider identifier here would be a site the sweep
+// does not reach. `addon` repeats the name outside the prefixed label so that a
+// reader filtering by add-on does not have to know how the label is spelled.
+func (s *Service) RecordAddonSessionMint(
+	ctx context.Context, actor *auth.Identity, ev auth.AddonSessionMint,
+) error {
+	var target *uuid.UUID
+	if actor != nil && actor.UserID != uuid.Nil {
+		id := actor.UserID
+		target = &id
+	}
+	return s.Record(ctx, actor, Event{
+		Action:     ActionSessionMintedByAddon,
+		TargetType: "user",
+		TargetID:   target,
+		Metadata: map[string]any{
+			"minted_by":              ev.MintedBy,
+			"addon":                  ev.Addon,
+			"issuer":                 ev.Issuer,
+			"second_factor_required": ev.SecondFactorRequired,
+		},
+	})
+}
+
 // mfaActions maps the seam's vocabulary onto this package's.
 //
 // A map rather than a switch with a default, so a kind added on the other side of
@@ -992,5 +1044,6 @@ func AllActions() []string {
 		ActionMFADisabled,
 		ActionMFARecoveryCodeUsed,
 		ActionMFARecoveryCodesRegenerated,
+		ActionSessionMintedByAddon,
 	}
 }

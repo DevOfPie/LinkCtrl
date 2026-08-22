@@ -622,6 +622,7 @@ func (m *MFAService) Disable(ctx context.Context, actor *Identity, password, cod
 // challenge is minted from the account row, which is all it needs.
 func (s *Service) pendingSecondFactor(
 	ctx context.Context, userID uuid.UUID, ip netip.Addr, userAgent string,
+	by *addonProvenance,
 ) (*LoginResult, error) {
 	// Supersede whatever was outstanding, so there is never more than one live
 	// prompt per account and an abandoned tab is not sharing its window with the
@@ -636,13 +637,23 @@ func (s *Service) pendingSecondFactor(
 		return nil, err
 	}
 	ipPrefix := AnonymizeIP(ip)
+	// Null for a password post, which is the ordinary case, and set when an add-on
+	// asserted the identity that stopped here. It is carried rather than recorded
+	// now because the record m65.md asks for is about *the session*, and on this
+	// path the session does not exist yet.
+	var addon, issuer *string
+	if by != nil {
+		addon, issuer = nullable(by.Addon), nullable(by.Issuer)
+	}
 	row, err := s.q.CreateMFAPendingLogin(ctx, dbgen.CreateMFAPendingLoginParams{
-		ID:        uuid.Must(uuid.NewV7()),
-		UserID:    userID,
-		TokenHash: hash,
-		IpPrefix:  nullable(ipPrefix),
-		UserAgent: nullable(truncate(userAgent, 512)),
-		ExpiresAt: time.Now().Add(MFAPendingTTL),
+		ID:             uuid.Must(uuid.NewV7()),
+		UserID:         userID,
+		TokenHash:      hash,
+		IpPrefix:       nullable(ipPrefix),
+		UserAgent:      nullable(truncate(userAgent, 512)),
+		ExpiresAt:      time.Now().Add(MFAPendingTTL),
+		MintedByAddon:  addon,
+		MintedByIssuer: issuer,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create pending login: %w", err)
@@ -765,7 +776,42 @@ func (m *MFAService) CompleteSecondFactor(
 	if row.UserAgent != nil {
 		agent = *row.UserAgent
 	}
-	return m.cfg.Auth.mintSession(ctx, row.UserID, row.Email, row.Name, loginIP, agent)
+	res, err := m.cfg.Auth.mintSession(ctx, row.UserID, row.Email, row.Name, loginIP, agent)
+	if err != nil {
+		return nil, err
+	}
+
+	// **The provenance record follows the session, not the assertion** (m65.md).
+	// An add-on's assertion against an account with TOTP enrolled produces no
+	// session — it produces the pending row this transaction just spent — so the
+	// record written back then says a factor is still owed and names no session
+	// that exists. This is where one does. Without this write, the only account for
+	// which an add-on is *most* worth naming as the minter is the only account for
+	// which nothing names it.
+	//
+	// After the mint and not before it, and never failing the sign-in: the record
+	// is written outside any transaction, which is what Record's own documentation
+	// prescribes, and losing the record is worse than losing nothing but better
+	// than losing the session.
+	if row.MintedByAddon != nil {
+		m.cfg.Auth.auditAddonSession(ctx, res.Identity, row.UserID, AddonSessionMint{
+			Addon:    *row.MintedByAddon,
+			MintedBy: MintedByLabel(*row.MintedByAddon),
+			Issuer:   deref(row.MintedByIssuer),
+			// False, and that is the whole point of this second record: the factor
+			// has been met, so this one is about a session rather than about a prompt.
+			SecondFactorRequired: false,
+		})
+	}
+	return res, nil
+}
+
+// deref reads an optional column, and empty is what a null one means here.
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // mfaFactorKind is which of the two credentials a presentation turned out to be.

@@ -25,12 +25,21 @@
 // # What the host grants
 //
 // Only what is in this package. A module is instantiated with no filesystem, no
-// environment, no arguments, its output discarded, and the runtime's *fake*
-// clock and random source rather than this machine's — so time.Now and
-// crypto/rand inside a module are not what they are on a server, and anything
-// needing either has to ask the host for it through a function here. There is no
-// such function yet, which is a real limitation and not an omission from this
-// paragraph.
+// environment, no arguments and its output discarded.
+//
+// **The clock and the random source are this machine's**, which is worth stating
+// because the runtime this host is built on defaults to fakes for both and this
+// paragraph said so until ABI 0.1.1. time.Now inside a module is the host's wall
+// clock and crypto/rand reads the operating system's entropy, so the standard
+// library does what you expect and code you wrote against it needs no change.
+// [TimeNow] and [RandomBytes] are the same two sources with a documented shape —
+// RFC 3339 in UTC, and a count you name — and they exist so a nonce, a `state`
+// parameter or a PKCE verifier has an answer in the published contract rather
+// than only in a runtime detail. Neither costs a permission.
+//
+// If you are reading this because you found the old sentence: a module built
+// against an earlier SDK is unaffected and does not need rebuilding. The fix is
+// underneath crypto/rand and time.Now, not in the two functions.
 //
 // A module also gets a bounded amount of memory — 8 MiB of linear memory, with a
 // fresh instance per request — and growing past it traps, which the host answers
@@ -47,6 +56,18 @@
 // cookie of its own, so an add-on's share of a browser's cookie store is fixed
 // rather than chosen — about 3 KiB, past which the oldest values are dropped. A
 // key to your own storage fits; a flow's state does not belong there.
+//
+// **Your routes are rate limited, and the budget is the instance's sign-in
+// budget.** Every request that reaches a route your add-on serves is charged
+// against LINKCTRL_LOGIN_RATE_PER_MIN — the operator's number, and tens of
+// requests a minute per client address rather than thousands — which is the same
+// allowance the login form spends. It applies to every add-on and not only one that can mint a session,
+// and there is no per-add-on budget to raise instead. So a provider's
+// server-to-server callback that retries hard, and a page of yours a browser
+// polls, are both spending an allowance somebody else's sign-in also needs;
+// a refusal is a 429 the host answers, and your module is not entered. A path
+// under /addons/ naming no installed add-on is a 404 refused on shape and is
+// charged to nobody. docs/addon-abi.md states it in full.
 //
 // Every function returns an error from the closed set in this package. A function
 // this ABI declares and this host has not implemented yet answers

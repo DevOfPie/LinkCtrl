@@ -81,10 +81,15 @@ var Permissions = []Permission{
 	},
 	{
 		Name: "session.mint", Grantable: true, BackedBy: "M65",
-		Doc: "Tell the host that somebody authenticated, and ask for a session. The " +
-			"highest-value grant in this vocabulary: a module holding it decides who is " +
-			"signed in, subject to the host's own judgement about whether an account " +
-			"exists and what the session may do.",
+		Doc: "Tell the host that somebody authenticated, and ask for a session — and " +
+			"connect an external identity to the account of whoever is already signed " +
+			"in, which is `identity_link` and is the same grant. **Two functions, one " +
+			"token**, because a module that can vouch for a person can already decide " +
+			"who is signed in; splitting them would let an operator grant the writing " +
+			"of a standing credential without the asserting that spends it, which is " +
+			"not a safer half. The highest-value grant in this vocabulary: a module " +
+			"holding it decides who is signed in, subject to the host's own judgement " +
+			"about whether an account exists and what the session may do.",
 	},
 	{
 		Name: "redirect.observe", Grantable: true, BackedBy: "M66",

@@ -22,7 +22,11 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/DevOfPie/LinkCtrl/sdk"
 )
@@ -100,14 +104,72 @@ func init() {
 	_, err = sdk.SessionContextRead()
 	check("session_context_outside_request", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
 
+	// D292's two functions, called from the **load-time** instance — the other of
+	// the two places this host builds a module config, and the one a fix applied
+	// only to the request path would miss.
+	//
+	// The comparison this module *can* make is the one that mattered: wazero's
+	// default random source is a compile-time constant, so before D292 a draw here
+	// was byte-identical to a draw anywhere else, and its default clock starts at
+	// 2022-01-01. So a 32-byte draw of all zeroes is impossible either way and is
+	// not what is checked; what is checked is that the clock is past the fake one's
+	// origin, which no seeded stream and no frozen clock can fake.
+	drawn, err := sdk.RandomBytes(32)
+	check("random_bytes", err == nil && len(drawn) == 32, "err "+errText(err))
+	std := make([]byte, 32)
+	_, err = rand.Read(std)
+	check("crypto_rand", err == nil, "err "+errText(err))
+	check("random_differs_from_stdlib", !bytes.Equal(drawn, std),
+		"the ABI and crypto/rand returned the same 32 bytes, which one stream cannot do twice")
+	stamp, err := sdk.TimeNow()
+	check("time_now", err == nil, "err "+errText(err))
+	at, perr := time.Parse(time.RFC3339Nano, stamp)
+	check("time_now_parses", perr == nil, "got "+stamp+" err "+errText(perr))
+	// 2023 rather than "near now": a fixture that asserts a tight window against
+	// the host's clock is a fixture that fails when a machine's clock is wrong,
+	// and the fake clock this is about begins at 2022-01-01T00:00:00Z.
+	check("time_now_is_not_the_fake_clock", perr == nil && at.Year() >= 2023,
+		"got "+stamp)
+	// **UTC, checked as the spelling and not as the instant.** The ABI's published
+	// promise is *one spelling to parse and no zone to guess*, and every check
+	// around this one passes on `2026-08-22T12:00:00+02:00`: it parses, its year is
+	// right, and it names the same instant the standard library does. A `Z` is the
+	// only thing that distinguishes the promise from a host that happened to format
+	// in local time, so it is what is asserted.
+	check("time_now_is_utc", strings.HasSuffix(stamp, "Z"), "got "+stamp)
+	// The standard library's clock is the same source, and it is the one a
+	// publisher writes. Compared against the ABI's answer rather than against a
+	// literal, so the check is "these two agree" and not "this machine is in 2026".
+	check("std_clock_agrees", time.Since(at) < time.Minute && time.Since(at) > -time.Minute,
+		"time.Now is "+time.Now().UTC().Format(time.RFC3339Nano)+" and the host says "+stamp)
+	// Named `_invalid` rather than `_refused`: the host-side test counts checks
+	// whose name ends in `_refused` against the ABI's set of declared-but-refused
+	// functions, and random_bytes is live. A bound it enforces is not a limb it
+	// does not have.
+	_, err = sdk.RandomBytes(0)
+	check("random_zero_invalid", errors.Is(err, sdk.ErrInvalid), "err "+errText(err))
+	_, err = sdk.RandomBytes(4097)
+	check("random_over_bound_invalid", errors.Is(err, sdk.ErrInvalid), "err "+errText(err))
+
+	// session_mint went live at M65, and this instance is not answering a request —
+	// package initialization never is. So the answer is ErrNotFound, which is the
+	// same "there is no request here" every M64 function gives from init, and the
+	// point of checking it is that a mint reached from outside a request is a mint
+	// with no visitor to sign in.
+	_, err = sdk.SessionMint([]byte(`{"subject":"s","issuer":"https://idp.test"}`))
+	check("session_mint_outside_request", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+	// Its mirror, and the same answer for the same reason: linking is something
+	// that happens to the person in front of the browser, and package
+	// initialization has no browser in front of it.
+	err = sdk.IdentityLink([]byte(`{"subject":"s","issuer":"https://idp.test"}`))
+	check("identity_link_outside_request", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+
 	// The ones this fixture exists for. Each is declared by the ABI and implemented
 	// by no host yet, so it resolves as an import — the module links — and answers a
 	// status the module can branch on. That the refusal is the whole set's property
 	// and not one function's is why every one of them is here.
 	_, err = sdk.TemplateRender("page", nil)
 	check("template_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
-	_, err = sdk.SessionMint(nil)
-	check("session_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
 	_, err = sdk.RedirectEventRead()
 	check("redirect_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
 

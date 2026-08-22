@@ -284,12 +284,21 @@ today. Such an add-on loads, does not hold the grant, and gets a warning at boot
 naming what it asked for and did not get; `linkctrl_addon_info` carries what it
 **holds**, so the difference is visible in a scrape.
 
-**Two functions cost nothing**, and that is a decision rather than an oversight.
+**Four functions cost nothing**, and that is a decision rather than an oversight.
 `abi_version` reports a constant. `log` is the capability that was granted on
 purpose — a module's stdout and stderr are discarded precisely so that reaching an
 operator's log is something it has to be given, and this is the giving. Requiring
 a declaration for it would put a line in every manifest and buy nothing: a module
 refused the log still runs, and now silently.
+
+`random_bytes` and `time_now` are ungated for the mirror of that reason. Your
+module already reads the *same* entropy source through `crypto/rand` and the
+*same* wall clock through `time.Now`, because the host wires WASI's `random_get`
+and `clock_time_get` to them — so a grant on either would refuse you the
+documented spelling of something you can still have, which costs every manifest a
+line and withholds nothing. They are in this table so the value has a shape you
+can rely on, not so it could be rationed. The Status column is generated, so it is
+the one place worth reading for which functions are live.
 
 **What is ungated is not what is trusted.** Because every loaded module can reach
 `log` — including one whose `permissions` array is empty — the host neutralizes the
@@ -481,7 +490,13 @@ One convention for all of them, because one convention is one thing to learn.
   **(pointer, capacity)** pair, and the return value is the size the value
   occupies. If that exceeds the capacity offered, **nothing was written** and the
   caller retries with a buffer that size. So no call ever has to ask for a size
-  first, and the generated SDK does the retry for you.
+  first, and the generated SDK does the retry for you. **A function that changes
+  something checks the buffer before it changes it**, so *nothing was written*
+  also means nothing happened and the retry is the first attempt rather than a
+  second one. Today that is `session_mint` alone — it is the only function here
+  with both an out parameter and a side effect — and what it requires is the
+  record at its widest rather than the answer it is about to produce, because the
+  answer does not exist yet.
 - At most one out parameter, and it is last.
 
 The host never allocates inside a module. A guest that exports an allocator hands
@@ -556,6 +571,62 @@ call you made, and an add-on that fills its jar over many responses loses its
 oldest values, with the operator's log saying so. Keep a flow's state in your own
 schema and a key to it in a cookie; the cookie is not the storage.
 
+## The clock and the entropy are this machine's
+
+Stated here because the runtime this host is built on defaults to fakes for both,
+and because until ABI **0.1.1** this page's neighbours and `sdk`'s own
+documentation told you so.
+
+wazero's default random source is `rand.New(rand.NewSource(42))` — a
+*compile-time* constant, not a seed taken at startup — so before 0.1.1 every
+module on every deployment of this product drew the same bytes, and since a
+request gets a fresh instance, every **visitor** was handed the same nonce. Its
+default clock starts at `2022-01-01T00:00:00Z` and advances a millisecond per
+reading, so an `exp` claim was checked against 2022.
+
+Both are now the operating system's:
+
+- **`crypto/rand` inside your module reads this machine's entropy**, and
+  `time.Now` reads its wall clock. Code you wrote against the standard library
+  needs no change, and a module compiled against an earlier SDK needs no rebuild —
+  the repair is underneath those calls rather than in the two functions below.
+- **`random_bytes` and `time_now`** are the same two sources with a documented
+  shape: a count you name, and RFC 3339 with nanoseconds in UTC. Use them when you
+  want the contract to say what you got; use the standard library when that reads
+  better. They are the same bytes and the same instant either way.
+
+The `RedirectEvent` record's `occurred_at` used to say *from the host's clock and
+not the guest's fake one*. The second half stopped being true at 0.1.1, so the
+field says what it still means instead: the instant this instance served the
+redirect, rather than the instant a module read the record. Both clocks are the
+same one now; the field is about *when*, not about whose.
+
+## Your callback arrives as a redirect, and `response_mode=form_post` is not supported
+
+**An identity provider that offers only `form_post` cannot be used with this
+product.** That is a limitation to plan around before you choose a provider, not a
+bug to report.
+
+Add-on routes sit inside this product's application tree, which refuses every
+cross-site request that uses an unsafe method — `Sec-Fetch-Site: cross-site` and
+`same-site` are both **403**, whether or not the request carries a credential, and
+your module is not entered. A `form_post` callback is a POST navigation from the
+provider's origin, so it arrives cross-site and never reaches you. A provider on a
+sibling subdomain of the dashboard is refused too, because `same-site` is refused
+as well.
+
+What works is OIDC's authorization-code default: the provider redirects the
+browser back to your callback with a **GET**, carrying `code` in the query. Read
+it with `http_request_read`, exchange it however your provider requires, and
+assert the result with `session_mint`.
+
+Nothing is exempted from that refusal — not a trusted origin your manifest names,
+not one declared callback path. Both were considered and declined: the first is a
+trust decision an add-on makes about itself that neither the host nor an operator
+can verify, and the second is a CSRF carve-out on a route anything holding
+`routes.own_prefix` can serve. The reasoning is D291 in
+[build-notes/decisions.md](build-notes/decisions.md).
+
 ## What is not promised
 
 - **Stability, while the ABI is `0.x`.** A generation may be retired with the
@@ -591,6 +662,26 @@ schema and a key to it in a cookie; the cookie is not the storage.
   against hold 2.4 MB at load and still allocate 4 MiB on top, so the room is for
   a request's work rather than for a cache: what an add-on wants to keep goes in
   its own schema, which is also the only thing that survives the instance.
+- **Unmetered traffic to your routes.** Every request that reaches a route your
+  add-on serves is charged against this instance's **per-address sign-in budget**,
+  the same one the login form spends — `LINKCTRL_LOGIN_RATE_PER_MIN`, which an
+  operator sets and which is **tens of requests a minute per client address, not
+  thousands**; its default is in [configuration.md](configuration.md#rate-limits),
+  stated there rather than repeated here so the two cannot disagree. That is true
+  of every add-on and not only one holding `session.mint`,
+  because a limit keyed on a manifest's permissions would move when the manifest
+  did. Two things follow for a flow you are designing. A **server-to-server
+  callback** — a provider's webhook, the one shape that reaches you at all, since
+  a browser POST from another origin is refused — arrives from the provider's
+  address, so a provider that retries hard, or that posts for many of your users
+  from one address, will meet the limit; there is no per-add-on budget to raise
+  instead. And a **page of yours that a browser fetches repeatedly** — a poll, a
+  progress check, an asset-like endpoint — spends the same allowance as a sign-in
+  attempt from the same address, so a design that asks for one request a second is
+  a design that will be refused. A refusal is `429` with `Retry-After`, and the
+  visitor sees this product's page rather than anything of yours. What is *not*
+  charged is a path under `/addons/` naming no installed add-on: that is a 404
+  answered on shape, before anything of yours is entered.
 - **A raw client address, ever.** Not a promise of restraint — a property of the
   surface. No function in the table below hands a module a client's address in
   any form, and the record that carries redirect data is bound to what
@@ -617,12 +708,14 @@ schema and a key to it in a cookie; the cookie is not the storage.
 
 <!-- BEGIN GENERATED: the function table -->
 
-The ABI is **0.1.0**, generation **1**, and this host loads generation 1 or newer.
+The ABI is **0.1.1**, generation **1**, and this host loads generation 1 or newer.
 
 | Function | Since | Requires | Status | What it is |
 | --- | --- | --- | --- | --- |
 | `abi_version`<br>`sdk.HostABIVersion()` | 0.1.0 | — | **live** | HostABIVersion is the ABI version of the host this module is running in. A module's manifest declares the generation it was built against and the host refuses a mismatch before instantiation, so this is not how a module checks compatibility — it is how one logs what it is talking to, and how it decides whether a function added in a later patch is worth probing for. |
 | `log`<br>`sdk.Log(level string, message string)` | 0.1.0 | — | **live** | Log writes one line to the host's logger, attributed to this add-on. It is the only way out: a module's stdout and stderr are discarded, because routing them into an operator's log is a capability and the host grants none it was not asked for. The host adds the add-on's name; a message that repeats it is noise. An unknown level is ErrInvalid rather than a silent default, so a typo does not become a line nobody greps for. The message is neutralized before it is written and bounded at 4 KiB, and the rule is stated as what survives rather than as what is caught: a graphic character reaches the line as itself, in any script, and everything else becomes its escape — a newline, a control character, an ANSI escape, every format and bidirectional control, every unassigned or private-use code point, and the 268 graphic code points this host treats as invisible: the 267 graphic members of Unicode's derived Default_Ignorable_Code_Point, which the host computes rather than reads because Go ships only the residue property the derivation subtracts from, plus U+2800 BRAILLE PATTERN BLANK, the one blank that is not whitespace. One class is deleted rather than escaped, and it is the only one: every variation selector is removed from the message. So a heart written as U+2764 U+FE0F arrives as U+2764 and is still a heart, an emoji that carries no selector is untouched, and a selector hung off a letter, a space, an ideograph or a block element takes nothing with it when it goes. There is no exemption and no base list: a selector after a character the reader's renderer does not vary is invisible, and no property tells the host which those are. That set is a published property and not the set of characters that render as nothing, because Unicode publishes no such property: eight combining marks it annotates as not visibly rendered — U+2D7F, U+17D2, U+10A3F, U+1107F, U+11A47, U+11A99, U+11F42 and U+16FE4 — reach the line as themselves, as do seventeen space characters and the prepended concatenation marks named below. What bounds that residue is that this log is write-only to you: Log declares no out-parameter, no function in this ABI hands log content back, your module gets no preopened file and its stdout and stderr are discarded, and your storage is a schema this log does not live in. So a character that survives is one an operator can still see; it is not a channel you can read back. A code point Unicode adds after the host was built is escaped rather than let through. One graphic character does not reach the line as itself: a backslash is doubled, so that the two characters \ and n cannot be mistaken for an escaped newline, and a module cannot spell the host's own truncation mark. The named exceptions run the other way: Unicode's prepended concatenation marks — the Arabic, Syriac and Kaithi signs that scope the digits after them — are left alone, read from Unicode's property rather than from a list, so a host built against a newer revision carries the marks it added. Nothing is refused for any of it, and a message that needed none arrives as it was written, backslashes aside. |
+| `random_bytes`<br>`sdk.RandomBytes(count int32)` | 0.1.1 | — | **live** | RandomBytes draws bytes from the operating system's entropy source, through the host. It is what a nonce, a `state` parameter or a PKCE verifier is built from. A count outside 1..4096 is ErrInvalid rather than a clamped answer, because a caller that asked for the wrong number of bytes wanted a different number and not a shorter one. Nothing about this function is a permission: every module already reaches the same source through crypto/rand, which the host wires to the same reader, so gating it would buy an operator nothing and cost every manifest a line. |
+| `time_now`<br>`sdk.TimeNow()` | 0.1.1 | — | **live** | TimeNow is the host's wall clock, which is this machine's. It is what an expiry is compared against and what a record's timestamp is stamped from. UTC and RFC 3339, so there is one spelling to parse and no zone to guess. Ungated for the reason random_bytes is: a module already reads the same clock through time.Now, and this is the same value with a documented shape. |
 | `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it, and ErrNotFound only when it declared none. An operator sets a value with LINKCTRL_ADDON_<NAME>_<SETTING> and it outranks the manifest's default; editing them in the Add-on manager is M68's, and until that lands the environment is the only way to set one. |
 | `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed — ErrDenied, which is distinguishable from ErrInvalid so that a module can tell confinement from its own mistake. One statement per call: the host parses through the extended protocol, so a payload carrying two is refused. The read is a read at the server, in a READ ONLY transaction, so this function cannot be used to write. Arguments are a JSON array of strings, numbers, booleans and nulls; pass JSON as a string and cast it. Rows come back as a JSON array of objects keyed by column name, and a result with two columns of one name is refused rather than collapsed. |
 | `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep — the add-on ships them in its own `migrations/` directory and names each with its digest in the manifest, and the host applies them at load inside the same schema this function writes to. Everything StorageQuery says about the boundary, the single statement and the arguments applies here too; what differs is that the transaction is not read-only. |
@@ -630,7 +723,8 @@ The ABI is **0.1.0**, generation **1**, and this host loads generation 1 or newe
 | `http_response_write`<br>`sdk.HTTPResponseWrite(response []byte)` | 0.1.0 | `routes.own_prefix` | **live** | HTTPResponseWrite answers the request that reached one of this add-on's routes. Called twice for one request it is ErrInvalid: a response is one record, not a stream, because a module that can hold a connection open is a module that can hold every connection open. What the record may carry is bounded by the host and not by the module: `content_type` is a closed vocabulary that does not include text/html, because the host wraps a page and an add-on that could choose the type could choose markup; `location` is answered 302 and never a permanent redirect; and `set_cookie` is bounded by the prefixes the manifest declares and by a `max_age` of at most 400 days, with the host's own Secure, HttpOnly and SameSite attributes applied. Each of those is ErrInvalid rather than a silently corrected response. The cookies themselves are carried in one cookie of the host's rather than written individually, so what an add-on occupies in a browser does not grow with what it sets or with how often it is visited — a set too large to pack into one is ErrInvalid at this call. |
 | `template_render`<br>`sdk.TemplateRender(name string, data []byte)` | 0.1.0 | `routes.own_prefix` | declared, refused | TemplateRender renders one of this add-on's own templates through the host's renderer, so a page an add-on draws inherits the product's escaping, its theme tokens and its Content-Security-Policy. It is also how an add-on reaches the page without bringing a front-end toolchain: it renders nothing itself. A host that does not implement it yet answers ErrNotAvailable. |
 | `session_context`<br>`sdk.SessionContextRead()` | 0.1.0 | `session.context` | **live** | SessionContextRead asks the host who is signed in on the request this add-on is answering. It is the *read* half of the session boundary and the whole of it: what comes back is an identity and where it is working, never a cookie, a token or a session row, so an add-on can draw a page for the person in front of it and cannot act as them anywhere else. Nobody signed in is not an error — add-on routes are reachable without a session, because a sign-in flow could not otherwise begin — so the record's `signed_in` is false and every other field is empty. Outside a request it is ErrNotFound, which is what a module calling it from package initialization gets. Minting a session is session_mint and is a different grant. |
-| `session_mint`<br>`sdk.SessionMint(claim []byte)` | 0.1.0 | `session.mint` | declared, refused | SessionMint tells the host that this add-on authenticated somebody, and asks for a session. The add-on does not make a session and never sees a token: it makes an assertion, the host decides whether an account exists for it and what the session may do, and the cookie is written by the host. That split is what keeps the host, and not an add-on, the authority over who is signed in. What comes back is a MintedSession, and it is enumerated for the same reason the claim is: an answer described only as "a JSON object" is an answer the credential assertion over this surface cannot read. A host that does not implement it yet answers ErrNotAvailable. |
+| `session_mint`<br>`sdk.SessionMint(claim []byte)` | 0.1.0 | `session.mint` | **live** | SessionMint tells the host that this add-on authenticated somebody, and asks for a session. The add-on does not make a session and never sees a token: it makes an assertion, the host decides whether an account exists for it and what the session may do, and the cookie is written by the host. That split is what keeps the host, and not an add-on, the authority over who is signed in. What comes back is a MintedSession, and it is enumerated for the same reason the claim is: an answer described only as "a JSON object" is an answer the credential assertion over this surface cannot read. Four host rules decide whether anything is minted, and each is a status rather than a page: the claim must name a subject and an issuer (ErrInvalid); that subject must already be linked to an account, through a linking flow the host owns and this function is not (ErrNotFound); the account must be active and not locked out (ErrDenied); and nobody may already be signed in on the request, because a mint is how somebody signs in and not how a browser changes who it is (ErrDenied). Called twice in one request the second is ErrInvalid, for the reason http_response_write is. An account with a second factor enrolled meets it after this call rather than instead of it: the host answers with second_factor_required set, and sends the visitor to its own prompt before your response's location. **What that replaces is your response, and not your cookies**: every set_cookie you made on the request is written to the browser either way, so a callback that clears the `state` cookie it set at the start clears it for an account with a second factor exactly as for one without. You cannot see which kind of account you asserted about, so nothing about your flow's own state may depend on it. **The out buffer is checked before anything is minted**, which is the one place this ABI's retry convention needs saying twice: a buffer too small for the record answers with the size to retry at and mints nothing, so the retry is the first mint rather than a second one and the sentence above about the second call keeps meaning what it says. A buffer of zero, offered to ask for the size, costs nothing for the same reason. The generated SDK starts larger than the record and never sees it. |
+| `identity_link`<br>`sdk.IdentityLink(claim []byte)` | 0.1.1 | `session.mint` | **live** | IdentityLink connects an external identity to the account of the person who is **already signed in** on this request, and it is the only way anything an add-on does writes that mapping. It is session_mint's mirror and its precondition: a subject nobody has linked mints nothing, and a subject can only be linked while its owner is in front of the browser. So the two functions have opposite requirements — this one is ErrDenied when nobody is signed in, and session_mint is ErrDenied when somebody is — which is what stops either being used to do the other's job. Linking the same subject to the same account twice succeeds and changes nothing; linking one another account already holds is ErrDenied and never moves it, because a link is a credential and re-pointing one is the takeover this table exists to prevent. An API key is not a person and cannot be the signed-in party. **Your callback still needs its own CSRF defence.** The host's guarantee is that a link is only ever made for whoever is signed in, in their own browser, at that moment; whether that browser meant to be there is what OAuth's `state` parameter is for, and it is yours. |
 | `redirect_event_read`<br>`sdk.RedirectEventRead()` | 0.1.0 | `redirect.observe` | declared, refused | RedirectEventRead reads the redirect this add-on is observing. What it carries is at most what click_events may carry — prefix-derived and country-level, and no client address in any form. The grant it costs is redirect.observe, which is out-of-band observation and nothing more: running inside the redirect path itself is redirect.inline, a separate declaration no host grants yet, so a module cannot reach the path by holding this. A host that does not implement it yet answers ErrNotAvailable. |
 
 ### Permissions
@@ -643,7 +737,7 @@ An add-on declares what it needs in its manifest's `permissions` array, and the 
 | `storage.own_schema` | yes | Read and write the Postgres schema this add-on owns, whole. The schema boundary is the whole of the grant — there is no row-level or column-level form of it, and nothing here names another add-on's schema or this product's own tables. It does not stop you giving your own schema away: a `GRANT` on what you own works, and the host reports it at your next load and refuses you until it is revoked. Migrations are the host's and are not this grant. |
 | `routes.own_prefix` | yes | Serve requests under the path prefix this add-on owns, and render its own templates through the host's renderer. One grant rather than two: a module renders a fragment in order to answer a request, and a template rendered for nobody is not a capability. |
 | `session.context` | yes | Ask the host who is signed in: identity, workspace and organization, and nothing else. Its own token rather than a thing a page-serving add-on gets for free, because `routes.own_prefix` is read as *this add-on draws a page* and identity is a second answer — a manifest declaring one grant should not turn out to have declared two. It is the read half and the whole of it: there is no cookie, no token and no session row behind it, and minting or destroying a session is session.mint. |
-| `session.mint` | yes | Tell the host that somebody authenticated, and ask for a session. The highest-value grant in this vocabulary: a module holding it decides who is signed in, subject to the host's own judgement about whether an account exists and what the session may do. |
+| `session.mint` | yes | Tell the host that somebody authenticated, and ask for a session — and connect an external identity to the account of whoever is already signed in, which is `identity_link` and is the same grant. **Two functions, one token**, because a module that can vouch for a person can already decide who is signed in; splitting them would let an operator grant the writing of a standing credential without the asserting that spends it, which is not a safer half. The highest-value grant in this vocabulary: a module holding it decides who is signed in, subject to the host's own judgement about whether an account exists and what the session may do. |
 | `redirect.observe` | yes | Observe redirects this instance served, out of band. What crosses is at most what click_events may carry — prefix-derived and country-level, and no client address in any form — so this grant cannot be widened into one by the host implementing it. |
 | `redirect.inline` | **no host grants it yet** | Run inside the redirect path itself, where a module's own latency is added to the response. Distinct from redirect.observe so that a module cannot acquire it by accident, and **no host grants it yet**: it is declared here so the milestone that admits an add-on onto that path enforces behaviour against a permission that is already enforced. |
 
@@ -673,7 +767,7 @@ One redirect this instance served, handed to an observing add-on. Every field is
 | --- | --- | --- |
 | `link_id` | string | The link, as a UUID |
 | `workspace_id` | string | The workspace the link belongs to, as a UUID |
-| `occurred_at` | string | RFC 3339, from the host's clock and not the guest's fake one |
+| `occurred_at` | string | RFC 3339, from the host's clock — the instant this instance served the redirect, not the instant a module read the record |
 | `visitor_hash` | string | The daily-salted visitor hash, hex — irreversible once the day's salt is purged, and not joinable across workspaces |
 | `is_first_visit` | boolean | As stored: dormant, and therefore always false |
 | `country` | string | ISO 3166-1 alpha-2, and the finest location this ABI carries |

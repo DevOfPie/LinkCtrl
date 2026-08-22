@@ -31,6 +31,17 @@ var outboundFromAnAuthenticationPath = regexp.MustCompile(
 // — m53.md says so, and the list is what makes the milestone's *no outbound
 // connection* bullet enforceable rather than reviewed.
 //
+// **internal/addon joined at M65**, and it had to: `session.mint` makes that
+// package a place where somebody is signed in, so the mechanism M53 built to make
+// *nothing on an authentication path reaches the network* enforceable had stopped
+// covering all of it. The package was clean when it was added, which is the
+// cheapest moment to add one — a list extended only when it goes red is a list
+// that documents defects rather than preventing them. Note what this does and does
+// not cover: it is about **this host's own Go source**, not about what a guest can
+// reach. A module gets no socket because it gets no import that opens one, which
+// is the ABI's claim and is asserted elsewhere; this is the claim that the code
+// standing between an assertion and a session does not dial either.
+//
 // **The mechanism is a new scan, not an existing one, and that is the point.** An
 // earlier draft of the milestone cited
 // `TestThisPackageOpensNoSocketOfItsOwn` in internal/link, which reads
@@ -39,7 +50,11 @@ var outboundFromAnAuthenticationPath = regexp.MustCompile(
 // passed while the thing it was cited for went unchecked. Corrected 2026-08-07,
 // from review: the template requires enforcement named as a mechanism — a test
 // that fails, not review vigilance — and the named test could not fail.
-var authenticationPackages = []string{".", filepath.Join("..", "httpx")}
+var authenticationPackages = []string{
+	".",
+	filepath.Join("..", "httpx"),
+	filepath.Join("..", "addon"),
+}
 
 // TestTheSecondFactorOpensNoSocket.
 //

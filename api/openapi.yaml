@@ -779,10 +779,12 @@ paths:
         person, not the credential.
 
         **What happens immediately, in one transaction.** Sessions, API keys,
-        memberships, notifications, outstanding password-reset tokens and any
-        instance-level grants are removed; the account is marked deleted; the
-        address becomes available for a new account. When this returns, no
-        credential reaches the account.
+        memberships, notifications, outstanding password-reset tokens, any
+        instance-level grants, second-factor recovery codes, any unanswered
+        second-factor prompt and every connected external identity are removed;
+        the account is marked deleted; the address becomes available for a new
+        account. When this returns, no credential reaches the account. Nine
+        tables, which is every one `DeleteAccountDependents` names.
 
         **What happens within the hour.** Records *about* you that ending the
         account does not remove keep their rows, because they are records of

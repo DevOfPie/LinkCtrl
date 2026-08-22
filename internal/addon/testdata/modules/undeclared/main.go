@@ -75,6 +75,7 @@ func init() {
 	denied("session_context", err)
 	_, err = sdk.SessionMint(nil)
 	denied("session_mint", err)
+	denied("identity_link", sdk.IdentityLink(nil))
 	_, err = sdk.RedirectEventRead()
 	denied("redirect_event_read", err)
 

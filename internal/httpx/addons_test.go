@@ -4,15 +4,19 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/ratelimit"
 	"github.com/DevOfPie/LinkCtrl/internal/ui"
 )
 
@@ -33,24 +37,35 @@ type stubAddonRouter struct {
 	// seen is the last request the router was handed, so a test can assert what
 	// crossed as well as what came back.
 	seen addon.RequestIn
-	sess addon.SessionContext
 	name string
+	// unknown is the names this stub does not serve. Empty — the zero value, and
+	// what every test about what reaches a browser wants — serves whatever it is
+	// asked for. The tests about the limiter name one here, because *a path that
+	// reaches no add-on* is the case D309 is about and a stub that serves
+	// everything cannot express it.
+	unknown []string
 }
 
-func (s *stubAddonRouter) Route(_ context.Context, name string, in addon.RequestIn,
-	sess addon.SessionContext) (addon.Response, error) {
-	s.name, s.seen, s.sess = name, in, sess
+func (s *stubAddonRouter) Route(_ context.Context, name string, in addon.RequestIn) (addon.Response, error) {
+	s.name, s.seen = name, in
 	return s.resp, s.err
+}
+
+func (s *stubAddonRouter) ServesRoutes(name string) bool {
+	return !slices.Contains(s.unknown, name)
 }
 
 // A value receiver on the zero value, for maximalDeps: it needs something
 // non-nil in the interface and never calls it.
 type nopAddonRouter struct{}
 
-func (nopAddonRouter) Route(context.Context, string, addon.RequestIn,
-	addon.SessionContext) (addon.Response, error) {
+func (nopAddonRouter) Route(context.Context, string, addon.RequestIn) (addon.Response, error) {
 	return addon.Response{}, addon.ErrNoRoute
 }
+
+// Serving nothing, which is what Route above already answers: the two agree, and
+// that agreement is the property the interface asks for.
+func (nopAddonRouter) ServesRoutes(string) bool { return false }
 
 // addonWeb is a Web wired for the add-on page and nothing else.
 func addonWeb(t *testing.T, router AddonRouter) *Web {
@@ -307,11 +322,13 @@ func TestAnAddonPageIsReachableWithoutASession(t *testing.T) {
 		t.Fatalf("status %d: an anonymous visitor could not reach an add-on's page, so no "+
 			"add-on can begin a sign-in", rec.Code)
 	}
-	if stub.sess.SignedIn {
-		t.Error("the session context says somebody is signed in and nobody is")
-	}
-	if stub.sess.UserID != "" || stub.sess.Email != "" {
-		t.Errorf("an anonymous request carried an identity: %+v", stub.sess)
+	// **What crosses this seam since M65 is the identity, not a record built from
+	// it**: internal/addon derives the SessionContext a module sees, because the
+	// record's own claim — that nothing in it is a credential — is a property of
+	// that mapping and belongs beside the record. What this test still owns is the
+	// half that is this package's: an anonymous request hands over nobody.
+	if stub.seen.Identity != nil {
+		t.Errorf("an anonymous request carried an identity: %+v", stub.seen.Identity)
 	}
 }
 
@@ -342,16 +359,21 @@ func TestASignedInVisitorsIdentityCrossesAndNothingElseDoes(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
-	if !stub.sess.SignedIn || stub.sess.UserID != id.UserID.String() {
-		t.Errorf("the session context did not carry the identity: %+v", stub.sess)
+	if stub.seen.Identity != id {
+		t.Errorf("the request did not carry the identity the host resolved: %+v", stub.seen.Identity)
 	}
-	if stub.sess.OrganizationID != id.OrgID.String() || stub.sess.WorkspaceID != id.WorkspaceID.String() {
-		t.Errorf("the session context did not carry where the request landed: %+v", stub.sess)
-	}
-	// The session id is the one field of an Identity that names the credential
-	// rather than the person, and no field of the record can carry it.
-	if strings.Contains(fmtSess(stub.sess), id.SessionID.String()) {
-		t.Error("the session identifier crossed the boundary")
+	// The cookie the browser sent is the credential (D232), and it must not reach
+	// the host's input either — the filtering to declared prefixes happens inside
+	// internal/addon, but this package is what decides which cookies it is handed,
+	// and that decision is "all of them, deliberately". What makes that safe is
+	// asserted where the filter is; what is asserted here is that this package
+	// hands over the identity and never a session of its own devising.
+	//
+	// The record a module actually sees, and the absence of a credential in it, is
+	// TestASignedInIdentityCrossesAsARecordAndNothingElseDoes in internal/addon,
+	// where the mapping lives.
+	if stub.seen.Identity.SessionID != id.SessionID {
+		t.Error("the identity was rebuilt rather than passed through")
 	}
 }
 
@@ -516,8 +538,351 @@ func TestNoAddonRouteWithoutAHost(t *testing.T) {
 // be asserting about a value no session ever carries.
 func mustUUID(s string) uuid.UUID { return uuid.MustParse(s) }
 
-func fmtSess(s addon.SessionContext) string {
-	return strings.Join([]string{
-		s.UserID, s.Email, s.DisplayName, s.WorkspaceID, s.OrganizationID, s.Role,
-	}, " ")
+// --- M65: what a mint does to the response ----------------------------------
+
+// The host writes the cookie and the module's own answer is still served, which
+// is what lets an add-on send somebody on to wherever its flow was going while
+// the browser picks up a session on the way.
+func TestAMintedSessionBecomesTheHostsOwnCookie(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	stub := &stubAddonRouter{resp: addon.Response{
+		Location: "/dashboard",
+		Minted: &addon.Minted{
+			Token: config.Secret("a-real-session-token"), ExpiresAt: expires,
+		},
+	}}
+	web := addonWeb(t, stub)
+	rec := serveAddon(t, web, http.MethodGet, "oidc", "callback")
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status %d: the module's own redirect was not served", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/dashboard" {
+		t.Errorf("Location is %q; the module still decides where the visitor goes", got)
+	}
+	var session *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.CookieName(false) {
+			session = c
+		}
+	}
+	if session == nil {
+		t.Fatalf("no session cookie was written: %v", rec.Header()["Set-Cookie"])
+	}
+	if session.Value != "a-real-session-token" {
+		t.Errorf("the cookie carries %q", session.Value)
+	}
+	// The host's attributes, not the module's — the same ones the sign-in form
+	// writes, because it is the same constructor.
+	if !session.HttpOnly || session.Path != "/" || session.SameSite != http.SameSiteLaxMode {
+		t.Errorf("the session cookie was not written with this product's own attributes: %+v", session)
+	}
+}
+
+// A second factor still owed takes the request over. The module's `location`
+// becomes where the visitor lands *after* the prompt, and the pending credential
+// travels in the redirect the way the sign-in form's does.
+func TestASecondFactorOwedSendsTheVisitorToTheHostsOwnPrompt(t *testing.T) {
+	stub := &stubAddonRouter{resp: addon.Response{
+		Location: "/addons/oidc/done",
+		Body:     "the module's own page",
+		Minted: &addon.Minted{
+			PendingToken: config.Secret("a-pending-token"), SecondFactorRequired: true,
+		},
+	}}
+	web := addonWeb(t, stub)
+	rec := serveAddon(t, web, http.MethodGet, "oidc", "callback")
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d, want 303", rec.Code)
+	}
+	got := rec.Header().Get("Location")
+	if !strings.HasPrefix(got, "/login/code?t=a-pending-token") {
+		t.Errorf("the visitor was not sent to the second-factor prompt: %q", got)
+	}
+	if !strings.Contains(got, "next=%2Faddons%2Foidc%2Fdone") {
+		t.Errorf("the module's own destination was not carried past the prompt: %q", got)
+	}
+	// No session cookie, because there is no session: the account still owes a
+	// factor and the type makes that a different value rather than a flag.
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.CookieName(false) {
+			t.Error("a session cookie was written for somebody who still owes a second factor")
+		}
+	}
+	if strings.Contains(rec.Body.String(), "the module's own page") {
+		t.Error("the module's answer was served as well as the prompt")
+	}
+}
+
+// An add-on's `location` may legitimately be an external URL — an authorization
+// endpoint is one — and an external URL is not something the sign-in flow may be
+// pointed at. safeNext is what stops the second-factor prompt becoming an open
+// redirect on somebody's way into their account.
+func TestAnAddonsExternalDestinationCannotBecomeTheSignInsNext(t *testing.T) {
+	for _, location := range []string{
+		"https://evil.test/steal", "//evil.test/steal", "/\\evil.test",
+	} {
+		t.Run(location, func(t *testing.T) {
+			stub := &stubAddonRouter{resp: addon.Response{
+				Location: location,
+				Minted: &addon.Minted{
+					PendingToken: config.Secret("a-pending-token"), SecondFactorRequired: true,
+				},
+			}}
+			rec := serveAddon(t, addonWeb(t, stub), http.MethodGet, "oidc", "callback")
+			got := rec.Header().Get("Location")
+			if !strings.Contains(got, "next=%2Fdashboard") {
+				t.Errorf("%q survived into the prompt's next: %q", location, got)
+			}
+			if strings.Contains(got, "evil.test") {
+				t.Errorf("an external destination reached the sign-in flow: %q", got)
+			}
+		})
+	}
+}
+
+// A response with nothing minted is untouched, which is every add-on that is not
+// an authentication add-on and every request that did not sign anybody in.
+func TestAResponseThatMintedNothingIsUnchanged(t *testing.T) {
+	stub := &stubAddonRouter{resp: addon.Response{Body: "just a page"}}
+	rec := serveAddon(t, addonWeb(t, stub), http.MethodGet, "oidc", "page")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if len(rec.Result().Cookies()) != 0 {
+		t.Errorf("a cookie was written for a request that minted nothing: %v", rec.Result().Cookies())
+	}
+}
+
+// --- M65, D305: the prefix is a credential endpoint, all of it ---------------
+
+// Every add-on route is charged against the login budget, whatever the add-on
+// behind it may or may not do.
+//
+// The stub here holds no grant and mints nothing — it is the *cheapest* add-on
+// an instance can run, a page and no credential — and it is charged anyway. That
+// is the whole of D305: a worker had built the narrower rule, charging only an
+// add-on holding `session.mint`, and the owner overruled it because protection
+// keyed on a grant in a manifest is protection the next grant can move out of
+// reach. So this test asserts the cost as much as the protection: an add-on that
+// carries none of the risk pays, deliberately.
+//
+// Driven through registerAppRoutes and RealIP rather than by calling the
+// middleware, because what is under test is the *wiring* — the guard being on
+// both patterns — and a test that called the limiter directly would keep passing
+// with the routes registered bare.
+func TestEveryAddonRouteIsChargedAgainstTheLoginBudget(t *testing.T) {
+	for _, tc := range []struct{ name, path string }{
+		{"the page pattern", addon.RoutePrefix + "notes/page"},
+		{"the bare pattern", addon.RoutePrefix + "notes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := maximalDeps()
+			d.Web = addonWeb(t, &stubAddonRouter{resp: addon.Response{Body: "a page, and no credential in it"}})
+			// Two, so the third request is the refusal and the first two prove the
+			// route works at all.
+			d.Limits.Login = ratelimit.New(2, ratelimit.Options{})
+			d.Metrics = nil
+			app := newAppMux()
+			registerAppRoutes(d, app)
+			h := RealIP(nil)(app.mux)
+
+			ask := func() *httptest.ResponseRecorder {
+				req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+				req.RemoteAddr = "203.0.113.7:5555"
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				return rec
+			}
+			for i := range 2 {
+				if got := ask().Code; got != http.StatusOK {
+					t.Fatalf("request %d answered %d, want 200: the route is broken and "+
+						"the refusal below would prove nothing", i+1, got)
+				}
+			}
+			rec := ask()
+			if rec.Code != http.StatusTooManyRequests {
+				t.Fatalf("the third request answered %d, want 429: %q is unlimited, and "+
+					"an anonymous caller can repeat whatever an add-on on it does",
+					rec.Code, tc.path)
+			}
+			if rec.Header().Get("Retry-After") == "" {
+				t.Error("the refusal carries no Retry-After, so a client cannot tell how " +
+					"long to wait and this reads as an outage rather than a limit")
+			}
+		})
+	}
+}
+
+// The login limit is one budget across every surface that spends it, so an
+// add-on route cannot be used to top up an attacker's allowance for the sign-in
+// form — or the other way round.
+func TestTheAddonPrefixSharesTheLoginBudgetWithSignIn(t *testing.T) {
+	d := maximalDeps()
+	d.Web = addonWeb(t, &stubAddonRouter{resp: addon.Response{Body: "a page"}})
+	d.Limits.Login = ratelimit.New(1, ratelimit.Options{})
+	d.Metrics = nil
+	app := newAppMux()
+	registerAppRoutes(d, app)
+	h := RealIP(nil)(app.mux)
+
+	ask := func(method, path string) int {
+		req := httptest.NewRequest(method, path, nil)
+		req.RemoteAddr = "203.0.113.8:5555"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if got := ask(http.MethodGet, addon.RoutePrefix+"notes/page"); got != http.StatusOK {
+		t.Fatalf("the add-on route answered %d, want 200", got)
+	}
+	// The sign-in submission, not the form: the form is a page and carries no
+	// limit. 429 here is the limiter refusing before the handler is reached,
+	// which is also why this asserts nothing about what LoginSubmit would do.
+	if got := ask(http.MethodPost, "/login"); got != http.StatusTooManyRequests {
+		t.Errorf("after one add-on request the sign-in submission answered %d, want 429: "+
+			"the two surfaces are on separate budgets, so an attacker has twice the "+
+			"allowance an operator set", got)
+	}
+}
+
+// --- M65, D309: a path that reaches no add-on is not an add-on route ---------
+
+// The reproduction, verbatim.
+//
+// D305 charges every add-on route against the login budget. It was implemented
+// as the whole `/addons/` prefix, so a 404 was charged too — and `addon.Open`
+// returns a host whenever `LINKCTRL_ADDONS_DIR` is set, so an instance with the
+// directory configured and **no add-ons in it** registered both patterns and paid
+// on every probe. An ordinary scanner walking two well-known paths therefore
+// denied somebody their sign-in, and with `TRUSTED_PROXIES` unset denied it to
+// every visitor at once, because then every request carries the proxy's address.
+//
+// The two paths are the ones a scanner actually asks for. Nothing about the test
+// needs them to be those, and they are those because the report was measured with
+// them and a reader should be able to see the same thing.
+func TestAProbeUnderTheAddonPrefixDoesNotSpendTheSignInBudget(t *testing.T) {
+	stub := &stubAddonRouter{
+		resp:    addon.Response{Body: "unreachable"},
+		unknown: []string{"nosuch"},
+	}
+	d := maximalDeps()
+	d.Web = addonWeb(t, stub)
+	// The number the report used, and the point of it being small: two probes are
+	// the whole budget, so a third request refused would be visible immediately.
+	d.Limits.Login = ratelimit.New(2, ratelimit.Options{})
+	d.Metrics = nil
+	app := newAppMux()
+	registerAppRoutes(d, app)
+	h := RealIP(nil)(app.mux)
+
+	ask := func(method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.RemoteAddr = "203.0.113.9:5555"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	for _, path := range []string{
+		addon.RoutePrefix + "nosuch/wp-login.php",
+		addon.RoutePrefix + "nosuch/xmlrpc.php",
+	} {
+		if got := ask(http.MethodGet, path).Code; got != http.StatusNotFound {
+			t.Fatalf("%s answered %d, want 404", path, got)
+		}
+	}
+	if stub.name != "" {
+		t.Errorf("the router was handed a request for %q: a name no add-on serves must "+
+			"not reach the host at all", stub.name)
+	}
+	// The budget itself, read off the limiter the sign-in form shares. Two allows
+	// have to remain, which is the whole of a `Login = 2` instance's allowance —
+	// so the probes above spent none of it. Asked here rather than by posting the
+	// sign-in form, because a 429 there is answered by the middleware while
+	// anything else runs LoginSubmit against services this test has not built;
+	// that the two surfaces are one budget is
+	// [TestTheAddonPrefixSharesTheLoginBudgetWithSignIn]'s claim, already made.
+	for i := range 2 {
+		if ok, _ := d.Limits.Login.Allow(netip.MustParseAddr("203.0.113.9")); !ok {
+			t.Fatalf("allowance %d of 2 was already spent after two 404s under /addons/. "+
+				"A request that reached no add-on is not an add-on route, and charging it "+
+				"makes an ordinary scanner a denial of sign-in for that address — or, with "+
+				"TRUSTED_PROXIES unset, for everybody", i+1)
+		}
+	}
+	if ok, _ := d.Limits.Login.Allow(netip.MustParseAddr("203.0.113.9")); ok {
+		t.Error("a third allowance was granted on a limiter set to two, so the two checks " +
+			"above proved nothing about what the probes spent")
+	}
+}
+
+// The bare pattern is the same claim, and it is asked separately because it is a
+// second registration: `/addons/nosuch` matches AddonBarePattern and
+// `/addons/nosuch/anything` matches AddonPagePattern, so a guard fixed on one and
+// not the other would leave half the prefix charging misses.
+func TestTheBarePatternDoesNotChargeAMissEither(t *testing.T) {
+	stub := &stubAddonRouter{unknown: []string{"nosuch"}}
+	d := maximalDeps()
+	d.Web = addonWeb(t, stub)
+	d.Limits.Login = ratelimit.New(1, ratelimit.Options{})
+	d.Metrics = nil
+	app := newAppMux()
+	registerAppRoutes(d, app)
+	h := RealIP(nil)(app.mux)
+
+	ask := func(method, path string) int {
+		req := httptest.NewRequest(method, path, nil)
+		req.RemoteAddr = "203.0.113.10:5555"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if got := ask(http.MethodGet, addon.RoutePrefix+"nosuch"); got != http.StatusNotFound {
+		t.Fatalf("the bare pattern answered %d for a name nothing serves, want 404", got)
+	}
+	if ok, _ := d.Limits.Login.Allow(netip.MustParseAddr("203.0.113.10")); !ok {
+		t.Error("one 404 on the bare pattern spent the whole login budget")
+	}
+}
+
+// --- M65: a second factor owed does not drop the module's own cookies --------
+
+// The mint path replaces the module's response when the account still owes a
+// second factor — the host's prompt is what the browser gets, and the module's
+// `location` becomes its `next`. What it must not replace is the module's jar.
+//
+// The two are unrelated facts: the jar is the add-on's own flow state, and an
+// OIDC callback clearing the `state` cookie it set at the start is doing exactly
+// what the ABI tells it to. Written after the mint branch, that clearing was
+// dropped — for accounts with TOTP enrolled and no others, which a module cannot
+// see and so cannot compensate for.
+func TestASecondFactorStillWritesTheModulesOwnCookies(t *testing.T) {
+	stub := &stubAddonRouter{resp: addon.Response{
+		Location: "/addons/oidc/done",
+		Jar: []addon.JarCookie{
+			{Name: "state", Value: "", MaxAge: -1},
+			{Name: "nonce", Value: "kept", MaxAge: 300},
+		},
+		Minted: &addon.Minted{
+			PendingToken: config.Secret("a-pending-token"), SecondFactorRequired: true,
+		},
+	}}
+	rec := serveAddon(t, addonWeb(t, stub), http.MethodGet, "oidc", "callback")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d, want 303: the prompt is what replaces the module's answer", rec.Code)
+	}
+	got := map[string]int{}
+	for _, c := range rec.Result().Cookies() {
+		got[c.Name] = c.MaxAge
+	}
+	if _, ok := got["state"]; !ok {
+		t.Error("the module cleared its `state` cookie and the browser was never told. " +
+			"A jar is written whether or not a session was minted; it was being dropped " +
+			"for accounts with a second factor and for no others")
+	}
+	if got["nonce"] != 300 {
+		t.Errorf("the module's `nonce` cookie reached the browser as %v, want max-age 300",
+			got["nonce"])
+	}
 }

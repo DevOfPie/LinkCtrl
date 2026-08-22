@@ -703,9 +703,49 @@ func registerAppRoutes(d Deps, app *appMux) {
 		// somebody is answering a request from a person who has no session yet, so
 		// a session requirement here would make M65's hook unreachable through the
 		// surface built for it. What an add-on may learn about who *is* signed in
-		// is a grant of its own with no credential behind it (session.context),
-		// and what bounds an anonymous request's cost is the host's concurrency
-		// bound rather than a limiter of this route's own.
+		// is a grant of its own with no credential behind it (session.context).
+		//
+		// **D261 also said no limiter, and that half is overturned** (D305). It was
+		// argued about a route that could not mint, where the host's concurrency
+		// bound was the whole of what an anonymous request could spend. M65 gave
+		// the route a way to supersede an account's outstanding second-factor
+		// prompt — deleted, so the person reading the code in their authenticator
+		// has a prompt that no longer exists — and to write an `audit_logs` row per
+		// attempt, with `RecordFailedLogin` never reached because nothing failed.
+		// Nothing counted either, so `README.md`'s *per-address limits on
+		// credential endpoints* had stopped being true of this prefix.
+		//
+		// **Every add-on, and not only the ones that can mint.** A narrower
+		// rule keyed on `session.mint` was built and the owner declined it: a
+		// route's protection that depends on a grant in a manifest is a route a
+		// future grant can quietly move out of the limiter's reach, which is
+		// exactly how D261 became wrong. The cost is real and is not hidden — an
+		// add-on page carrying no credential now pays against a limiter written for
+		// credential endpoints, so an operator running a dashboard add-on behind a
+		// NAT may have to raise `LOGIN_RATE_PER_MIN`. docs/configuration.md says so
+		// where that variable is documented.
+		//
+		// **A path under the prefix that reaches no add-on pays nothing** (D309),
+		// and that is a narrowing of the route set rather than of the rule. D305
+		// charges every add-on route; a request naming an add-on this instance does
+		// not serve is not one, it is the 404 a mistyped path gets. Charged, it made
+		// an ordinary scanner a denial of sign-in: two GETs to
+		// `/addons/nosuch/wp-login.php` and `/addons/nosuch/xmlrpc.php` on an
+		// instance with `LOGIN_RATE_PER_MIN=2` answered 404, 404, and then refused
+		// `POST /login` — for that address, or with `TRUSTED_PROXIES` unset for
+		// everybody. `RateLimitWhen` asks `web.addonRouteExists` before it charges,
+		// and the handler answers its 404 through the same function, so the two
+		// cannot come to disagree about what an add-on route is. This is the
+		// 404-probe limiter's own shape — refuse on shape, then charge — with the
+		// direction reversed, because there the miss is the abuse.
+		//
+		// `guard` rather than a limiter of its own, for the reason
+		// `POST /login/code` shares it: a sweep of passwords, a sweep of six-digit
+		// codes and a sweep of assertions against one instance are three spellings
+		// of one attack, and three budgets would be three times the number an
+		// operator set. It also charges before the module runs, which is the safe
+		// direction — the alternative bounds the audit row and leaves the wasm
+		// instantiation and the pending-prompt deletion unbounded.
 		//
 		// Method-less on purpose: an add-on answers whatever it was asked, and a
 		// method filter here would be this file deciding which verbs somebody
@@ -724,8 +764,10 @@ func registerAppRoutes(d Deps, app *appMux) {
 		// F284 carries it to M65, which builds an authentication flow on exactly
 		// this path.
 		if web.Addons != nil {
-			app.HandleFunc(AddonPagePattern, web.AddonPage)
-			app.HandleFunc(AddonBarePattern, web.AddonPage)
+			addonGuard := RateLimitWhen(d.Limits.Login, "login", d.Metrics,
+				web.tooManyRequests, web.addonRouteExists)
+			app.Handle(AddonPagePattern, addonGuard(http.HandlerFunc(web.AddonPage)))
+			app.Handle(AddonBarePattern, addonGuard(http.HandlerFunc(web.AddonPage)))
 		}
 
 		// Everything else redirects anonymous visitors to the login form,

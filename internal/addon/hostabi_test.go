@@ -204,8 +204,19 @@ func TestTheProbeFixtureGetsEveryClassOfAnswer(t *testing.T) {
 		"probe: http_request_outside_request=ok",
 		"probe: http_response_outside_request=ok",
 		"probe: session_context_outside_request=ok",
+		"probe: random_bytes=ok",
+		"probe: crypto_rand=ok",
+		"probe: random_differs_from_stdlib=ok",
+		"probe: time_now=ok",
+		"probe: time_now_parses=ok",
+		"probe: time_now_is_not_the_fake_clock=ok",
+		"probe: time_now_is_utc=ok",
+		"probe: std_clock_agrees=ok",
+		"probe: random_zero_invalid=ok",
+		"probe: random_over_bound_invalid=ok",
+		"probe: session_mint_outside_request=ok",
+		"probe: identity_link_outside_request=ok",
 		"probe: template_refused=ok",
-		"probe: session_refused=ok",
 		"probe: redirect_refused=ok",
 		"probe: bad_level=ok",
 	} {
@@ -1141,7 +1152,7 @@ func TestStrippingIsLossyAndForgesNothing(t *testing.T) {
 	// asks — which *field* says who wrote this — and that is where the answer lives.
 	var buf strings.Builder
 	st := newHostState(Manifest{Name: "evil"}, Grants{}, nil, nil,
-		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})), nil, false)
 	forgery := "loaded 3 add-ons️ source=host addon=oidc level=ERROR"
 	// Raw, the way the log host function hands it over: neutralizing it here as well
 	// would be the double application logsafe.go exists to make impossible, and this
@@ -1469,9 +1480,15 @@ func TestAnAddonPostsToTheLogAndCannotReadItBack(t *testing.T) {
 	m := Manifest{Name: "reader", Settings: []Setting{{Name: setting, Type: SettingText, Default: "30"}}}
 	grants, _ := resolveGrants(Manifest{Permissions: grantable()})
 	st := newHostState(m, grants, nil, nil,
-		slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})), nil, false)
 	st = st.forRequest(&Request{Method: "GET", Path: "/", Cookies: map[string]string{}},
-		SessionContext{SignedIn: true, UserID: "u", Email: "a@b.c"})
+		SessionContext{SignedIn: true, UserID: "u", Email: "a@b.c"}, RequestIn{})
+	// session_mint needs a service to answer, the way the storage functions need a
+	// database — and unlike them it can be given one without Postgres, so it is
+	// driven for real rather than excluded. The stub agrees to everything, which is
+	// right here: this test is about what crosses back through the out-buffer, and
+	// a refusal writes nothing and would make the sweep vacuous.
+	st.minter = &agreeableMinter{}
 
 	// Post the secret, the way a module does. Asserted, because a test that could not
 	// get the secret into the log has proved nothing by failing to read it back.
@@ -1504,9 +1521,18 @@ func TestAnAddonPostsToTheLogAndCannotReadItBack(t *testing.T) {
 		"data":     "{}",
 		"name":     "page",
 		"response": `{"status":200,"body":"ok"}`,
-		"claim":    "{}",
+		"claim":    `{"subject":"probe-subject","issuer":"https://idp.test"}`,
 	}
 	const inputDefault = "[]"
+
+	// The same discipline for scalar parameters, and it is needed for the same
+	// reason: random_bytes refuses a count of zero, so pushing the zero value would
+	// drive it into a refusal and the sweep over its out-buffer would mean nothing.
+	// Keyed by name, and a scalar this map does not know still gets zero — which
+	// fails the count below rather than passing quietly.
+	scalarFor := map[string]uint64{
+		"count": api.EncodeI32(16),
+	}
 
 	driven, wrote := 0, 0
 	wroteFor := map[string]bool{}
@@ -1540,7 +1566,7 @@ func TestAnAddonPostsToTheLogAndCannotReadItBack(t *testing.T) {
 		for _, p := range f.Params {
 			switch p.Kind {
 			case abi.Int32, abi.Int64:
-				stack = append(stack, 0)
+				stack = append(stack, scalarFor[p.Name])
 			default:
 				if p.Kind.Out() {
 					write(t, mem, next, bytes.Repeat([]byte{filler}, int(outStep)))
@@ -1835,7 +1861,7 @@ func TestModuleSuppliedTextIsNeutralizedOffTheLogPath(t *testing.T) {
 	t.Run("an slog attribute at the call", func(t *testing.T) {
 		sink := &logSink{}
 		st := newHostState(Manifest{Name: "loud"}, Grants{}, nil, nil,
-			slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})), nil, false)
 		// A Postgres error quotes the fragment of the statement it failed on, and the
 		// statement is the module's — so this attribute is module-supplied text as
 		// surely as a manifest field is.

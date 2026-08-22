@@ -47,13 +47,22 @@ import (
 const (
 	VersionMajor = 0
 	VersionMinor = 1
-	VersionPatch = 0
+	VersionPatch = 1
 )
 
 // Version is the SemVer string the ABI publishes, and what the abi_version host
 // function hands a module that asks. Asserted against the three integers above
 // by test, because two spellings of one number is how they come to differ.
-const Version = "0.1.0"
+//
+// The patch moved at M65, and which component moved is the whole of what
+// docs/addon-abi.md's table decides. Adding a function is **additive**, and while
+// the major is zero the *minor* is the breaking axis — so additive is the patch,
+// and [Generation] does not move. `random_bytes` and `time_now` are therefore
+// importable by a module built against 0.1.0 that is rebuilt against 0.1.1, and
+// invisible to one that is not; the one failure mode is the documented patch case,
+// a module built against 0.1.1 loaded on a 0.1.0 host, where the import does not
+// resolve and instantiation fails naming the function.
+const Version = "0.1.1"
 
 // Generation is the integer axis a breaking change moves along, and it is what a
 // manifest's abi_version field names.

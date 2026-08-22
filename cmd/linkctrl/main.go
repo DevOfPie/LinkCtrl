@@ -256,6 +256,48 @@ func run(cfg config.Config, _ io.Writer) error {
 		"redirect": pools.Redirect,
 	}))
 
+	// The sign-in service and the audit recorder, built before the add-on host
+	// because that host takes the first as a dependency (M65): an add-on holding
+	// `session.mint` asserts, and this is what decides. Both constructions are
+	// total — neither reads the database or can fail — so moving them above the
+	// host costs the ordering nothing, and the property the comment below relies on
+	// is unchanged: this is all still before the listener.
+	//
+	// One policy, shared by both places a password can be guessed at. Sign-in is
+	// the obvious one; redeeming an invitation is the other, because it
+	// authenticates an existing account before adding the membership. Built once
+	// rather than twice so the two cannot drift into an instance whose lockout
+	// covers one door (F51).
+	lockout := auth.LockoutPolicy{
+		Threshold: cfg.Auth.LockoutThreshold,
+		Window:    15 * time.Minute,
+	}
+
+	authSvc := auth.NewService(pools.App, auth.ServiceConfig{
+		Params: auth.Params{
+			MemoryKiB:   cfg.Auth.Argon2MemoryKiB,
+			Iterations:  cfg.Auth.Argon2Iterations,
+			Parallelism: cfg.Auth.Argon2Parallelism,
+		},
+		TTL: auth.SessionTTL{
+			Absolute: cfg.Auth.SessionAbsoluteTTL,
+			Idle:     cfg.Auth.SessionIdleTTL,
+		},
+		Lockout: lockout,
+	})
+
+	// The key service needs the recorder and the key service is built below, where
+	// the dashboard and every API handler resolve their identity through it.
+	auditSvc := audit.NewService(pools.App)
+
+	// The seam M65's mint writes its provenance record through, and the logger the
+	// two failures that must not fail a sign-in go to. Both are setters because
+	// this service is constructed before the audit service exists and reordering
+	// the two would put the key service — which needs auth — before its own
+	// dependency.
+	authSvc.SetSessionAuditor(auditSvc)
+	authSvc.SetLogger(log)
+
 	// The add-on host (M60). Before the services, because a `required` add-on
 	// that will not load has to stop the instance before anything is listening —
 	// and after the metrics registry, so a refusal is counted rather than only
@@ -283,6 +325,10 @@ func run(cfg config.Config, _ io.Writer) error {
 		Metrics: metrics,
 		DB:      pools.App,
 		DSN:     cfg.DB.URL.Reveal(),
+		// M65. The host decides nothing about who may sign in: it decodes an
+		// assertion, refuses what it knows better than the module does, and hands the
+		// rest to the same service the sign-in form uses.
+		Sessions: authSvc,
 	})
 	if err != nil {
 		return fmt.Errorf("add-on host: %w", err)
@@ -312,34 +358,6 @@ func run(cfg config.Config, _ io.Writer) error {
 			log.Warn("rate limit disabled by configuration", slog.String("limit", name))
 		}
 	}
-
-	// One policy, shared by both places a password can be guessed at. Sign-in is
-	// the obvious one; redeeming an invitation is the other, because it
-	// authenticates an existing account before adding the membership. Built once
-	// rather than twice so the two cannot drift into an instance whose lockout
-	// covers one door (F51).
-	lockout := auth.LockoutPolicy{
-		Threshold: cfg.Auth.LockoutThreshold,
-		Window:    15 * time.Minute,
-	}
-
-	authSvc := auth.NewService(pools.App, auth.ServiceConfig{
-		Params: auth.Params{
-			MemoryKiB:   cfg.Auth.Argon2MemoryKiB,
-			Iterations:  cfg.Auth.Argon2Iterations,
-			Parallelism: cfg.Auth.Argon2Parallelism,
-		},
-		TTL: auth.SessionTTL{
-			Absolute: cfg.Auth.SessionAbsoluteTTL,
-			Idle:     cfg.Auth.SessionIdleTTL,
-		},
-		Lockout: lockout,
-	})
-
-	// Built here rather than at the other services' construction point below
-	// because the key service needs it and the key service is built first — the
-	// dashboard and every API handler resolve their identity through it.
-	auditSvc := audit.NewService(pools.App)
 
 	keySvc, err := auth.NewAPIKeyService(pools.App, authSvc, auth.APIKeyConfig{
 		Pepper: []byte(cfg.APIKeyPepper.Reveal()),

@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 )
 
 // ManifestFile is the name every add-on directory must hold. Fixed rather than
@@ -643,6 +644,15 @@ func (m Manifest) Validate() error {
 		case !nameRe.MatchString(s.Name):
 			add("settings: %q is not a usable setting name; same shape as an "+
 				"add-on name", s.Name)
+		case slices.Contains(config.AddonOverrideNames, s.Name):
+			// The reserved names (M65). A setting and an operator's override live in
+			// one environment namespace by design, so LINKCTRL_ADDON_OIDC_FAILURE_CLASS
+			// would otherwise be two different things at once and no lookup could tell
+			// which was meant — the same ambiguity D263 closed for two add-on names,
+			// answered the same way: refuse, rather than resolve.
+			add("settings: %q is reserved; it is how an operator answers about this "+
+				"add-on rather than a value the add-on reads, and the reserved names "+
+				"are %s", s.Name, strings.Join(config.AddonOverrideNames, ", "))
 		case seenSetting[s.Name]:
 			add("settings: %q is declared twice", s.Name)
 		}

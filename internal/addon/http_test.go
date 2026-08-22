@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -72,7 +74,7 @@ func pagesHost(t *testing.T, tweak func(*Manifest)) (*Host, *logSink) {
 func get(t *testing.T, h *Host, path string) (Response, error) {
 	t.Helper()
 	return h.Route(context.Background(), "pages",
-		RequestIn{Method: http.MethodGet, Path: path}, SessionContext{})
+		RequestIn{Method: http.MethodGet, Path: path})
 }
 
 // A request crosses, the module answers, and the record arrives intact. The echo
@@ -88,7 +90,7 @@ func TestARequestReachesAModuleAndTheAnswerComesBack(t *testing.T) {
 		ContentType:    "application/x-www-form-urlencoded",
 		AcceptLanguage: "en-GB,en;q=0.9",
 		Body:           []byte("a=1"),
-	}, SessionContext{})
+	})
 	if err != nil {
 		t.Fatalf("Route: %v", err)
 	}
@@ -131,7 +133,7 @@ func TestTheSessionCookieDoesNotReachAModule(t *testing.T) {
 			{Name: pagesPrefix + "state", Value: "mine"},
 			{Name: "other_addon_state", Value: "not mine"},
 		},
-	}, SessionContext{})
+	})
 	if err != nil {
 		t.Fatalf("Route: %v", err)
 	}
@@ -282,7 +284,7 @@ func TestWhatAModuleFailingLooksLike(t *testing.T) {
 		t.Errorf("a handler that returned a refusal answered %v, want ErrGuestFailed", err)
 	}
 	if _, err := h.Route(context.Background(), "nosuchaddon",
-		RequestIn{Method: http.MethodGet, Path: "/"}, SessionContext{}); !isErr(err, ErrNoRoute) {
+		RequestIn{Method: http.MethodGet, Path: "/"}); !isErr(err, ErrNoRoute) {
 		t.Errorf("an add-on nobody installed answered %v, want ErrNoRoute", err)
 	}
 }
@@ -316,7 +318,7 @@ func TestAModuleWithNoHandlerLoadsAndItsPagesFail(t *testing.T) {
 		t.Fatalf("the add-on did not load: %v", err)
 	}
 	if _, err := h.Route(context.Background(), "minimal",
-		RequestIn{Method: http.MethodGet, Path: "/"}, SessionContext{}); !isErr(err, ErrNoHandler) {
+		RequestIn{Method: http.MethodGet, Path: "/"}); !isErr(err, ErrNoHandler) {
 		t.Errorf("a module with no handler answered %v, want ErrNoHandler", err)
 	}
 	if !strings.Contains(sink.String(), abi.GuestHTTPHandler) {
@@ -327,14 +329,17 @@ func TestAModuleWithNoHandlerLoadsAndItsPagesFail(t *testing.T) {
 // The session read costs its own grant (D258), and an add-on that did not declare
 // it is handed nothing — not merely refused the call.
 func TestSessionContextCostsItsOwnGrant(t *testing.T) {
-	signedIn := SessionContext{
-		SignedIn: true, UserID: "0198c9c5-0000-7000-8000-000000000001",
-		Email: "owner@example.com", Role: "owner",
+	// The identity the host resolved, not a record built by the test: since M65 the
+	// record a module sees is derived from this inside internal/addon, so a test
+	// that handed one over would be testing its own mapping.
+	signedIn := &auth.Identity{
+		UserID: uuid.MustParse("0198c9c5-0000-7000-8000-000000000001"),
+		Email:  "owner@example.com", Role: "owner",
 	}
 
 	full, _ := pagesHost(t, nil)
 	resp, err := full.Route(context.Background(), "pages",
-		RequestIn{Method: http.MethodGet, Path: "/session"}, signedIn)
+		RequestIn{Method: http.MethodGet, Path: "/session", Identity: signedIn})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,11 +352,11 @@ func TestSessionContextCostsItsOwnGrant(t *testing.T) {
 		m.Permissions = []string{PermissionRoutes, "config.read"}
 	})
 	resp, err = narrow.Route(context.Background(), "pages",
-		RequestIn{Method: http.MethodGet, Path: "/session"}, signedIn)
+		RequestIn{Method: http.MethodGet, Path: "/session", Identity: signedIn})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(resp.Body, signedIn.Email) || strings.Contains(resp.Body, signedIn.UserID) {
+	if strings.Contains(resp.Body, signedIn.Email) || strings.Contains(resp.Body, signedIn.UserID.String()) {
 		t.Errorf("an add-on that declared only routes.own_prefix read the identity anyway: %q",
 			resp.Body)
 	}
@@ -502,7 +507,7 @@ func TestABusyHostRefusesRatherThanWaitsForEver(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := h.Route(ctx, "pages",
-		RequestIn{Method: http.MethodGet, Path: "/echo"}, SessionContext{}); !isErr(err, ErrBusy) {
+		RequestIn{Method: http.MethodGet, Path: "/echo"}); !isErr(err, ErrBusy) {
 		t.Errorf("a saturated host answered %v, want ErrBusy", err)
 	}
 }
@@ -590,7 +595,7 @@ func TestARequestTooLargeToCrossIsRefusedBeforeTheModuleSeesIt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := h.Route(context.Background(), "pages", RequestIn{
 				Method: http.MethodPost, Path: "/hostile", Body: tc.body,
-			}, SessionContext{})
+			})
 			if !isErr(err, ErrRequestTooLarge) {
 				t.Fatalf("a body of %d bytes answered %v with status %d; the record does not "+
 					"fit one value and the visitor has to be told so",
@@ -607,7 +612,7 @@ func TestARequestTooLargeToCrossIsRefusedBeforeTheModuleSeesIt(t *testing.T) {
 	resp, err := h.Route(context.Background(), "pages", RequestIn{
 		Method: http.MethodPost, Path: "/hostile",
 		Body: bytes.Repeat([]byte("a"), maxStringIn/2),
-	}, SessionContext{})
+	})
 	if err != nil || resp.Status != http.StatusOK {
 		t.Fatalf("a body of %d bytes answered %v with status %d, so the bound above is "+
 			"refusing everything", maxStringIn/2, err, resp.Status)
@@ -664,7 +669,7 @@ func visit(t *testing.T, h *Host, store jarStore, path, query string) Response {
 	t.Helper()
 	resp, err := h.Route(context.Background(), "pages", RequestIn{
 		Method: http.MethodGet, Path: path, Query: query, Cookies: store.sent(),
-	}, SessionContext{})
+	})
 	if err != nil {
 		t.Fatalf("GET %s?%s: %v", path, query, err)
 	}
@@ -849,7 +854,7 @@ func TestAnEntryDiesOnItsOwnScheduleInsideALongerLivedJar(t *testing.T) {
 	resp, err := h.Route(context.Background(), "pages", RequestIn{
 		Method: http.MethodGet, Path: "/echo",
 		Cookies: []*http.Cookie{{Name: jarName("pages", true), Value: value}},
-	}, SessionContext{})
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1106,7 +1111,7 @@ func TestGuestMemoryIsBoundedPerInstance(t *testing.T) {
 		t.Fatalf("a module allocating nothing failed: %v", err)
 	}
 	resp, err := h.Route(context.Background(), "pages",
-		RequestIn{Method: http.MethodGet, Path: "/grow", Query: "4"}, SessionContext{})
+		RequestIn{Method: http.MethodGet, Path: "/grow", Query: "4"})
 	if err != nil {
 		t.Fatalf("a module allocating 4 MiB was refused, which is less room than a "+
 			"page handler needs: %v", err)
@@ -1116,7 +1121,7 @@ func TestGuestMemoryIsBoundedPerInstance(t *testing.T) {
 	}
 
 	resp, err = h.Route(context.Background(), "pages",
-		RequestIn{Method: http.MethodGet, Path: "/grow", Query: "64"}, SessionContext{})
+		RequestIn{Method: http.MethodGet, Path: "/grow", Query: "64"})
 	if !errors.Is(err, ErrGuestFailed) {
 		t.Fatalf("a module allocating 64 MiB was allowed to: err=%v body=%q; "+
 			"maxGuestMemoryPages is %d pages, which is %d MiB",

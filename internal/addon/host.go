@@ -15,8 +15,8 @@
 // rather than from this comment, which has been wrong once: the live set grows as
 // milestones land, and the rest are declared and refused with a status a module can
 // branch on, because the contract crosses a repository boundary before the
-// behaviour behind it exists. Template rendering, the session hook and redirect
-// observation are the ones still refused.
+// behaviour behind it exists. Template rendering and redirect observation are the
+// ones still refused.
 //
 // # An add-on's own tables
 //
@@ -56,17 +56,20 @@
 //
 //   - no filesystem is preopened, so fd operations have nothing to reach;
 //   - no environment and no arguments are passed;
-//   - the clocks are wazero's **fake** clocks and the random source its **fake**
-//     source (internal/sys/sys.go:151-175 in wazero v1.12.0), so a module that
-//     reads the wall clock sees a frozen one and a module that reads randomness
-//     gets a deterministic stream.
+//   - the clock and the random source are **not** wazero's defaults, and that is
+//     the one place this host deliberately departs from them. See
+//     [guestModuleConfig], which is the only place in this package a module
+//     config is built.
 //
-// That last one is a hazard the ABI has not answered: nothing in abi.Functions
-// hands a module a real clock or a real random source, so a module needing either
-// has none, and sdk/doc.go tells a publisher so rather than leaving them to
-// discover it. A module's writes to stdout and stderr are still discarded —
-// routing them into the operator's log would be a capability granted by accident,
-// and the log function is the one that was granted on purpose.
+// The departure is D292, and what it repairs is worth stating where the defaults
+// are described. wazero's default random source is `rand.New(rand.NewSource(42))`
+// — a compile-time constant, so every module on every deployment drew the same
+// bytes — and its default clock starts at 2022-01-01 and advances a millisecond
+// per reading. With a fresh instance per request (D260) that made *every
+// visitor's* nonce identical rather than merely predictable, which is F292. A
+// module's writes to stdout and stderr are still discarded — routing them into the
+// operator's log would be a capability granted by accident, and the log function is
+// the one that was granted on purpose.
 //
 // # Cost
 //
@@ -91,6 +94,7 @@ package addon
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -98,6 +102,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -124,6 +129,53 @@ import (
 // command. An add-on is a library the host calls into later, which the Go
 // toolchain produces with -buildmode=c-shared and which starts at _initialize.
 const StartFunction = "_initialize"
+
+// guestModuleConfig is the configuration **every** guest instance in this product
+// is made with, and it is the only place in this package a module config is built.
+//
+// One function rather than a literal per call site, because there are two sites —
+// the load-time instance in loadOne and the per-request instance in http.go — and
+// a difference between them is invisible: a module drawing entropy would work at
+// load and be predictable per request, or the reverse, with nothing failing.
+// TestOnlyOneModuleConfigIsBuilt asserts that this stays the only site, so a third
+// instantiation added by a later milestone cannot quietly get wazero's defaults.
+//
+// # The clock and the random source (D292)
+//
+// wazero's defaults for both are fakes, and they are fakes with a shape worth
+// naming rather than merely replacing:
+//
+//   - the random source is `rand.New(rand.NewSource(42))`. Not "seeded at
+//     startup" — a **compile-time constant**, so the stream is byte-identical
+//     across requests, across add-ons, across host processes, across machines and
+//     across deployments. With a fresh instance per request (D260) every visitor
+//     therefore received the *same* nonce, which is the composition F292 filed;
+//   - the wall clock starts at 2022-01-01 and advances one millisecond per
+//     reading, so an `exp` claim checked against it is checked against 2022.
+//
+// Both are replaced here with the operating system's own, which is what makes
+// `crypto/rand` and `time.Now` **inside a guest** mean what a publisher assumes
+// they mean. That is deliberately the load-bearing half of D292: an add-on built
+// against the older SDK, which cannot call `random_bytes` because it did not exist
+// when the add-on was compiled, still gets real entropy from the standard library
+// call it already made. The two ABI functions are the *documented* spelling of the
+// same two sources, not a second pair of them.
+//
+// WithSysNanotime is set as well as WithSysWalltime. It is not what an expiry is
+// compared against — that is the wall clock — but it is what Go's runtime uses for
+// monotonic time inside `time.Since` and for scheduling, and leaving one real and
+// the other fake is the shape that produces a duration measured between two clocks.
+func guestModuleConfig(name string) wazero.ModuleConfig {
+	return wazero.NewModuleConfig().
+		WithName(name).
+		WithStartFunctions(StartFunction).
+		// crypto/rand.Reader, which is the operating system's own getrandom(2) on
+		// Linux. Handed to WASI's random_get, which is what a guest's crypto/rand
+		// and the runtime's own seeding both read.
+		WithRandSource(rand.Reader).
+		WithSysWalltime().
+		WithSysNanotime()
+}
 
 // Outcome is the closed vocabulary of load results, and it is a metric label.
 //
@@ -420,10 +472,109 @@ type Options struct {
 	// values without writing to the process environment.
 	Settings func(addon string, declared []string) map[string]config.Secret
 
+	// Overrides is where an operator's per-add-on answers come from — the two
+	// names in [config.AddonOverrideNames], which are not settings and which no
+	// manifest may declare. Nil means the environment, through
+	// [config.AddonOverrides]; a test substitutes them without writing to the
+	// process environment, which is what lets the tests that exercise them run in
+	// parallel.
+	Overrides func(addon string) map[string]string
+
+	// Sessions is what answers `session_mint` (M65). Nil is a host that cannot
+	// mint — every unit test in this package, and no instance — and such a host
+	// answers StatusInternal rather than pretending the function is not
+	// implemented, because *this host has no database* and *this ABI does not have
+	// that function* are different facts and a module branches on them differently.
+	Sessions SessionMinter
+
 	// LoadTimeout is how long one add-on may take to load. Zero means
 	// [DefaultLoadTimeout], which is what an instance uses; a test sets a budget it
 	// can afford to spend watching a module that will not return.
 	LoadTimeout time.Duration
+}
+
+// FailureClassError is an operator override this host cannot interpret.
+//
+// Its own type because it is the one add-on failure that is neither the
+// publisher's fault nor recoverable by degrading: the variable that says whether
+// this add-on may be skipped is the variable that could not be read, so there is
+// no answer to fall back to. Open returns it and the instance stops.
+type FailureClassError struct {
+	Addon string
+	Var   string
+	Value string
+}
+
+func (e *FailureClassError) Error() string {
+	return fmt.Sprintf("add-on %q: %s=%q: must be %q or %q",
+		moduleText(e.Addon), e.Var, moduleText(e.Value), ClassRequired, ClassDegrade)
+}
+
+// neutralized marks the sentence above as already escaped — moduleText is what
+// does it, on both values that came from outside this build.
+func (*FailureClassError) neutralized() {}
+
+// requiredByDefault reports whether this manifest's declared permissions put the
+// add-on on the authentication path.
+//
+// One permission does, and it is the highest-value grant in the vocabulary: an
+// add-on holding `session.mint` decides who is signed in, so an instance that
+// booted without it is an instance whose external sign-in silently does not exist.
+// m65.md's answer, which is the owner's load-failure answer applied to the one
+// milestone it was written for: **anything on the authentication path defaults to
+// required**, whatever the manifest says.
+//
+// Read off the manifest's declarations rather than off resolved grants,
+// deliberately. A permission that is declared and not held is still a statement
+// about what the add-on is *for*, and an add-on refused the grant is exactly the
+// case where an operator most needs the instance to say so.
+func requiredByDefault(m Manifest) bool {
+	return slices.Contains(m.Permissions, PermissionSessionMint)
+}
+
+// effectiveFailureClass is the class this host actually applies, which is not
+// always the one the manifest declared.
+//
+// Three answers in a fixed order, and the order is the argument:
+//
+//  1. **The operator's override wins**, when there is one. It is the escape hatch
+//     m65.md requires and the only way to run an authentication add-on as
+//     `degrade`; a value that is neither class is an error rather than a fallback,
+//     because falling back would be this host choosing the answer an operator was
+//     trying to give.
+//  2. **Otherwise `session.mint` forces `required`.** The manifest still declares
+//     the class and this still overrides it, which is a deliberate exception to
+//     *the add-on decides* (M60): the publisher of an authentication add-on cannot
+//     know whether this instance has another way in, and the failure mode of
+//     guessing wrong is an instance that boots with sign-in missing.
+//  3. **Otherwise the manifest's own class**, unchanged.
+func effectiveFailureClass(m Manifest, overrides map[string]string) (FailureClass, error) {
+	if v, set := overrides["failure_class"]; set {
+		switch FailureClass(v) {
+		case ClassRequired, ClassDegrade:
+			return FailureClass(v), nil
+		default:
+			return "", &FailureClassError{
+				Addon: m.Name, Var: config.AddonSettingVar(m.Name, "failure_class"), Value: v,
+			}
+		}
+	}
+	if requiredByDefault(m) {
+		return ClassRequired, nil
+	}
+	return m.FailureClass, nil
+}
+
+// mfaSatisfiedByProvider is the operator's answer about *this* add-on's provider.
+//
+// Anything other than the exact string "true" is false, and that is the point
+// rather than lax parsing: this is the one flag in this product that can stop a
+// second factor being asked for, so the safe reading is the default and saying
+// otherwise has to be unambiguous. An unparseable value is not an error for the
+// same reason it is not a yes — the instance keeps asking for the factor, which
+// is what an operator who typed `yes` instead of `true` would want.
+func mfaSatisfiedByProvider(overrides map[string]string) bool {
+	return overrides["mfa_satisfied"] == "true"
 }
 
 // Loaded is one add-on that instantiated.
@@ -437,6 +588,12 @@ type Loaded struct {
 	// add-ons contending for one schema impossible rather than merely unlikely: the
 	// directory *is* the name and loadOne refuses a manifest that disagrees.
 	Schema string
+	// FailureClass is what this host **applies**, which is the manifest's answer
+	// only when neither of the two things that outrank it applied. Read this rather
+	// than Manifest.FailureClass: the boot log, the info gauge and the decision to
+	// stop the instance all use this one, and the manifest's field is the
+	// publisher's declaration rather than the outcome.
+	FailureClass FailureClass
 
 	module  api.Module
 	grants  Grants
@@ -468,6 +625,19 @@ func (l Loaded) MemorySize() uint32 {
 	return l.module.Memory().Size()
 }
 
+// overrides is the operator's answers about one add-on, nil-safe.
+//
+// Nil-safe because a *Host built by a test — which several in this package are,
+// directly rather than through Open — has no function here, and registerState is
+// reached from both. An absent lookup is an add-on with no overrides, which is
+// what an operator who set no variables has.
+func (h *Host) overrides(addon string) map[string]string {
+	if h == nil || h.overrideFor == nil {
+		return nil
+	}
+	return h.overrideFor(addon)
+}
+
 // Module exposes the instance so a later milestone can call into it. It is the
 // only reason this type is exported and there is nothing to call yet.
 func (l Loaded) Module() api.Module { return l.module }
@@ -491,8 +661,15 @@ type Host struct {
 	// the maintenance job.
 	db  *pgxpool.Pool
 	dsn string
-	// settings is Options.Settings with its default applied.
-	settings func(addon string, declared []string) map[string]config.Secret
+	// settings is Options.Settings with its default applied, and overrides is
+	// Options.Overrides with its default applied. Two functions rather than one,
+	// because they read two disjoint sets of variable names and a manifest may
+	// declare from only one of them — see config.AddonOverrideNames.
+	settings    func(addon string, declared []string) map[string]config.Secret
+	overrideFor func(addon string) map[string]string
+	// sessions is Options.Sessions: what answers session_mint. Nil is a host that
+	// cannot mint.
+	sessions SessionMinter
 
 	// states is what an ABI call is answered against, keyed by the calling
 	// module's name — see hostabi.go. Guarded because a host function is called
@@ -560,29 +737,36 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// the guarantee is what makes the log diffable across restarts.
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
+	settings := opts.Settings
+	if settings == nil {
+		settings = config.AddonSettings
+	}
+	overrides := opts.Overrides
+	if overrides == nil {
+		overrides = config.AddonOverrides
+	}
+
 	// Every name that is claimed, read before anything is loaded, because whether
 	// one add-on may load is a question about the *other* names installed beside
 	// it — the one check in this file that cannot be made from one directory.
 	// See nameCollisions.
-	claimed := claimants(dir, entries)
+	claimed := claimants(dir, entries, overrides)
 	collisions := nameCollisions(claimed)
 	classes := make(map[string]FailureClass, len(claimed))
 	for _, c := range claimed {
 		classes[c.name] = c.class
 	}
 
-	settings := opts.Settings
-	if settings == nil {
-		settings = config.AddonSettings
-	}
 	timeout := opts.LoadTimeout
 	if timeout <= 0 {
 		timeout = DefaultLoadTimeout
 	}
 	h := &Host{
 		log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN,
-		settings: settings,
-		slots:    make(chan struct{}, maxConcurrentRoutes),
+		settings:    settings,
+		overrideFor: overrides,
+		sessions:    opts.Sessions,
+		slots:       make(chan struct{}, maxConcurrentRoutes),
 
 		loadTimeout: timeout,
 	}
@@ -675,7 +859,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		}
 		h.metrics.ObserveAddonLoad(loaded.Manifest.Name, string(OutcomeLoaded))
 		h.metrics.SetAddonInfo(loaded.Manifest.Name, loaded.Manifest.Version,
-			loaded.Manifest.ABIVersion, string(loaded.Manifest.FailureClass),
+			loaded.Manifest.ABIVersion, string(loaded.FailureClass),
 			loaded.grants.String())
 		h.loaded = append(h.loaded, loaded)
 		// The grants are named rather than counted. A count answers "did anything
@@ -687,7 +871,10 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			slog.String("addon", loaded.Manifest.Name),
 			slog.String("version", loaded.Manifest.Version),
 			slog.Int("abi_version", loaded.Manifest.ABIVersion),
-			slog.String("failure_class", string(loaded.Manifest.FailureClass)),
+			// The class this host applies, not the one the manifest declared — see
+			// Loaded.FailureClass. An operator reading a boot log to find out whether
+			// this add-on can be skipped is asking about the applied one.
+			slog.String("failure_class", string(loaded.FailureClass)),
 			slog.Any("permissions", loaded.grants.Names()),
 			slog.Int("declared_settings", len(loaded.Manifest.Settings)),
 			// How many of them an operator has actually set, which is the question a
@@ -766,7 +953,7 @@ type claimant struct {
 // The manifest is read twice per add-on, here and in loadOne. Boot only, a few
 // hundred bytes of JSON each, and the alternative is threading a parsed manifest
 // through the load path to save it.
-func claimants(dir string, entries []os.DirEntry) []claimant {
+func claimants(dir string, entries []os.DirEntry, overrides func(string) map[string]string) []claimant {
 	out := make([]claimant, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -776,7 +963,17 @@ func claimants(dir string, entries []os.DirEntry) []claimant {
 		if err != nil || m.Name != e.Name() {
 			continue
 		}
-		out = append(out, claimant{name: m.Name, class: m.FailureClass})
+		// The **effective** class, for the same reason loadOne uses it: a collision
+		// refusal has to stop the instance when the add-on it refuses is on the
+		// authentication path, and reading the manifest's own field here would have
+		// let an `oidc`/`oidc_x` pair degrade past it. An override this host cannot
+		// interpret leaves the class empty, which fatal() already treats as the
+		// harsh case — and loadOne reports the variable by name a moment later.
+		class, cerr := effectiveFailureClass(m, overrides(m.Name))
+		if cerr != nil {
+			class = ""
+		}
+		out = append(out, claimant{name: m.Name, class: class})
 	}
 	return out
 }
@@ -854,12 +1051,24 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	if err != nil {
 		return fail(OutcomeManifestInvalid, "", err)
 	}
+	// Resolved once, immediately, and used for every refusal below rather than
+	// class. The two differ whenever an operator overrode the class or the
+	// add-on declared `session.mint`, and a `fail` call that reached for the
+	// manifest's field would let an authentication add-on degrade past exactly the
+	// failures this milestone made fatal.
+	class, err := effectiveFailureClass(m, h.overrides(m.Name))
+	if err != nil {
+		// No class to fall back to — the variable that decides whether this add-on
+		// may be skipped is the one that could not be read — so this is the
+		// deliberately harsh limb, the same one an unparseable manifest gets.
+		return fail(OutcomeManifestInvalid, "", err)
+	}
 	// The directory *is* the add-on's identity. Requiring the two to agree buys
 	// two things: a metric label that exists before the manifest parses, and the
 	// impossibility of two directories claiming one name — which would be two
 	// add-ons contending for one Postgres schema at M63.
 	if m.Name != entry {
-		return fail(OutcomeManifestInvalid, m.FailureClass,
+		return fail(OutcomeManifestInvalid, class,
 			fmt.Errorf("manifest names %q but the directory is %q; they must match", m.Name, entry))
 	}
 	// Before the module is read, let alone hashed or compiled. An add-on built
@@ -867,7 +1076,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	// knowable from 200 bytes of JSON, and doing the cheap check first is the same
 	// ordering rule the rest of this function follows.
 	if err := abi.CheckGeneration(m.ABIVersion); err != nil {
-		return fail(OutcomeABIUnsupported, m.FailureClass, err)
+		return fail(OutcomeABIUnsupported, class, err)
 	}
 
 	// filepath.Join with a validated bare filename, so this cannot leave dir.
@@ -875,7 +1084,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	wasmPath := filepath.Join(dir, m.Module)
 	code, err := os.ReadFile(wasmPath) //nolint:gosec // G304: an operator-owned directory is the feature; the filename is validated to be bare
 	if err != nil {
-		return fail(OutcomeModuleUnreadable, m.FailureClass, err)
+		return fail(OutcomeModuleUnreadable, class, err)
 	}
 
 	// Verified before the runtime is asked for anything. A module whose bytes are
@@ -884,7 +1093,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	// been parsed.
 	sum := sha256.Sum256(code)
 	if got := hex.EncodeToString(sum[:]); got != m.SHA256 {
-		return fail(OutcomeChecksumMismatch, m.FailureClass,
+		return fail(OutcomeChecksumMismatch, class,
 			fmt.Errorf("%s hashes to %s, manifest says %s", m.Module, got, m.SHA256))
 	}
 
@@ -903,10 +1112,10 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	})
 	if err != nil {
 		if expired {
-			return fail(OutcomeLoadTimeout, m.FailureClass,
+			return fail(OutcomeLoadTimeout, class,
 				fmt.Errorf("did not finish compiling within %v: %w", h.loadTimeout, err))
 		}
-		return fail(OutcomeInstantiateFailed, m.FailureClass, fmt.Errorf("compile: %w", err))
+		return fail(OutcomeInstantiateFailed, class, fmt.Errorf("compile: %w", err))
 	}
 
 	// Resolved once, here, and never again: from M66 a grant check sits on the
@@ -931,7 +1140,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	// what m63.md's third risk names as the accepted cost.
 	storage, err := h.openStorage(ctx, m, dir, grants)
 	if err != nil {
-		return fail(OutcomeStorageFailed, m.FailureClass, err)
+		return fail(OutcomeStorageFailed, class, err)
 	}
 
 	// What an operator configured, resolved once at load for the reason the grants
@@ -957,10 +1166,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	var mod api.Module
 	expired, err = h.runGuest(ctx, func(ctx context.Context) error {
 		var e error
-		mod, e = h.runtime.InstantiateModule(ctx, compiled,
-			wazero.NewModuleConfig().
-				WithName(m.Name).
-				WithStartFunctions(StartFunction))
+		mod, e = h.runtime.InstantiateModule(ctx, compiled, guestModuleConfig(m.Name))
 		return e
 	})
 	if err != nil {
@@ -981,10 +1187,10 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		// start is a pool leak with a schedule.
 		storage.Close()
 		if expired {
-			return fail(OutcomeLoadTimeout, m.FailureClass,
+			return fail(OutcomeLoadTimeout, class,
 				fmt.Errorf("did not finish starting within %v: %w", h.loadTimeout, err))
 		}
-		return fail(OutcomeInstantiateFailed, m.FailureClass, err)
+		return fail(OutcomeInstantiateFailed, class, err)
 	}
 
 	schema := ""
@@ -992,7 +1198,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		schema = storage.Schema()
 	}
 	return Loaded{
-		Manifest: m, Dir: dir, Schema: schema, settings: values,
+		Manifest: m, Dir: dir, Schema: schema, settings: values, FailureClass: class,
 		module: mod, grants: grants, storage: storage, compiled: compiled,
 	}, nil
 }

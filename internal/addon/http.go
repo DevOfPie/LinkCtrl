@@ -9,15 +9,17 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/tetratelabs/wazero"
+	"github.com/google/uuid"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 )
 
 // This file is the routes limb (M64): what an add-on may be asked, what it may
@@ -206,6 +208,68 @@ type RequestIn struct {
 	AcceptLanguage string
 	Body           []byte
 	Cookies        []*http.Cookie
+
+	// ClientIP and UserAgent are the request's, and they are here for exactly one
+	// consumer: a session minted through `session_mint` records where the sign-in
+	// came from, in the same columns and by the same reduction the password path
+	// uses. **Neither reaches the guest.** RequestIn is the host's input type and
+	// [RequestIn.record] is what turns it into the record a module sees; neither
+	// field is copied into it, no ABI record has a field for either, and
+	// abi.AddressBearing fails the surface test if one ever acquires a name that
+	// reads like an address. The address itself becomes a /24 or /48 prefix inside
+	// internal/auth before it reaches a column, which is where every other address
+	// in this product is reduced.
+	ClientIP  netip.Addr
+	UserAgent string
+
+	// Identity is whoever the *host* resolved for this request, or nil for
+	// nobody. It is the single source of truth about who is signed in, and
+	// [RequestIn.session] is what a module is allowed to see of it.
+	//
+	// **One value rather than two**, which M65 is why. Two host functions have
+	// opposite requirements about a session — `identity_link` refuses unless
+	// somebody is signed in, `session_mint` refuses unless nobody is — and the
+	// record a module sees is blanked for an add-on that did not declare
+	// `session.context`. Passing the record as well would therefore have let an
+	// add-on's own manifest decide whether the host noticed a session, which is
+	// the wrong thing to be able to arrange from inside a manifest.
+	Identity *auth.Identity
+}
+
+// session is the SessionContext record for this request, and the whole of what a
+// module may learn about who is signed in.
+//
+// Built here rather than by internal/httpx because this package owns the ABI's
+// records, and because the property worth asserting — nothing in it is a
+// credential (D232) — is a property of this mapping. No cookie, no token and no
+// session identifier appears below; abi.CredentialBearing walks the record's field
+// names for the same claim from the surface.
+func (in RequestIn) session() SessionContext {
+	id := in.Identity
+	if id == nil {
+		// Not an error. Add-on routes are reachable without a session, because a
+		// sign-in flow could not otherwise begin, so this is the ordinary state of a
+		// module drawing its first page.
+		return SessionContext{}
+	}
+	out := SessionContext{
+		SignedIn:    true,
+		UserID:      id.UserID.String(),
+		Email:       id.Email,
+		DisplayName: id.Name,
+		Role:        id.Role,
+	}
+	// The zero UUID crosses as an empty string rather than as a run of zeroes: a
+	// module comparing what it was handed against "" is doing the obvious thing,
+	// and a module that stored 00000000-0000-0000-0000-000000000000 as a tenant
+	// would have stored a tenant that does not exist.
+	if id.WorkspaceID != uuid.Nil {
+		out.WorkspaceID = id.WorkspaceID.String()
+	}
+	if id.OrgID != uuid.Nil {
+		out.OrganizationID = id.OrgID.String()
+	}
+	return out
 }
 
 // record turns a request into the HTTPRequest a guest sees, keeping only what
@@ -314,6 +378,23 @@ type Response struct {
 	// to loop over but the jar, and the jar is at most two cookies however many a
 	// module named.
 	Jar []JarCookie `json:"-"`
+	// Minted is the session the host minted while this module was answering, or
+	// nil. Also not part of the record: a module neither sends it nor sees it, and
+	// what it holds — the session token — is the one value M65 exists to keep on
+	// this side of the sandbox.
+	//
+	// It is on the response rather than a second return value because the two
+	// travel together to exactly one place: internal/httpx writes a cookie and then
+	// writes the module's answer, in that order, and a caller that ignored this
+	// field would produce a page for somebody the host had already signed in.
+	//
+	// A module that mints and then **fails** — traps, writes no response, answers a
+	// refusal — loses this, because Route returns an error and there is no response
+	// to carry it on. The session row still exists and expires on its own; the
+	// visitor gets a 502 and is not signed in. That is the safe direction of the two
+	// and it is stated rather than fixed: writing a session cookie alongside a
+	// failure page would sign somebody in on the strength of a module that crashed.
+	Minted *Minted `json:"-"`
 }
 
 // ContentTypeWrapped is the empty content type: the host wraps the body in the
@@ -349,23 +430,14 @@ var ResponseMediaTypes = []string{"text/plain", "application/json"}
 // failing per visit. Neutralizing at each site was the shape that missed that one.
 // Unwrap survives, so errors.Is on ErrNoRoute, ErrBusy and the rest still decides
 // what it decided.
-func (h *Host) Route(ctx context.Context, name string, in RequestIn, sess SessionContext) (Response, error) {
-	resp, err := h.route(ctx, name, in, sess)
+func (h *Host) Route(ctx context.Context, name string, in RequestIn) (Response, error) {
+	resp, err := h.route(ctx, name, in)
 	return resp, neutralize(err)
 }
 
-func (h *Host) route(ctx context.Context, name string, in RequestIn, sess SessionContext) (Response, error) {
-	if h == nil {
-		return Response{}, ErrNoRoute
-	}
-	var target *Loaded
-	for i := range h.loaded {
-		if h.loaded[i].Manifest.Name == name && h.loaded[i].ServesRoutes() {
-			target = &h.loaded[i]
-			break
-		}
-	}
-	if target == nil || target.compiled == nil {
+func (h *Host) route(ctx context.Context, name string, in RequestIn) (Response, error) {
+	target := h.routed(name)
+	if target == nil {
 		return Response{}, ErrNoRoute
 	}
 
@@ -385,15 +457,20 @@ func (h *Host) route(ctx context.Context, name string, in RequestIn, sess Sessio
 		// the same "no state" case dispatch refuses, reached from the other side.
 		return Response{}, fmt.Errorf("%w: the host has no state for %q", ErrGuestFailed, name)
 	}
+	sess := in.session()
 	if !target.grants.Has(PermissionSessionContext) {
 		// The grant is what the session read costs, and the cheapest place to
 		// enforce it is to have nothing to read: an add-on that did not declare it
 		// gets dispatch's StatusDenied, and this makes the value absent as well, so
 		// no future edit to that check can turn into a disclosure.
+		//
+		// It blanks the *record* and nothing else. in.Identity is untouched, which is
+		// what keeps the two session-shaped host functions answering about the
+		// request rather than about the manifest.
 		sess = SessionContext{}
 	}
 	req := in.record(name, target.Manifest.CookiePrefixes)
-	st := base.forRequest(&req, sess)
+	st := base.forRequest(&req, sess, in)
 
 	// The record has to fit one value, and this is where that is decided.
 	//
@@ -450,10 +527,7 @@ func (h *Host) route(ctx context.Context, name string, in RequestIn, sess Sessio
 	// that will not return a bounded failure rather than a stuck goroutine: the
 	// runtime is built WithCloseOnContextDone, so the deadline every application
 	// request carries closes the instance underneath a spinning guest.
-	mod, err := h.runtime.InstantiateModule(ctx, target.compiled,
-		wazero.NewModuleConfig().
-			WithName(instance).
-			WithStartFunctions(StartFunction))
+	mod, err := h.runtime.InstantiateModule(ctx, target.compiled, guestModuleConfig(instance))
 	if err != nil {
 		if mod != nil {
 			_ = mod.Close(ctx)
@@ -515,8 +589,46 @@ func (h *Host) route(ctx context.Context, name string, in RequestIn, sess Sessio
 	}
 	resp.SetCookie = nil
 	resp.Jar = jar
+	// Read off the per-request state rather than out of anything the module wrote,
+	// which is the whole of why a module cannot fabricate one: the only writer of
+	// this field is the session_mint host function, after internal/auth agreed.
+	resp.Minted = st.minted
 	return resp, nil
 }
+
+// routed selects the loaded add-on that would be handed a request under this
+// name, or nil.
+//
+// One function, because two callers ask the same question for different reasons
+// and an answer that differed between them would be a defect neither could see:
+// [Host.Route] asks in order to dispatch, and [Host.ServesRoutes] asks so that
+// internal/httpx can answer 404 and decline to charge without instantiating
+// anything. Nil-safe on the host for the reason Route is — an instance with no
+// add-ons directory has no host at all.
+func (h *Host) routed(name string) *Loaded {
+	if h == nil {
+		return nil
+	}
+	for i := range h.loaded {
+		if h.loaded[i].Manifest.Name == name && h.loaded[i].ServesRoutes() &&
+			h.loaded[i].compiled != nil {
+			return &h.loaded[i]
+		}
+	}
+	return nil
+}
+
+// ServesRoutes reports whether a request naming this add-on would reach a module.
+//
+// It is the shape test internal/httpx makes before the login limiter charges
+// (D309): a path under `/addons/` naming nothing this instance serves is a 404
+// that costs its caller nothing, and only a request that would actually reach a
+// module is charged against the budget somebody needs to sign in. Reading it off
+// [Host.routed] is what keeps that from drifting away from what Route does.
+//
+// No lock, no instance, no allocation: it runs on every request under the prefix
+// including the flood it exists to make cheap.
+func (h *Host) ServesRoutes(name string) bool { return h.routed(name) != nil }
 
 // RoutedAddons is every loaded add-on holding the routes grant, in discovery
 // order. It is what an operator's boot log and M68's manager read; the routing

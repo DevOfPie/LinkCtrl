@@ -29,6 +29,118 @@ migrations run at boot.
 
 ### Added
 
+- **An add-on can sign somebody in, and LinkCtrl decides what that means.**
+
+  A module whose manifest declares `session.mint` can complete an external
+  identity flow — an OIDC sign-in, a corporate provider — and tell this instance
+  that somebody authenticated. **It never makes the session.** It makes an
+  assertion; LinkCtrl decides whether an account exists for that external
+  identity, whether that account may sign in, how long the session lives, and
+  whether a second factor is still owed. The cookie is written by LinkCtrl. No
+  add-on is ever handed a session token, a cookie or a session row, and there is
+  no function in the published ABI that returns one.
+
+  **Connecting a provider is explicit and is never guessed.** The mapping from a
+  provider's subject to an account here is written only while the person it
+  belongs to is signed in, in their own browser. **Nothing matches on the email
+  address an assertion carries** — that is the classic account-takeover shape, and
+  it is absent by design rather than by omission: there is no statement in this
+  product that resolves an assertion by any column other than the add-on, the
+  issuer and the subject. An assertion for an identity nobody has connected signs
+  nobody in.
+
+  **A second factor is not bypassed.** An account with two-factor authentication
+  enrolled meets its code prompt after an add-on's assertion, exactly as it does
+  after a correct password — the assertion gets somebody as far as the prompt and
+  no further. An operator whose provider already performed a second factor can say
+  so with `LINKCTRL_ADDON_<NAME>_MFA_SATISFIED=true`, and only that exact word
+  turns it off.
+
+  **An add-on that signs people in defaults to `required`.**
+  `LINKCTRL_ADDON_<NAME>_FAILURE_CLASS` is read before the manifest's class for
+  **every** add-on, not only the authentication ones, so an operator can make any
+  add-on `required` or `degrade` from the environment; a value that is neither
+  stops the instance rather than falling back. With no such variable set, an
+  add-on holding `session.mint` is `required` whatever its manifest says, because
+  the publisher cannot know whether your instance has another way in and an
+  instance that boots with sign-in silently missing is the worse failure. Editing
+  `failure_class` in such an add-on's manifest therefore changes nothing, and
+  `LINKCTRL_ADDON_<NAME>_FAILURE_CLASS=degrade` is the only way to say otherwise —
+  which `docs/operations.md`'s recovery runbook now says where an operator reads
+  it. Its consequence is stated: external sign-in disappears while local sign-in
+  continues.
+
+  **Two setting names are now reserved, and a manifest using one is refused at
+  load.** `failure_class` and `mfa_satisfied` live in the same
+  `LINKCTRL_ADDON_<NAME>_<X>` namespace as an add-on's own settings, so one
+  variable cannot be your answer about an add-on and a value the add-on reads at
+  the same time. An existing add-on declaring a setting by either name stops
+  loading when you upgrade, with the reason and the reserved list on stderr.
+
+  The audit log gained `session.minted_by_addon`. Every session minted this way
+  leaves a record under it naming which add-on and which issuer vouched — and deliberately nothing about the external identity, so
+  the erasure sweep has nothing new to reach. **That includes an account with a
+  second factor**, where the session is minted after the code prompt rather than
+  at the assertion: the provenance is carried through the prompt, so the record
+  describes the session that exists rather than only the assertion that asked for
+  it. Deleting an account takes its
+  connected identities with it, for the same reason it takes a password-reset
+  token: a connection is a standing credential that admits somebody with no
+  password.
+
+  **Every add-on's pages are now rate limited per address**, and this is a change
+  for add-ons that have nothing to do with signing anybody in. Until now
+  `/addons/<name>/…` carried no limit at all, which was correct while an add-on
+  could only draw a page; an add-on that can mint changed that, because a stranger
+  repeating a request could supersede somebody's outstanding two-factor prompt and
+  write an audit row each time. The limit is `LINKCTRL_LOGIN_RATE_PER_MIN`, shared
+  with the sign-in form so that alternating between the two gains nothing, and it
+  covers **every route an add-on serves** rather than only the add-ons that hold
+  `session.mint` — a bound that depends on which permissions a manifest happens to
+  declare is a bound the next release can move without anyone noticing. The cost is
+  real: a dashboard add-on carrying no credential now spends the same budget, and
+  an operator running one behind a shared address or a NAT may have to raise that
+  number.
+
+  **A path under `/addons/` that reaches no add-on costs nothing.** It answers 404
+  without being charged, on the same rule the 404-probe limit has always followed:
+  a request that could not be the thing does not spend the budget the thing has.
+  Otherwise a scanner walking two well-known paths under a prefix no add-on serves
+  would deny people their sign-in — and behind a proxy with `TRUSTED_PROXIES`
+  unset, deny it to every visitor at once.
+
+  If you watch `linkctrl_rate_limited_total{limit="login"}`, note that it now
+  counts add-on page refusals as well as credential ones.
+
+  There is no screen yet for reviewing or removing a connection; that arrives with
+  the Add-on manager.
+
+- **An add-on gets this machine's clock and this machine's entropy.**
+
+  The runtime add-ons run in defaults to a *fake* clock and a *fake* random source,
+  and LinkCtrl was shipping those defaults. The random source was a compile-time
+  constant, so every module on every deployment drew the same bytes — and because
+  a request gets a fresh module instance, every visitor was handed the same value.
+  The clock started at 2022-01-01 and advanced a millisecond per reading. An
+  authentication add-on built on that would have given every LinkCtrl instance on
+  earth one `state` parameter, one nonce and one PKCE verifier, and checked token
+  expiry against 2022.
+
+  Both are now the operating system's. `crypto/rand` and `time.Now` inside a
+  module do what a publisher assumes they do, so **a module built against an older
+  SDK needs no rebuild** — the repair is underneath those calls. The ABI also
+  gains `random_bytes` and `time_now`, the same two sources with a documented
+  shape, neither of which costs a permission. `sdk`'s own documentation said the
+  old behaviour out loud and no longer does.
+
+  The add-on ABI moves to **0.1.1** for three new functions — `random_bytes`,
+  `time_now` and `identity_link`, which is how an external identity is connected
+  to the account of somebody already signed in — and for `session_mint` becoming
+  live. Both are additive under the policy in
+  `docs/addon-abi.md`, so the *generation* a manifest declares does not move: an
+  add-on built against `abi_version: 1` keeps loading, and one that wants the new
+  functions rebuilds against the newer SDK.
+
 - **An add-on can serve pages, under its own prefix, and LinkCtrl draws them.**
 
   A module whose manifest declares `routes.own_prefix` now answers requests under
@@ -275,9 +387,9 @@ migrations run at boot.
   templates, asking who is signed in, minting a session, observing redirects out of
   band, and running inside the redirect path. A `permissions` entry outside that
   list refuses the add-on at load, for the same reason an unknown manifest field
-  does. Two functions cost
-  nothing and are ungated deliberately: asking the host its ABI version, and
-  writing a line to the log, which is the one capability that was granted on
+  does. Four functions cost nothing and are ungated
+  deliberately: asking the host its ABI version, drawing random bytes, reading
+  the clock, and writing a line to the log, which is the one capability that was granted on
   purpose.
 
   **Ungated is not the same as trusted.** Because every loaded module can write to
@@ -415,13 +527,14 @@ migrations run at boot.
   four places including the SDK's own Go `Deprecated:` markers, and what counts as
   breaking is a table rather than a judgement call.
 
-  **Eight functions work; the rest are declared and refuse.** Logging, reading the
+  **Twelve functions work; the rest are declared and refuse.** Logging, reading the
   add-on's own declared settings, asking the host its ABI version, the two storage
   calls, and — since the add-on pages entry above — reading the request, writing
-  the response and asking who is signed in are live. Rendering a template, the
-  authentication hook and redirect observation are declared — their names fixed,
-  their signatures fixed enough to compile against — and answer a refusal a module
-  can branch on until the release that implements them. Rendering is the one that
+  the response and asking who is signed in are live, as are the clock, the random
+  source, minting a session and connecting an identity. Rendering a template and
+  redirect observation are the two that remain declared — their names fixed, their
+  signatures fixed enough to compile against — and answer a refusal a module can
+  branch on until the release that implements them. Rendering is the one that
   will not simply be filled in: a page's HTML is composed by the host and an
   add-on returns text, so the function as declared has no behaviour to grow into
   and what happens to it is an open question about a published contract. So an add-on can be written against the whole contract now instead of being
@@ -464,10 +577,12 @@ migrations run at boot.
   each with an `addon.json` and the `.wasm` that manifest describes. At boot each
   module is verified against the `sha256` in its manifest and either instantiated
   or refused — a module whose bytes do not match is never compiled. What happens
-  when one will not load is the add-on's own declaration: `required` stops the
-  instance with the reason, `degrade` logs it, counts it, and the instance serves
-  without the module. A manifest that cannot be parsed also stops the instance,
-  because there is no declaration left to honour.
+  when one will not load is the add-on's own declaration unless you say otherwise:
+  `required` stops the instance with the reason, `degrade` logs it, counts it, and
+  the instance serves without the module, and `LINKCTRL_ADDON_<NAME>_FAILURE_CLASS`
+  outranks the manifest for any add-on. A manifest that cannot be parsed still
+  stops the instance whatever either of you said, because there is no add-on left
+  to have a class.
 
   Three metrics come with it, on the metrics listener as everything else there is:
   `linkctrl_addon_loads_total{addon,outcome}`,

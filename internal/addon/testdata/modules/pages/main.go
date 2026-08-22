@@ -20,8 +20,12 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strconv"
+	"time"
 
 	"github.com/DevOfPie/LinkCtrl/sdk"
 )
@@ -177,6 +181,57 @@ func handle() int32 {
 			return answer(response{Body: "session unavailable: " + errText(err)})
 		}
 		return answer(response{Body: "session " + string(raw)})
+
+	case "/entropy":
+		// D292, from the guest's side, and the reason it is here rather than only in
+		// the probe fixture: this route runs in a **per-request** instance, which is
+		// the one that made every visitor's nonce identical. Four values, because two
+		// of them are the ones a publisher will actually write — the standard
+		// library's — and a fix that reached only the ABI's own functions would leave
+		// those two constant while these two moved.
+		//
+		// The module asserts nothing about them: two draws inside one instance differ
+		// even from a seeded stream, so the claim worth making is across instances and
+		// across processes, and only the host-side test can see that. What the module
+		// does is report, in a fixed order, so the test can compare run to run.
+		abiRandom, err := sdk.RandomBytes(32)
+		if err != nil {
+			report("entropy_abi", err)
+			return answer(response{Body: "entropy unavailable: " + errText(err)})
+		}
+		// Deliberately larger than the SDK's initial buffer (512 bytes), so the
+		// retry half of the calling convention is exercised by something other than
+		// a unit test's arithmetic.
+		big, err := sdk.RandomBytes(1024)
+		if err != nil {
+			report("entropy_abi_large", err)
+			return answer(response{Body: "large draw unavailable: " + errText(err)})
+		}
+		if len(big) != 1024 {
+			report("entropy_abi_large_short", errors.New(strconv.Itoa(len(big))+" bytes"))
+			return answer(response{Body: "large draw short"})
+		}
+		stdRandom := make([]byte, 32)
+		if _, err := rand.Read(stdRandom); err != nil {
+			report("entropy_std", err)
+			return answer(response{Body: "crypto/rand unavailable: " + errText(err)})
+		}
+		abiNow, err := sdk.TimeNow()
+		if err != nil {
+			report("entropy_clock", err)
+			return answer(response{Body: "clock unavailable: " + errText(err)})
+		}
+		// Both refusals, reported rather than fatal, because a fixture that panics
+		// here fails every routing test in the package rather than this one.
+		_, zeroErr := sdk.RandomBytes(0)
+		report("entropy_zero_refused", zeroErr)
+		_, hugeErr := sdk.RandomBytes(4097)
+		report("entropy_huge_refused", hugeErr)
+		return answer(response{ContentType: "application/json", Body: `{"abi_random":"` +
+			hex.EncodeToString(abiRandom) + `","abi_random_large":"` +
+			hex.EncodeToString(big[:32]) + `","std_random":"` +
+			hex.EncodeToString(stdRandom) + `","abi_now":"` + abiNow +
+			`","std_now":"` + time.Now().UTC().Format(time.RFC3339Nano) + `"}`})
 
 	case "/grow":
 		// F290, from the guest's side: linear memory is bounded, so a module asking

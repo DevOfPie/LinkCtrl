@@ -2,20 +2,25 @@ package addon
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"math"
+	"net/netip"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/tetratelabs/wazero/api"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
+	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
@@ -25,11 +30,10 @@ import (
 //
 // # What is live, and what is declared
 //
-// Eight functions work here — abi_version, log, config_get, the two storage
-// functions M63 turned on, and the request, response and session-context
-// functions M64 did — and the rest are
-// registered and answer abi.StatusNotAvailable to an add-on that holds the
-// permission they cost, and abi.StatusDenied to one that does not. Which of the two
+// Which functions work here is abi.Functions' Live field and not this comment's to
+// count — it has been wrong once already. What is left refused is registered all
+// the same, and answers abi.StatusNotAvailable to an add-on that holds the
+// permission it costs and abi.StatusDenied to one that does not. Which of the two
 // comes first is the next section's, and it is a decision rather than an accident.
 // That the remainder is refused rather than absent is m61.md's requirement, not a
 // shortcut: the contract has to be complete on paper before it is complete in
@@ -75,6 +79,15 @@ import (
 // argument that large: the largest is a SQL statement.
 const maxStringIn = 64 << 10
 
+// maxRandomBytes bounds one draw from random_bytes.
+//
+// 4 KiB, which is three orders of magnitude more than anything this function
+// exists for — a 32-byte nonce, a 32-byte `state`, a 96-byte PKCE verifier — and
+// small enough that a module looping on it is asking the host for work rather than
+// for memory. It is not maxStringIn: that bound protects the host's heap from a
+// length the *guest* chose, and this one is a policy about what a random number is.
+const maxRandomBytes = 4096
+
 // hostFunc is one live ABI function. It reads its arguments off the wasm stack —
 // the layout is abi.Function.Params, expanded by hostSignature — and returns what
 // the caller gets: a length, or one of abi.Statuses.
@@ -110,6 +123,46 @@ var hostFuncs = map[string]hostFunc{
 		// above rather than passed through.
 		st.log.Log(context.Background(), slogLevels[level], message)
 		return 0
+	},
+
+	// The two host facts M65 turned on, and the two that cost nothing (D292).
+	//
+	// Neither answer is scoped to the caller: what comes back is a property of the
+	// machine, identical for every add-on, and the state is reached only to say
+	// whose call the host was answering when its own random source failed. They are
+	// in the ABI so that
+	// value has a documented shape a publisher can rely on — not because the
+	// capability is rationed. A guest reaches the same two sources through
+	// crypto/rand and time.Now, because guestModuleConfig wires WASI's random_get
+	// and clock_time_get to them.
+	"random_bytes": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		n := api.DecodeI32(stack[0])
+		if n < 1 || n > maxRandomBytes {
+			// Refused rather than clamped, in both directions. A caller that asked
+			// for zero bytes of entropy has a bug that a zero-length success would
+			// hide, and one that asked for a megabyte wanted a stream this ABI does
+			// not carry — a value crosses in one piece, and the answer to "how much
+			// randomness" is never "as much as fits".
+			return int32(abi.StatusInvalid)
+		}
+		buf := make([]byte, n)
+		if _, err := rand.Read(buf); err != nil {
+			// crypto/rand.Read does not fail on any platform this product runs on;
+			// it is checked because the one thing worse than no entropy is a buffer
+			// of zeroes that reports success.
+			st.hostLog.Error("the host could not read from its random source",
+				slog.String("addon", st.manifest.Name),
+				slog.Any("error", err))
+			return int32(abi.StatusInternal)
+		}
+		return writeOut(mod, stack[1], stack[2], buf)
+	},
+
+	"time_now": func(_ context.Context, _ *hostState, mod api.Module, stack []uint64) int32 {
+		// UTC and RFC 3339 with nanoseconds: one spelling to parse, no zone for a
+		// guest to guess at, and the same format the RedirectEvent record's
+		// occurred_at already promises.
+		return writeOut(mod, stack[0], stack[1], []byte(time.Now().UTC().Format(time.RFC3339Nano)))
 	},
 
 	"config_get": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
@@ -235,6 +288,155 @@ var hostFuncs = map[string]hostFunc{
 		return 0
 	},
 
+	"identity_link": func(ctx context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		raw, ok := readBytes(mod, stack[0], stack[1])
+		if !ok {
+			return int32(abi.StatusInvalid)
+		}
+		if st.request == nil {
+			return int32(abi.StatusNotFound)
+		}
+		if st.minter == nil {
+			st.hostLog.Debug("an add-on called identity_link and this host has no session service",
+				slog.String("addon", st.manifest.Name))
+			return int32(abi.StatusInternal)
+		}
+		claim, err := decodeClaim(raw)
+		if err != nil {
+			st.hostLog.Debug("refused an add-on's link claim",
+				slog.String("addon", st.manifest.Name),
+				slog.Any("error", err))
+			return int32(abi.StatusInvalid)
+		}
+		// The **actor is the host's**, resolved from the request's own session and
+		// never from anything the module wrote. That is the whole of "linking is
+		// explicit": a module names a subject and the host names the account, so
+		// there is no shape in which a module links a subject to somebody it chose.
+		if err := st.minter.LinkAddonIdentity(ctx, st.identity, st.manifest.Name,
+			claim.Issuer, claim.Subject); err != nil {
+			return st.linkRefused(claim, err)
+		}
+		return 0
+	},
+
+	"session_mint": func(ctx context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		raw, ok := readBytes(mod, stack[0], stack[1])
+		if !ok {
+			return int32(abi.StatusInvalid)
+		}
+		if st.request == nil {
+			// Outside a request, which is where package initialization always is.
+			// NotFound rather than Invalid, and the same answer the M64 functions give
+			// from there: a mint with no visitor in front of it is a mint for nobody.
+			return int32(abi.StatusNotFound)
+		}
+		if st.minted != nil {
+			// One mint per request. Refused rather than replacing the first, for the
+			// reason http_response_write refuses a second response: a module that
+			// minted twice does not know which of the two the browser is holding, and
+			// neither would its author.
+			return int32(abi.StatusInvalid)
+		}
+		if st.minter == nil {
+			// A host built without an auth service, which in this product is a test
+			// and never an instance. Said once per call at debug, the way noStorage
+			// does, because a module branching on the status deserves the reason to be
+			// findable.
+			st.hostLog.Debug("an add-on called session_mint and this host has no session service",
+				slog.String("addon", st.manifest.Name))
+			return int32(abi.StatusInternal)
+		}
+		claim, err := decodeClaim(raw)
+		if err != nil {
+			// Debug, and the reason never crosses: the guest gets a status and the
+			// detail goes where an operator can read it. decodeClaim names what it
+			// refused and what it refused is the module's, so the neutralizing logger
+			// is what makes the raw error safe to write.
+			st.hostLog.Debug("refused an add-on's session claim",
+				slog.String("addon", st.manifest.Name),
+				slog.Any("error", err))
+			return int32(abi.StatusInvalid)
+		}
+		// **The buffer is checked before anything is minted.** Every other function
+		// on this ABI can answer a short buffer with a size and let the guest retry,
+		// because a second read costs nothing; this one has a side effect, so the
+		// convention's *nothing was written* has to mean nothing happened. Without
+		// this the SDK's own retry loop re-enters, meets the one-mint guard above,
+		// and is told ErrInvalid while the host has minted and is about to set the
+		// cookie — the module and the host disagreeing about who is signed in.
+		//
+		// The record's own size is not known until after the mint, so what is
+		// required is its maximum. See mintedSessionMaxBytes for the arithmetic and
+		// TestAMintedSessionFitsItsPublishedBound for what holds it.
+		if int(api.DecodeU32(stack[3])) < mintedSessionMaxBytes {
+			return mintedSessionMaxBytes
+		}
+		mint, err := st.minter.MintFromAddonAssertion(ctx, auth.AddonAssertion{
+			// The add-on's name comes from the *host's* record of which module is
+			// calling, not from anything in the claim. A module cannot assert in
+			// another add-on's name, which is what makes `addon` safe as a key column.
+			Addon:                 st.manifest.Name,
+			Issuer:                claim.Issuer,
+			Subject:               claim.Subject,
+			Email:                 claim.Email,
+			DisplayName:           claim.DisplayName,
+			EmailVerified:         claim.EmailVerified,
+			Groups:                claim.Groups,
+			AlreadySignedIn:       st.identity != nil,
+			SatisfiesSecondFactor: st.mfaSatisfied,
+			IP:                    st.clientIP,
+			UserAgent:             st.userAgent,
+		})
+		if err != nil {
+			return st.mintRefused(claim, err)
+		}
+		out := Minted{
+			ExpiresAt:            mint.ExpiresAt,
+			SecondFactorRequired: mint.SecondFactorRequired(),
+		}
+		if mint.Pending != nil {
+			out.PendingToken = config.Secret(mint.Pending.Token)
+		} else {
+			out.Token = config.Secret(mint.Login.Token)
+		}
+		encoded, err := json.Marshal(MintedSession{
+			ExpiresAt:            out.ExpiresAt.UTC().Format(time.RFC3339),
+			SecondFactorRequired: out.SecondFactorRequired,
+		})
+		if err != nil {
+			return st.marshalFailed("session_mint", err)
+		}
+		if len(encoded) > mintedSessionMaxBytes {
+			// Unreachable: the record has one shape and the bound is that shape at its
+			// widest with slack on top. Checked because the alternative to checking it
+			// is the defect the pre-mint check above removes, arriving from the other
+			// end — a record that does not fit, on a call that has already minted. The
+			// session is recorded, because it exists and hiding it would sign somebody
+			// in with nothing carrying the fact; the guest gets a status it can branch
+			// on rather than a size whose retry would now be refused.
+			st.minted = &out
+			return st.marshalFailed("session_mint",
+				fmt.Errorf("a minted session encoded to %d bytes against a bound of %d",
+					len(encoded), mintedSessionMaxBytes))
+		}
+		// Recorded **before** the record is written back, and the write can no longer
+		// fail for want of room: the capacity was checked before the mint. What is
+		// left is a guest whose pointer does not address its own memory, and that is a
+		// module the host cannot answer at all — the session row exists either way,
+		// so whether somebody is signed in must not depend on how a module sized or
+		// placed a slice.
+		st.minted = &out
+		// **`hostLog`, not `log`.** This is the host saying it minted a session, and
+		// `st.log` stamps `source=addon` — so the one security-relevant record on
+		// this boundary would be attributed to the party it is a record *about*, and
+		// a module holding only the ungated `log` could emit a byte-identical line.
+		st.hostLog.Info("minted a session on this add-on's assertion",
+			slog.String("addon", st.manifest.Name),
+			slog.String("issuer", claim.Issuer),
+			slog.Bool("second_factor_required", out.SecondFactorRequired))
+		return writeOut(mod, stack[2], stack[3], encoded)
+	},
+
 	"session_context": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
 		if st.request == nil {
 			return int32(abi.StatusNotFound)
@@ -320,6 +522,77 @@ func (s *hostState) storageFailed(function string, err error) int32 {
 		"an add-on's statement failed",
 		slog.String("addon", s.manifest.Name),
 		slog.String("function", function),
+		slog.Any("error", err))
+	return int32(status)
+}
+
+// linkRefused turns a refusal from the linking flow into the guest's status.
+//
+// Two refusals and a fallback, and the two are told apart because a module does
+// different things with them: "nobody is signed in" is a flow that began in the
+// wrong place and is answered by sending the person to sign in first, while "that
+// identity belongs to somebody else" is a dead end the person has to resolve on
+// the other account. Neither names the other account, and neither says whether the
+// subject was linked at all when nobody is signed in — the signed-in check comes
+// first, so an anonymous browser cannot ask.
+func (s *hostState) linkRefused(claim SessionClaim, err error) int32 {
+	status, level := abi.StatusInternal, slog.LevelError
+	switch {
+	case errors.Is(err, auth.ErrAssertionIncomplete):
+		status, level = abi.StatusInvalid, slog.LevelDebug
+	case errors.Is(err, domain.ErrUnauthorized), errors.Is(err, domain.ErrForbidden):
+		status, level = abi.StatusDenied, slog.LevelDebug
+	case errors.Is(err, auth.ErrSubjectLinkedElsewhere):
+		// Warned. One external identity being offered to a second account is either
+		// a person with two accounts or an attempt to take one over, and an operator
+		// is the only one who can tell which.
+		status, level = abi.StatusDenied, slog.LevelWarn
+	}
+	s.hostLog.Log(context.Background(), level,
+		"refused an add-on's request to connect an external identity",
+		slog.String("addon", s.manifest.Name),
+		slog.String("issuer", claim.Issuer),
+		slog.Any("error", err))
+	return int32(status)
+}
+
+// mintRefused turns a refusal from the session service into the status the guest
+// gets, and puts the reason where an operator can read it.
+//
+// **The four refusals are distinguishable to the guest**, and that is a decision
+// rather than a leak. An add-on has to be able to tell "nobody has connected this
+// identity" — the ordinary first visit, which it answers with a linking page —
+// from "that account cannot sign in", which it cannot do anything about. What it
+// never learns is *which* account, or whether one exists at all beyond the link:
+// an unlinked subject and a subject linked to a locked account are two statuses,
+// and neither names anybody. That is a narrower disclosure than the password
+// form's, which m65.md's own boundary makes safe: only a module holding
+// `session.mint` can ask, and an operator installed it deliberately.
+func (s *hostState) mintRefused(claim SessionClaim, err error) int32 {
+	status := abi.StatusInternal
+	level := slog.LevelError
+	switch {
+	case errors.Is(err, auth.ErrAssertionIncomplete):
+		status, level = abi.StatusInvalid, slog.LevelDebug
+	case errors.Is(err, auth.ErrSubjectNotLinked):
+		// Debug, and this is the one refusal that is *ordinary*: every first visit
+		// by somebody who has not connected a provider looks exactly like this.
+		status, level = abi.StatusNotFound, slog.LevelDebug
+	case errors.Is(err, auth.ErrAccountLocked), errors.Is(err, auth.ErrAccountInactive):
+		// Warned. An external provider vouching for an account this instance has
+		// locked or disabled is the event an operator wants to see, and it is
+		// bounded — one line per attempt, and an attempt needs a visitor.
+		status, level = abi.StatusDenied, slog.LevelWarn
+	case errors.Is(err, auth.ErrAlreadySignedIn):
+		status, level = abi.StatusDenied, slog.LevelWarn
+	}
+	s.hostLog.Log(context.Background(), level,
+		"refused an add-on's session claim",
+		slog.String("addon", s.manifest.Name),
+		// The issuer is the module's own string and is neutralized by the handler.
+		// The subject is **not** logged: it identifies a person at an external
+		// provider, and a log is not a place this product puts one.
+		slog.String("issuer", claim.Issuer),
 		slog.Any("error", err))
 	return int32(status)
 }
@@ -874,6 +1147,36 @@ type hostState struct {
 	session SessionContext
 	// response is what the guest wrote, or nil until it does.
 	response *Response
+
+	// minter is what answers session_mint, resolved once at load from
+	// Options.Sessions. Nil is a host that cannot mint — every unit test in this
+	// package, and no instance.
+	minter SessionMinter
+	// mfaSatisfied is the operator's answer for *this* add-on: whether the
+	// provider behind it already met a second factor. False is the default and the
+	// safe reading; it is read from the environment and never from the manifest,
+	// because it is a claim about a provider's authentication strength that only
+	// the person who configured that provider can make.
+	mfaSatisfied bool
+
+	// identity is whoever the host resolved for this request, or nil for nobody,
+	// and it is deliberately not read off `session`: Route blanks that record for
+	// an add-on that did not declare session.context, so reading it here would make
+	// an add-on's own manifest decide whether the host notices a session. It is
+	// also the actor identity_link writes a link for, which is what makes "the
+	// module names a subject and the host names the account" structural.
+	identity *auth.Identity
+	// clientIP and userAgent are the request's, held so that a session minted here
+	// records where the sign-in came from exactly as the password path's does.
+	// **Neither crosses to the guest**: no ABI record carries either, the address
+	// becomes a /24 or /48 prefix inside internal/auth before it reaches a column,
+	// and abi.AddressBearing is what keeps the first half of that true from the
+	// other end.
+	clientIP  netip.Addr
+	userAgent string
+	// minted is what the host produced on this request, or nil. It holds the
+	// session token and never crosses the ABI — see Minted.
+	minted *Minted
 }
 
 // forRequest is the per-request copy of an add-on's state.
@@ -882,12 +1185,16 @@ type hostState struct {
 // else is running, and so the fields above are written once by the goroutine that
 // created them and read only by the guest it belongs to — which is what makes
 // this path need no lock of its own.
-func (s *hostState) forRequest(req *Request, sess SessionContext) *hostState {
+func (s *hostState) forRequest(req *Request, sess SessionContext, in RequestIn) *hostState {
 	out := *s
 	out.request = req
 	out.session = sess
+	out.identity = in.Identity
+	out.clientIP = in.ClientIP
+	out.userAgent = in.UserAgent
 	out.encoded = nil
 	out.response = nil
+	out.minted = nil
 	return &out
 }
 
@@ -914,7 +1221,8 @@ func (s *hostState) marshalFailed(function string, err error) int32 {
 }
 
 func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
-	values map[string]config.Secret, log *slog.Logger) *hostState {
+	values map[string]config.Secret, log *slog.Logger,
+	minter SessionMinter, mfaSatisfied bool) *hostState {
 	// Open has wrapped this already and wrapping is idempotent; it is repeated here
 	// because a state built directly — which is what a test does — must be as safe as
 	// one built through a load.
@@ -929,11 +1237,13 @@ func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
 			slog.String("addon", m.Name),
 			slog.String("source", "addon"),
 		),
-		hostLog:  log,
-		settings: settings,
-		values:   values,
-		grants:   grants,
-		storage:  storage,
+		hostLog:      log,
+		settings:     settings,
+		values:       values,
+		grants:       grants,
+		storage:      storage,
+		minter:       minter,
+		mfaSatisfied: mfaSatisfied,
 	}
 }
 
@@ -941,7 +1251,11 @@ func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
 // module that will call one exists. Returns the deregistration.
 func (h *Host) registerState(m Manifest, grants Grants, storage *store.AddonDB,
 	values map[string]config.Secret) func() {
-	st := newHostState(m, grants, storage, values, h.log)
+	// The two M65 facts are read here rather than passed in, because both are
+	// properties of the host and of this add-on's name and neither changes for the
+	// life of the load — the same reason grants are resolved once.
+	st := newHostState(m, grants, storage, values, h.log,
+		h.sessions, mfaSatisfiedByProvider(h.overrides(m.Name)))
 	h.mu.Lock()
 	if h.states == nil {
 		h.states = make(map[string]*hostState)

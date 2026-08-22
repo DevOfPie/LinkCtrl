@@ -135,7 +135,7 @@ func TestPermissionsAndFunctionsAgreeInBothDirections(t *testing.T) {
 	}
 }
 
-// The ungated functions are exactly two, and they are named here so that a third
+// The ungated functions are exactly four, and they are named here so that a fifth
 // one cannot arrive by somebody forgetting the field.
 //
 // m62.md's enforcement bullet says every host function checks the calling
@@ -150,11 +150,19 @@ func TestPermissionsAndFunctionsAgreeInBothDirections(t *testing.T) {
 //     capability nobody asked for, and this function is the one that was asked
 //     for. Requiring a declaration for it would put a line in every manifest and
 //     buy nothing: a module refused the log still runs, and now silently.
+//   - random_bytes and time_now are the same argument as log run the other way.
+//     A module reads the *same* entropy source through crypto/rand and the *same*
+//     wall clock through time.Now, because the host wires WASI's random_get and
+//     clock_time_get to them — see guestModuleConfig in the parent package. Gating
+//     these two would therefore refuse a module the documented spelling of
+//     something it can still have, which is the worst of both: a line in every
+//     manifest, and no capability withheld. D292 took them into the ABI so the
+//     value has a shape a publisher can rely on, not so it could be rationed.
 func TestTheUngatedFunctionsAreNamed(t *testing.T) {
-	ungated := []string{"abi_version", "log"}
+	ungated := []string{"abi_version", "log", "random_bytes", "time_now"}
 	for _, f := range Functions {
 		if f.Requires == "" && !slices.Contains(ungated, f.Name) {
-			t.Errorf("%s requires no permission and is not one of the two functions this "+
+			t.Errorf("%s requires no permission and is not one of the four functions this "+
 				"test allows to be ungated (%v); either name the permission it costs or "+
 				"argue for it here", f.Name, ungated)
 		}

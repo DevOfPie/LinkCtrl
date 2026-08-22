@@ -166,6 +166,28 @@ type Deny func(http.ResponseWriter, *http.Request)
 // with TRUSTED_PROXIES unset, every request carries the proxy's address, all
 // traffic shares one bucket, and the limit applies to the whole world at once.
 func RateLimit(l *ratelimit.Limiter, name string, metrics *observability.Metrics, deny Deny) func(http.Handler) http.Handler {
+	return RateLimitWhen(l, name, metrics, deny, nil)
+}
+
+// RateLimitWhen is RateLimit with a shape test in front of the charge: a request
+// `chargeable` refuses is passed through untouched and spends nothing. A nil
+// test charges everything, which is what RateLimit is.
+//
+// **It exists so that a budget a person needs can only be spent by traffic that
+// reached the thing the budget is about** (D309). The precedent is the 404-probe
+// limiter, which charges a miss and never a hit and is enforced inside the
+// redirect handler for exactly that reason (`Limiters.NotFound`); the difference
+// is only that some routes can tell a real request from a probe *before* the
+// handler runs, from a path value and something the boot already decided. Where
+// that holds, the test sits here, at the registration, where the rule is visible
+// beside the pattern rather than buried in what the pattern serves.
+//
+// The test runs before `Allow`, so a refused shape is never charged and never
+// metered. It must not be the expensive half of the request: it decides whether
+// the request may be *counted*, so anything it does is done by every caller
+// including the one being limited.
+func RateLimitWhen(l *ratelimit.Limiter, name string, metrics *observability.Metrics,
+	deny Deny, chargeable func(*http.Request) bool) func(http.Handler) http.Handler {
 	if l == nil {
 		return func(next http.Handler) http.Handler { return next }
 	}
@@ -174,6 +196,10 @@ func RateLimit(l *ratelimit.Limiter, name string, metrics *observability.Metrics
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if chargeable != nil && !chargeable(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			// The limiter deliberately does not take the request context; see
 			// ratelimit.Shared.take. Charging must not be cancellable by the
 			// client being charged.

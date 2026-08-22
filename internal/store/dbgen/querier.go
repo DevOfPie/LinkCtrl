@@ -477,6 +477,16 @@ type Querier interface {
 	CountWorkspaceLinks(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	// API keys and the permission vocabulary their scopes are drawn from.
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
+	// Connect a provider to the account of the person who is signed in.
+	//
+	// **The only writer, and it takes a user id the caller resolved from a session.**
+	// That is the deliberate half of the linking flow: nothing an add-on asserts
+	// reaches this statement, so an add-on cannot create the mapping it will later be
+	// believed on. `ON CONFLICT DO NOTHING` on the unique key makes a second attempt
+	// at the same connection idempotent rather than an error page; a conflict with a
+	// *different* account returns no row, and the caller reports that the subject is
+	// already connected somewhere else rather than moving it.
+	CreateAddonIdentityLink(ctx context.Context, arg CreateAddonIdentityLinkParams) (AddonIdentityLink, error)
 	// Automation rules and their evaluation (M43).
 	//
 	// Two halves that never meet in one statement, the shape webhooks.sql already
@@ -602,6 +612,11 @@ type Querier interface {
 	// Returned in full so the caller can assert the expiry it asked for rather than
 	// recompute it from its own clock — the TTL m53.md wants a test to hold is the
 	// one the database wrote.
+	//
+	// `minted_by_addon` and `minted_by_issuer` (04600) are null for a password post
+	// and set when an add-on's assertion is what stopped here. They are carried
+	// through the prompt because the session this row becomes is minted by
+	// `CompleteSecondFactor`, which would otherwise have no way to say who vouched.
 	CreateMFAPendingLogin(ctx context.Context, arg CreateMFAPendingLoginParams) (MfaPendingLogin, error)
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
@@ -685,14 +700,14 @@ type Querier interface {
 	// Everything hanging off the account that must not outlive it, removed in one
 	// statement and counted.
 	//
-	// **Written out because a soft delete fires no foreign key.** All eight tables
-	// below declare `ON DELETE CASCADE` against `users`, and every one of those
+	// **Written out because a soft delete fires no foreign key.** Every table
+	// below declares `ON DELETE CASCADE` against `users`, and every one of those
 	// clauses triggers on `DELETE`; the account row is kept — that is what
 	// `anonymized_at` marks and what the partial `users_email_key` is shaped for —
 	// so the cascade never runs and these statements are what stands in for it.
 	//
 	// Four of them are the tables M52 enumerates: `memberships`, `sessions`,
-	// `api_keys`, `notifications`. Four more are here because leaving them would
+	// `api_keys`, `notifications`. Five more are here because leaving them would
 	// falsify a claim the schema already makes:
 	//
 	//   * `password_resets`, whose own comment (03900) says *"there is no route by
@@ -710,6 +725,24 @@ type Querier interface {
 	//     are the `password_resets` defect in a new table, and shipping the tables
 	//     without the statements would have reintroduced it in the same phase that
 	//     closed it.
+	//   * `addon_identity_links` (04500), added by M65 in the milestone that creates
+	//     it, for that same reason and with no more argument than M53 needed. A link
+	//     is a standing credential that admits somebody to an account with no
+	//     password and no second factor of this product's — the add-on's assertion is
+	//     the whole of it — so a link surviving a deletion is the deleted account
+	//     still signing in.
+	//
+	// **Both numbers above are counted rather than remembered**, and that is a
+	// correction rather than a flourish: this header and the paragraph in
+	// internal/account/account.go each said "eight" through the milestone that made
+	// it nine, which was the second time a hand-maintained count beside this
+	// statement drifted from the schema it describes.
+	// `TestEveryCascadeToUsersIsInTheDeletionStatement` in internal/store reads every
+	// migration for an `ON DELETE CASCADE` against `users`, reads this statement for
+	// what it deletes, and fails on a table in either and not the other — which is
+	// the failure that matters, because a table added to the schema and not to this
+	// list is rows outliving the account they belong to. A companion test holds the
+	// two sentences to the same count.
 	//
 	// The counts come back so the caller can log what went, and so a test can assert
 	// the statement reached each table rather than assert it did not error.
@@ -2629,6 +2662,18 @@ type Querier interface {
 	// rather than what the guard counted, so such a row is reserved rather than
 	// skipped, and the lock makes it wait rather than slip between the two.
 	ReserveWorkspaceTraffickedAliases(ctx context.Context, workspaceID uuid.UUID) error
+	// The only statement in this product that turns an add-on's assertion into an
+	// account, and the whole of what "linking is explicit" enforces.
+	//
+	// Three columns in the predicate and no fourth. There is deliberately no variant
+	// of this keyed on the email address an assertion carries: that is the
+	// account-takeover shape m65.md names, and the way it stays absent is that the
+	// statement which would perform it does not exist.
+	//
+	// The user's own row comes back with it, so the caller decides about status and
+	// lockout from one read rather than from a second lookup that could disagree with
+	// this one about which account it is talking about.
+	ResolveAddonIdentityLink(ctx context.Context, arg ResolveAddonIdentityLinkParams) (ResolveAddonIdentityLinkRow, error)
 	// The redirect hot path.
 	//
 	// Everything here runs under a 20ms budget on the dedicated redirect pool.
@@ -3091,6 +3136,10 @@ type Querier interface {
 	// GREATEST guards against a late batch moving the timestamp backwards, which
 	// two processes flushing out of order would otherwise do.
 	TouchAPIKeys(ctx context.Context, arg TouchAPIKeysParams) error
+	// Record that this link minted a session. Best-effort at the call site: a session
+	// that exists and a timestamp that did not move is a worse outcome than the
+	// reverse, so the caller logs a failure here rather than failing the sign-in.
+	TouchAddonIdentityLink(ctx context.Context, id uuid.UUID) error
 	// Idle expiry is measured from last_seen_at. Updated at most once a minute by
 	// the caller, because writing on every request would turn a read-mostly path
 	// into a write on the hottest authenticated query.

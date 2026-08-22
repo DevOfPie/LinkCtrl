@@ -366,6 +366,34 @@ reasons live and stay:
   [upcoming-decisions.md](upcoming-decisions.md) that shares its hard part.
 - Grouping API-key scopes by the object they act on.
 
+### Provisioning from an add-on's assertion — deferred by M65, on purpose
+
+**[M65](phase-details/m65.md) ships linking-only**, and this is where its own
+bullet says the other half is recorded so that the phase which wants it does not
+have to rediscover the shape.
+
+An add-on that holds `session.mint` asserts *this external subject
+authenticated*. Today the host answers by looking the subject up in
+`addon_identity_links` and minting nothing when there is no row: an account is
+reached, never created. **Whether an unknown external subject may become a new
+account is a separate question**, and it is a policy one rather than a
+mechanical one:
+
+- It has to answer to `LINKCTRL_SIGNUP_MODE` ([D38](decisions.md)), which is the
+  operator's and not an add-on's. `closed` means closed, and an identity provider
+  that could create accounts under it would be a way around the setting rather
+  than a feature beside it.
+- It has to say which organization and which workspace a provisioned account
+  lands in. Phase 2's signup section is the precedent and the reason this is not
+  a one-line answer: a self-registered account gets an organization and a
+  workspace of its own, which is a tenancy decision somebody has to have made.
+- It has to say what an operator sees. An add-on that can create accounts can
+  create them faster than anybody reads an audit log.
+
+**Not blocked on anything** — the linking table, the assertion path and the
+provenance record are all built and are what provisioning would be written on
+top of. What it needs is the decision, and the decision is the owner's.
+
 **Areas B, E and F are not taken**, and their surviving rows are in
 [phase-3-candidates.md](phase-3-candidates.md)'s close-out section rather than
 copied here. *We stopped caring about this* remains the decision this project

@@ -18,6 +18,14 @@ func wasmHostABIVersion(versionPtr unsafe.Pointer, versionLen uint32) int32
 //go:noescape
 func wasmLog(levelPtr unsafe.Pointer, levelLen uint32, messagePtr unsafe.Pointer, messageLen uint32) int32
 
+//go:wasmimport linkctrl random_bytes
+//go:noescape
+func wasmRandomBytes(count int32, bytesPtr unsafe.Pointer, bytesLen uint32) int32
+
+//go:wasmimport linkctrl time_now
+//go:noescape
+func wasmTimeNow(nowPtr unsafe.Pointer, nowLen uint32) int32
+
 //go:wasmimport linkctrl config_get
 //go:noescape
 func wasmConfigGet(keyPtr unsafe.Pointer, keyLen uint32, valuePtr unsafe.Pointer, valueLen uint32) int32
@@ -49,6 +57,10 @@ func wasmSessionContextRead(contextPtr unsafe.Pointer, contextLen uint32) int32
 //go:wasmimport linkctrl session_mint
 //go:noescape
 func wasmSessionMint(claimPtr unsafe.Pointer, claimLen uint32, sessionPtr unsafe.Pointer, sessionLen uint32) int32
+
+//go:wasmimport linkctrl identity_link
+//go:noescape
+func wasmIdentityLink(claimPtr unsafe.Pointer, claimLen uint32) int32
 
 //go:wasmimport linkctrl redirect_event_read
 //go:noescape
@@ -136,6 +148,58 @@ func Log(level string, message string) error {
 		return statusError(n)
 	}
 	return nil
+}
+
+// RandomBytes draws bytes from the operating system's entropy source,
+// through the host. It is what a nonce, a `state` parameter or a PKCE
+// verifier is built from. A count outside 1..4096 is ErrInvalid rather than
+// a clamped answer, because a caller that asked for the wrong number of
+// bytes wanted a different number and not a shorter one. Nothing about this
+// function is a permission: every module already reaches the same source
+// through crypto/rand, which the host wires to the same reader, so gating
+// it would buy an operator nothing and cost every manifest a line.
+//
+// count is how many bytes to draw, at most 4096.
+//
+// ABI: linkctrl.random_bytes, since 0.1.1; implemented since this version.
+func RandomBytes(count int32) ([]byte, error) {
+	buf := make([]byte, initialBuffer)
+	for attempt := 0; attempt < growthAttempts; attempt++ {
+		n := wasmRandomBytes(count, bytesPtr(buf), uint32(len(buf)))
+		runtime.KeepAlive(buf)
+		if n < 0 {
+			return nil, statusError(n)
+		}
+		if int(n) <= len(buf) {
+			return buf[:n:n], nil
+		}
+		buf = make([]byte, n)
+	}
+	return nil, ErrInternal
+}
+
+// TimeNow is the host's wall clock, which is this machine's. It is what an
+// expiry is compared against and what a record's timestamp is stamped from.
+// UTC and RFC 3339, so there is one spelling to parse and no zone to guess.
+// Ungated for the reason random_bytes is: a module already reads the same
+// clock through time.Now, and this is the same value with a documented
+// shape.
+//
+// ABI: linkctrl.time_now, since 0.1.1; implemented since this version.
+func TimeNow() (string, error) {
+	buf := make([]byte, initialBuffer)
+	for attempt := 0; attempt < growthAttempts; attempt++ {
+		n := wasmTimeNow(bytesPtr(buf), uint32(len(buf)))
+		runtime.KeepAlive(buf)
+		if n < 0 {
+			return "", statusError(n)
+		}
+		if int(n) <= len(buf) {
+			return string(buf[:n]), nil
+		}
+		buf = make([]byte, n)
+	}
+	return "", ErrInternal
 }
 
 // ConfigGet reads one of this add-on's own settings. The key must be one
@@ -380,14 +444,34 @@ func SessionContextRead() ([]byte, error) {
 // over who is signed in. What comes back is a MintedSession, and it is
 // enumerated for the same reason the claim is: an answer described only as
 // "a JSON object" is an answer the credential assertion over this surface
-// cannot read. A host that does not implement it yet answers
-// ErrNotAvailable.
+// cannot read. Four host rules decide whether anything is minted, and each
+// is a status rather than a page: the claim must name a subject and an
+// issuer (ErrInvalid); that subject must already be linked to an account,
+// through a linking flow the host owns and this function is not
+// (ErrNotFound); the account must be active and not locked out (ErrDenied);
+// and nobody may already be signed in on the request, because a mint is how
+// somebody signs in and not how a browser changes who it is (ErrDenied).
+// Called twice in one request the second is ErrInvalid, for the reason
+// http_response_write is. An account with a second factor enrolled meets it
+// after this call rather than instead of it: the host answers with
+// second_factor_required set, and sends the visitor to its own prompt
+// before your response's location. **What that replaces is your response,
+// and not your cookies**: every set_cookie you made on the request is
+// written to the browser either way, so a callback that clears the `state`
+// cookie it set at the start clears it for an account with a second factor
+// exactly as for one without. You cannot see which kind of account you
+// asserted about, so nothing about your flow's own state may depend on it.
+// **The out buffer is checked before anything is minted**, which is the one
+// place this ABI's retry convention needs saying twice: a buffer too small
+// for the record answers with the size to retry at and mints nothing, so
+// the retry is the first mint rather than a second one and the sentence
+// above about the second call keeps meaning what it says. A buffer of zero,
+// offered to ask for the size, costs nothing for the same reason. The
+// generated SDK starts larger than the record and never sees it.
 //
 // claim is who authenticated, as a SessionClaim record.
 //
-// ABI: linkctrl.session_mint, since 0.1.0; declared, and not implemented by
-// every host: a host without it answers ErrNotAvailable, which a module may
-// branch on.
+// ABI: linkctrl.session_mint, since 0.1.0; implemented since this version.
 //
 // Requires the session.mint permission, declared in this add-on's manifest.
 // A module that did not declare it gets ErrDenied, whether or not the host
@@ -407,6 +491,40 @@ func SessionMint(claim []byte) ([]byte, error) {
 		buf = make([]byte, n)
 	}
 	return nil, ErrInternal
+}
+
+// IdentityLink connects an external identity to the account of the person
+// who is **already signed in** on this request, and it is the only way
+// anything an add-on does writes that mapping. It is session_mint's mirror
+// and its precondition: a subject nobody has linked mints nothing, and a
+// subject can only be linked while its owner is in front of the browser. So
+// the two functions have opposite requirements — this one is ErrDenied
+// when nobody is signed in, and session_mint is ErrDenied when somebody is
+// — which is what stops either being used to do the other's job. Linking
+// the same subject to the same account twice succeeds and changes nothing;
+// linking one another account already holds is ErrDenied and never moves
+// it, because a link is a credential and re-pointing one is the takeover
+// this table exists to prevent. An API key is not a person and cannot be
+// the signed-in party. **Your callback still needs its own CSRF defence.**
+// The host's guarantee is that a link is only ever made for whoever is
+// signed in, in their own browser, at that moment; whether that browser
+// meant to be there is what OAuth's `state` parameter is for, and it is
+// yours.
+//
+// claim is who was authenticated, as a SessionClaim record.
+//
+// ABI: linkctrl.identity_link, since 0.1.1; implemented since this version.
+//
+// Requires the session.mint permission, declared in this add-on's manifest.
+// A module that did not declare it gets ErrDenied, whether or not the host
+// implements the function.
+func IdentityLink(claim []byte) error {
+	n := wasmIdentityLink(bytesPtr(claim), uint32(len(claim)))
+	runtime.KeepAlive(claim)
+	if n < 0 {
+		return statusError(n)
+	}
+	return nil
 }
 
 // RedirectEventRead reads the redirect this add-on is observing. What it

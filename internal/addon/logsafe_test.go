@@ -42,7 +42,7 @@ func TestEveryLoggerThisSubsystemHandsOutNeutralizes(t *testing.T) {
 	if _, ok := h.log.Handler().(*neutralizingHandler); !ok {
 		t.Fatalf("the host's logger is a %T, so anything given it can log what it likes", h.log.Handler())
 	}
-	st := newHostState(Manifest{Name: "x"}, Grants{}, nil, nil, h.log)
+	st := newHostState(Manifest{Name: "x"}, Grants{}, nil, nil, h.log, nil, false)
 	for name, l := range map[string]*slog.Logger{"addon": st.log, "host": st.hostLog} {
 		if _, ok := l.Handler().(*neutralizingHandler); !ok {
 			t.Errorf("hostState's %s logger is a %T", name, l.Handler())
@@ -354,7 +354,7 @@ func TestEveryErrorOutOfRouteIsNeutralizedAtTheExit(t *testing.T) {
 		{"a handler that wrote nothing", "pages", "/nothing", ErrNoResponse},
 		{"a handler that refused", "pages", "/refuse", ErrGuestFailed},
 	} {
-		_, err := h.Route(t.Context(), tc.addon, RequestIn{Method: "GET", Path: tc.path}, SessionContext{})
+		_, err := h.Route(t.Context(), tc.addon, RequestIn{Method: "GET", Path: tc.path})
 		if err == nil {
 			t.Errorf("%s answered no error", tc.what)
 			continue
@@ -377,7 +377,7 @@ func TestEveryErrorOutOfRouteIsNeutralizedAtTheExit(t *testing.T) {
 
 	// A nil host answers the same way, so the wrapper is not skipped on the cheap path.
 	var none *Host
-	if _, err := none.Route(t.Context(), "x", RequestIn{}, SessionContext{}); !errors.Is(err, ErrNoRoute) {
+	if _, err := none.Route(t.Context(), "x", RequestIn{}); !errors.Is(err, ErrNoRoute) {
 		t.Errorf("a nil host answered %v, want ErrNoRoute", err)
 	}
 }

@@ -519,7 +519,7 @@ saves. See *Per instance, unless the limit is shared* below.
 
 | Variable | Default | Applies to |
 | --- | --- | --- |
-| `LINKCTRL_LOGIN_RATE_PER_MIN` | `10` | The endpoints that verify a credential: login, register, first-run setup, password change — both the API and the dashboard forms, sharing one budget so alternating between them gains nothing. |
+| `LINKCTRL_LOGIN_RATE_PER_MIN` | `10` | The endpoints that verify a credential: login, register, first-run setup, password change — both the API and the dashboard forms, sharing one budget so alternating between them gains nothing. **Every route an installed add-on serves spends it too**, whether or not the add-on behind it can sign anybody in: an add-on holding `session.mint` makes its route a credential endpoint, and a limit that applied only to those would move the moment a manifest's permissions changed. So the cost is paid uniformly and is stated rather than discovered — a dashboard add-on carrying no credential is charged the same as an authentication one, and an instance whose visitors arrive from one address (a NAT, an office egress, a corporate proxy) may need this number raised for add-on pages alone. **A path under `/addons/` that reaches no add-on is not one of those routes and costs nothing**: it is refused on shape and answers 404 without being charged, exactly as the 404-probe limit below refuses `/wp-login.php` before any lookup. Otherwise a scanner walking two well-known paths under a prefix no add-on serves would deny everybody their sign-in — and with `TRUSTED_PROXIES` unset, deny it to every visitor at once. |
 | `LINKCTRL_API_RATE_PER_MIN` | `600` | Everything under `/api/v1`. Dashboard pages, static assets and the health endpoints are not counted. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses on the redirect path, and misses only. |
 | `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Submissions to a password-protected link, charged per address **and** per alias. |
@@ -907,12 +907,16 @@ and generates the same table from the host's own definition.
 | `storage.own_schema` | Read and write the Postgres schema it owns, whole. Not finer, and not another add-on's |
 | `routes.own_prefix` | Serve requests under the path prefix it owns — `/addons/<name>/`, on the dashboard and never on the link host — and have what it answers rendered by this product |
 | `session.context` | Ask who is signed in on the request it is answering: the account, its email and display name, the workspace and organization the request landed in, and the role held there. Nothing else, and nothing that could be replayed — no cookie, no token, no session identifier. It is separate from `routes.own_prefix` deliberately: an add-on that draws a page has not thereby asked to know who is looking at it |
-| `session.mint` | Tell this instance that somebody authenticated, and ask for a session. The highest-value grant here — an add-on holding it decides who is signed in. **No release implements this yet**; the grant is held and the function answers `ErrNotAvailable` until M65 lands |
+| `session.mint` | Tell this instance that somebody authenticated, and ask for a session, and connect an external identity to the account of whoever is signed in. The highest-value grant here — an add-on holding it decides who is signed in, subject to this instance's own rules about whether an account exists for the assertion, is active, is not locked out and still owes a second factor. **An add-on declaring it is treated as `required`**, whatever its manifest says; see [When an add-on signs people in](#when-an-add-on-signs-people-in) |
 | `redirect.observe` | Watch redirects out of band. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form. **No release implements this yet**; the grant is held and the function answers `ErrNotAvailable` until M66 lands |
 | `redirect.inline` | Run inside the redirect path itself. **No release grants this yet**; an add-on declaring it loads, does not hold it, and says so in the boot log |
 
-Two functions cost nothing and need no declaration: asking the host its ABI
-version, and writing a line to your log. Everything else costs one of the seven.
+Four functions cost nothing and need no declaration: asking the host its ABI
+version, writing a line to your log, drawing random bytes, and reading the clock.
+The last two are ungated because a module reads the same two sources through
+`crypto/rand` and `time.Now` anyway — gating them would refuse an add-on the
+documented spelling of something it can still have. Everything else costs one of
+the seven.
 
 **A refused call is `ErrDenied`, and it is refused before the host says whether it
 implements the function at all** — so an add-on that declared nothing cannot use
@@ -931,8 +935,9 @@ Some of those functions do not work yet. They are declared so that an add-on can
 be written against the whole contract now, and each answers a refusal a module can
 branch on until the release that implements it arrives. What works today is
 logging, reading the add-on's own declared settings, reading and writing its own
-Postgres schema, answering HTTP requests under its own prefix, and asking who is
-signed in on one — and each of those, apart from the ABI version and the log, is
+Postgres schema, answering HTTP requests under its own prefix, asking who is
+signed in on one, and signing somebody in — and each of those, apart from the ABI
+version, the log, the clock and the random source, is
 behind one of the permissions above. **No function hands an add-on a client's address**, in
 any form, which is why an add-on that watches redirects cannot store one — and none
 hands it a credential of this instance's either, which is what `cookie_prefixes`
@@ -940,9 +945,16 @@ above is for: see [SECURITY.md](SECURITY.md).
 
 ### What happens when an add-on will not load
 
-**The add-on decides, not you.** A manifest saying `required` stops the instance
-with the reason on stderr; one saying `degrade` logs an error, increments
-`linkctrl_addon_loads_total`, and the instance serves without it.
+**The add-on declares it and you outrank it.** A manifest saying `required` stops
+the instance with the reason on stderr; one saying `degrade` logs an error,
+increments `linkctrl_addon_loads_total`, and the instance serves without it. That
+is the publisher's answer, and it is not the last word: `LINKCTRL_ADDON_<NAME>_FAILURE_CLASS`
+is read **before** the manifest's class for **every** add-on, not only the
+authentication ones the section below is about, so any add-on can be made
+`required` or `degrade` from the environment. A value that is neither stops the
+instance rather than falling back, because the setting that decides whether this
+add-on may be skipped is the one that could not be read. [operations.md](operations.md)
+says the same thing from the other side.
 
 **A module that never returns is a failure like any other**, and it did not use to
 be. Package initialization runs while the module is being instantiated, so a module
@@ -981,6 +993,69 @@ nobody is **not** a refusal: the add-on loads without it, and the boot log says 
 
 A file that is not a directory is ignored with a warning, so a `README` you left
 in there is not an outage.
+
+### When an add-on signs people in
+
+An add-on holding `session.mint` is an **authentication** add-on: it tells this
+instance that somebody authenticated and this instance decides what that means.
+Three things about it are yours rather than the publisher's.
+
+**It is `required` whatever its manifest says.** The rule everywhere else is *the
+add-on decides* — the publisher knows whether the instance is still the product
+without it. That rule inverts here, because the publisher of an authentication
+add-on cannot know whether *your* instance has another way in, and the failure
+mode of guessing wrong is an instance that boots with external sign-in silently
+missing. So a manifest saying `degrade` is treated as `required`, and if that is
+wrong for you, say so:
+
+```
+LINKCTRL_ADDON_<NAME>_FAILURE_CLASS=degrade
+```
+
+**The consequence is stated rather than implied**: with `degrade`, an add-on that
+will not load takes external sign-in with it and the instance keeps serving.
+Anybody who signs in with a password still can; anybody who only ever signed in
+through that provider cannot, until it loads. That is a real answer for an
+instance where the provider is a convenience, and the wrong answer for one where
+it is the only door. The variable takes `required` or `degrade`; **anything else
+stops the instance**, naming the variable, because the value that decides whether
+this add-on may be skipped is the one that could not be read.
+
+**A second factor is still asked for.** An account with TOTP enrolled meets it
+after an add-on's assertion rather than instead of it — the assertion gets the
+person as far as the code prompt and no further. If the provider behind this
+add-on already performed a second factor and you want this instance to accept
+that:
+
+```
+LINKCTRL_ADDON_<NAME>_MFA_SATISFIED=true
+```
+
+Only the exact word `true` turns it off. Anything else — `yes`, `1`, `TRUE` — is
+read as no, deliberately: this is the one setting in this product that can stop a
+second factor being asked for, so the safe reading is the default and turning it
+off has to be unambiguous.
+
+**These two names are reserved.** They live in the same
+`LINKCTRL_ADDON_<NAME>_<X>` namespace as an add-on's settings, so a manifest
+declaring a setting called `failure_class` or `mfa_satisfied` is refused at load —
+one variable cannot be your answer and the add-on's value at the same time.
+
+**Signing in is not the same as connecting.** An assertion for an external
+identity nobody has connected signs nobody in. The mapping from a provider's
+subject to an account on this instance is written only while the person it belongs
+to is signed in, in their own browser, and never on an add-on's say-so; there is
+no matching on the email address an assertion carries, which is the classic
+account-takeover shape and is absent by design. There is no screen for reviewing
+or removing a connection yet — that belongs with the Add-on manager — so today the
+table is `addon_identity_links` and removal is a `DELETE`.
+
+**A provider that offers only `response_mode=form_post` cannot be used.** An
+add-on's callback has to arrive as a GET redirect carrying `code` in the query,
+which is OIDC's authorization-code default. A form-post callback is a cross-site
+POST, and this product refuses every cross-site request that uses an unsafe
+method, with no exemptions — so the callback never reaches the module.
+[addon-abi.md](addon-abi.md) says the same thing to the publisher.
 
 ### Configuring an add-on
 

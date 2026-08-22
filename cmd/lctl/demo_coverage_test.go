@@ -52,6 +52,15 @@ import (
 // here would be a query about nothing. That is a narrowing of what this list
 // covers, in writing, which is what the paragraph above requires instead of a
 // deletion.
+//
+// **M65 falls under the same narrowing, and it is now not quite true that there is
+// no table.** `addon_identity_links` exists and is LinkCtrl's own, so a row here
+// *could* be written — and would assert zero forever, because a link is written
+// only by an installed add-on holding `session.mint` and the demo installs none.
+// The same is true of the `session.minted_by_addon` audit record. Seeding either by
+// hand would show a connection to a provider that is not there and a sign-in that
+// did not happen, which is a worse demo than an absent feature. When the manager
+// arrives and the demo runs an add-on, both become real rows.
 
 // demoFeature is one thing the demo must show, and the query that proves it does.
 type demoFeature struct {

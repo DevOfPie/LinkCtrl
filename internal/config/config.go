@@ -535,6 +535,47 @@ func AddonSettingVar(addon, setting string) string {
 	return AddonEnvPrefix + strings.ToUpper(addon) + "_" + strings.ToUpper(setting)
 }
 
+// AddonOverrideNames are the two per-add-on variables that are **not** settings:
+// they are answers an operator gives about an add-on rather than values an add-on
+// reads, and no add-on may declare a setting by either name.
+//
+// They live in the same LINKCTRL_ADDON_<NAME>_<X> namespace deliberately — an
+// operator configuring an add-on should not have to learn a second prefix — which
+// is why the collision has to be closed rather than tolerated: without the
+// reservation, LINKCTRL_ADDON_OIDC_FAILURE_CLASS would be the operator's answer
+// and a declared setting called `failure_class` at the same time, and no lookup
+// could tell which was meant. internal/addon's manifest validation refuses a
+// manifest declaring either name, so the ambiguity does not exist rather than
+// being resolved.
+//
+//   - `failure_class` overrides what the manifest declared. It is the escape hatch
+//     m65.md requires: an add-on holding `session.mint` is treated as `required`
+//     whatever its manifest says, and this is how an operator says otherwise,
+//     knowing that external sign-in then disappears on a failed load while local
+//     sign-in continues.
+//   - `mfa_satisfied` says the provider behind this add-on already met a second
+//     factor. False is the default and the safe reading: an account with TOTP
+//     enrolled meets its factor after an add-on's assertion rather than instead of
+//     it.
+var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
+
+// AddonOverrides reads the operator's answers about one add-on.
+//
+// Read by name, exactly like [AddonSettings] and never by scanning the
+// environment for a prefix, and for the same reason: a scan would hand an add-on
+// every variable under its name including a neighbour's. A variable that is set
+// and empty is treated as unset, which is what an operator leaving a line in their
+// .env with nothing after the `=` means.
+func AddonOverrides(addon string) map[string]string {
+	out := make(map[string]string, len(AddonOverrideNames))
+	for _, name := range AddonOverrideNames {
+		if v := os.Getenv(AddonSettingVar(addon, name)); v != "" {
+			out[name] = v
+		}
+	}
+	return out
+}
+
 // AddonSettings reads the values an operator configured for one add-on.
 //
 // Asked for the settings the manifest **declares**, and it reads exactly those —

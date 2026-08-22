@@ -1615,9 +1615,12 @@ delete itself — through the API, since every dashboard page but the ones about
 joining an organization needs one.
 
 **What goes immediately**, in a single transaction: every session, every API key,
-every membership, your notifications, any outstanding password-reset link, and
-any instance-level grant you hold. Your address becomes available for a new
-account. When the call returns there is no credential that reaches the account.
+every membership, your notifications, any outstanding password-reset link, any
+instance-level grant you hold, your second factor's recovery codes and any code
+prompt you had not answered, and every external identity you had connected. Your
+address becomes available for a new account. When the call returns there is no
+credential that reaches the account — nine tables, and the list is the whole of
+it rather than the memorable part of it.
 
 **What stays, with you taken out of it.** The audit log and the
 destination-dispute queue keep their rows — they record what happened, and one
