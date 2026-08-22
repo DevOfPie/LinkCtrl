@@ -465,6 +465,7 @@ file. Append a row when you append an entry.
 | [M65, README is not anchored to a count until the tag](#2026-08-22--m65-readme-is-not-anchored-to-a-count-until-the-tag) | D313, owner-answered, correcting the orchestrator: D104 was applied to one README line and overridden on another in the same diff; README leaves the anchor set and M70 folds the count at the tag, with the deliberate blind spot named and the obligation written into the phase-close milestone rather than left to memory |
 | [M65, the two sweeps become one shape, and a gate stops reading working files](#2026-08-22--m65-the-two-sweeps-become-one-shape-and-a-gate-stops-reading-working-files) | D314: the function sweep's value gate is gone and its reader is the audit sweep's; two live counts in `[Unreleased]` become anchors rather than exemptions; both sweeps read only tracked files; the near-vacuous reach guard becomes a per-anchor one; the cascade scanner stops recommending a repair it cannot see |
 | [M65, amending M60's failure-class bullet, and the fold that owes more than a number](#2026-08-22--m65-amending-m60s-failure-class-bullet-and-the-fold-that-owes-more-than-a-number) | D315: M60's `degrade` limb no longer reaches an authentication add-on, amended rather than prompted because the owner decided the assertion at M65's planning — and the pattern behind the third such case this run. D316: the README fold owes the *cannot drift without a failing build* clause as well as the number, and why it is not fixed by editing README |
+| [M66, an inline add-on may rewrite the query and nothing else](#2026-08-22--m66-an-inline-add-on-may-rewrite-the-query-and-nothing-else) | D317, owner-answered at step 1: the `redirect.inline` class gets veto plus a rewrite bounded to the query string, and the rewrite is a second declared grant rather than a power `redirect.inline` implies. Why the host-and-path bound keeps the tier system's single validation door intact, why free rewrite was declined on the hot path, and the tracking-parameter case that moved the bound off *nothing* |
 
 ---
 
@@ -37183,3 +37184,85 @@ not touch it, D313 was answered on that ground hours ago, and correcting the
 clause now would repeat in the same milestone the inconsistency D313 exists to
 correct. The clause is false for a reader of `phase-4` and true for a reader of
 the 0.3.0 tag, which is the trade D104 already makes.
+
+## 2026-08-22 — M66, an inline add-on may rewrite the query and nothing else
+
+Owner-answered at [step 1](phase-loop.md#1-validate), before anything was built
+against it. [m66.md](phase-details/m66.md) left the question to "this
+milestone's design"; this is the design, recorded first because it sets the
+extension point's power and the ABI's return channel.
+
+### D317 — the redirect-inline class gets veto plus a query-only rewrite, and the rewrite is declared separately
+
+**The question.** May a `redirect.inline` add-on rewrite the destination? Three
+shapes were put: veto only; choose among the destinations the tier system has
+already cleared for that link; free rewrite revalidated on the path.
+
+**The answer.** Veto, **plus a rewrite bounded to the query string** — the
+module may alter query pairs and may not touch the scheme, host, port or path.
+And the capability is **declared before it is allowed**: holding
+`redirect.inline` buys observation and refusal, and rewriting the query costs a
+second token the manifest has to name. Owner's words: *"The add-on needs to
+specify this functionality before it is allowed to do it."* That is M62's rule
+applied one level down — a module cannot acquire the sharper power by accident,
+which is the same reason `redirect.observe` and `redirect.inline` are two grants
+rather than one.
+
+**Why the query is a safe bound and the rest is not.** `ValidateDestination` has
+exactly one call site in the program — `link.Service.Judge`,
+`internal/link/blocking.go:625` — and
+`TestEveryDestinationSurfaceGoesThroughTheCheck`
+(`internal/link/surfaces_test.go:98`) enforces that, plus the caller sets of
+`Judge` and `checkDestination`. Every tier above the SSRF refusals judges by
+**host**: the embedded high-confidence list, the operator blocklist and the
+heuristics all ask what host this is. Hold the host and the path fixed and no
+tier's verdict can change, so a query rewrite adds no destination-writing
+surface, no `destinationSurfaces` row and no second validation door. That claim
+is M66's to assert in a test rather than to inherit from this entry.
+
+**Free rewrite was declined on the hot path, not on principle.** Revalidating an
+arbitrary URL means calling `Judge`, which does database tier lookups and writes
+a `destination.blocked` audit record. That is storage I/O on the redirect path,
+which [m66.md](phase-details/m66.md) forbids an inline module by name and which
+the 20 ms cached p99 would have to absorb. The alternative — a weaker second
+door — is the fourth way around the validator the same file forbids. Neither is
+a thing to build quietly, so neither was built.
+
+**Bare veto-only was declined for one concrete case.** The owner asked whether
+veto-only would stop a future add-on declining tracking cookies on destination
+sites. It does not, and nothing could: cookie consent happens in the
+destination's own origin, and a 302 hands the host exactly one lever, the
+`Location` URL. `Sec-GPC` is a request header the browser emits on its own
+navigation and cannot be injected into it. What veto-only *did* foreclose is the
+nearest reachable version — stripping `fbclid`, `gclid` or `utm_*` from the
+outbound URL, or appending a privacy signal to it — and that is precisely a
+query rewrite. The case is what moved the bound from *nothing* to *the query*.
+
+**The counter-argument, on record because it may still be right.** Core already
+owns the query: `ForwardQuery` merges the incoming one into the destination at
+`internal/httpx/redirect.go:885`, under a round-trip guard. Parameter policy
+applied to every link from one operator setting is arguably a better product
+than the same policy applied only where an add-on happens to be installed. The
+owner chose the add-on route knowing that; a core setting remains available
+later and the two do not conflict.
+
+**What this obliges M66 to build**, beyond the bullets already in its file:
+
+- a second grant token in `abi.Permissions` — `redirect.rewrite_query` unless
+  the build finds a better name — `Grantable: true`, `BackedBy: "M66"`, and
+  refused to a module that did not declare it;
+- a **return channel** on the inline invocation carrying a verdict *and*
+  optionally a query, which is the standing half of
+  [F270](deferred-findings.md#open): `redirect_event_read` is a read whose only
+  parameter is the out buffer, so an inline module cannot answer at all today.
+  That row closes here, pointing at M66, under
+  [step 1](phase-loop.md#1-validate)'s deferred-overlap exception rather than
+  under owner approval — named in the commit message as that rule requires;
+- an assertion that the rewritten URL differs from the decided one in its query
+  and in nothing else, so the bound is enforced by the host rather than trusted
+  to the module.
+
+**Deliberately not decided here**: whether a rewrite is visible in the click
+record or the audit log, and what a module returning a malformed query gets.
+Both are M66's to answer in its diff — they are consequences of the shape, not
+choices about it.
