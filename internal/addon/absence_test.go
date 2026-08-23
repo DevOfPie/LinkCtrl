@@ -154,6 +154,14 @@ var httpSurfaceMentioningAddOns = []string{
 	// The page the host wraps an add-on's answer in, and its fixture.
 	"internal/ui/templates/pages/addon.html",
 	"internal/ui/ui_test.go",
+	// The redirect handler and the tests that drive it (M66). **This is the
+	// deliberate change the comment above asks for**, and it is the one the
+	// milestone was for: an add-on may now run inside the redirect path, so the
+	// file that serves it has to know add-ons exist. What is bounded is what it
+	// knows — one interface with two methods, consulted at one named point — and
+	// the second half of this test is what says the *prefix* still is not here.
+	"internal/httpx/redirect.go",
+	"internal/httpx/redirect_addon_test.go",
 }
 
 // The HTTP surface knows about add-ons in the files M64 gave it and in no
@@ -187,16 +195,33 @@ func TestOnlyTheNamedHTTPFilesMentionAddOns(t *testing.T) {
 		}
 	}
 
-	// The redirect tree is the half of M60's absence that does not narrow. An
-	// add-on's prefix is on the application tree only (m64.md), so no file serving
-	// a short link may know add-ons exist — and every one of them is inside the
-	// package the sweep above covers, which is why this is a second read of the
-	// same directory rather than a claim about somewhere else.
+	// **The half of M60's absence that narrowed at M66, and what is left of it.**
+	//
+	// It used to say no file serving a short link may know add-ons exist at all.
+	// That stopped being the claim the moment an add-on could run inside the
+	// redirect path, and the honest replacement is not "nothing here mentions
+	// add-ons" — it is that what the redirect tree knows about them is the
+	// *extension point* and never the *prefix*. `/addons/` is an application-tree
+	// path (m64.md, D261) and a route under it on the link host would be a session
+	// lookup and a template render on the tree whose whole rule is that it has
+	// neither, which internal/httpx's own split-host test asserts from the other
+	// side.
+	//
+	// So the sweep below is on the prefix rather than on the word, and it still
+	// covers rootredirect.go, which has no extension point and must not acquire
+	// one by copying.
 	for _, hit := range hits {
 		base := filepath.Base(hit)
-		if strings.HasPrefix(base, "redirect") || strings.HasPrefix(base, "rootredirect") {
-			t.Errorf("%s serves the redirect path and mentions add-ons; the prefix is "+
-				"application-tree only", hit)
+		if !strings.HasPrefix(base, "redirect") && !strings.HasPrefix(base, "rootredirect") {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(repoRoot(t), hit))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(body), RoutePrefix) {
+			t.Errorf("%s serves the redirect path and names %q; the prefix is "+
+				"application-tree only", hit, RoutePrefix)
 		}
 	}
 

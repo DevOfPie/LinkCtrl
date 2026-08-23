@@ -20,6 +20,32 @@ operation the server completes in microseconds. Seeded, because index depth,
 planner choices and cache behaviour all change with size, and a load test against
 an empty database measures an empty database.
 
+## What this measures, and what it stops measuring
+
+**Every figure in this document is *core*: this product's own redirect path, with
+no inline add-on on it.** That was unconditionally true of the whole instance
+until [M66](build-notes/phase-details/m66.md), and it is a scope rather than a
+caveat — the owner set the boundary in those terms: *we are only responsible for
+maintaining the core redirect promise; if an add-on ruins that, it is on the
+add-on.*
+
+So an operator who installs an add-on holding `redirect.inline` has changed the
+thing being measured, and this page says what that costs rather than leaving the
+number to be read as though it still applied. **What stays ours is availability**:
+the host bounds how long a module may hold a redirect, kills it when it overruns,
+and answers the visitor without it. The
+[M66 section](#re-measured-for-m66-2026-08-22) below is both runs side by side —
+core unmoved, and a deliberately hostile module measured rather than described.
+
+The claim is therefore two sentences and not one:
+
+- **core, no inline add-on** — p99 under 20 ms, which is what the table below
+  reports and what every re-measurement in this document has re-established;
+- **with an inline add-on** — the module's own latency is added to every redirect
+  it is invoked on, it is the operator's to watch on
+  `linkctrl_addon_redirect_duration_seconds{addon,class}`, and this product makes
+  no promise about it. The redirect still happens.
+
 ## Result
 
 **Met, with two orders of magnitude of margin.**
@@ -1187,11 +1213,133 @@ instead. HAProxy 3.1, `balance roundrobin`, `option httpchk GET /readyz`,
 `inter 1s fall 2 rise 1`. Same host as
 [M35](#re-measured-for-m35-2026-08-03) onward.
 
-Thirty cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
+Thirty-one cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%, 100%,
-100%, 99.405%, 100%, 99.826%, 100%, 100%, 100%, 100%, **100%** and **100%**
-under 20ms — the last two being the rolling deploy and the rolling kill, which
-are the only two taken while the processes serving them were being replaced.
+100%, 99.405%, 100%, 99.826%, 100%, 100%, 100%, 100%, **100%**, **100%** and
+**100%** under 20ms — the two before the last being the rolling deploy and the
+rolling kill, which are the only two taken while the processes serving them were
+being replaced, and the last being
+[M66](#re-measured-for-m66-2026-08-22)'s core run. **The M66 run with an add-on on
+the path is deliberately not in that tally**, because the tally is what this
+document promises and that run is what the promise is scoped away from.
+
+### Re-measured for M66 (2026-08-22)
+
+[M66](build-notes/phase-details/m66.md) admits an add-on onto the redirect path,
+so this is two runs and not one: the inherited rule says a milestone that touches
+this path re-measures it, and this milestone's own claim is that **core is
+unmoved and an inline add-on's cost is the add-on's**. One number would have
+answered neither question.
+
+Both are the same 2,000 rps for two minutes against the same 100k links and 5M
+click events, on an image built from the milestone's own code.
+
+**Both were re-taken on 2026-08-23**, and the figures below are that pair. The
+first build of this milestone let core's histogram enclose the add-on's time, so
+its second column measured the defect rather than the deadline; the heading keeps
+its original date because it names this measurement rather than its latest
+revision, and what changed between the two is D324.
+
+| | Core, no add-on | With a deliberately hostile inline add-on |
+| --- | --- | --- |
+| Generator p99 | **136.61µs** | **132.07ms** |
+| Server-side under 20ms | **100%** of 240,002 | **99.84%** of 239,944 |
+| Server-side histogram total | 240,002 redirects | 239,944 redirects in **17.87 s**, a mean of **74µs** |
+| Requests failed | **0** | **0** |
+| Sustained rate | 2,000.00/s | 1,998.74/s, 57 iterations dropped by the generator |
+| Cache mix | 240,002 memory | 239,944 memory |
+| Redirect pool acquire waits | 0 | 0 |
+| `linkctrl_addon_redirect_kills_total{addon="slow"}` | — | **40,439** in the measured window |
+| `linkctrl_rate_limited_total{limit="addon_inline"}` | — | **199,505** in the measured window |
+| `linkctrl_addon_redirect_duration_seconds` | — | **no samples**, and that is correct: every invocation was killed, and a kill is on the counter above rather than in the histogram |
+
+**The first column is the claim, and it did not move.** 100% under 20ms with a
+generator p99 of 136.61µs is where this measurement has been since
+[M50](#re-measured-for-m50-2026-08-07), and it is taken on a build that carries
+the whole extension point — the interface, the guard, the moved query merge, and
+the subtraction below. An instance that installs no add-on pays a nil check, a
+field read and a zeroed local per redirect, which is what "zero added cost when no
+inline module is installed" has to mean to be worth writing down. Thirty-one
+cached runs now read 100%.
+
+**The second column is a module that never returns.** The `slow` fixture reads
+the decision it is handed and then loops forever, which is the worst case rather
+than a slow one: there is no work it is doing and no point at which it would have
+finished. Every number in that column is what the host does about that.
+
+*Zero failed requests* is the whole of the availability claim. Every one of the
+239,944 visitors got their redirect, to the destination their link points at,
+while a module on the path was refusing to return.
+
+**The two columns of *server-side under 20ms* are comparable, and that is the
+point of the number.** `linkctrl_redirect_duration_seconds` is core's own work:
+the handler times the extension point and subtracts it before it observes, so the
+25 ms a killed module held the request is **not** in the second column's histogram
+(D324). The arithmetic is worth doing, because it is the difference between a
+measurement and a tautology — 40,439 kills at the 25 ms deadline is **1,011
+seconds**, against a histogram that totals **17.87 s** for the whole run. An
+earlier build of this milestone did not subtract, and the same run read 83.17%
+under 20 ms; that figure was core's curve absorbing somebody else's deadline, and
+it is what the rejection of that build was about.
+
+*The 0.16% that is still over 20 ms is real and is not the add-on's time.* 383
+redirects of 239,944, and what they measure is a host doing this product's work
+while 40,000 goroutines are being killed on a two-minute clock: contention for CPU
+and for the runtime, not a module holding anything. Core is *almost* unmoved
+rather than unmoved, and the honest form of that claim is a number rather than an
+adjective.
+
+*199,505 skips against 40,439 kills* is the mechanism that keeps the first
+sentence true, and the two add to exactly the 239,944 redirects served. Sixteen
+instance slots exist across the whole host and an inline invocation takes one
+**without waiting**: while sixteen are held by modules being killed, every other
+redirect is served with the add-on skipped — that is 83% of the run, at core's own
+latency and never queued behind anything.
+
+*The generator p99 of 132.07ms* is what a **visitor** waits, and it is the number
+the scope above is about. It is five times the deadline and it is the honest
+figure: at 2,000 rps a module holding a slot for 25 ms means slots are the scarce
+thing, and what a visitor waits for is the queue rather than the module. A product
+that had promised 20 ms unconditionally would be in breach of its own
+documentation because an operator installed something; this one says the latency
+is the add-on's, publishes what the visitor waited on
+`linkctrl_http_request_duration_seconds`, and keeps
+`linkctrl_redirect_duration_seconds` describing itself.
+
+*The kill counter moving is the point of the deadline*, not a side effect. A
+module that hangs is an add-on to go and fix, and 40,439 kills in two minutes is
+an operator's alert rather than a mystery. It is also the **only** per-module
+series this run produced: `linkctrl_addon_redirect_duration_seconds` has no
+samples at all, because an invocation that was killed is deliberately absent from
+it, and a histogram of zeroes would have reported a p99 nobody experienced. Nothing about it is silent: the boot
+log warns that an add-on is on the redirect path and that this page's figure is
+core's, and each kill is a warning line naming the add-on and the deadline it
+overran.
+
+#### What this run did **not** measure
+
+**A well-behaved inline add-on.** There is no such module in this repository to
+measure — the fixture that answers correctly returns in microseconds and would
+have measured the host's overhead rather than an add-on's, and inventing a
+plausible one would be measuring a guess. What a real module costs is bounded
+below by an instantiation, which is measured elsewhere: **~1.6 ms** on this
+machine, from M60. The end-to-end figure a fixture doing real work reaches — read
+its decision, probe six host functions, write a query rewrite — is a mean of
+**3.27 ms** and a worst-of-twenty of **4.34 ms**, and *that* is the number
+[`DefaultInlineDeadline`](../internal/addon/redirect.go) is set at roughly six
+times of (25 / 4.34 ≈ 5.8). D318 has the arithmetic. The first real add-on to hold this grant is
+[M69](build-notes/phase-details/m69.md)'s, and it holds `routes.own_prefix`
+rather than this class.
+
+**A deadline other than the default.** 25 ms is what shipped and what was run.
+An operator who sets `LINKCTRL_ADDON_INLINE_DEADLINE` lower gets more kills and
+less queueing, and higher gets the reverse; the arithmetic is visible in the two
+counters above and does not need a run per value.
+
+**The observe class.** Nothing about it is on this path — it is fed from the
+click pipeline after the response and after the commit — so a load test of the
+redirect path cannot say anything about it that is not already true of the
+pipeline it rides on.
 
 ## Reproducing it
 
@@ -1320,6 +1468,51 @@ The script also prints the cache mix and the redirect pool's acquire waits. Read
 them before believing the latency: a cached measurement with database reads in it
 is not a cached measurement, and a starved pool is the difference between "the
 query was slow" and "the request never got a connection".
+
+### Reproducing the M66 add-on runs
+
+The core column is `make load` on an ordinary instance and needs no recipe. The
+second column needs a module inside the container, and there is deliberately no
+compose mount for one: an add-ons directory is an operator's own path and
+`docs/configuration.md` is where that is described, so the measurement builds a
+throwaway image rather than adding a developer convenience that would then be
+part of the product.
+
+```sh
+make addon-fixtures                        # builds internal/addon/testdata/build/slow.wasm
+mkdir -p /tmp/addons/slow
+cp internal/addon/testdata/build/slow.wasm /tmp/addons/slow/
+cat > /tmp/addons/slow/addon.json <<EOF
+{"schema_version":1,"name":"slow","version":"1.0.0","abi_version":1,
+ "module":"slow.wasm","sha256":"$(sha256sum /tmp/addons/slow/slow.wasm | cut -d' ' -f1)",
+ "failure_class":"degrade","permissions":["redirect.inline"]}
+EOF
+printf 'FROM linkctrl:test
+COPY addons /addons
+' > /tmp/Dockerfile.slow
+docker build -t linkctrl:test-slowaddon -f /tmp/Dockerfile.slow /tmp
+```
+
+Then point the instance at it, run, and put it back. Both lines go in
+`.env.test`, which is untracked and per-instance:
+
+```sh
+printf '\nLINKCTRL_ADDONS_DIR=/addons\nLINKCTRL_TAG=test-slowaddon\n' >> .env.test
+docker compose -p linkctrl-test --env-file .env.test up -d --force-recreate --wait app
+make load                                  # exits 99: the threshold is crossed, which is the result
+docker compose -p linkctrl-test --env-file .env.test exec app \
+  wget -qO- http://localhost:9090/metrics | grep addon_redirect
+```
+
+`make load` **failing is the measurement succeeding** here: the k6 threshold is
+`p(99)<20`ms and the whole point of the run is that an add-on's latency is not
+this product's to keep under it. Read the two counters before and after, as the
+script already does for the server histogram — they are cumulative since boot,
+and the figures in the table above are deltas across the measured window.
+
+Undo it by removing the two lines and recreating the container. The image is a
+throwaway; `docker image rm linkctrl:test-slowaddon` when the run is done, or the
+next `make rebuild` will be building against a tag nothing points at.
 
 ### Reproducing the rolling-deploy measurement
 

@@ -21,6 +21,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
@@ -446,6 +447,83 @@ var hostFuncs = map[string]hostFunc{
 			return st.marshalFailed("session_context", err)
 		}
 		return writeOut(mod, stack[0], stack[1], encoded)
+	},
+
+	// The redirect limb (M66). Two classes, three functions, and the class an
+	// invocation is in is a property of its state rather than an argument — so
+	// "outside a redirect" needs no flag to check and cannot be faked by a module
+	// calling the wrong one.
+
+	"redirect_event_read": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		if st.event == nil {
+			// Package initialization, a route's instance, or an inline invocation
+			// reaching for the other class's payload — though the last of those is
+			// refused before it arrives here, because redirect_event_read is not in
+			// abi.InlineSafe. NotFound for the reason http_request_read gives: the
+			// call is well formed and there is nothing to read.
+			return int32(abi.StatusNotFound)
+		}
+		encoded, err := st.encodedRedirect()
+		if err != nil {
+			return st.marshalFailed("redirect_event_read", err)
+		}
+		return writeOut(mod, stack[0], stack[1], encoded)
+	},
+
+	"redirect_decision_read": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		if st.decision == nil {
+			return int32(abi.StatusNotFound)
+		}
+		encoded, err := st.encodedRedirect()
+		if err != nil {
+			return st.marshalFailed("redirect_decision_read", err)
+		}
+		return writeOut(mod, stack[0], stack[1], encoded)
+	},
+
+	"redirect_answer_write": func(_ context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		raw, ok := readBytes(mod, stack[0], stack[1])
+		if !ok {
+			return int32(abi.StatusInvalid)
+		}
+		if st.decision == nil {
+			return int32(abi.StatusNotFound)
+		}
+		if st.answer != nil {
+			// One answer per invocation, refused rather than replacing the first —
+			// the reason http_response_write gives, and it is sharper here: a module
+			// that vetoed and then allowed does not know which the visitor got.
+			return int32(abi.StatusInvalid)
+		}
+		answer, err := decodeRedirectAnswer(raw)
+		if err != nil {
+			// Debug, and the reason never crosses. A module looping on a malformed
+			// record would otherwise decide how much an instance logs, on the one
+			// path in this product where that is a latency question as well as a
+			// disk one.
+			st.hostLog.Debug("refused an add-on's redirect answer",
+				slog.String("addon", st.manifest.Name),
+				slog.Any("error", err))
+			return int32(abi.StatusInvalid)
+		}
+		if answer.Rewrite && !st.grants.Has(PermissionRewriteQuery) {
+			// The second grant, checked here rather than in dispatch, because
+			// dispatch checks what a *function* costs and this is what one field of
+			// one record costs. D317: holding redirect.inline buys watching and
+			// refusing, and editing the destination is a token of its own.
+			//
+			// Counted on the same series an undeclared call is, and for the same
+			// reason: it is an add-on reaching past what its manifest declared, and
+			// an operator asking "is anything being refused" should get one answer.
+			st.metrics.ObserveAddonRefusal(st.manifest.Name, PermissionRewriteQuery)
+			st.hostLog.Debug("refused an add-on's query rewrite: it did not declare the "+
+				"permission that a rewrite costs",
+				slog.String("addon", st.manifest.Name),
+				slog.String("permission", PermissionRewriteQuery))
+			return int32(abi.StatusDenied)
+		}
+		st.answer = &answer
+		return 0
 	},
 }
 
@@ -1177,6 +1255,88 @@ type hostState struct {
 	// minted is what the host produced on this request, or nil. It holds the
 	// session token and never crosses the ABI — see Minted.
 	minted *Minted
+
+	// The redirect limb (M66). Three fields and each of them is nil outside the
+	// invocation it belongs to, which is what makes "outside a redirect" a state
+	// rather than a flag: an inline invocation gets its own state, so a load-time
+	// instance and a route's instance answer StatusNotFound to both reads without
+	// anything having to be cleared.
+	//
+	// decision is what an inline module is being asked about, and encodedDecision
+	// is it marshalled once — for the reason `encoded` is, since the retry half of
+	// the calling convention makes a second read ordinary.
+	decision        *RedirectDecision
+	encodedDecision []byte
+	// answer is what the inline module wrote back, or nil for a module that wrote
+	// nothing. Nil is *allow, unchanged*, which is also what a module the host had
+	// to kill leaves behind — the two agreeing is deliberate and is why the veto is
+	// a written verdict rather than an unwritten one.
+	answer *RedirectAnswer
+	// event is what an observing module is being handed, marshalled once beside it.
+	// The observe class runs after the response, so nothing here is on the hot path.
+	event        *RedirectEvent
+	encodedEvent []byte
+	// inline marks an invocation that is holding a visitor's redirect open. It is
+	// what dispatch reads to refuse everything outside abi.InlineSafe — storage
+	// above all — whatever this add-on's manifest declared.
+	inline bool
+
+	// metrics is the host's registry, held so that a refusal decided *inside* a
+	// host function rather than by dispatch reaches the same counter dispatch
+	// writes. There is one such refusal — the query rewrite's second grant — and
+	// an operator asking "is anything being refused" is entitled to one answer
+	// rather than two places to look. Nil-safe, like every method on it, which is
+	// what lets a test build a state without a registry.
+	metrics *observability.Metrics
+}
+
+// forRedirect is the per-invocation copy of an add-on's state, for either
+// redirect class.
+//
+// A copy for the reason [hostState.forRequest] is one: the fields below are
+// written by the goroutine that made them and read only by the guest they belong
+// to, so neither class needs a lock and neither can see the other's subject.
+// Exactly one of the two arguments is non-nil at any call site, which is what
+// makes the class a property of the state rather than an argument a host function
+// has to be told.
+func (s *hostState) forRedirect(decision *RedirectDecision, event *RedirectEvent) *hostState {
+	out := *s
+	out.request = nil
+	out.encoded = nil
+	out.response = nil
+	out.minted = nil
+	out.session = SessionContext{}
+	out.identity = nil
+	out.decision = decision
+	out.encodedDecision = nil
+	out.answer = nil
+	out.event = event
+	out.encodedEvent = nil
+	out.inline = decision != nil
+	return &out
+}
+
+// encodedRedirect marshals whichever redirect record this invocation carries,
+// once, and remembers it.
+func (s *hostState) encodedRedirect() ([]byte, error) {
+	if s.decision != nil {
+		if s.encodedDecision == nil {
+			b, err := json.Marshal(s.decision)
+			if err != nil {
+				return nil, err
+			}
+			s.encodedDecision = b
+		}
+		return s.encodedDecision, nil
+	}
+	if s.encodedEvent == nil {
+		b, err := json.Marshal(s.event)
+		if err != nil {
+			return nil, err
+		}
+		s.encodedEvent = b
+	}
+	return s.encodedEvent, nil
 }
 
 // forRequest is the per-request copy of an add-on's state.
@@ -1256,6 +1416,11 @@ func (h *Host) registerState(m Manifest, grants Grants, storage *store.AddonDB,
 	// life of the load — the same reason grants are resolved once.
 	st := newHostState(m, grants, storage, values, h.log,
 		h.sessions, mfaSatisfiedByProvider(h.overrides(m.Name)))
+	// Set here rather than taken as an eighth parameter: it is the same host's
+	// registry for every add-on and it is nil-safe, so threading it through the
+	// constructor would add an argument to every test that builds a state by hand
+	// and buy nothing.
+	st.metrics = h.metrics
 	h.mu.Lock()
 	if h.states == nil {
 		h.states = make(map[string]*hostState)
@@ -1349,6 +1514,27 @@ func (h *Host) dispatch(f abi.Function, impl hostFunc) api.GoModuleFunc {
 				slog.String("addon", st.manifest.Name),
 				slog.String("function", f.Name),
 				slog.String("permission", f.Requires))
+			stack[0] = api.EncodeI32(int32(abi.StatusDenied))
+			return
+		}
+		if st.inline && !abi.CallableInline(f.Name) {
+			// The redirect tree's own rule, enforced at the boundary (M66): an
+			// inline invocation is holding a visitor's redirect open, so it reaches
+			// only what abi.InlineSafe names — no storage, no request, no session,
+			// no template — **whatever this add-on's manifest declared**. Denied
+			// rather than NotFound, because the capability exists and this is not
+			// where it may be used.
+			//
+			// After the grant check, so a module that declared neither the
+			// permission nor a redirect class cannot tell the two refusals apart,
+			// and not counted on the refusals series: that counter is undeclared
+			// calls, and this is a declared one in the wrong place. The log line is
+			// the record, and it is at debug for the reason the one above is — this
+			// is the redirect path.
+			h.log.Debug("refused an add-on's call: an inline redirect invocation reaches "+
+				"only the redirect-safe subset of this ABI",
+				slog.String("addon", st.manifest.Name),
+				slog.String("function", f.Name))
 			stack[0] = api.EncodeI32(int32(abi.StatusDenied))
 			return
 		}

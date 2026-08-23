@@ -814,6 +814,16 @@ sentence that stops being true one release after somebody writes it.
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `LINKCTRL_ADDONS_DIR` | *(empty — no add-ons)* | A directory holding one subdirectory per add-on. Validated at startup: a path that is not there, or is a file rather than a directory, refuses to boot rather than being read as "no add-ons". **On compose, add the mount before you set this.** The shipped `docker-compose.yml` has no `/addons` volume, so a container path set here is not readable inside the container and the refusal above takes the instance down — add the `volumes:` snippet from [the trust boundary](#the-trust-boundary) below in the same change. `lctl` reads the same `.env`, so it stops starting too, exactly as `GEOIP_MMDB_PATH` does. |
+| `LINKCTRL_ADDON_INLINE_DEADLINE` | `25ms` | How long an add-on holding `redirect.inline` may hold a redirect open before this instance stops waiting for it, kills the invocation and answers the visitor without it. It applies to no other add-on, so on an instance where nothing declared that class it bounds nothing and costs nothing. **It is deliberately larger than the 20ms cached-redirect target**, which is core's and is measured with nothing on the path — see [the redirect classes](#the-redirect-classes) below. It covers instantiating the module as well as calling it, because a module's package initialization runs while it is being instantiated and can hang there. `linkctrl_addon_redirect_kills_total` is what tells you whether it is set where you meant. |
+
+**One name in the add-on variable namespace is this product's own**, and it is a
+consequence of the row above. `LINKCTRL_ADDON_<NAME>_<SETTING>` is how an add-on's
+settings are read, so an add-on called `inline` declaring a setting called
+`deadline` would be read from the same variable as the one above. There is nothing
+to resolve that with, so the ambiguity is removed instead: **an add-on named
+`inline` is refused at load**, naming the reservation. It is the same answer
+`failure_class` and `mfa_satisfied` get from the other direction — those are
+setting names no add-on may declare.
 
 ### The layout
 
@@ -897,7 +907,7 @@ description of an add-on.
 
 #### The permissions an add-on may declare
 
-Seven, and the list is closed: adding one is a change to LinkCtrl, not something a
+Eight, and the list is closed: adding one is a change to LinkCtrl, not something a
 manifest can do. [addon-abi.md](addon-abi.md) says which function each one gates
 and generates the same table from the host's own definition.
 
@@ -908,15 +918,16 @@ and generates the same table from the host's own definition.
 | `routes.own_prefix` | Serve requests under the path prefix it owns — `/addons/<name>/`, on the dashboard and never on the link host — and have what it answers rendered by this product |
 | `session.context` | Ask who is signed in on the request it is answering: the account, its email and display name, the workspace and organization the request landed in, and the role held there. Nothing else, and nothing that could be replayed — no cookie, no token, no session identifier. It is separate from `routes.own_prefix` deliberately: an add-on that draws a page has not thereby asked to know who is looking at it |
 | `session.mint` | Tell this instance that somebody authenticated, and ask for a session, and connect an external identity to the account of whoever is signed in. The highest-value grant here — an add-on holding it decides who is signed in, subject to this instance's own rules about whether an account exists for the assertion, is active, is not locked out and still owes a second factor. **An add-on declaring it is treated as `required`**, whatever its manifest says; see [When an add-on signs people in](#when-an-add-on-signs-people-in) |
-| `redirect.observe` | Watch redirects out of band. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form. **No release implements this yet**; the grant is held and the function answers `ErrNotAvailable` until M66 lands |
-| `redirect.inline` | Run inside the redirect path itself. **No release grants this yet**; an add-on declaring it loads, does not hold it, and says so in the boot log |
+| `redirect.observe` | Watch redirects **out of band**. Your module is called once per recorded redirect, after the visitor has been answered and after the click is durable, so nothing it does can delay or fail a redirect — and nothing it does can affect one. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form |
+| `redirect.inline` | Run **inside** the redirect path itself, after this instance has decided where the visitor goes and before anything is written. You see the decision and may let it stand or veto it; a veto refuses the visitor with the same page a blocked bot gets. Your latency is added to theirs, and it is yours — see [the redirect classes](#the-redirect-classes) |
+| `redirect.rewrite_query` | Alter the **query string** of the destination an inline module was handed, and nothing else about it. A token of its own on top of `redirect.inline`, because declaring *run on the redirect path* is not declaring *and edit where the visitor goes*. Useless without it |
 
 Four functions cost nothing and need no declaration: asking the host its ABI
 version, writing a line to your log, drawing random bytes, and reading the clock.
 The last two are ungated because a module reads the same two sources through
 `crypto/rand` and `time.Now` anyway — gating them would refuse an add-on the
 documented spelling of something it can still have. Everything else costs one of
-the seven.
+the eight.
 
 **A refused call is `ErrDenied`, and it is refused before the host says whether it
 implements the function at all** — so an add-on that declared nothing cannot use
@@ -1117,9 +1128,12 @@ Three things worth knowing before you install one:
   A scheme-relative `//host`, any other scheme, and a control character are each
   refused, and it is never permanent, which this product enforces. That is one of the reasons the directory is a trust boundary.
 
-Sixteen add-on requests are served at once across the whole instance; a
-seventeenth waits for one of them to finish and gives up when the request's own
-timeout does. Each in-flight request gets an instance of the module to itself,
+Sixteen add-on invocations are served at once across the whole instance; a
+seventeenth page request waits for one of them to finish and gives up when the
+request's own timeout does. The budget is shared with the redirect path — see
+[the redirect classes](#the-redirect-classes) for what an
+invocation that cannot get a slot does there, which is not to wait. Each in-flight
+invocation gets an instance of the module to itself,
 and each instance is bounded at **8 MiB** of memory — which is why an add-on
 cannot keep anything in memory between two requests of one flow, and has to keep
 it in the schema it owns. Sixteen instances of 8 MiB is a ceiling of **128 MiB**,
@@ -1136,6 +1150,62 @@ of a visitor's cookie store however many cookies it sets and however many times
 it is visited, and cannot crowd out this instance's session cookie. Each jar
 holds up to 3 KiB; past that an add-on's oldest values are dropped and the log
 says which add-on ran out of room.
+
+### The redirect classes
+
+**An add-on may run on the redirect path, and what that costs is yours to know
+before you install one.** Two grants, and they are separate so that a module
+cannot acquire the sharper one by accident.
+
+`redirect.observe` is **off the path**. Your module is handed each recorded
+redirect after the visitor has already been answered and after the click is in
+the database, from the pipeline that writes the click. It can delay nothing,
+because nothing waits for it — the queue is bounded and an observation that
+cannot be delivered in time is dropped and counted rather than allowed to hold
+anything up. It can also affect nothing: there is no answer to give.
+
+`redirect.inline` is **on the path**, and this is the one to read carefully.
+
+**What it changes about this product's promise.** [slo.md](slo.md)'s measured
+figure — a cached redirect's p99 under 20 ms — is *core*, with no inline add-on
+on the path, and installing one means it no longer describes your instance. That
+is deliberate and it is stated rather than hidden: an add-on's latency is the
+add-on's. The boot log warns when a module is on that path, for exactly this
+reason.
+
+**What stays this product's.** Availability. An invocation is bounded by
+`LINKCTRL_ADDON_INLINE_DEADLINE`; the runtime kills a module that overruns; the
+redirect completes without it; and the kill is counted per module. A module that
+fails, is killed, or cannot be given an instance always means *allow, unchanged* —
+never a refusal — so a bug in an add-on cannot take your links down.
+
+**What an inline module may do.** It sees the decision: the link, the alias and
+the destination the visitor is about to be sent to, with routing rules, split
+arms, the deep-link path and any forwarded query already applied. It may let that
+stand, veto it, or — with `redirect.rewrite_query` as well — replace its query
+string. It sees nothing about the visitor: watching visitors is the observe
+class's job, off the path, under a grant you would have to install separately.
+
+**What an inline module may not do**, whatever its manifest declares: reach its
+own storage, read the request, ask who is signed in, or render a template. An
+inline invocation reaches only the redirect-safe subset of the ABI and everything
+else answers `ErrDenied` there. The redirect path does no session lookup, no CSRF
+check and no template rendering, and an add-on does not get to be the exception.
+
+**Where the point sits, and why.** After the destination is decided and **before**
+the gates that spend a link's budget. So a veto costs nobody a click on a one-time
+or max-clicks link. One write is not undone by a veto: a split test's rotation was
+advanced when the arm was chosen, so a vetoed redirect costs one step of it.
+
+**What to watch.**
+
+| Series | What it tells you |
+| --- | --- |
+| `linkctrl_addon_redirect_duration_seconds{addon,class}` | What each add-on costs a redirect, separate from `linkctrl_redirect_duration_seconds` so core's latency and each module's are different curves. Separate in both directions: the redirect histogram *excludes* the time an add-on held the request, so installing one does not move it |
+| `linkctrl_redirects_total{outcome="vetoed"}` | Redirects an add-on refused. Zero until you install a module that vetoes, and every one of them is a visitor who got a 403 instead of their link — worth an alert if the add-on is not meant to refuse routinely. The refusal records no click, so the link's own analytics show the drop too |
+| `linkctrl_addon_redirect_kills_total{addon}` | Invocations killed for overrunning the deadline. Non-zero is an add-on to go and fix |
+| `linkctrl_rate_limited_total{limit="addon_inline"}` | Redirects served with the add-on **skipped**, because every instance slot was busy. A high rate beside a high kill rate is the host protecting itself from a module that hangs |
+| `linkctrl_rate_limited_total{limit="addon_observe"}` | Observations dropped because the out-of-band queue was full |
 
 ### The trust boundary
 

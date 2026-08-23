@@ -216,8 +216,10 @@ func TestTheProbeFixtureGetsEveryClassOfAnswer(t *testing.T) {
 		"probe: random_over_bound_invalid=ok",
 		"probe: session_mint_outside_request=ok",
 		"probe: identity_link_outside_request=ok",
+		"probe: redirect_event_outside_invocation=ok",
+		"probe: redirect_decision_outside_invocation=ok",
+		"probe: redirect_answer_outside_invocation=ok",
 		"probe: template_refused=ok",
-		"probe: redirect_refused=ok",
 		"probe: bad_level=ok",
 	} {
 		if !strings.Contains(logs, check) {
@@ -1489,6 +1491,14 @@ func TestAnAddonPostsToTheLogAndCannotReadItBack(t *testing.T) {
 	// right here: this test is about what crosses back through the out-buffer, and
 	// a refusal writes nothing and would make the sweep vacuous.
 	st.minter = &agreeableMinter{}
+	// The two redirect reads (M66), given their subjects the same way. Both are set
+	// on a state that also carries a request, which is a combination the host never
+	// builds — an invocation is a request's or a redirect's and forRedirect clears
+	// the other — and it is right here for the reason the minter stub is: this test
+	// asks whether any function hands log content back, and a function answering
+	// NotFound writes nothing and would make the sweep over it vacuous.
+	st.decision = &RedirectDecision{Alias: "sw", Destination: "https://example.test/"}
+	st.event = &RedirectEvent{LinkID: "l", Country: "US"}
 
 	// Post the secret, the way a module does. Asserted, because a test that could not
 	// get the secret into the log has proved nothing by failing to read it back.

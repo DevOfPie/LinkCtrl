@@ -80,34 +80,68 @@ func TestAPermissionOutsideTheVocabularyIsRefused(t *testing.T) {
 	}
 }
 
-// A permission in the vocabulary that no host grants yet is a different case and
-// **loads**: the class is declarable on purpose, so refusing the module for
-// naming it would make the declaration unusable and M66 would have nothing to
-// turn on.
-func TestADeclaredButUngrantablePermissionStillValidates(t *testing.T) {
-	m := valid()
-	m.Permissions = []string{"redirect.inline"}
-	if err := m.Validate(); err != nil {
-		t.Errorf("a manifest declaring redirect.inline was refused, and the class exists "+
-			"to be declarable: %v", err)
+// Validation asks whether a token is **in the vocabulary** and never whether this
+// host grants it, and the difference is what made the declared-but-ungrantable
+// pattern usable: a class defined ahead of the milestone that implements it has to
+// be declarable, or the milestone has nothing to turn on and no add-on can be
+// written against it in the meantime.
+//
+// It named `redirect.inline` until M66, which is the milestone that granted it.
+// **There is no ungrantable token today**, so the test walks the vocabulary
+// instead of naming one — which is what it should always have done: written
+// against a literal, it would have gone quietly vacuous the moment that literal
+// became grantable, which is exactly what happened.
+func TestGrantabilityIsNotAValidationQuestion(t *testing.T) {
+	for _, p := range abi.Permissions {
+		m := valid()
+		m.Permissions = []string{p.Name}
+		if err := m.Validate(); err != nil {
+			t.Errorf("a manifest declaring %q was refused and the token is in the "+
+				"vocabulary; grantable=%v, and validation is not supposed to be asking: %v",
+				p.Name, p.Grantable, err)
+		}
 	}
 }
 
 // --- what a module holds ----------------------------------------------------
 
-// m62.md: "the redirect-inline grant exists and is refused for every module …
-// nothing may hold it until M66 lands. The refusal is the test." This is it, and
-// it is asserted against a real loaded add-on rather than against resolveGrants,
-// because holding is a property of what the host registered and not of a function
-// nobody has to call.
-func TestNothingHoldsRedirectInline(t *testing.T) {
+// M62 shipped this test asserting that **nothing may hold `redirect.inline`**,
+// and M66 is the milestone that makes that assertion false. So it is amended
+// here, deliberately and by counter-edit, rather than deleted and rewritten under
+// a new name — which is the tripwire-amendment discipline applied to the phase's
+// own scaffolding, and m66.md puts it in scope in as many words.
+//
+// What it asserted: *"the redirect-inline grant exists and is refused for every
+// module … nothing may hold it until M66 lands. The refusal is the test."* Read
+// as written, that sentence contains its own expiry — *until M66 lands* — and
+// what replaces it is the enforcement the refusal was standing in for: an add-on
+// that declared the class holds it and is on the redirect path, an add-on that
+// did not is not, and the boot log and the identity series both say which. The
+// four milestones the grant spent declarable and ungrantable are what this
+// milestone got for free: the class was already being enforced, so turning it on
+// changed a flag rather than adding a check.
+//
+// It is asserted against a real loaded add-on rather than against resolveGrants,
+// for the reason it always was: holding is a property of what the host registered
+// and not of a function nobody has to call.
+func TestDeclaringRedirectInlineIsWhatPutsAnAddonOnTheRedirectPath(t *testing.T) {
 	code := fixture(t, "minimal")
 	dir := t.TempDir()
 	m := manifestFor("minimal", ClassRequired, code)
-	// Everything, including the one that may not be held — so the assertion is
-	// about redirect.inline rather than about a manifest that declared little.
-	m.Permissions = append(grantable(), "redirect.inline")
+	m.Permissions = grantable()
 	install(t, dir, m, code)
+
+	// A second add-on that declared everything **except** the two redirect classes,
+	// so the assertions below are about the declaration and not about a host that
+	// puts whatever loaded onto the path.
+	quiet := manifestFor("quiet", ClassRequired, code)
+	for _, p := range grantable() {
+		if p == PermissionRedirectInline || p == PermissionRedirectObserve {
+			continue
+		}
+		quiet.Permissions = append(quiet.Permissions, p)
+	}
+	install(t, dir, quiet, code)
 
 	metrics := observability.NewMetrics()
 	sink := &logSink{}
@@ -117,21 +151,18 @@ func TestNothingHoldsRedirectInline(t *testing.T) {
 		Logger:  slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
 	if err != nil {
-		t.Fatalf("an add-on declaring redirect.inline did not load, and the class is "+
-			"declarable on purpose: %v", err)
+		t.Fatalf("an add-on declaring redirect.inline did not load: %v", err)
 	}
 	t.Cleanup(func() { _ = h.Close(t.Context()) })
-	if h.Len() != 1 {
-		t.Fatalf("loaded %d add-ons, want 1", h.Len())
+	if h.Len() != 2 {
+		t.Fatalf("loaded %d add-ons, want 2", h.Len())
 	}
 
 	grants := h.Addons()[0].Grants()
-	if grants.Has("redirect.inline") {
-		t.Error("an add-on holds redirect.inline, and no host grants it until an add-on " +
-			"may run inside the redirect path")
+	if !grants.Has(PermissionRedirectInline) {
+		t.Error("an add-on declared redirect.inline and does not hold it; M66 is the " +
+			"milestone that turns the class on and this is what turning it on means")
 	}
-	// The rest of what it declared it does hold, which is what makes the line above
-	// an assertion about one permission rather than about a resolution that failed.
 	for _, p := range grantable() {
 		if !grants.Has(p) {
 			t.Errorf("the add-on declared %q and does not hold it", p)
@@ -142,20 +173,37 @@ func TestNothingHoldsRedirectInline(t *testing.T) {
 			got, len(grantable()))
 	}
 
-	// Said out loud, because an operator who wrote that line in a manifest is
-	// entitled to know it bought nothing.
-	if logs := sink.String(); !strings.Contains(logs, "redirect.inline") ||
-		!strings.Contains(logs, "no host grants yet") {
-		t.Errorf("the load said nothing about the withheld permission\n%s", logs)
+	// **Nothing is withheld any more**, and that is the other half of the
+	// amendment: the withheld path exists for a class declared ahead of the
+	// milestone that implements it, and there is no such class today. The log line
+	// that used to say so must therefore be absent — an operator told a permission
+	// bought them nothing, when it bought them the redirect path, is worse than
+	// silence.
+	if logs := sink.String(); strings.Contains(logs, "no host grants yet") {
+		t.Errorf("the load withheld a permission and every entry in the vocabulary is "+
+			"grantable\n%s", logs)
 	}
-	// And it is not on the identity series either, which is where an operator looks
+
+	// Held, and therefore on the identity series, which is where an operator looks
 	// for what an add-on holds rather than what it asked for.
 	series := seriesLike(scrape(t, metrics), "linkctrl_addon_info")
-	if strings.Contains(series, "redirect.inline") {
-		t.Errorf("linkctrl_addon_info names a permission the add-on does not hold: %s", series)
+	if !strings.Contains(series, PermissionRedirectInline) {
+		t.Errorf("linkctrl_addon_info does not name a permission the add-on holds: %s", series)
 	}
-	if !strings.Contains(series, "redirect.observe") {
-		t.Errorf("linkctrl_addon_info does not name the permissions the add-on holds: %s", series)
+
+	// And the enforcement the refusal was standing in for: declaring the class is
+	// what puts a module on the path, and the host resolved that once at load
+	// rather than filtering per redirect.
+	if !h.HasInline() {
+		t.Error("an add-on holds redirect.inline and the host reports nothing on the " +
+			"redirect path")
+	}
+	if got := h.InlineAddons(); len(got) != 1 || got[0] != "minimal" {
+		t.Errorf("the redirect path carries %v, want only the add-on that declared the "+
+			"class", got)
+	}
+	if got := h.ObservingAddons(); len(got) != 1 || got[0] != "minimal" {
+		t.Errorf("the observe class carries %v, want only the add-on that declared it", got)
 	}
 }
 
@@ -205,16 +253,30 @@ func TestGrantsAreResolvedOnceAtLoad(t *testing.T) {
 // resolution that read a file, built a slice or walked the vocabulary would show
 // up here.
 func TestAGrantCheckAllocatesNothing(t *testing.T) {
-	g, withheld := resolveGrants(Manifest{Permissions: grantable()})
+	// Everything except one, so both branches below are measured against a real
+	// declaration rather than against a token outside the vocabulary — which is a
+	// miss the manifest parser would have refused long before a grant check saw it.
+	//
+	// It used to withhold `redirect.inline`, which was the ungrantable class until
+	// M66 turned it on. Nothing is ungrantable now, so the miss has to be
+	// constructed from something simply not declared, which is the ordinary shape
+	// anyway.
+	var declared []string
+	for _, p := range grantable() {
+		if p != PermissionRewriteQuery {
+			declared = append(declared, p)
+		}
+	}
+	g, withheld := resolveGrants(Manifest{Permissions: declared})
 	if len(withheld) != 0 {
 		t.Fatalf("resolving the grantable vocabulary withheld %v", withheld)
 	}
 	if allocs := testing.AllocsPerRun(1000, func() {
-		if !g.Has("redirect.observe") {
+		if !g.Has(PermissionRedirectObserve) {
 			t.Fatal("the grant is not held, so this measured the wrong branch")
 		}
-		if g.Has("redirect.inline") {
-			t.Fatal("an ungranted permission was held")
+		if g.Has(PermissionRewriteQuery) {
+			t.Fatal("an undeclared permission was held")
 		}
 	}); allocs != 0 {
 		t.Errorf("a grant check allocated %v times per run; from M66 it sits on the "+

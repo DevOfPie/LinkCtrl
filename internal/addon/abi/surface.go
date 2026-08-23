@@ -1,5 +1,7 @@
 package abi
 
+import "slices"
+
 // # The calling convention
 //
 // Every function in this ABI has the same shape, and the uniformity is the
@@ -211,6 +213,79 @@ const HostModule = "linkctrl"
 // names, and refusing an instance for it would take an instance down for a page
 // nobody asked for. The host answers 500 and logs which export was missing.
 const GuestHTTPHandler = "linkctrl_http_handle"
+
+// GuestRedirectObserve and GuestRedirectInline are the two exports the redirect
+// classes are called through (M66). A module exports the one its manifest's grant
+// names, both, or neither; an add-on holding a redirect grant and exporting
+// nothing is not an error, it is an add-on the host has nothing to call.
+//
+// **Two exports rather than one with a class argument**, and it is the same
+// argument that made the two grants two: the classes differ in when they run,
+// what they may read and whether anything they do can affect a visitor, so a
+// module holding both writes two functions and cannot confuse which one it is in.
+// A single entry point told *which mode this is* would put that distinction
+// inside the guest, where the host cannot enforce it.
+//
+// Neither takes an argument and both return an i32 the way a host function does.
+// The observe export reads its subject with `redirect_event_read`; the inline
+// export reads `redirect_decision_read` and answers with `redirect_answer_write`,
+// which is the same read-and-write convention the request handler uses and for
+// the same reason — there is already a way to move a record across, and a second
+// one would double what a publisher has to learn.
+//
+// A negative return is a refusal in the ABI's own vocabulary. On the inline path
+// it is **not** a veto: a veto is a verdict and is written, and a module that
+// failed is a module the host has no answer from, so the redirect proceeds
+// unchanged. Making a trap mean *refuse the visitor* would turn every bug in an
+// add-on into an outage of somebody's links.
+const (
+	GuestRedirectObserve = "linkctrl_redirect_observe"
+	GuestRedirectInline  = "linkctrl_redirect_inline"
+)
+
+// InlineSafe is every function an inline redirect invocation may call, and it is
+// the whole of the redirect tree's rule as it crosses this boundary.
+//
+// m66.md: *an inline module's host functions are the redirect-safe subset only —
+// no storage I/O on the hot path*. Stated as a list rather than as a property of
+// each function, for the reason the ungated set is: what belongs on the hot path
+// is a judgement about the path and not about the function, and a boolean beside
+// each entry would be a judgement made fifteen times by whoever added the
+// sixteenth. Anything not here is [StatusDenied] inside an inline invocation,
+// **whatever the manifest declared** — the grant is what an add-on may do, and
+// this is where it may do it.
+//
+// What is on it: the four ungated host facts, this add-on's own settings, and the
+// two redirect functions the class exists for. Every one of those is an in-memory
+// read of something the host already has in hand. What is off it is everything
+// that touches Postgres, the request, the session or a template — and the storage
+// pair is the one the milestone names, because an add-on that owns tables is
+// exactly the add-on that would write to them from here.
+//
+// A test holds the list against [Functions] in both directions, and asserts that
+// nothing requiring [PermissionStorage] is on it.
+var InlineSafe = []string{
+	"abi_version",
+	"log",
+	"random_bytes",
+	"time_now",
+	"config_get",
+	"redirect_decision_read",
+	"redirect_answer_write",
+}
+
+// CallableInline reports whether an inline redirect invocation may call this
+// function.
+func CallableInline(name string) bool { return slices.Contains(InlineSafe, name) }
+
+// RedirectVerdicts is the closed vocabulary of [RedirectAnswer]'s verdict field.
+// Empty is the ordinary answer and means allow, which is what a module that only
+// watches writes.
+var RedirectVerdicts = []string{"", "allow", "veto"}
+
+// VerdictVeto is the one verdict that changes anything, named because the host
+// branches on it.
+const VerdictVeto = "veto"
 
 // Function is one entry in the ABI: what a module may import.
 type Function struct {

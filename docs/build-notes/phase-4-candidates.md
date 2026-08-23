@@ -230,7 +230,16 @@ decision left in it, named so the milestone that meets it does not rediscover it
 
 1. **The SLO claim is restated as core-only** in [slo.md](../slo.md),
    `docs/SECURITY.md` and `README.md`. It is a published measurement and it is
-   about to stop being true of an instance with an inline add-on.
+   about to stop being true of an instance with an inline add-on. **Discharged by
+   [M66](phase-details/m66.md) in two of the three, and the third is deliberate**:
+   slo.md now opens by scoping every figure in it to core with no inline add-on on
+   the path and carries both runs — core unmoved, and a module that never returns
+   — while `docs/SECURITY.md` gains a row saying the same thing and what stays this
+   product's, which is availability. `README.md` is **not** in that diff, because
+   D104 keeps it describing the *released* product and add-ons are not released
+   until the tag; `CHANGELOG.md`'s `[Unreleased]` carries the rescoping until
+   [M70](phase-details/m70.md)'s documentation pass moves it, which m66.md states
+   so the close does not rediscover it.
 2. **A deprecation policy is written with the ABI**, because SemVer without one
    is a version number and a hope. **Discharged by
    [M61](phase-details/m61.md)**: [docs/addon-abi.md](../addon-abi.md) states what

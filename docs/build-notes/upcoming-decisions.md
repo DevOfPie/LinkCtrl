@@ -66,36 +66,23 @@ an answer already given, found by building against it — and was answered the s
 day as **D164**, which corrects D159 in
 [decisions.md](decisions.md#2026-08-08--m55-d159-corrected--an-upgraded-instance-is-asked-not-assumed).*
 
-*One entry below arrived 2026-08-18, at Phase 4's planning, for its redirect
-milestone. Two more arrived and left the same day — the F253 and F254 repair
-shapes, asked and owner-answered at the plan's review, and recorded as **D212**
-and **D213** in
+*Three entries arrived from Phase 4 and all three have left. Two arrived and left
+on 2026-08-18 — the F253 and F254 repair shapes, asked and owner-answered at the
+plan's review, and recorded as **D212** and **D213** in
 [decisions.md](decisions.md#2026-08-18--m59-the-two-repair-shapes-the-owner-chose-at-the-plans-review)
-when [M59](phase-details/m59.md) used them. Their heading has left this file, the
-direction it only travels; nothing pointed at it.*
-
-### M66 — What is the inline add-on deadline's default?
-
-**Needed by:** [M66](phase-details/m66.md) — but **answerable only there**:
-the number bounds an inline add-on against the 20ms redirect budget, and no
-data exists to pick it from until M60 measures instantiation and M66 measures
-steady-state call cost. This entry exists so the loop arrives knowing the
-value is measured into rather than assumed, and knowing the shape of the
-answer in advance:
-
-- one instance-wide `LINKCTRL_ADDON_INLINE_DEADLINE`, no per-add-on override
-  until a real case argues for one;
-- the default chosen from M66's own k6 runs, stated in
-  [docs/slo.md](../slo.md) with the measurement beside it;
-- planning-time expectation is single-digit milliseconds; if measurement says
-  the honest number is larger than the 20ms budget can absorb, that is an
-  owner prompt at M66, not a bigger default.
-
-**Default if unanswered:** M66 proposes a value from its measurements and
-prompts with the data.
-
-**Assumes:** the cached-redirect SLO stays <20ms p99 and the extension point
-lands after destination decision, both per [m66.md](phase-details/m66.md).
+when [M59](phase-details/m59.md) used them. The third arrived the same day and
+left on 2026-08-22: **what the inline add-on deadline's default is**, filed for
+[M66](phase-details/m66.md) with the shape of its answer fixed in advance and the
+number deliberately left to be measured. It is
+[D318](decisions.md#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits),
+25ms, taken from that milestone's own runs and stated in
+[docs/slo.md](../slo.md) beside them. **The entry's own escape clause did not
+fire**: it said that if the honest number did not fit the 20ms budget that was an
+owner prompt rather than a bigger default, and the honest number is single-digit
+milliseconds exactly as planning expected — what exceeds the budget is the safety
+margin on top of it, which is not the measurement the clause was about. All three
+headings have left this file, the direction it only travels; nothing pointed at
+any of them.*
 
 One heading, kept for one reason: **other files link to it.** An answered
 question leaves this file, and this section is what stops that removal breaking

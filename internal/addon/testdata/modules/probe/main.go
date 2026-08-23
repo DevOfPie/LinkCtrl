@@ -164,14 +164,30 @@ func init() {
 	err = sdk.IdentityLink([]byte(`{"subject":"s","issuer":"https://idp.test"}`))
 	check("identity_link_outside_request", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
 
-	// The ones this fixture exists for. Each is declared by the ABI and implemented
-	// by no host yet, so it resolves as an import — the module links — and answers a
-	// status the module can branch on. That the refusal is the whole set's property
-	// and not one function's is why every one of them is here.
+	// The redirect limb went live at M66, and this instance is not answering a
+	// redirect — package initialization never is, in either class. So all three
+	// answer ErrNotFound, which is the same "there is nothing here to read" the M64
+	// functions give from init, and it is what makes the class a *state* rather
+	// than a flag: an instance that was not made for a redirect cannot be talked
+	// into behaving as though it were.
+	//
+	// Named `_outside_invocation` rather than `_refused`, deliberately: the
+	// host-side test counts checks whose name ends in `_refused` against the ABI's
+	// declared-but-refused set, and these three are live.
+	_, err = sdk.RedirectEventRead()
+	check("redirect_event_outside_invocation", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+	_, err = sdk.RedirectDecisionRead()
+	check("redirect_decision_outside_invocation", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+	err = sdk.RedirectAnswerWrite([]byte(`{}`))
+	check("redirect_answer_outside_invocation", errors.Is(err, sdk.ErrNotFound), "err "+errText(err))
+
+	// The one this fixture exists for. It is declared by the ABI and implemented by
+	// no host yet, so it resolves as an import — the module links — and answers a
+	// status the module can branch on. It is the last of them: every other limb
+	// this ABI declared has landed, and D259 is why this one answered its purpose a
+	// different way and stayed refused.
 	_, err = sdk.TemplateRender("page", nil)
 	check("template_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
-	_, err = sdk.RedirectEventRead()
-	check("redirect_refused", errors.Is(err, sdk.ErrNotAvailable), "err "+errText(err))
 
 	// The guest's own fault, answered as such rather than defaulted. A level
 	// nobody spelled correctly would otherwise become a line nobody greps for.

@@ -1274,9 +1274,12 @@ var documentedNumberSites = []struct {
 }{
 	{path: "docs/SECURITY.md",
 		sentences: []string{
-			"the number of add-on requests in flight is bounded at {n} across the instance",
+			"the number of add-on invocations in flight is bounded at {n} across the instance",
 			"each of those {n} instances is bounded at {mem} of guest memory, " +
 				"a ceiling of {ceiling}",
+			// M66: the same budget, now stated as shared by three consumers rather
+			// than by add-on page requests alone.
+			"The {n} are shared by every reason an add-on runs",
 			"a module wanting more than its {mem} is stopped by the runtime",
 			"the instance is held to {mem} whatever the module's toolchain wrote",
 		},
@@ -1292,24 +1295,29 @@ var documentedNumberSites = []struct {
 		}},
 	{path: "docs/deployment.md",
 		sentences: []string{
-			"{n} add-on requests run at once and each is capped at {mem} of guest " +
+			"{n} add-on invocations run at once and each is capped at {mem} of guest " +
 				"memory, so {ceiling} is the ceiling",
+			"{n} across every reason an add-on runs",
 		}},
 	{path: "docs/configuration.md",
 		sentences: []string{
-			"{n} add-on requests are served at once",
+			"{n} add-on invocations are served at once",
 			"each instance is bounded at {mem} of memory",
 			"{n} instances of {mem} is a ceiling of {ceiling}",
 		}},
 	{path: "docs/operations.md",
 		sentences: []string{
 			// The 503 row of the table an add-on's own failures are read from.
-			"{n} add-on requests are already in flight across the instance",
+			"{n} add-on invocations are already in flight across the instance",
+			"the {n} are shared with the redirect path",
+			// The rate-limited row, where the redirect path's own skip is read.
+			"all {n} instance slots were busy",
 		}},
 	{path: "CHANGELOG.md",
 		sentences: []string{
-			"{n} add-on requests run at once across the instance",
+			"{n} add-on invocations run at once across the instance",
 			"each instance is capped at {mem} of memory, so add-ons add at most {ceiling}",
+			"skipped because all {n} instance slots were busy",
 		},
 		untied: []string{
 			// How many dashboard pages scrolled sideways at 360px, in 0.4.0.
@@ -1317,13 +1325,19 @@ var documentedNumberSites = []struct {
 		}},
 	{path: "Plan.md",
 		sentences: []string{
-			"{n} add-on requests run at once across the instance, each bounded at " +
+			"{n} add-on invocations run at once across the instance, each bounded at " +
 				"{mem} of guest memory",
 			"the two bounds multiply into the {ceiling} ceiling",
+			"an out-of-band observation draw on the same {n}",
 		},
 		untied: []string{
 			// An anchor in planning.md, about how many milestones a phase holds.
 			"the-size-target-a-phase-stays-under-sixteen-milestones",
+			// How many functions the ABI has, which is a different count entirely and
+			// is tied by internal/addon/abi's own sweep. It collides here only because
+			// this file's concurrency bound happens to be spelled with the same word,
+			// and it arrived at M66 when the ABI reached sixteen functions.
+			"one of its sixteen functions still refuses",
 		}},
 	{path: "docs/addon-abi.md",
 		sentences: []string{
@@ -1336,6 +1350,14 @@ var documentedNumberSites = []struct {
 			"the instance gets {mem} either way",
 		}},
 	{path: "docs/slo.md",
+		sentences: []string{
+			// M66's add-on run, where the concurrency bound is the thing being
+			// measured: it is what makes 83% of that run indistinguishable from a run
+			// with no add-on, so it is tied rather than excused.
+			"{n} instance slots exist across the whole host and an inline invocation " +
+				"takes one without waiting",
+			"while {n} are held by modules being killed",
+		},
 		untied: []string{
 			// Cache-hit runs in the performance record.
 			"what all sixteen cached runs in this document have done",

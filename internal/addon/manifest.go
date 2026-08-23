@@ -189,9 +189,11 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,30}$`)
 // refuses the add-on, for the reason DisallowUnknownFields refuses an unknown
 // field — a declaration this host cannot interpret is a manifest whose author
 // expects behaviour that will not happen, and there is no safe direction to guess
-// in. A token that is in the vocabulary and not grantable on this host —
-// redirect.inline, until the milestone that admits an add-on onto the redirect
-// path — is a different case and loads: see resolveGrants.
+// in. A token that is in the vocabulary and not grantable on this host
+// is a different case and loads: see resolveGrants. There is none today —
+// `redirect.inline` was the last, until M66 admitted an add-on onto the redirect
+// path — and the shape stays because it is what lets a class be declared a
+// milestone before it works.
 var permissionRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
 
 // migrationFileRe is the filename shape goose reads a version out of: digits, an
@@ -495,6 +497,16 @@ func (m Manifest) Validate() error {
 		add("name %q: must be 2 to 31 characters, lowercase letters, digits and "+
 			"underscores, starting with a letter — it names a metric label and, "+
 			"from M63, a Postgres schema", m.Name)
+	}
+	if slices.Contains(config.AddonReservedNames, m.Name) {
+		// The other half of the LINKCTRL_ADDON_<NAME>_<X> namespace's ambiguity, and
+		// the same answer the reserved *setting* names get: an add-on named `inline`
+		// with a setting called `deadline` would read the instance-wide
+		// LINKCTRL_ADDON_INLINE_DEADLINE, and no lookup could tell which was meant.
+		add("name %q is reserved: this product reads a variable of its own from the "+
+			"%s namespace under that name, and a setting of yours would be read from "+
+			"the same variable. The reserved names are %s", m.Name,
+			config.AddonEnvPrefix, strings.Join(config.AddonReservedNames, ", "))
 	}
 	if !versionRe.MatchString(m.Version) {
 		add("version %q: must be 1 to 32 characters of letters, digits, dot, plus, "+

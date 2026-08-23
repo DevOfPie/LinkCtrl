@@ -23,10 +23,11 @@ const PermissionStorage = "storage.own_schema"
 // the set edited in the same commit and D258 saying what riding on
 // `routes.own_prefix` would have cost instead.
 //
-// Seven entries, one per limb this phase lands plus that one, because the
-// enforcement (M62) had to be built before any capability worth abusing existed —
-// a grant declared here and implemented later is refused by an already-enforced
-// permission rather than by a check somebody remembers to add.
+// Eight entries, one per limb this phase lands plus that one and the one M66
+// added, because the enforcement (M62) had to be built before any capability
+// worth abusing existed — a grant declared here and implemented later is refused
+// by an already-enforced permission rather than by a check somebody remembers to
+// add.
 //
 // It lives in this package and not in the host, for the reason [Functions] does:
 // this is the ABI's authoring point, the SDK and the published table are
@@ -36,15 +37,24 @@ const PermissionStorage = "storage.own_schema"
 // anything it does not hold; nothing in this package enforces, and nothing in it
 // needs a runtime to be read.
 //
-// # Two grants for the redirect path, and only one of them exists
+// # Three grants for the redirect path, and each is a step down the same ladder
 //
 // `redirect.observe` and `redirect.inline` are deliberately separate, which is
 // the owner's first requirement on the redirect answer: an add-on declares
 // whether it watches redirects out of band or sits in the path itself, and a
-// module cannot acquire the second by accident. `redirect.inline` is therefore
-// **[Permission.Grantable] false** and no host grants it until M66 lands. It is
-// defined now rather than then so that M66 enforces behaviour against a
-// permission that is already enforced.
+// module cannot acquire the second by accident. `redirect.inline` was
+// **[Permission.Grantable] false** from M62 until M66, which is the milestone
+// that admitted an add-on onto that path — so the behaviour landed against a
+// permission that was already enforced, which is the whole reason it was
+// declared two milestones early.
+//
+// `redirect.rewrite_query` is the third rung and it is M66's own (D317). Holding
+// `redirect.inline` buys observation and refusal; **altering the destination's
+// query costs a token of its own**, because the owner's rule is that an add-on
+// says what it will do before it is allowed to do it. That is the same argument
+// that made observe and inline two grants rather than one, applied one level
+// down: a manifest that declared *run on the path* should not turn out to have
+// declared *and edit where the visitor goes*.
 var Permissions = []Permission{
 	{
 		Name: "config.read", Grantable: true, BackedBy: "M61",
@@ -99,12 +109,35 @@ var Permissions = []Permission{
 			"the host implementing it.",
 	},
 	{
-		Name: "redirect.inline", Grantable: false, BackedBy: "M66",
+		Name: "redirect.inline", Grantable: true, BackedBy: "M66",
 		Doc: "Run inside the redirect path itself, where a module's own latency is added " +
 			"to the response. Distinct from redirect.observe so that a module cannot " +
-			"acquire it by accident, and **no host grants it yet**: it is declared here " +
-			"so the milestone that admits an add-on onto that path enforces behaviour " +
-			"against a permission that is already enforced.",
+			"acquire it by accident. What it buys is the decision and a verdict on it: " +
+			"the module is handed the destination this instance has chosen and may let " +
+			"it stand or veto it, and a veto is the same refusal a gate answers with. " +
+			"What it does not buy is the rest of the ABI — an inline invocation may call " +
+			"only the redirect-safe subset, so there is no storage, no request, no " +
+			"session and no template on the hot path, whatever the manifest declared. " +
+			"Nor does it buy editing the destination, which is redirect.rewrite_query. " +
+			"The host bounds how long the module holds the path and completes the " +
+			"redirect without it when that runs out; the latency it adds inside that " +
+			"bound is the add-on's own, and this product's published redirect promise " +
+			"is measured with no inline add-on on the path.",
+	},
+	{
+		Name: "redirect.rewrite_query", Grantable: true, BackedBy: "M66",
+		Doc: "Alter the query string of the destination an inline module was handed, and " +
+			"nothing else about it: the scheme, the host, the port and the path are the " +
+			"host's and are unchanged by construction, because the host substitutes the " +
+			"query into the URL it already decided rather than accepting one the module " +
+			"wrote. That bound is what keeps the destination validator's single door " +
+			"single — every tier above the SSRF refusals judges by host, so a query the " +
+			"module chose cannot change any tier's verdict. It is a second token rather " +
+			"than something redirect.inline implies (D317): stripping fbclid or " +
+			"appending a privacy parameter is a sharper power than watching and " +
+			"refusing, and a module cannot acquire it by having asked for the weaker " +
+			"one. Useless on its own — an add-on that declares this and not " +
+			"redirect.inline is never on the path to use it.",
 	},
 }
 

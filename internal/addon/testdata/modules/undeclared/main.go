@@ -78,6 +78,15 @@ func init() {
 	denied("identity_link", sdk.IdentityLink(nil))
 	_, err = sdk.RedirectEventRead()
 	denied("redirect_event_read", err)
+	// The inline class's pair (M66). Denied here for the ordinary reason — the
+	// permission was not declared — and denied for a *second* reason inside an
+	// inline invocation, where everything outside the redirect-safe subset is
+	// refused whatever the manifest said. This module never reaches that second
+	// refusal, because a module that did not declare the class is never on the
+	// path; the redirect fixture is what drives it.
+	_, err = sdk.RedirectDecisionRead()
+	denied("redirect_decision_read", err)
+	denied("redirect_answer_write", sdk.RedirectAnswerWrite(nil))
 
 	// The other half of what an ungated function means. log costs nothing, so this
 	// module — which declared nothing at all — is the widest untrusted input the

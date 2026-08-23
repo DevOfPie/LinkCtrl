@@ -329,6 +329,10 @@ func run(cfg config.Config, _ io.Writer) error {
 		// assertion, refuses what it knows better than the module does, and hands the
 		// rest to the same service the sign-in form uses.
 		Sessions: authSvc,
+		// M66. How long an add-on may hold a redirect open before the host stops
+		// waiting for it. The one knob on the redirect limb, and the one place an
+		// operator's answer about somebody else's code enters this product.
+		InlineDeadline: cfg.Addons.InlineDeadline,
 	})
 	if err != nil {
 		return fmt.Errorf("add-on host: %w", err)
@@ -901,6 +905,18 @@ func run(cfg config.Config, _ io.Writer) error {
 	returning := analytics.NewReturningSet(rdb, salts, cfg.Redis.ReadTimeout, log)
 	ingestCfg.Returning = returning
 
+	// The observe class (M66), fed from the pipeline because that is the one place
+	// off the request path where a redirect's derived fields exist at all.
+	//
+	// Assigned only when something is actually watching, for the reason
+	// ingestCfg.Geo is: a nil *addon.Host in an interface is not a nil interface,
+	// and the pipeline's per-click "is anyone observing" check would then rest on
+	// the host's nil-tolerance rather than saying what it means — on the loop that
+	// runs once per recorded click.
+	if len(addons.ObservingAddons()) > 0 {
+		ingestCfg.Observer = addons
+	}
+
 	// Today's salt, loaded before the listener opens.
 	//
 	// The returning-visitor check on the redirect path reads the salt cache
@@ -985,6 +1001,11 @@ func run(cfg config.Config, _ io.Writer) error {
 	}
 	if geo.Enabled() {
 		redirectHandler.Geo = geo
+	}
+	// The inline class (M66), and the same rule as the two above: a nil host in an
+	// interface is not a nil interface, and this field is read on every redirect.
+	if addons != nil {
+		redirectHandler.Addons = addons
 	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {

@@ -66,6 +66,14 @@ func wasmIdentityLink(claimPtr unsafe.Pointer, claimLen uint32) int32
 //go:noescape
 func wasmRedirectEventRead(eventPtr unsafe.Pointer, eventLen uint32) int32
 
+//go:wasmimport linkctrl redirect_decision_read
+//go:noescape
+func wasmRedirectDecisionRead(decisionPtr unsafe.Pointer, decisionLen uint32) int32
+
+//go:wasmimport linkctrl redirect_answer_write
+//go:noescape
+func wasmRedirectAnswerWrite(answerPtr unsafe.Pointer, answerLen uint32) int32
+
 // HostABIVersion is the ABI version of the host this module is running in.
 // A module's manifest declares the generation it was built against and the
 // host refuses a mismatch before instantiation, so this is not how a module
@@ -532,13 +540,19 @@ func IdentityLink(claim []byte) error {
 // country-level, and no client address in any form. The grant it costs is
 // redirect.observe, which is out-of-band observation and nothing more:
 // running inside the redirect path itself is redirect.inline, a separate
-// declaration no host grants yet, so a module cannot reach the path by
-// holding this. A host that does not implement it yet answers
-// ErrNotAvailable.
+// declaration, so a module cannot reach the path by holding this. The host
+// calls your `linkctrl_redirect_observe` export once per recorded redirect,
+// **after the visitor has already been answered and after the click is
+// durable**, so nothing you do here can delay or fail a redirect — and
+// nothing you do here can affect one either. Outside such an invocation it
+// is ErrNotFound, which is what a module calling it from package
+// initialization gets. An instance that could not be given the event within
+// the host's own bound is dropped rather than queued: observation is
+// best-effort by construction, exactly as the click pipeline it is fed from
+// is.
 //
-// ABI: linkctrl.redirect_event_read, since 0.1.0; declared, and not
-// implemented by every host: a host without it answers ErrNotAvailable,
-// which a module may branch on.
+// ABI: linkctrl.redirect_event_read, since 0.1.0; implemented since this
+// version.
 //
 // Requires the redirect.observe permission, declared in this add-on's
 // manifest. A module that did not declare it gets ErrDenied, whether or not
@@ -557,4 +571,71 @@ func RedirectEventRead() ([]byte, error) {
 		buf = make([]byte, n)
 	}
 	return nil, ErrInternal
+}
+
+// RedirectDecisionRead reads the redirect this module is being asked about,
+// while the visitor waits. The host calls your `linkctrl_redirect_inline`
+// export after it has decided where the visitor goes and **before it has
+// written anything** — before the gates that spend a link's budget, so a
+// veto costs nobody a click. What crosses is the decision and not the
+// visitor: the link, the alias and the destination, and no field derived
+// from the person in front of the browser. Watching visitors is
+// redirect.observe's job and it happens off this path. Outside an inline
+// invocation this is ErrNotFound.
+//
+// ABI: linkctrl.redirect_decision_read, since 0.1.2; implemented since this
+// version.
+//
+// Requires the redirect.inline permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
+func RedirectDecisionRead() ([]byte, error) {
+	buf := make([]byte, initialBuffer)
+	for attempt := 0; attempt < growthAttempts; attempt++ {
+		n := wasmRedirectDecisionRead(bytesPtr(buf), uint32(len(buf)))
+		runtime.KeepAlive(buf)
+		if n < 0 {
+			return nil, statusError(n)
+		}
+		if int(n) <= len(buf) {
+			return buf[:n:n], nil
+		}
+		buf = make([]byte, n)
+	}
+	return nil, ErrInternal
+}
+
+// RedirectAnswerWrite is how an inline module answers, and it is the only
+// channel it has: `linkctrl_redirect_inline` returns a status and not a
+// payload, for the reason the request handler does. Not calling it is the
+// ordinary case and means *allow* — a module that only watches writes
+// nothing, and a module the host had to kill wrote nothing either, so the
+// two agree. A verdict of `veto` refuses the visitor with the same page a
+// gate refuses with; the alias, the destination and the reason are never
+// echoed to them. A `query` alters the destination's query string and costs
+// redirect.rewrite_query on top of redirect.inline — ErrDenied without it
+// — and it is a **replacement** rather than a merge: what you write is
+// the whole query, and an empty string with `rewrite` set removes it. You
+// cannot reach the scheme, the host, the port or the path, because the host
+// substitutes your query into the URL it already decided rather than
+// accepting a URL from you. A query carrying anything outside RFC 3986's
+// query characters is ErrInvalid, and so is a verdict outside the
+// vocabulary. Called twice in one invocation the second is ErrInvalid, for
+// the reason http_response_write is.
+//
+// answer is your verdict, as a RedirectAnswer record.
+//
+// ABI: linkctrl.redirect_answer_write, since 0.1.2; implemented since this
+// version.
+//
+// Requires the redirect.inline permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
+func RedirectAnswerWrite(answer []byte) error {
+	n := wasmRedirectAnswerWrite(bytesPtr(answer), uint32(len(answer)))
+	runtime.KeepAlive(answer)
+	if n < 0 {
+		return statusError(n)
+	}
+	return nil
 }

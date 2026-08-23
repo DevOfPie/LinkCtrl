@@ -94,18 +94,34 @@ const PermissionRoutes = "routes.own_prefix"
 // separate from PermissionRoutes on purpose — D258.
 const PermissionSessionContext = "session.context"
 
-// maxConcurrentRoutes bounds how many add-on requests are in flight at once,
-// across every add-on.
+// maxConcurrentRoutes bounds how many add-on invocations are in flight at once,
+// across every add-on and every reason for invoking one.
 //
 // It exists because add-on routes are reachable without a session (D261) and
-// each in-flight request holds an instance's linear memory. Unbounded, a flood
-// of anonymous requests to an add-on's prefix is a memory exhaustion with no
-// session to rate-limit against; bounded, it is a queue.
+// each in-flight instance holds linear memory. Unbounded, a flood of anonymous
+// requests to an add-on's prefix is a memory exhaustion with no session to
+// rate-limit against; bounded, it is a queue.
 //
-// A request that cannot get a slot waits, and waits on the request's own
-// context, so what bounds the wait is the deadline every application request
-// already carries (LINKCTRL_HTTP_REQUEST_TIMEOUT). It is [ErrBusy] after that rather
-// than a page that arrives too late to be read.
+// **Three callers draw on it and they do not wait alike** — the name predates
+// two of them and is kept because renaming a constant is not what makes the
+// bound true. Each is documented where an operator meets its symptom:
+//
+//   - A **page request** waits, on the request's own context, so what bounds the
+//     wait is the deadline every application request already carries
+//     (LINKCTRL_HTTP_REQUEST_TIMEOUT). It is [ErrBusy] after that rather than a
+//     page that arrives too late to be read.
+//   - An **inline redirect invocation** (M66) never waits. A visitor is being held
+//     open, and queueing for a resource this product owns is the half of the
+//     redirect promise the owner's boundary did not give away — so the redirect is
+//     served with the add-on skipped, counted on
+//     linkctrl_rate_limited_total{limit="addon_inline"}.
+//   - An **out-of-band observation** (M66) waits on the add-on deadline rather
+//     than on any request, because nothing is waiting for it, and is dropped and
+//     counted on {limit="addon_observe"} when that runs out.
+//
+// So an instance running an inline add-on and serving no add-on pages still
+// spends this budget, which is why docs/deployment.md sizes a host by it whatever
+// the add-on is for.
 const maxConcurrentRoutes = 16
 
 // maxGuestMemoryPages is how much linear memory one instance may hold, in

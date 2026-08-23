@@ -61,6 +61,16 @@ import (
 // hand would show a connection to a provider that is not there and a sign-in that
 // did not happen, which is a worse demo than an absent feature. When the manager
 // arrives and the demo runs an add-on, both become real rows.
+//
+// **M66 falls under it too, and it is the clearest case of the three.** An add-on
+// on the redirect path leaves no row anywhere: what it produces is a metric series
+// per module and a line in the operator's log, and the demo instance neither
+// installs an add-on nor exposes a scrape to look at. Seeding something would mean
+// fabricating an add-on's effect on redirects that were served without one, which
+// is not a narrowing question at all — there is no query to write. The visible
+// half of this milestone is the per-module performance the Add-on manager renders,
+// which is [M68](../../docs/build-notes/phase-details/m68.md)'s and is named in
+// M66's own file as such.
 
 // demoFeature is one thing the demo must show, and the query that proves it does.
 type demoFeature struct {

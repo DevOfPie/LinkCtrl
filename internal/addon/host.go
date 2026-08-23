@@ -491,6 +491,13 @@ type Options struct {
 	// [DefaultLoadTimeout], which is what an instance uses; a test sets a budget it
 	// can afford to spend watching a module that will not return.
 	LoadTimeout time.Duration
+
+	// InlineDeadline is how long an add-on may hold a redirect open (M66). Zero
+	// means [DefaultInlineDeadline], and an instance sets it from
+	// LINKCTRL_ADDON_INLINE_DEADLINE. Unlike LoadTimeout it is an operator's knob
+	// and not only a test's, because what it bounds is somebody else's code on the
+	// path this product makes a latency promise about — see redirect.go.
+	InlineDeadline time.Duration
 }
 
 // FailureClassError is an operator override this host cannot interpret.
@@ -696,6 +703,26 @@ type Host struct {
 	// calls below Open, and threading a duration through them would say less
 	// about where it applies than the two call sites do.
 	loadTimeout time.Duration
+
+	// The redirect limb (M66); redirect.go is where all of it is used.
+	//
+	// inline is the loaded add-ons holding `redirect.inline`, in load order,
+	// resolved once here rather than filtered per redirect. That is the same
+	// reason grants are resolved once: this slice is read on **every** redirect,
+	// where the inherited rule is a cached p99 under 20 ms, and `len(h.inline)`
+	// has to be the whole cost on an instance that installed none.
+	inline []Loaded
+	// inlineDeadline is Options.InlineDeadline with its default applied: how long
+	// a module may hold a redirect, instantiation included.
+	inlineDeadline time.Duration
+	// observe is the out-of-band queue, and it is nil unless something declared
+	// the grant — which is what makes the observe class cost an ordinary instance
+	// nothing at all: no channel, no goroutine.
+	observe chan RedirectEvent
+	// observeStop cancels the workers' context, which is what ends an invocation in
+	// flight rather than waiting one out — see stopObserving.
+	observeStop context.CancelFunc
+	observeWG   sync.WaitGroup
 }
 
 // Open discovers, verifies and instantiates every add-on in opts.Dir.
@@ -761,6 +788,10 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if timeout <= 0 {
 		timeout = DefaultLoadTimeout
 	}
+	deadline := opts.InlineDeadline
+	if deadline <= 0 {
+		deadline = DefaultInlineDeadline
+	}
 	h := &Host{
 		log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN,
 		settings:    settings,
@@ -768,7 +799,8 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		sessions:    opts.Sessions,
 		slots:       make(chan struct{}, maxConcurrentRoutes),
 
-		loadTimeout: timeout,
+		loadTimeout:    timeout,
+		inlineDeadline: deadline,
 	}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
@@ -886,6 +918,34 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			slog.String("schema", loaded.Schema),
 			slog.Int("migrations", len(loaded.Manifest.Migrations)),
 			slog.Uint64("guest_memory_bytes", uint64(loaded.MemorySize())))
+	}
+
+	// The redirect classes, resolved once now that everything that is going to
+	// load has (M66). Both are deliberately after the loop rather than inside it:
+	// what goes on the redirect path is a property of the whole set, and a slice
+	// appended to while modules were still being refused would carry an add-on
+	// that did not finish loading.
+	for _, l := range h.loaded {
+		if l.RunsInline() && l.compiled != nil {
+			h.inline = append(h.inline, l)
+		}
+	}
+	if len(h.inline) > 0 {
+		// Warn, because this is the line that tells an operator their published
+		// redirect latency is no longer this product's alone to answer for. It is
+		// the boundary the owner set, said out loud on the instance it applies to
+		// rather than only in docs/slo.md.
+		log.Warn("an add-on runs inside the redirect path; this instance's redirect "+
+			"latency is no longer core's alone, and the measured figure in docs/slo.md "+
+			"is core with no inline add-on on the path",
+			slog.Any("addons", h.InlineAddons()),
+			slog.String("deadline", h.inlineDeadline.String()))
+	}
+	h.startObserving(ctx)
+	if observers := h.ObservingAddons(); len(observers) > 0 {
+		log.Info("add-ons are observing redirects out of band; nothing they do can delay "+
+			"or fail one, and an observation the host cannot deliver in time is dropped",
+			slog.Any("addons", observers))
 	}
 
 	// Said at boot rather than only when somebody opens the manager, because an
@@ -1400,6 +1460,10 @@ func (h *Host) Close(ctx context.Context) error {
 	// closing underneath it. The schemas themselves are untouched: closing a host is
 	// not an uninstall, and an add-on's data outliving the process is the whole
 	// point of it being in Postgres.
+	// Before the storage pools and before the runtime, because an observing
+	// invocation in flight is a guest that may still be holding a statement open
+	// on one of them.
+	h.stopObserving()
 	for _, l := range h.loaded {
 		l.storage.Close()
 	}
@@ -1409,6 +1473,7 @@ func (h *Host) Close(ctx context.Context) error {
 	err := neutralize(h.runtime.Close(ctx))
 	h.runtime = nil
 	h.loaded = nil
+	h.inline = nil
 	h.mu.Lock()
 	h.states = nil
 	h.mu.Unlock()

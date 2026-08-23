@@ -29,6 +29,75 @@ migrations run at boot.
 
 ### Added
 
+- **An add-on can run inside the redirect path, and the published redirect
+  measurement is now scoped to core.**
+
+  Two classes, declared separately so a module cannot acquire the sharper one by
+  accident. `redirect.observe` watches redirects **out of band** — it is fed from
+  the click pipeline after the visitor has been answered and after the click is
+  durable, so nothing it does can delay or fail a redirect. `redirect.inline`
+  runs **on the path**, at one point: after this instance has decided where the
+  visitor goes and before the gates that spend a link's budget. An inline module
+  may let the redirect stand or veto it, and a veto is answered with the same
+  refusal page a blocked bot gets — naming no alias, no destination and no
+  add-on. **It is a refusal your visitors will meet, so it is tellable apart from
+  every other one**: `linkctrl_redirects_total{outcome="vetoed"}` is its own series,
+  zero forever until an inline add-on is installed, and the add-on that decided it
+  is named in a log line at info. Like the other gate refusals it records **no
+  click**, so a link whose traffic an add-on is refusing shows the drop in its own
+  analytics rather than only in a scrape.
+
+  A third grant, `redirect.rewrite_query`, lets an inline module alter the
+  destination's **query string and nothing else about it**. It is a token of its
+  own on top of `redirect.inline`, because a manifest declaring *run on the
+  redirect path* should not turn out to have declared *and edit where the visitor
+  goes*. The bound is structural rather than checked: the module writes a query
+  and LinkCtrl substitutes it into the URL **it** decided, so the scheme, the
+  host, the port and the path cannot move and no tier of the destination
+  validator can reach a different verdict. Stripping `fbclid` or `utm_*` from an
+  outbound link is what the power exists for.
+
+  **The published redirect latency is now stated as core, with no inline add-on
+  on the path** — in [docs/slo.md](docs/slo.md) and
+  [docs/SECURITY.md](docs/SECURITY.md), both edited in the same change that made
+  an inline add-on possible. That is the boundary rather than a retreat: an
+  add-on's own latency is the add-on's, and **availability stays LinkCtrl's**. An
+  invocation is bounded by `LINKCTRL_ADDON_INLINE_DEADLINE` (25 ms by default,
+  measured rather than chosen), the runtime kills a module that overruns, the
+  redirect completes without it, and the kill is counted per module on
+  `linkctrl_addon_redirect_kills_total{addon}`. A module that fails, is killed or
+  cannot be given an instance always means *allow, unchanged* — never a refusal —
+  because a bug in an add-on must not be able to take somebody's links down.
+
+  Both halves are measured. Against 2,000 rps for two minutes on 100k links and
+  5M click events, core is unmoved at **100% of requests under 20 ms**, and the
+  same run with a module that never returns served **every one of 239,944
+  redirects with zero failures** while 40,439 invocations were killed. That second
+  run still reads **99.84% of redirects under 20 ms server-side**, because the
+  figure is core's own work and the time a module held the request is not in it.
+  Both runs are in [docs/slo.md](docs/slo.md) with what each one does and does not
+  show.
+
+  Per-module attribution is first-class:
+  `linkctrl_addon_redirect_duration_seconds{addon,class}` is a separate curve from
+  `linkctrl_redirect_duration_seconds`, and separate in both directions — the
+  redirect histogram now **excludes** the time an add-on held the request, so
+  core's curve still describes core after you install one. That is what lets an
+  operator tell core's latency from each add-on's and take the problem to the right
+  team. An invocation skipped because all sixteen instance slots were busy is on
+  `linkctrl_rate_limited_total{limit="addon_inline"}`, and an observation dropped
+  the same way on `{limit="addon_observe"}`. Rendering that is the
+  Add-on manager's, which is not built yet.
+
+  An inline invocation reaches only a **redirect-safe subset** of the ABI — the
+  ungated host facts, its own settings and the two functions the class exists for.
+  Storage, the request, the session and templates are refused there whatever the
+  manifest declared, which is the redirect tree's own *no session lookup, no CSRF,
+  no template rendering* rule reaching across the boundary. One add-on name is
+  reserved as a consequence of the new variable: an add-on called `inline` is
+  refused at load, because a setting of its called `deadline` would be read from
+  `LINKCTRL_ADDON_INLINE_DEADLINE`.
+
 - **An add-on can sign somebody in, and LinkCtrl decides what that means.**
 
   A module whose manifest declares `session.mint` can complete an external
@@ -178,10 +247,11 @@ migrations run at boot.
   add-on learns nothing about who is signed in when nobody is. A module holding the
   routes grant can **redirect a visitor anywhere**, since sending somebody to an
   identity provider is the point of one; LinkCtrl enforces only that the redirect
-  is never permanent. And sixteen add-on requests run at once across the instance,
-  a further one waiting on the request's own timeout: each gets an instance of the
-  module to itself and each instance is capped at **8 MiB** of memory, so add-ons
-  add at most **128 MiB** to what this instance holds while they are working. That
+  is never permanent. And sixteen add-on invocations run at once across the instance,
+  a further page request waiting on the request's own timeout: each gets an
+  instance of the module to itself and each instance is capped at **8 MiB** of
+  memory, so add-ons add at most **128 MiB** to what this instance holds while they
+  are working. That
   isolation is deliberate — one visitor's state cannot be left where another
   visitor's request can read it — and it means an add-on keeping state between two
   requests of one flow keeps it in the schema it owns, where it survives a restart
@@ -527,7 +597,7 @@ migrations run at boot.
   four places including the SDK's own Go `Deprecated:` markers, and what counts as
   breaking is a table rather than a judgement call.
 
-  **Twelve functions work; the rest are declared and refuse.** Logging, reading the
+  **Fifteen functions work; the rest are declared and refuse.** Logging, reading the
   add-on's own declared settings, asking the host its ABI version, the two storage
   calls, and — since the add-on pages entry above — reading the request, writing
   the response and asking who is signed in are live, as are the clock, the random

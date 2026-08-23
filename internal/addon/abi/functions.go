@@ -19,23 +19,37 @@ package abi
 // grant on either would be a line in every manifest that bought an operator
 // nothing.
 //
-// Nine capability groups across seven declarable permissions, and they do not map
+// Ten capability groups across eight declarable permissions, and they do not map
 // one to one onto milestones: logging and
 // config are M61's, storage is M63's, routes and the session *read* are M64's, the
 // session *hook* and the two ungated host facts — entropy and the clock — are
-// M65's, and all of those work. Template rendering from a module's own files is
-// declared and
+// M65's, and the redirect group is M66's. All of those work. Template rendering
+// from a module's own files is declared and
 // **still refused** — M64 answered the rendering half by wrapping what a module
 // returns rather than by parsing markup a module ships, which is D259 and is why
 // the function that would parse it did not land with the milestone that backs it.
-// Redirect observation is M66's, and it is
-// **declared here and refused at runtime** with
-// StatusNotAvailable. That order is deliberate — a module written against the
+// It is the last one left. That order is deliberate — a module written against the
 // whole contract compiles today, and the milestone that implements a limb turns
 // a refusal into behaviour without changing a signature. m61.md's second risk is
 // exactly this pattern rotting into permanently-refused, and the mitigation is
 // the pair of tests over this slice plus M64.9 reading it against what M62–M64
 // built.
+//
+// # The redirect group is three functions and two of them are not for the same caller
+//
+// `redirect_event_read` belongs to the **observe** class, which runs after the
+// response and off the path. `redirect_decision_read` and `redirect_answer_write`
+// belong to the **inline** class, which runs on it. They are separate functions
+// rather than one read with a mode, because the two classes are separate grants
+// for the owner's own reason — a module cannot acquire the sharper one by
+// accident — and one function serving both would be a place where holding the
+// weaker grant reached the stronger one's payload.
+//
+// **What an inline invocation may call is narrower than what its manifest
+// declared**, and [InlineSafe] is the whole of it. That is the redirect tree's
+// own rule reaching across the boundary: no storage, no request, no session and
+// no template on the hot path, refused by the host at the call rather than
+// promised about add-on code.
 var Functions = []Function{
 	{
 		Name: "abi_version", Go: "HostABIVersion", Since: "0.1.0", BackedBy: "M61", Live: true,
@@ -310,7 +324,7 @@ var Functions = []Function{
 			"OAuth's `state` parameter is for, and it is yours.",
 	},
 	{
-		Name: "redirect_event_read", Go: "RedirectEventRead", Since: "0.1.0", BackedBy: "M66",
+		Name: "redirect_event_read", Go: "RedirectEventRead", Since: "0.1.0", BackedBy: "M66", Live: true,
 		Requires: "redirect.observe",
 		Params: []Param{
 			{Name: "event", Kind: OutBytes, Doc: "the redirect, as a RedirectEvent record"},
@@ -320,9 +334,56 @@ var Functions = []Function{
 			"is at most what click_events may carry — prefix-derived and country-level, and " +
 			"no client address in any form. The grant it costs is redirect.observe, which " +
 			"is out-of-band observation and nothing more: running inside the redirect path " +
-			"itself is redirect.inline, a separate declaration no host grants yet, so a " +
-			"module cannot reach the path by holding this. A host that does not implement " +
-			"it yet answers ErrNotAvailable.",
+			"itself is redirect.inline, a separate declaration, so a module cannot reach " +
+			"the path by holding this. The host calls your " +
+			"`linkctrl_redirect_observe` export once per recorded redirect, **after the " +
+			"visitor has already been answered and after the click is durable**, so " +
+			"nothing you do here can delay or fail a redirect — and nothing you do here " +
+			"can affect one either. Outside such an invocation it is ErrNotFound, which " +
+			"is what a module calling it from package initialization gets. An instance " +
+			"that could not be given the event within the host's own bound is dropped " +
+			"rather than queued: observation is best-effort by construction, exactly as " +
+			"the click pipeline it is fed from is.",
+	},
+	{
+		Name: "redirect_decision_read", Go: "RedirectDecisionRead", Since: "0.1.2", BackedBy: "M66", Live: true,
+		Requires: "redirect.inline",
+		Params: []Param{
+			{Name: "decision", Kind: OutBytes, Doc: "where this visitor is about to be sent, as a RedirectDecision record"},
+		},
+		Carries: []string{"RedirectDecision"},
+		Doc: "RedirectDecisionRead reads the redirect this module is being asked about, " +
+			"while the visitor waits. The host calls your `linkctrl_redirect_inline` " +
+			"export after it has decided where the visitor goes and **before it has " +
+			"written anything** — before the gates that spend a link's budget, so a veto " +
+			"costs nobody a click. What crosses is the decision and not the visitor: the " +
+			"link, the alias and the destination, and no field derived from the person in " +
+			"front of the browser. Watching visitors is redirect.observe's job and it " +
+			"happens off this path. Outside an inline invocation this is ErrNotFound.",
+	},
+	{
+		Name: "redirect_answer_write", Go: "RedirectAnswerWrite", Since: "0.1.2", BackedBy: "M66", Live: true,
+		Requires: "redirect.inline",
+		Params: []Param{
+			{Name: "answer", Kind: Bytes, Doc: "your verdict, as a RedirectAnswer record"},
+		},
+		Carries: []string{"RedirectAnswer"},
+		Doc: "RedirectAnswerWrite is how an inline module answers, and it is the only " +
+			"channel it has: `linkctrl_redirect_inline` returns a status and not a " +
+			"payload, for the reason the request handler does. Not calling it is the " +
+			"ordinary case and means *allow* — a module that only watches writes nothing, " +
+			"and a module the host had to kill wrote nothing either, so the two agree. " +
+			"A verdict of `veto` refuses the visitor with the same page a gate refuses " +
+			"with; the alias, the destination and the reason are never echoed to them. " +
+			"A `query` alters the destination's query string and costs " +
+			"redirect.rewrite_query on top of redirect.inline — ErrDenied without it — " +
+			"and it is a **replacement** rather than a merge: what you write is the whole " +
+			"query, and an empty string with `rewrite` set removes it. You cannot reach " +
+			"the scheme, the host, the port or the path, because the host substitutes " +
+			"your query into the URL it already decided rather than accepting a URL from " +
+			"you. A query carrying anything outside RFC 3986's query characters is " +
+			"ErrInvalid, and so is a verdict outside the vocabulary. Called twice in one " +
+			"invocation the second is ErrInvalid, for the reason http_response_write is.",
 	},
 }
 
@@ -351,6 +412,43 @@ var Records = []Record{
 			{"language", "string", "the primary Accept-Language tag"},
 			{"referrer_host", "string", "the referrer's host only; the full URL is discarded at the edge"},
 			{"is_bot", "boolean", "whether the request was classified as a bot"},
+		},
+	},
+	{
+		Name: "RedirectDecision",
+		Doc: "Where a visitor is about to be sent, handed to an inline add-on before " +
+			"anything is written. **Deliberately not click-derived**: every field here is " +
+			"a property of the link and of the decision this instance made, and not one " +
+			"of them describes the person waiting. An inline module is on the hot path " +
+			"and holds the visitor's own request open, which is the worst place in this " +
+			"product to hand anything about them over — and it would buy nothing that " +
+			"RedirectEvent does not already carry off the path, under a grant an operator " +
+			"declares separately.",
+		Fields: []Field{
+			{"link_id", "string", "the link, as a UUID"},
+			{"workspace_id", "string", "the workspace the link belongs to, as a UUID"},
+			{"alias", "string", "the short code this request resolved, canonicalised"},
+			{"destination", "string", "the absolute URL this visitor is about to be sent to, " +
+				"as the host has decided it — routing rules, split arms, deep-link path and " +
+				"forwarded query all already applied, so it is the Location header and not " +
+				"the link's stored URL"},
+		},
+	},
+	{
+		Name: "RedirectAnswer",
+		Doc: "What an inline add-on answers with. Every field is optional and the empty " +
+			"record means *allow, unchanged*, which is what a module that only watches " +
+			"writes and what the host assumes of a module that wrote nothing at all.",
+		Fields: []Field{
+			{"verdict", "string", "allow or veto; empty is allow. A veto is answered with the " +
+				"gate refusal page and nothing about the add-on reaches the visitor"},
+			{"rewrite", "boolean", "whether query is to be applied at all, which is what makes " +
+				"removing a query expressible: an empty query with this false is a module " +
+				"that did not ask for a rewrite, and an empty query with it true is a module " +
+				"asking for the query to be dropped"},
+			{"query", "string", "the destination's new query string, without the leading `?`. " +
+				"It replaces the query the host decided and reaches nothing else about the " +
+				"URL, which the host enforces by substitution rather than by inspection"},
 		},
 	},
 	{

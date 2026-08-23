@@ -145,10 +145,14 @@ milestone after it is certain to make.
 ### A function nothing implements has no signature to break
 
 The first row of the table is that case. Three milestones of this phase finish a
-record — M64 `HTTPRequest`, `HTTPResponse` and `SessionContext`, which have landed
-and are carried by live functions; M65 `SessionClaim` and `MintedSession`; M66
-`RedirectEvent` — and under the ordinary rows each of those costs a generation,
-which is the exact cost the declared-and-refused pattern exists to avoid.
+record — M64 `HTTPRequest`, `HTTPResponse` and `SessionContext`; M65
+`SessionClaim` and `MintedSession`; M66 `RedirectEvent`, `RedirectDecision` and
+`RedirectAnswer` — and under the ordinary rows each of those costs a generation,
+which is the exact cost the declared-and-refused pattern exists to avoid. **All of
+them are now carried by live functions**, which is the rule having worked rather
+than the rule going unused: each record was finished while no released host could
+answer the call that carries it. `template_render` is the only refused function
+left, so the record shapes still under this rule are whatever it comes to carry.
 
 **The rule: while every released host answers `ErrNotAvailable` for a function,
 that function's parameters, and the records only such functions carry, move no
@@ -279,10 +283,14 @@ in [the permission table](#permissions) refuses the add-on at load, for the same
 reason an unknown manifest *field* does: a declaration this host cannot interpret
 is a manifest written for a host that is not this one, and there is no safe
 direction to guess in. The one thing that is *not* a refusal is a token this
-version publishes and no version grants yet — `redirect.inline` is that case
-today. Such an add-on loads, does not hold the grant, and gets a warning at boot
-naming what it asked for and did not get; `linkctrl_addon_info` carries what it
-**holds**, so the difference is visible in a scrape.
+version publishes and no version grants yet: such an add-on loads, does not hold
+the grant, and gets a warning at boot naming what it asked for and did not get.
+**There is no such token today** — `redirect.inline` was the last one and this
+version grants it, so every entry in the table is grantable and nothing is
+withheld at load. The path is kept because the phase's own scaffolding uses it: a class is
+declared, and therefore enforced, a milestone or two before the behaviour behind
+it lands. `linkctrl_addon_info` carries what an add-on **holds** rather than what
+it declared, so whenever that gap reopens it is visible in a scrape.
 
 **Four functions cost nothing**, and that is a decision rather than an oversight.
 `abi_version` reports a constant. `log` is the capability that was granted on
@@ -510,18 +518,29 @@ module work against two hosts. Probing for a capability is the intended use.
 
 ## What a module exports
 
-The functions above are what a module *imports*. There is one function it must
-**export**, and it is how the host hands over a request:
+The functions above are what a module *imports*. There are three it may
+**export**, and each is how the host hands something over. Every one of them is
+required only of an add-on holding the grant beside it and ignored for one that is
+not, so a module exports what it declared and nothing else:
+
+| Export | Required of | The host calls it |
+| --- | --- | --- |
+| `linkctrl_http_handle` | `routes.own_prefix` | per request to one of your routes |
+| `linkctrl_redirect_observe` | `redirect.observe` | per recorded redirect, off the request path |
+| `linkctrl_redirect_inline` | `redirect.inline` | per redirect, **while the visitor waits** |
 
 ```go
 //go:wasmexport linkctrl_http_handle
 func handle() int32 { … }
 ```
 
-Required only of an add-on that declared `routes.own_prefix`; ignored for one
-that did not. It takes no arguments and returns an `int32`, read the way a host
-function's answer is read — a negative number is one of the statuses in the table
-below, anything else is success.
+Each takes no arguments and returns an `int32`, read the way a host function's
+answer is read — a negative number is one of the statuses in the table below,
+anything else is success. **On the redirect exports a negative answer is not a
+veto**: a veto is a verdict and is written, and a module that failed is a module
+the host has no answer from, so the redirect proceeds unchanged. Declaring a grant
+and exporting nothing is not a load failure — the host logs it and does nothing —
+because the export is a property of your wasm rather than of your manifest.
 
 **Nothing is passed in and nothing is returned out**, deliberately: the calling
 convention already has a way to move a record across, and a second one for this
@@ -570,6 +589,76 @@ about 3 KiB: a set of cookies that would not pack into one is `ErrInvalid` at th
 call you made, and an add-on that fills its jar over many responses loses its
 oldest values, with the operator's log saying so. Keep a flow's state in your own
 schema and a key to it in a cookie; the cookie is not the storage.
+
+## The two redirect classes
+
+Both are declared, and they are separate grants so that a module cannot acquire
+the sharper one by accident. Read this before you declare either.
+
+### `redirect.observe` — off the path
+
+The host calls `linkctrl_redirect_observe` once per recorded redirect, **after the
+visitor has been answered and after the click is durable**, and you read what it
+is about with `redirect_event_read`. Nothing waits for you: an observation the
+host cannot deliver in time is dropped, and it is dropped rather than queued
+because an observation a minute old is of no more use than one that never
+arrived. There is no answer to write — an observing invocation cannot affect the
+redirect it is describing, which is the whole of the difference from the class
+below.
+
+What crosses is a `RedirectEvent`, and it is bounded to what this product's own
+`click_events` table may carry: country-level, and no client address in any form.
+Your storage is available here, which is the point of the class.
+
+### `redirect.inline` — on the path, while somebody waits
+
+The host calls `linkctrl_redirect_inline` after it has decided where the visitor
+goes and **before it has written anything** — before the gates that spend a link's
+budget, so a veto costs nobody a click. You read the decision with
+`redirect_decision_read` and answer with `redirect_answer_write`. Writing nothing
+means *allow, unchanged*, which is the ordinary case for a module that only
+watches.
+
+**Your latency is the visitor's.** This product's published redirect measurement
+is *core*, with no inline add-on on the path, and an operator who installs yours
+has changed what is being measured — their instance's numbers become partly
+yours, per module, on
+`linkctrl_addon_redirect_duration_seconds{addon,class}`. Take that seriously: the
+budget core holds itself to is a cached p99 under 20 ms.
+
+**You are bounded, and the bound is not negotiable from here.** An operator sets
+`LINKCTRL_ADDON_INLINE_DEADLINE` — 25 ms by default — and the runtime closes your
+module when you overrun it. The redirect completes without you, the kill is
+counted against your add-on by name, and there is no way for a module to ask for
+more. The deadline covers **instantiation as well as the call**, because your
+package initialization runs while you are being instantiated: work you do there is
+work the visitor waits for.
+
+**You reach less of this ABI here than your manifest declared.** An inline
+invocation may call `abi_version`, `log`, `random_bytes`, `time_now`,
+`config_get`, and the two functions above. Everything else is `ErrDenied` inside
+one — storage above all, because the redirect path does no I/O of this product's
+own either and an add-on does not get to be the exception. Anything you need
+during a redirect has to be in memory, and your memory is new every invocation,
+so in practice it has to be a `config_get` or a constant.
+
+**A veto refuses the visitor**, with the same fixed page a blocked request gets.
+It names no alias, no destination and no add-on. Use it for something an operator
+asked for; a module that vetoes broadly is a module whose links have stopped
+working, and the operator's log names you.
+
+**Rewriting the query costs a second grant.** With `redirect.rewrite_query`
+declared as well, your answer may carry a `query` that replaces the destination's,
+with `rewrite` set — an empty query with the flag set removes the query
+altogether. You cannot reach the scheme, the host, the port or the path: the host
+substitutes your query into the URL it already decided rather than accepting a URL
+from you, so those are unchanged by construction rather than by inspection. A
+query holding a character RFC 3986 does not allow there — a `#` above all — is
+`ErrInvalid`, and so is a `query` without `rewrite`.
+
+The destination you are handed is the one the visitor would have received:
+routing rules, the split arm, the deep-link path and any forwarded query are
+already applied. Strip what you were installed to strip and hand the rest back.
 
 ## The clock and the entropy are this machine's
 
@@ -708,7 +797,7 @@ can verify, and the second is a CSRF carve-out on a route anything holding
 
 <!-- BEGIN GENERATED: the function table -->
 
-The ABI is **0.1.1**, generation **1**, and this host loads generation 1 or newer.
+The ABI is **0.1.2**, generation **1**, and this host loads generation 1 or newer.
 
 | Function | Since | Requires | Status | What it is |
 | --- | --- | --- | --- | --- |
@@ -725,7 +814,9 @@ The ABI is **0.1.1**, generation **1**, and this host loads generation 1 or newe
 | `session_context`<br>`sdk.SessionContextRead()` | 0.1.0 | `session.context` | **live** | SessionContextRead asks the host who is signed in on the request this add-on is answering. It is the *read* half of the session boundary and the whole of it: what comes back is an identity and where it is working, never a cookie, a token or a session row, so an add-on can draw a page for the person in front of it and cannot act as them anywhere else. Nobody signed in is not an error — add-on routes are reachable without a session, because a sign-in flow could not otherwise begin — so the record's `signed_in` is false and every other field is empty. Outside a request it is ErrNotFound, which is what a module calling it from package initialization gets. Minting a session is session_mint and is a different grant. |
 | `session_mint`<br>`sdk.SessionMint(claim []byte)` | 0.1.0 | `session.mint` | **live** | SessionMint tells the host that this add-on authenticated somebody, and asks for a session. The add-on does not make a session and never sees a token: it makes an assertion, the host decides whether an account exists for it and what the session may do, and the cookie is written by the host. That split is what keeps the host, and not an add-on, the authority over who is signed in. What comes back is a MintedSession, and it is enumerated for the same reason the claim is: an answer described only as "a JSON object" is an answer the credential assertion over this surface cannot read. Four host rules decide whether anything is minted, and each is a status rather than a page: the claim must name a subject and an issuer (ErrInvalid); that subject must already be linked to an account, through a linking flow the host owns and this function is not (ErrNotFound); the account must be active and not locked out (ErrDenied); and nobody may already be signed in on the request, because a mint is how somebody signs in and not how a browser changes who it is (ErrDenied). Called twice in one request the second is ErrInvalid, for the reason http_response_write is. An account with a second factor enrolled meets it after this call rather than instead of it: the host answers with second_factor_required set, and sends the visitor to its own prompt before your response's location. **What that replaces is your response, and not your cookies**: every set_cookie you made on the request is written to the browser either way, so a callback that clears the `state` cookie it set at the start clears it for an account with a second factor exactly as for one without. You cannot see which kind of account you asserted about, so nothing about your flow's own state may depend on it. **The out buffer is checked before anything is minted**, which is the one place this ABI's retry convention needs saying twice: a buffer too small for the record answers with the size to retry at and mints nothing, so the retry is the first mint rather than a second one and the sentence above about the second call keeps meaning what it says. A buffer of zero, offered to ask for the size, costs nothing for the same reason. The generated SDK starts larger than the record and never sees it. |
 | `identity_link`<br>`sdk.IdentityLink(claim []byte)` | 0.1.1 | `session.mint` | **live** | IdentityLink connects an external identity to the account of the person who is **already signed in** on this request, and it is the only way anything an add-on does writes that mapping. It is session_mint's mirror and its precondition: a subject nobody has linked mints nothing, and a subject can only be linked while its owner is in front of the browser. So the two functions have opposite requirements — this one is ErrDenied when nobody is signed in, and session_mint is ErrDenied when somebody is — which is what stops either being used to do the other's job. Linking the same subject to the same account twice succeeds and changes nothing; linking one another account already holds is ErrDenied and never moves it, because a link is a credential and re-pointing one is the takeover this table exists to prevent. An API key is not a person and cannot be the signed-in party. **Your callback still needs its own CSRF defence.** The host's guarantee is that a link is only ever made for whoever is signed in, in their own browser, at that moment; whether that browser meant to be there is what OAuth's `state` parameter is for, and it is yours. |
-| `redirect_event_read`<br>`sdk.RedirectEventRead()` | 0.1.0 | `redirect.observe` | declared, refused | RedirectEventRead reads the redirect this add-on is observing. What it carries is at most what click_events may carry — prefix-derived and country-level, and no client address in any form. The grant it costs is redirect.observe, which is out-of-band observation and nothing more: running inside the redirect path itself is redirect.inline, a separate declaration no host grants yet, so a module cannot reach the path by holding this. A host that does not implement it yet answers ErrNotAvailable. |
+| `redirect_event_read`<br>`sdk.RedirectEventRead()` | 0.1.0 | `redirect.observe` | **live** | RedirectEventRead reads the redirect this add-on is observing. What it carries is at most what click_events may carry — prefix-derived and country-level, and no client address in any form. The grant it costs is redirect.observe, which is out-of-band observation and nothing more: running inside the redirect path itself is redirect.inline, a separate declaration, so a module cannot reach the path by holding this. The host calls your `linkctrl_redirect_observe` export once per recorded redirect, **after the visitor has already been answered and after the click is durable**, so nothing you do here can delay or fail a redirect — and nothing you do here can affect one either. Outside such an invocation it is ErrNotFound, which is what a module calling it from package initialization gets. An instance that could not be given the event within the host's own bound is dropped rather than queued: observation is best-effort by construction, exactly as the click pipeline it is fed from is. |
+| `redirect_decision_read`<br>`sdk.RedirectDecisionRead()` | 0.1.2 | `redirect.inline` | **live** | RedirectDecisionRead reads the redirect this module is being asked about, while the visitor waits. The host calls your `linkctrl_redirect_inline` export after it has decided where the visitor goes and **before it has written anything** — before the gates that spend a link's budget, so a veto costs nobody a click. What crosses is the decision and not the visitor: the link, the alias and the destination, and no field derived from the person in front of the browser. Watching visitors is redirect.observe's job and it happens off this path. Outside an inline invocation this is ErrNotFound. |
+| `redirect_answer_write`<br>`sdk.RedirectAnswerWrite(answer []byte)` | 0.1.2 | `redirect.inline` | **live** | RedirectAnswerWrite is how an inline module answers, and it is the only channel it has: `linkctrl_redirect_inline` returns a status and not a payload, for the reason the request handler does. Not calling it is the ordinary case and means *allow* — a module that only watches writes nothing, and a module the host had to kill wrote nothing either, so the two agree. A verdict of `veto` refuses the visitor with the same page a gate refuses with; the alias, the destination and the reason are never echoed to them. A `query` alters the destination's query string and costs redirect.rewrite_query on top of redirect.inline — ErrDenied without it — and it is a **replacement** rather than a merge: what you write is the whole query, and an empty string with `rewrite` set removes it. You cannot reach the scheme, the host, the port or the path, because the host substitutes your query into the URL it already decided rather than accepting a URL from you. A query carrying anything outside RFC 3986's query characters is ErrInvalid, and so is a verdict outside the vocabulary. Called twice in one invocation the second is ErrInvalid, for the reason http_response_write is. |
 
 ### Permissions
 
@@ -739,7 +830,8 @@ An add-on declares what it needs in its manifest's `permissions` array, and the 
 | `session.context` | yes | Ask the host who is signed in: identity, workspace and organization, and nothing else. Its own token rather than a thing a page-serving add-on gets for free, because `routes.own_prefix` is read as *this add-on draws a page* and identity is a second answer — a manifest declaring one grant should not turn out to have declared two. It is the read half and the whole of it: there is no cookie, no token and no session row behind it, and minting or destroying a session is session.mint. |
 | `session.mint` | yes | Tell the host that somebody authenticated, and ask for a session — and connect an external identity to the account of whoever is already signed in, which is `identity_link` and is the same grant. **Two functions, one token**, because a module that can vouch for a person can already decide who is signed in; splitting them would let an operator grant the writing of a standing credential without the asserting that spends it, which is not a safer half. The highest-value grant in this vocabulary: a module holding it decides who is signed in, subject to the host's own judgement about whether an account exists and what the session may do. |
 | `redirect.observe` | yes | Observe redirects this instance served, out of band. What crosses is at most what click_events may carry — prefix-derived and country-level, and no client address in any form — so this grant cannot be widened into one by the host implementing it. |
-| `redirect.inline` | **no host grants it yet** | Run inside the redirect path itself, where a module's own latency is added to the response. Distinct from redirect.observe so that a module cannot acquire it by accident, and **no host grants it yet**: it is declared here so the milestone that admits an add-on onto that path enforces behaviour against a permission that is already enforced. |
+| `redirect.inline` | yes | Run inside the redirect path itself, where a module's own latency is added to the response. Distinct from redirect.observe so that a module cannot acquire it by accident. What it buys is the decision and a verdict on it: the module is handed the destination this instance has chosen and may let it stand or veto it, and a veto is the same refusal a gate answers with. What it does not buy is the rest of the ABI — an inline invocation may call only the redirect-safe subset, so there is no storage, no request, no session and no template on the hot path, whatever the manifest declared. Nor does it buy editing the destination, which is redirect.rewrite_query. The host bounds how long the module holds the path and completes the redirect without it when that runs out; the latency it adds inside that bound is the add-on's own, and this product's published redirect promise is measured with no inline add-on on the path. |
+| `redirect.rewrite_query` | yes | Alter the query string of the destination an inline module was handed, and nothing else about it: the scheme, the host, the port and the path are the host's and are unchanged by construction, because the host substitutes the query into the URL it already decided rather than accepting one the module wrote. That bound is what keeps the destination validator's single door single — every tier above the SSRF refusals judges by host, so a query the module chose cannot change any tier's verdict. It is a second token rather than something redirect.inline implies (D317): stripping fbclid or appending a privacy parameter is a sharper power than watching and refusing, and a module cannot acquire it by having asked for the weaker one. Useless on its own — an add-on that declares this and not redirect.inline is never on the path to use it. |
 
 ### Statuses
 
@@ -777,6 +869,27 @@ One redirect this instance served, handed to an observing add-on. Every field is
 | `language` | string | The primary Accept-Language tag |
 | `referrer_host` | string | The referrer's host only; the full URL is discarded at the edge |
 | `is_bot` | boolean | Whether the request was classified as a bot |
+
+#### `RedirectDecision`
+
+Where a visitor is about to be sent, handed to an inline add-on before anything is written. **Deliberately not click-derived**: every field here is a property of the link and of the decision this instance made, and not one of them describes the person waiting. An inline module is on the hot path and holds the visitor's own request open, which is the worst place in this product to hand anything about them over — and it would buy nothing that RedirectEvent does not already carry off the path, under a grant an operator declares separately.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `link_id` | string | The link, as a UUID |
+| `workspace_id` | string | The workspace the link belongs to, as a UUID |
+| `alias` | string | The short code this request resolved, canonicalised |
+| `destination` | string | The absolute URL this visitor is about to be sent to, as the host has decided it — routing rules, split arms, deep-link path and forwarded query all already applied, so it is the Location header and not the link's stored URL |
+
+#### `RedirectAnswer`
+
+What an inline add-on answers with. Every field is optional and the empty record means *allow, unchanged*, which is what a module that only watches writes and what the host assumes of a module that wrote nothing at all.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `verdict` | string | Allow or veto; empty is allow. A veto is answered with the gate refusal page and nothing about the add-on reaches the visitor |
+| `rewrite` | boolean | Whether query is to be applied at all, which is what makes removing a query expressible: an empty query with this false is a module that did not ask for a rewrite, and an empty query with it true is a module asking for the query to be dropped |
+| `query` | string | The destination's new query string, without the leading `?`. It replaces the query the host decided and reaches nothing else about the URL, which the host enforces by substitution rather than by inspection |
 
 #### `HTTPRequest`
 

@@ -35,7 +35,17 @@ func TestThePermissionVocabularyIsExactlyThis(t *testing.T) {
 		{"session.context", true},
 		{"session.mint", true},
 		{"redirect.observe", true},
-		{"redirect.inline", false},
+		// **`redirect.inline` was `false` here from M62 until M66**, and the flip is
+		// the whole of what that ordering bought: the class was declarable and
+		// refused for four milestones, so the behaviour landed against a permission
+		// that was already enforced rather than against a check somebody added with
+		// it. The line changing is what makes that a diff somebody read.
+		{"redirect.inline", true},
+		// The eighth, added at M66 (D317). It is here rather than folded into
+		// redirect.inline for the reason session.context is not folded into
+		// routes.own_prefix: a manifest declaring *run on the redirect path* should
+		// not turn out to have declared *and edit where the visitor goes*.
+		{"redirect.rewrite_query", true},
 	}
 
 	if len(Permissions) != len(want) {
@@ -122,10 +132,19 @@ func TestPermissionsAndFunctionsAgreeInBothDirections(t *testing.T) {
 		required[f.Requires] = true
 	}
 
-	// The permissions that gate nothing, named rather than counted. `redirect.inline`
-	// is a *placement* class — it decides where a module runs, not which function it
-	// may call — so it gates no function by construction, and it is the only one.
-	gatesNothing := []string{"redirect.inline"}
+	// The permissions that gate nothing, named rather than counted.
+	//
+	// **`redirect.inline` left this list at M66 and `redirect.rewrite_query`
+	// arrived on it**, which is worth reading as one change rather than two. The
+	// inline class stopped being purely a placement the moment it had functions of
+	// its own — `redirect_decision_read` and `redirect_answer_write` cost it, so it
+	// gates two — while the rewrite grant is not a placement at all and gates
+	// nothing for a different reason: what it permits is one *field* of one record
+	// that `redirect_answer_write` already carries, and the check for it therefore
+	// lives inside that function rather than in dispatch. A permission gating no
+	// function is a shape worth being suspicious of, and each entry here says which
+	// of the two harmless reasons it is.
+	gatesNothing := []string{"redirect.rewrite_query"}
 	for _, p := range Permissions {
 		if required[p.Name] == slices.Contains(gatesNothing, p.Name) {
 			t.Errorf("%q gates a function: %v, and this test says otherwise — either the "+

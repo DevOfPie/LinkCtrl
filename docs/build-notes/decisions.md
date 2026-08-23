@@ -466,6 +466,9 @@ file. Append a row when you append an entry.
 | [M65, the two sweeps become one shape, and a gate stops reading working files](#2026-08-22--m65-the-two-sweeps-become-one-shape-and-a-gate-stops-reading-working-files) | D314: the function sweep's value gate is gone and its reader is the audit sweep's; two live counts in `[Unreleased]` become anchors rather than exemptions; both sweeps read only tracked files; the near-vacuous reach guard becomes a per-anchor one; the cascade scanner stops recommending a repair it cannot see |
 | [M65, amending M60's failure-class bullet, and the fold that owes more than a number](#2026-08-22--m65-amending-m60s-failure-class-bullet-and-the-fold-that-owes-more-than-a-number) | D315: M60's `degrade` limb no longer reaches an authentication add-on, amended rather than prompted because the owner decided the assertion at M65's planning — and the pattern behind the third such case this run. D316: the README fold owes the *cannot drift without a failing build* clause as well as the number, and why it is not fixed by editing README |
 | [M66, an inline add-on may rewrite the query and nothing else](#2026-08-22--m66-an-inline-add-on-may-rewrite-the-query-and-nothing-else) | D317, owner-answered at step 1: the `redirect.inline` class gets veto plus a rewrite bounded to the query string, and the rewrite is a second declared grant rather than a power `redirect.inline` implies. Why the host-and-path bound keeps the tier system's single validation door intact, why free rewrite was declined on the hot path, and the tracking-parameter case that moved the bound off *nothing* |
+| [M66, what the extension point costs and where it sits](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits) | D318–D323, taken while building: the deadline's measured default, why an inline invocation gets a fresh instance rather than a pooled one, why the point sits before the gates, why a veto is a gate refusal that records no click, why a saturated host skips the add-on instead of queueing the visitor, and the add-on name the new variable reserves |
+| [M66, core's histogram excludes what the add-on held](#2026-08-23--m66-cores-histogram-excludes-what-the-add-on-held) | D324, taken on the milestone's second attempt after the first was rejected on it: attribution is two curves that can disagree, so the redirect handler subtracts the whole extension point before observing the SLO series — what that costs, why the excluded amount is the extension point rather than the sum of the invocations recorded, and which four measurements are deliberately left enclosing |
+| [M66, the deadline default put to the owner anyway](#2026-08-23--m66-the-deadline-default-put-to-the-owner-anyway) | D325: 25ms stands, owner-confirmed rather than inferred. Why an escape clause whose trigger did not fire still earned a prompt, and what the ceiling costs a visitor when a module reaches it |
 
 ---
 
@@ -37266,3 +37269,290 @@ later and the two do not conflict.
 record or the audit log, and what a module returning a malformed query gets.
 Both are M66's to answer in its diff — they are consequences of the shape, not
 choices about it.
+
+
+## 2026-08-22 — M66, what the extension point costs and where it sits
+
+Six decisions taken while building M66. [D317](#2026-08-22--m66-an-inline-add-on-may-rewrite-the-query-and-nothing-else)
+is the one the owner took and it fixed the *power* the extension point grants;
+these are what building against that answer forced, and none of them is a choice
+the owner would recognise as one they were asked. They are here rather than in
+[m66.md](phase-details/m66.md) because a worker never amends a milestone file.
+
+### D318 — the inline deadline ships at 25ms, measured, and it is deliberately larger than the 20ms target
+
+The question was filed a phase early —
+[upcoming-decisions.md](upcoming-decisions.md) has carried *what is the inline
+add-on deadline's default* since 2026-08-18 — with the shape of the answer fixed
+in advance and the value left to be measured: one instance-wide knob, no
+per-add-on override until a real case argues for one, and the number taken from
+M66's own runs.
+
+**The measurement.** An inline invocation is an instantiation plus a call.
+`TestAnInlineInvocationCostsAnInstantiation` times a fixture that reads its
+decision, probes six host functions and writes a query rewrite: on this machine,
+2026-08-22, that is single-digit milliseconds end to end, against M60's separately
+measured ~1.6 ms to instantiate the same class of module. 25 ms is roughly six
+times a module doing real work, which is the headroom a default needs when the
+thing it bounds is code this repository did not write and cannot profile.
+
+**It is larger than the 20 ms cached-redirect target and that is not a
+contradiction.** The target is *core's*, measured with nothing on the path;
+[slo.md](../slo.md) now says so in its own opening. The deadline is the point at
+which the host stops waiting for somebody else's code. A deadline **under** the
+target would kill add-ons that were working perfectly well, in order to protect a
+number that had already stopped describing the instance — trading the operator's
+feature for a figure that was no longer true either way.
+
+The planning-time expectation was *single-digit milliseconds*, and the entry said
+that if the honest number did not fit the 20 ms budget it was an owner prompt
+rather than a bigger default. **It is not a prompt**, because the honest number
+*is* single-digit milliseconds; what does not fit the budget is the safety margin
+on top of it, and a margin is not the measurement. The entry's condition was about
+the measurement.
+
+**What the number is not.** It is not a promise about how long a redirect takes
+with an add-on installed. At 2,000 rps a module that hangs makes *slots* the
+scarce resource, and the k6 run in [slo.md](../slo.md#re-measured-for-m66-2026-08-22)
+measures a generator p99 of 135 ms against a 25 ms deadline for exactly that
+reason. The deadline bounds one invocation; it does not bound a queue.
+
+### D319 — an inline invocation gets a fresh instance, and there is no pool
+
+[m66.md](phase-details/m66.md)'s second risk priced this in advance: *wazero
+invocation overhead at 2,000 rps is unmeasured until now… if per-call cost is
+hostile, pooling strategy changes inside this milestone.* It was measured and it
+is not hostile, and pooling was declined on three grounds rather than on cost.
+
+**Guest memory would cross two visitors' redirects.** D260 gives a route its own
+instance so that a module cannot hold one visitor's state where another's request
+can read it. The redirect path is the *worse* place to give that up, not a
+lighter one: it is where the host hands a module something while somebody is
+waiting, at two thousand requests a second, and an authentication add-on's nonce
+was the example that made D260's argument — the argument does not weaken because
+the payload is a destination.
+
+**It would move a ceiling four documents state.** A pooled instance holds its
+linear memory whether or not anything is using it, so a pool is added to
+`maxConcurrentRoutes × maxGuestMemoryPages` rather than drawn from it, and the
+sentence an operator sizes a host by would have to be rewritten in
+`docs/SECURITY.md`, `docs/deployment.md`, `docs/configuration.md`, `Plan.md` and
+`CHANGELOG.md`. That is not an argument against pooling; it is the price of it,
+and it should be paid by a milestone that has a measurement demanding it.
+
+**A killed instance has to be evicted from a pool.** wazero closes the *module*
+on a deadline, not the call — m66.md's third risk — so a pool needs eviction, a
+health notion and a re-instantiation path, all of which exist to make a
+thrashing module cheaper. A thrashing module being expensive is the correct
+outcome.
+
+**What not pooling costs**, stated rather than absorbed: about 2 ms of
+instantiation per redirect that reaches an inline add-on, paid by the operator
+who installed one, visible per module on
+`linkctrl_addon_redirect_duration_seconds`. A later milestone with a real inline
+add-on and a real profile may reopen this; the entry it would correct is this one.
+
+### D320 — the extension point sits after the destination and before the gates
+
+m66.md calls the placement the riskiest design line in the phase and names the
+constraint: *a killed add-on must not have half-spent a click budget.* Both halves
+of the placement follow from it.
+
+**After the destination is decided**, because a module that cannot see where the
+visitor is going has nothing to have an opinion about — routing rules, the split
+arm, the deep-link path and the forwarded query are all already applied, so what
+crosses is the `Location` header rather than the link's stored URL.
+
+**Before the gates**, because the gates *spend* things. A veto after a one-time
+link's single click had been consumed would refuse the visitor **and** retire the
+link, which makes "an add-on can take somebody's links down by refusing traffic to
+them" true. It is asserted rather than reasoned about:
+`TestAVetoDoesNotSpendAOneTimeLinksClick` reads `link_click_budget` after a vetoed
+visit, and it fails when the two blocks are swapped.
+
+**One write is not undone by a veto, and it is documented rather than
+compensated.** A split test's rotation is advanced when the arm is chosen, which
+is before the destination exists, so a vetoed redirect costs one step of it. The
+two fixes are worse than the skew: asking the module before an arm is chosen is
+asking about a destination that does not exist, and a compensating decrement is a
+race on a counter two replicas share. The rotation is already approximate across
+replicas and the skew is one step per veto.
+
+**The forwarded query moved up with it**, from beside the `Location` line to
+before the point. That is not tidying: `ForwardQuery` merges the *visitor's* query
+into the destination, so a module shown the URL before the merge would strip
+`fbclid` from a query that did not have it yet and the merge would then put it
+back — which is precisely the case D317 gave the rewrite grant for.
+
+### D321 — a veto is a gate refusal, and a gate refusal records no click
+
+m66.md sends a veto "to the gate-refusal path", and following that literally
+decides two things a bullet does not state.
+
+**The page is the blocked-bot 403.** Fixed bytes, embedded at build, naming no
+alias and no destination — and now also naming no add-on. A refusal that echoed
+any of the three would make a veto a confirmation oracle for which short codes are
+real and where they point, which is the reasoning M32.5's page already carries.
+
+**No click is recorded**, and this is the limb worth writing down because it
+contradicts a rule that reads like it should govern. D101 says a request that
+reached a real link is recorded whatever the link's state made the answer, and the
+gate refusals are its standing exception: they never reach `record` at all. A veto
+is on that path, so it inherits the exception. The consequence is deliberate — a
+vetoed visitor brands nobody in the returning-visitor set, and the refusal is
+counted where refusals are counted, on
+`linkctrl_redirects_total{outcome="vetoed"}`. That label is m66.md's last risk
+answered: a new refusal source a visitor meets has to be tellable apart from the
+ones that already existed, or an operator debugs a ghost.
+
+### D322 — a saturated host skips the add-on rather than making the visitor queue for it
+
+An inline invocation holds an instance, and instances are bounded — the same
+sixteen-slot budget add-on pages draw from, unchanged, so no documented
+guest-memory number moves. What is new is **how the slot is taken**: without
+waiting.
+
+A route waits for a slot, because a page arriving late is still a page. A redirect
+must not, because waiting for a *slot* is waiting for a resource this product
+owns — and the owner's boundary gave away the add-on's latency, not ours. So a
+redirect that cannot get a slot is served with the add-on skipped, and the skip is
+counted on `linkctrl_rate_limited_total{limit="addon_inline"}`.
+
+**It is the mechanism that makes "core availability survives a slow add-on"
+true rather than hoped for**, and the k6 run shows it as a split: with a module
+that never returns, 199,757 redirects were served at core's own latency because
+every slot was busy being killed, and 45,195 paid the deadline. Zero of 239,952
+failed.
+
+The counter is the existing throttled series rather than a new one. Its help text
+grew *or work a concurrency bound would not admit*, because a skipped invocation
+is not a refused request and the sentence had to stop implying it was. An operator
+asking "is anything being throttled" gets one answer, which is why that series
+exists.
+
+Dropped observations are counted on the same series under `addon_observe`, for
+the same reason and with the same argument: the out-of-band queue is bounded and
+best-effort by construction, exactly as the click pipeline it is fed from is.
+
+### D323 — `inline` is a reserved add-on name
+
+`LINKCTRL_ADDON_INLINE_DEADLINE` is instance-wide, and it is also exactly what a
+setting called `deadline` on an add-on called `inline` would be read from. A
+concatenation offers nothing to resolve that with — the same ambiguity
+`AddonOverrideNames` closes for `failure_class` and `mfa_satisfied`, arriving from
+the other direction.
+
+So the collision is removed rather than resolved: an add-on named `inline` is
+refused at load, naming the reservation and the namespace. It is a reserved
+**name** and not a reserved *setting*, because the variable belongs to no add-on
+— refusing the setting `deadline` on every add-on would be a far wider
+reservation bought for the same one collision.
+
+The variable's name was not free to change: [m66.md](phase-details/m66.md) states
+it, and a worker meets a bullet as written or reports and stops.
+
+
+## 2026-08-23 — M66, core's histogram excludes what the add-on held
+
+### D324 — the redirect handler subtracts the extension point before it observes
+
+M66's first attempt was rejected on its own attribution bullet, and the finding is
+worth stating before the decision is: `start := time.Now()` is the first statement
+of `RedirectHandler.ServeHTTP`, the extension point runs two hundred lines later,
+and every `time.Since(start)` after it therefore **contained** whatever an add-on
+spent. `linkctrl_redirect_duration_seconds` enclosed
+`linkctrl_addon_redirect_duration_seconds` rather than sitting beside it. Three
+documents and one source comment said the opposite in as many words, and the k6
+slow-module run's headline — 83.17% of server-side redirects under 20 ms — *was*
+the defect being measured: core's histogram absorbing a 25 ms deadline spent by
+somebody else's code.
+
+**The bullet is not satisfied by relabelling.** *Core p99 and each add-on's p99 are
+different curves an operator can read apart* is a claim about two readings that
+can disagree, and under nesting they cannot: they rise together, and an operator
+who installed an inline add-on has no baseline left to compare their instance
+against. Editing the prose to say *nests* would have made the documents true and
+the bullet false, which is the trade this project does not make.
+
+So the handler times its call into the add-on host and subtracts it from the
+duration it hands `ObserveRedirect`, at the three observation sites after the
+point. The six before it are unchanged, because nothing can have run yet.
+
+**What is subtracted is the whole extension point, not the sum of the invocations
+the histogram recorded**, and the difference is the case that decides it. A killed
+invocation is on `linkctrl_addon_redirect_kills_total` and deliberately **absent**
+from the per-module histogram — a bucket of zeroes would drag a p99 towards a
+latency nobody experienced, which is D-numbered reasoning that predates this
+entry. Subtracting only what was observed would therefore have left the deadline
+itself — the largest cost an add-on can impose, and the exact thing the 83.17%
+was made of — inside core's curve. Whatever the host spends around the call is
+excluded with it: a slot check, a query substitution, a log line. Those exist only
+because an add-on is installed, so charging them to core would reintroduce a
+smaller version of the same problem.
+
+**The two do not sum to the wall clock, and neither is meant to.** The question
+they answer together is *whose latency is this*, not *where did every microsecond
+go*. A run with kills has a visible gap between the visitor's wait and the two
+curves, and that gap is the deadline — which is already published, per module, as
+a counter.
+
+**Four measurements are deliberately left enclosing**, because each of them is
+about the visitor rather than about this product's own work:
+
+- the click event's `LatencyUS`, which is what somebody waited
+- the sampled redirect log line's `duration_us`, same
+- `linkctrl_http_request_duration_seconds`, which is the outside view and says so
+- the k6 generator's own p99, which is a client and cannot see any of this
+
+An operator who wants to know what a visitor experienced on an instance with an
+inline add-on reads the third. An operator who wants to know whether *LinkCtrl*
+is slow reads `linkctrl_redirect_duration_seconds`, and now gets an answer that
+does not change when they install a module.
+
+**The cost is one `time.Now()` and one subtraction on redirects that reached the
+point**, which are only ever redirects on an instance that installed an inline
+add-on. The hot path of an instance with no add-on gains a zeroed local and
+nothing else, and the core k6 column re-run after this change is what says so.
+
+**Both k6 runs were re-taken on an image built from the fixed code, and the
+figures in D318 and D322 above are the ones they replace.** This file is
+append-only, so those entries still read 45,195 kills, 199,757 skips, 239,952
+redirects and 83.17% under 20 ms; every one of those is superseded by
+[slo.md](../slo.md#re-measured-for-m66-2026-08-22)'s table, which now reads 40,439
+kills, 199,505 skips, 239,944 redirects and **99.84%** under 20 ms. The arguments
+those entries make are unaffected — the skip/kill split is the same mechanism at
+the same proportion, and the deadline's arithmetic did not depend on the histogram
+— but the numbers in them are a measurement of a build that was rejected, and this
+paragraph is what stops them being quoted as current.
+
+## 2026-08-23 — M66, the deadline default put to the owner anyway
+
+### D325 — 25ms stands, confirmed rather than inferred
+
+[upcoming-decisions.md](upcoming-decisions.md)'s M66 entry carried an escape
+clause naming the owner: *"if measurement says the honest number is larger than
+the 20ms budget can absorb, that is an owner prompt at M66, not a bigger
+default."* [D318](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)
+judged that it did not fire — the honest number is 3.27ms mean and 4.34ms worst,
+and 25ms is a ceiling rather than an expectation. M66's second reviewer read the
+same two sentences and reached *defensible, and the loop decided it itself*.
+
+Both are right, which is what makes it a prompt rather than an argument. The
+clause's trigger is about the measured cost and the measured cost is well inside
+the budget; the clause's *purpose* is that a number bounding what an add-on may
+cost a visitor is the owner's. Put to the owner at
+[step 3.4](phase-loop.md#3-land) with the data and two tighter alternatives —
+10ms, still 2.3x the worst observation and inside the 20ms budget even for a
+hostile module; 5ms, just above it and argued against.
+
+**Owner: keep 25ms.** So the shipped default is unchanged and this entry buys one
+thing — the number is now confirmed rather than inferred from a clause two
+readers had to interpret. The cost is stated: a module that hits the ceiling
+holds a visitor past the 20ms figure this product publishes, which is 0.16% of
+the hostile k6 run and is the owner's own boundary working as intended. Core's
+curve excludes it ([D324](#2026-08-23--m66-cores-histogram-excludes-what-the-add-on-held)),
+so an operator can see whose latency it is.
+
+Recorded because the next reader of `LINKCTRL_ADDON_INLINE_DEADLINE` should find
+an answer rather than a clause, and because an escape clause that two actors read
+opposite ways is worth one prompt to close.

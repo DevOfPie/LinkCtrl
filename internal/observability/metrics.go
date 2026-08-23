@@ -50,6 +50,8 @@ type Metrics struct {
 	addonRefusals     *prometheus.CounterVec
 	addonSchemaBytes  *prometheus.GaugeVec
 	addonLargeObjects *prometheus.GaugeVec
+	addonRedirect     *prometheus.HistogramVec
+	addonRedirectKill *prometheus.CounterVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -89,9 +91,18 @@ func NewMetrics() *Metrics {
 		// The SLO metric. `cache` is what makes "cached redirect, p99 under
 		// 20ms" answerable from the server side: memory and redis are hits,
 		// database is a miss, negative is a cached miss.
+		//
+		// **It is core's own work and an inline add-on's time is not in it** (M66).
+		// The handler subtracts the extension point before observing here, so this
+		// is the series docs/slo.md's figure is taken from and the series that
+		// stays comparable across installing an add-on. What the visitor waited is
+		// linkctrl_http_request_duration_seconds and the click's own latency, both
+		// of which include whatever a module spent.
 		redirectDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "linkctrl_redirect_duration_seconds",
-			Help:    "Time to resolve and answer a short link, by outcome and cache tier.",
+			Name: "linkctrl_redirect_duration_seconds",
+			Help: "Time to resolve and answer a short link, by outcome and cache tier. " +
+				"Excludes time an inline add-on held the redirect, which is on " +
+				"linkctrl_addon_redirect_duration_seconds.",
 			Buckets: redirectBuckets,
 		}, []string{"outcome", "cache"}),
 
@@ -105,7 +116,8 @@ func NewMetrics() *Metrics {
 		// question an alert asks is "is something being throttled", not "who".
 		throttled: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "linkctrl_rate_limited_total",
-			Help: "Requests refused by a rate limit, by limit name.",
+			Help: "Requests refused by a rate limit, or work a concurrency bound would " +
+				"not admit, by limit name.",
 		}, []string{"limit"}),
 
 		jobRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -304,6 +316,60 @@ func NewMetrics() *Metrics {
 			Help: "Large objects each add-on's database role owns. Always 0 unless an " +
 				"add-on created one, which is data outside its schema.",
 		}, []string{"addon"}),
+
+		// What each add-on costs the redirect path, per module (M66), and it is the
+		// owner's second requirement on the redirect answer stated as a series:
+		// *so an operator can efficiently track a problem down and report it to the
+		// right team*. **Separate from linkctrl_redirect_duration_seconds and never
+		// folded into it**, because the whole point is that core's p99 and each
+		// add-on's p99 are different curves. A single number covering both would
+		// answer "is this instance slow" and never "whose fault is it", which is the
+		// question this exists for.
+		//
+		// It measures the *invocation* — instantiating the module and calling it —
+		// and not the redirect around it. **The separation is enforced from the
+		// other side too**, and it has to be or this series would be a duplicate of
+		// what the redirect histogram already contained: `RedirectHandler.ServeHTTP`
+		// subtracts the whole extension point from the reading it hands
+		// [Metrics.ObserveRedirect], so core's curve is this product's own work and
+		// the two sit beside each other rather than one enclosing the other. What
+		// is taken out of core is slightly more than what arrives here — a killed
+		// invocation costs the deadline and is deliberately absent below — so the
+		// two do not sum to the wall time, and neither is meant to: the question
+		// they answer together is *whose latency is this*, not *where did every
+		// microsecond go*.
+		//
+		// An invocation that never ran is absent rather than zero: a skipped one is
+		// on the throttled series and a killed one is on the counter below, and a
+		// bucket of zeroes would drag a p99 towards a latency nobody experienced.
+		//
+		// The same buckets the redirect histogram uses, so an operator reading the
+		// two beside each other is reading one scale. `class` is the closed pair
+		// inline/observe and `addon` is a validated manifest name, so the series
+		// count is bounded by how many modules an operator installed times two.
+		addonRedirect: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "linkctrl_addon_redirect_duration_seconds",
+			Help: "Time one add-on spent on a redirect, by add-on and class (inline, " +
+				"observe). Separate from linkctrl_redirect_duration_seconds so core's " +
+				"latency and each add-on's are different curves.",
+			Buckets: redirectBuckets,
+		}, []string{"addon", "class"}),
+
+		// The availability half, and it is the number the owner's boundary rests on:
+		// an add-on's latency is its own, and an add-on that never returns is killed
+		// so the instance's availability stays this product's. A non-zero rate here
+		// is an add-on to go and fix, and it is what makes a thrashing module an
+		// operator-visible fact rather than a mystery slowdown.
+		//
+		// Kills only. A module that was skipped because the host was saturated is on
+		// linkctrl_rate_limited_total, and one that trapped is in the log: neither is
+		// an overrun, and counting them here would put a number on the Add-on manager
+		// that blames the wrong thing.
+		addonRedirectKill: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_addon_redirect_kills_total",
+			Help: "Add-on invocations killed for overrunning the redirect deadline. The " +
+				"redirect completed without them.",
+		}, []string{"addon"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -323,7 +389,7 @@ func NewMetrics() *Metrics {
 		m.webhookDeliveries,
 		m.automationFirings,
 		m.addonLoads, m.addonInfo, m.addonRefusals, m.addonSchemaBytes,
-		m.addonLargeObjects,
+		m.addonLargeObjects, m.addonRedirect, m.addonRedirectKill,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -526,9 +592,12 @@ func (m *Metrics) HTTPMiddleware(next http.Handler) http.Handler {
 
 // ObserveRedirect records one short-link request.
 //
-// Called from the redirect handler with the duration it already measures for
-// the click event, so instrumentation adds a map lookup and a histogram
-// observation — tens of nanoseconds against a 20ms budget.
+// Called from the redirect handler with the elapsed time **less whatever an
+// inline add-on held the redirect for** (M66), so instrumentation adds a map
+// lookup and a histogram observation — tens of nanoseconds against a 20ms
+// budget. That subtraction is why this no longer takes the same number the click
+// event carries: the click records what the visitor waited, and this records what
+// this product's own work cost.
 //
 // One measurement caveat, verified rather than assumed: on a Windows host Go's
 // monotonic clock cannot resolve an interval this short, and time.Since returns
@@ -725,13 +794,33 @@ func (m *Metrics) SetAddonSchemaBytes(addon string, n int64) {
 	m.addonSchemaBytes.WithLabelValues(addon).Set(float64(n))
 }
 
+// ObserveAddonRedirect records what one add-on cost one redirect (M66).
+//
+// Called from the redirect path itself for the inline class and from the
+// out-of-band worker for the observe one, so it is on the hot path and is a
+// label lookup and an observation, exactly like ObserveRedirect beside it.
+func (m *Metrics) ObserveAddonRedirect(addon, class string, d time.Duration) {
+	if m == nil {
+		return
+	}
+	m.addonRedirect.WithLabelValues(addon, class).Observe(d.Seconds())
+}
+
+// ObserveAddonRedirectKill counts an add-on the host stopped waiting for.
+func (m *Metrics) ObserveAddonRedirectKill(addon string) {
+	if m == nil {
+		return
+	}
+	m.addonRedirectKill.WithLabelValues(addon).Inc()
+}
+
 // SetAddonLargeObjects records how many large objects one add-on's role owns
 // (M63).
 //
 // Zero for every add-on that behaves, which is why it is published at all: a large
 // object is outside every schema, so SetAddonSchemaBytes cannot see one and an
 // add-on's growth would otherwise be invisible between loads. Same replica rule as
-// the gauge above.
+// SetAddonSchemaBytes.
 func (m *Metrics) SetAddonLargeObjects(addon string, n int64) {
 	if m == nil {
 		return

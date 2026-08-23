@@ -3,6 +3,7 @@ package analytics
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 )
 
 // Event is a click as the redirect handler observes it.
@@ -100,6 +103,34 @@ type IngestConfig struct {
 	// instance with no Redis, and then nothing is written and every visitor
 	// reads as new.
 	Returning *ReturningSet
+
+	// Observer is the add-on host, for add-ons holding `redirect.observe` (M66).
+	// Nil is every instance that installed none, and it costs a nil check per
+	// batch.
+	//
+	// **The pipeline is where the observe class is fed from, and that is a
+	// placement rather than a convenience.** m66.md's rule for the class is that
+	// it runs off the request path, after the response, and can delay nothing.
+	// This goroutine is already all three. It is also the only place the derived
+	// fields exist at all: the country and the visitor hash are computed here from
+	// an address that is discarded in the same statement, so an observer fed from
+	// the handler would have to be handed the address — which is the one thing the
+	// ABI's privacy assertion says never crosses.
+	Observer RedirectObserver
+}
+
+// RedirectObserver receives one recorded redirect, out of band.
+//
+// An interface for the reason [CountryResolver] is one: this package should not
+// know what a WASM host is, and a test has to be able to watch what would be
+// handed over without starting one. Its one implementation is *addon.Host.
+//
+// The contract is the whole of why this is safe to call from the flush loop:
+// [addon.Host.Observe] never blocks, never fails and never returns anything. An
+// add-on that cannot keep up loses observations and says so on a counter; it does
+// not make a click batch late.
+type RedirectObserver interface {
+	Observe(ev addon.RedirectEvent)
 }
 
 // Ingester buffers click events and writes them in batches.
@@ -256,7 +287,7 @@ func (i *Ingester) write(batch []Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	rows, counts, marks, err := i.prepare(ctx, batch)
+	rows, counts, marks, observed, err := i.prepare(ctx, batch)
 	if err != nil {
 		i.Stats.Failed.Add(int64(len(batch)))
 		i.log.Error("failed to prepare click batch", slog.Any("error", err), slog.Int("events", len(batch)))
@@ -339,6 +370,20 @@ func (i *Ingester) write(batch []Event) {
 	// Redis asserting a visit Postgres has no record of — and nothing would ever
 	// correct it, because the set is only ever added to.
 	i.cfg.Returning.mark(ctx, marks, time.Now())
+
+	// After the commit, for the reason the marks are: an add-on told about a
+	// redirect whose batch then rolled back would have written a row about a click
+	// this product has no record of, in a schema nothing here can correct. So an
+	// observation is a fact about a *stored* click, which is the same thing the
+	// analytics an operator reads is a fact about.
+	//
+	// Handing them over one at a time rather than as a batch, because the queue on
+	// the other side is bounded and the point of that bound is that a slow add-on
+	// loses the oldest observations rather than the newest — a batch offered whole
+	// would be all-or-nothing against the same limit.
+	for _, ev := range observed {
+		i.cfg.Observer.Observe(ev)
+	}
 }
 
 type linkCount struct {
@@ -396,10 +441,16 @@ var clickEventColumns = []string{
 //
 // This is where the raw IP is consumed and discarded: it goes into the visitor
 // hash and never reaches the row.
-func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uuid.UUID]linkCount, []returningMark, error) {
+func (i *Ingester) prepare(ctx context.Context, batch []Event) (
+	[][]any, map[uuid.UUID]linkCount, []returningMark, []addon.RedirectEvent, error,
+) {
 	rows := make([][]any, 0, len(batch))
 	counts := make(map[uuid.UUID]linkCount, len(batch))
 	var marks []returningMark
+	// Built only when something is going to read them, so an instance with no
+	// observing add-on allocates nothing here — which is every instance until an
+	// operator installs one, and this loop runs per click.
+	var observed []addon.RedirectEvent
 
 	// Cache salts per day within the batch: a batch almost always spans one
 	// day, so this is one lookup rather than one per event.
@@ -411,7 +462,7 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 		if !ok {
 			s, err := i.salts.For(ctx, day)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("resolve salt for %s: %w", day.Format(time.DateOnly), err)
+				return nil, nil, nil, nil, fmt.Errorf("resolve salt for %s: %w", day.Format(time.DateOnly), err)
 			}
 			salt = s
 			saltByDay[day] = s
@@ -435,6 +486,36 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 		// which the address exists. It is not stored, so a country has to be
 		// resolved now or never.
 		country := i.country(ev.IP)
+
+		if i.cfg.Observer != nil {
+			// Built from the same derived values the row below is built from, in the
+			// same iteration, rather than read back out of the row slice: the row is
+			// positional and untyped, and a record assembled by indexing into it
+			// would be the silent-mis-ordering failure clickEventColumns warns about
+			// with a second reader.
+			//
+			// **Every field is one of the columns beside it**, which is what
+			// abi_test.go asserts of the ABI record against the migration. region and
+			// city are columns and are deliberately absent: the privacy stance is
+			// country-level and an add-on with storage is where they would stop being
+			// transient. So is latency, which is not a fact about the visitor but is
+			// also not one an add-on has any use for, and so is the destination id,
+			// which names a row in a table no add-on can read.
+			observed = append(observed, addon.RedirectEvent{
+				LinkID:       ev.LinkID.String(),
+				WorkspaceID:  ev.WorkspaceID.String(),
+				OccurredAt:   ev.OccurredAt.UTC().Format(time.RFC3339Nano),
+				VisitorHash:  hex.EncodeToString(hash),
+				IsFirstVisit: false,
+				Country:      countryOrEmpty(country),
+				Device:       string(cls.Device),
+				Browser:      cls.Browser,
+				OS:           cls.OS,
+				Language:     PrimaryLanguage(ev.Language),
+				ReferrerHost: referrerOrSource(ev),
+				IsBot:        cls.IsBot,
+			})
+		}
 
 		rows = append(rows, []any{
 			uuid.Must(uuid.NewV7()),
@@ -472,7 +553,24 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) ([][]any, map[uui
 		counts[ev.LinkID] = c
 	}
 
-	return rows, counts, marks, nil
+	return rows, counts, marks, observed, nil
+}
+
+// countryOrEmpty flattens the nullable country the row carries into the string
+// the ABI record does.
+//
+// The two spellings are not the same fact told twice. NULL in the column means
+// *this instance has no GeoIP database, or the address was in nobody's range*,
+// and the column keeps that distinct from a country because a breakdown that
+// bucketed unknown as a place would be a chart that lies. Across the ABI it is
+// an empty string, because the record is JSON and a publisher reading a field
+// that is sometimes absent and sometimes a code has two shapes to handle for one
+// meaning.
+func countryOrEmpty(c *string) string {
+	if c == nil {
+		return ""
+	}
+	return *c
 }
 
 // destinationOrNil turns the zero uuid into a NULL.

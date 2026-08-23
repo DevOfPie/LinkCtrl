@@ -504,6 +504,26 @@ type AddonsConfig struct {
 	// to it is the whole of the trust boundary. docs/SECURITY.md states that in
 	// the same terms.
 	Dir string `env:"ADDONS_DIR"`
+
+	// InlineDeadline is how long an add-on holding `redirect.inline` may keep a
+	// redirect open before the host stops waiting for it, kills the invocation and
+	// answers the visitor without it (M66).
+	//
+	// **One knob for the instance, with no per-add-on override**, which was fixed
+	// as the shape of this answer a phase before the number existed: a second
+	// number per add-on would be an operator choosing a latency budget per module
+	// with no more information than they had for the first, and the case that
+	// argues for one has not arrived.
+	//
+	// The default is measured rather than chosen — see addon.DefaultInlineDeadline
+	// and the runs in docs/slo.md — and it is deliberately larger than the 20 ms
+	// cached-redirect target. The target is core's, measured with nothing on the
+	// path; this is the point at which the host stops waiting for somebody else's
+	// code, and setting it under the target would kill add-ons that were working.
+	//
+	// It bounds instantiation as well as the call, because a module's package
+	// initialization runs while it is being instantiated and can hang there.
+	InlineDeadline time.Duration `env:"ADDON_INLINE_DEADLINE" envDefault:"25ms"`
 }
 
 // Enabled reports whether this instance has an add-on host at all.
@@ -558,6 +578,24 @@ func AddonSettingVar(addon, setting string) string {
 //     enrolled meets its factor after an add-on's assertion rather than instead of
 //     it.
 var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
+
+// AddonReservedNames are add-on names no manifest may take, because this file
+// already spells a variable that a setting of that add-on would spell too.
+//
+// One entry, and it is [AddonsConfig.InlineDeadline]'s:
+// `LINKCTRL_ADDON_INLINE_DEADLINE` is instance-wide, and it is also exactly what
+// a setting called `deadline` on an add-on called `inline` would be read from.
+// The collision is the same one [AddonOverrideNames] closes and it is closed the
+// same way — the ambiguity is made not to exist rather than resolved, because a
+// concatenation offers nothing to resolve it with.
+//
+// It is a reserved **name** rather than a reserved setting because the variable
+// is not per-add-on: there is no add-on it belongs to, so refusing the setting
+// `deadline` on every add-on would be a far wider reservation bought for the same
+// collision. internal/addon's manifest validation is where it is refused, for the
+// reason the override names are refused there — this package is imported by that
+// one and not the other way round.
+var AddonReservedNames = []string{"inline"}
 
 // AddonOverrides reads the operator's answers about one add-on.
 //

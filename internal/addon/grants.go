@@ -54,11 +54,19 @@ func (g Grants) String() string { return strings.Join(g.Names(), ",") }
 // resolveGrants turns a manifest's declarations into what the add-on actually
 // holds, plus the declarations that were **withheld**.
 //
-// Withheld means declared, in the vocabulary, and not grantable on this host —
-// `redirect.inline` today. It is not an error and does not refuse the add-on: the
-// class exists so that M66 can turn it on, and refusing a module for declaring it
-// would make the declaration unusable. The module simply does not hold it, every
-// capability behind it is denied, and the host says so at load.
+// Withheld means declared, in the vocabulary, and not grantable on this host.
+// **Nothing is withheld today**: `redirect.inline` was, from M62 until M66 turned
+// it on, and it is what the shape was built for. It is not an error and does not
+// refuse the add-on — a class exists in the vocabulary so that a later milestone
+// can turn it on, and refusing a module for declaring it would make the
+// declaration unusable. The module simply does not hold it, every capability
+// behind it is denied, and the host says so at load.
+//
+// The path is kept rather than deleted with its last user, because the ordering it
+// buys is what made M66 cheap: a grant declared and enforced four milestones
+// before the behaviour landed meant the behaviour landed against enforcement that
+// already worked. The next class to be planned ahead of its milestone uses this
+// unchanged.
 //
 // A token *outside* the vocabulary never reaches here. Manifest.Validate refuses
 // it, for the reason DisallowUnknownFields refuses an unknown field: a

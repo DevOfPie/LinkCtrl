@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	_ "embed"
 	"log/slog"
 	"math"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
@@ -99,6 +101,21 @@ type RedirectHandler struct {
 	// serves ordinary links.
 	Gates Gatekeeper
 
+	// Addons is the add-on host, and it is consulted on the redirect path for
+	// exactly one thing: whether anything holds `redirect.inline`, and if so what
+	// it makes of the destination (M66).
+	//
+	// Nil is the ordinary case and costs one interface comparison — see
+	// [RedirectHandler.inline]. An instance that configured no add-ons directory
+	// has no host at all, and one whose add-ons all declared other grants answers
+	// the same way from a field read, because the host resolves the inline set
+	// once at load rather than filtering per redirect.
+	//
+	// An interface rather than *addon.Host, for the reason [AddonRouter] is one:
+	// the tests that assert what a visitor gets from a veto or a rewrite must not
+	// need a wasm runtime to say so.
+	Addons AddonRedirector
+
 	// PasswordLimiter throttles guesses at a link password, per address and per
 	// alias (D54). Optional; nil disables it.
 	//
@@ -110,6 +127,29 @@ type RedirectHandler struct {
 
 	counter atomic.Int64
 }
+
+// AddonRedirector is what this package needs from the add-on host to put a module
+// on the redirect path (M66).
+//
+// Two methods and not one, and the split is the whole reason this is affordable.
+// [AddonRedirector.HasInline] is asked on every redirect on every instance and
+// has to be free; [AddonRedirector.Inline] instantiates a wasm module and is
+// asked only when the first said yes. A single method returning "nothing
+// happened" would have put that cost, or the branch avoiding it, inside the host.
+type AddonRedirector interface {
+	// HasInline reports whether anything on this instance runs on the redirect
+	// path. No lock, no allocation, no walk of the loaded set.
+	HasInline() bool
+	// Inline runs every inline add-on against one decided redirect and reports
+	// what they made of it. It never returns an error: a module that failed, was
+	// killed or could not be given a slot leaves the redirect exactly as it was,
+	// because a bug in an add-on must not be able to refuse somebody's links.
+	Inline(ctx context.Context, d addon.RedirectDecision) addon.InlineResult
+}
+
+// inline reports whether this handler has an add-on host with something on the
+// path. It is the guard on the hot path and it is two comparisons.
+func (h *RedirectHandler) inline() bool { return h.Addons != nil && h.Addons.HasInline() }
 
 // outcomeLabel names an outcome for metrics. A switch rather than Stringer on
 // the type, because the label vocabulary is this package's concern.
@@ -162,6 +202,32 @@ type ClickEvent struct {
 
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	// How long an add-on held this redirect open, and it is **subtracted from
+	// every core measurement taken after the extension point** (M66).
+	//
+	// This is the mechanism behind the milestone's central promise, and without it
+	// the promise is false rather than merely unproven: `start` is taken before
+	// anything, so a `time.Since(start)` after the extension point contains
+	// whatever a module spent — an instantiation, a call, or the whole deadline
+	// when the module was killed. `linkctrl_redirect_duration_seconds` would then
+	// *enclose* `linkctrl_addon_redirect_duration_seconds` instead of sitting
+	// beside it, and an operator running an inline add-on would have no core curve
+	// at all: the two would rise together and neither would say whose fault it was.
+	// Per-module attribution is the owner's second requirement on this answer, and
+	// it needs two readings that can disagree.
+	//
+	// What is taken back out is the **whole extension point**, not the sum of the
+	// invocations the histogram recorded, and the difference is the case that
+	// matters: a killed invocation is on the kill counter and deliberately absent
+	// from the histogram, so subtracting only what was observed would leave the
+	// deadline itself — 25 ms, the largest cost an add-on can impose — inside
+	// core's curve. The residue that stays in core is the host's own bookkeeping
+	// around the call: a slot check, a query substitution, a log line.
+	//
+	// Zero on every path that never reaches the extension point, which is every
+	// refusal above it and every redirect on an instance with no inline add-on, so
+	// the six observations before it read `time.Since(start)` unchanged.
+	var addonHeld time.Duration
 	code := strings.TrimSpace(r.PathValue("alias"))
 	canonical := alias.Canonical(code)
 
@@ -347,6 +413,78 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		target = joined
 	}
 
+	// The forwarded query (M8), **moved up here at M66** from beside the Location
+	// line, where it used to be the last thing done to the URL.
+	//
+	// It moved because the extension point below has to be handed the URL the
+	// visitor would actually receive. An inline module's one power over the
+	// destination is its query string, and the case that power exists for is
+	// stripping a tracking parameter — which on a link with query forwarding on
+	// arrives from the *visitor's* request rather than from the stored
+	// destination. A module shown the URL before this merge would strip `fbclid`
+	// from a query that did not have it yet, and the merge would then put it back.
+	//
+	// Nothing else changes by moving it. It is pure string work with no side
+	// effect, it still happens only for a redirect, and every branch between here
+	// and the write reads the alias and the snapshot rather than the target.
+	if outcome == redirect.OutcomeRedirect {
+		target = withForwardedQuery(target, r, res.Snapshot)
+	}
+
+	// The extension point (M66), and this is the single named place an add-on
+	// runs inside the redirect path.
+	//
+	// **After the destination is decided and before the gates**, which is the
+	// placement m66.md calls the riskiest design line in the phase, and both
+	// halves are load-bearing. After, because a module that cannot see where the
+	// visitor is going has nothing to have an opinion about. Before, because the
+	// gates *spend* things — a one-time link's single click, a max-clicks budget —
+	// and a veto after that would refuse the visitor and consume the link on their
+	// way out. The failure the ordering exists to prevent is not that the count is
+	// wrong; it is that a module can retire somebody's link by refusing traffic to
+	// it.
+	//
+	// **One write does happen before this point and is not undone by a veto**: a
+	// split test's rotation was advanced when the arm was chosen, so a vetoed
+	// redirect costs one step of it. That is stated rather than fixed. Undoing it
+	// would mean either asking the module before choosing an arm — which is asking
+	// about a destination that does not exist yet — or a compensating decrement on
+	// a counter two replicas share, which trades an exact rotation for a race. The
+	// skew is one step per veto on a weighted rotation that is already approximate
+	// across replicas.
+	//
+	// Free when nothing is installed, which is every instance until an operator
+	// installs an inline add-on: `h.inline()` is a nil check and a field read.
+	if outcome == redirect.OutcomeRedirect && h.inline() {
+		held := time.Now()
+		decided := h.Addons.Inline(r.Context(), addon.RedirectDecision{
+			LinkID:      res.Snapshot.LinkID,
+			WorkspaceID: res.Snapshot.WorkspaceID,
+			Alias:       canonical,
+			Destination: target,
+		})
+		addonHeld = time.Since(held)
+		if decided.Vetoed {
+			// Its own outcome label, which m66.md's last risk asks for by name: a
+			// new refusal source visitors meet needs to be tellable apart from the
+			// ones that already existed, or an operator debugs a ghost. It is the
+			// same 403 page a blocked bot gets — fixed bytes naming no alias and no
+			// destination — because a refusal that echoed either would make this a
+			// confirmation oracle exactly as that one would.
+			h.Metrics.ObserveRedirect("vetoed", string(res.Source), time.Since(start)-addonHeld)
+			h.blocked(w, r)
+			// **No click**, and this is the gate refusals' rule rather than D101's.
+			// D101 says a request that reached a real link is recorded whatever the
+			// link's state made the answer; the gate refusals are its standing
+			// exception and never reach `record` at all, and a veto is a gate
+			// refusal — m66.md puts it on that path in as many words. So a vetoed
+			// visitor is counted where refusals are counted, on the series above,
+			// and brands nobody in the returning-visitor set.
+			return
+		}
+		target = decided.Destination
+	}
+
 	// The gates (M35), and they run here — after the destination is known,
 	// before anything is written.
 	//
@@ -364,7 +502,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// every request that arrived on a verified custom hostname.
 	if outcome == redirect.OutcomeRedirect && res.Snapshot.Gated() {
 		if g := h.passGates(w, r, res.Snapshot, canonical, domainID); g.answered {
-			h.Metrics.ObserveRedirect(g.label, string(res.Source), time.Since(start))
+			h.Metrics.ObserveRedirect(g.label, string(res.Source), time.Since(start)-addonHeld)
 			return
 		}
 	}
@@ -372,7 +510,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Observed here, before the response is written, so the measurement covers
 	// resolution and decision rather than however long a client takes to read
 	// the body. Writing an empty 302 is a syscall on an already-open socket.
-	h.Metrics.ObserveRedirect(outcomeLabel(outcome), string(res.Source), time.Since(start))
+	h.Metrics.ObserveRedirect(outcomeLabel(outcome), string(res.Source), time.Since(start)-addonHeld)
 
 	switch outcome {
 	case redirect.OutcomeGone:
@@ -416,23 +554,17 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// being treated as "redirect anyway".
 	}
 
-	if res.Snapshot.ForwardQuery && r.URL.RawQuery != "" {
-		// The signature parameters are addressed to this server and stop here
-		// (M35). Forwarding them would hand whoever runs the destination a URL
-		// they can replay against this link until it expires, which is a
-		// capability the workspace issued to one recipient. StripSignature
-		// returns the query untouched when it carries neither parameter, which
-		// is every request to every link that is not signature-gated.
-		if raw := gate.StripSignature(r.URL.RawQuery); raw != "" {
-			target = appendQuery(target, raw)
-		}
-	}
-
 	// 302, never 301. Links are editable by design, so a permanent redirect
 	// would be cached by browsers and intermediaries and keep sending traffic
 	// to the old destination long after an edit — with no way to recall it.
 	// no-store for the same reason.
 	h.Location(w, target, h.redirectStatus(r))
+	// `start` rather than the core reading above, and the difference is deliberate:
+	// the click's latency and this log line are what the **visitor** waited, and a
+	// visitor waits for an add-on like anything else. Only the SLO histogram is
+	// core's alone, because only it is a promise this product makes about its own
+	// work. So the two disagree by `addonHeld` on an instance running an inline
+	// add-on, and that disagreement is the per-request form of the two curves.
 	h.record(r, res.Snapshot, start, destID, true)
 
 	if h.LogSample > 0 && h.counter.Add(1)%h.LogSample == 0 {
@@ -442,6 +574,32 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Int64("duration_us", time.Since(start).Microseconds()),
 		)
 	}
+}
+
+// withForwardedQuery merges the visitor's own query into the destination, for a
+// link whose owner asked for it (M8).
+//
+// Extracted from ServeHTTP at M66 rather than rewritten: it is the same three
+// lines it always was, lifted so that the inline extension point can be handed
+// the URL a visitor would receive rather than one that is still two steps from
+// being it. Every request to a link with forwarding off, and every request with
+// no query, leaves through the first comparison.
+//
+// The signature parameters are addressed to this server and stop here (M35).
+// Forwarding them would hand whoever runs the destination a URL they can replay
+// against this link until it expires, which is a capability the workspace issued
+// to one recipient. StripSignature returns the query untouched when it carries
+// neither parameter, which is every request to every link that is not
+// signature-gated.
+func withForwardedQuery(target string, r *http.Request, snap *redirect.Snapshot) string {
+	if !snap.ForwardQuery || r.URL.RawQuery == "" {
+		return target
+	}
+	raw := gate.StripSignature(r.URL.RawQuery)
+	if raw == "" {
+		return target
+	}
+	return appendQuery(target, raw)
 }
 
 // blockedAsBot reports whether this request is an automated client the link

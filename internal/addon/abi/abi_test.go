@@ -594,6 +594,9 @@ func anchoredFunctionCounts(t *testing.T, live, ungated, refusing int) []anchore
 // functionCountWords is how docs/SECURITY.md and Plan.md write these numbers: as a
 // word, capitalized where it opens a sentence and lower case where it does not.
 var functionCountWords = map[int][]string{
+	// One arrived at M66, when the refusing count reached it: `template_render` is
+	// the last function this ABI declares and this host does not implement.
+	1: {"One", "one"},
 	2: {"Two", "two"}, 3: {"Three", "three"}, 4: {"Four", "four"},
 	5: {"Five", "five"}, 6: {"Six", "six"}, 7: {"Seven", "seven"},
 	8: {"Eight", "eight"}, 9: {"Nine", "nine"}, 10: {"Ten", "ten"},
@@ -720,6 +723,9 @@ var notThisFunctionCount = map[string][]string{
 	// two sentences that did state the live counts moved to the anchors above.
 	"CHANGELOG.md": {
 		"moves to 0.1.1 for three new functions",
+		// The redirect-inline subset's own pair — redirect_decision_read and
+		// redirect_answer_write — and not a count of the list.
+		"the two functions the class exists for",
 		// A pair, and one the sweep could not see until it learned to read past a
 		// word: `two host functions` names storage_query and storage_exec.
 		"and two host functions to read and write it",
@@ -731,10 +737,18 @@ var notThisFunctionCount = map[string][]string{
 		"the repair is underneath those calls rather than in the two functions below",
 		"So the two functions have opposite requirements",
 		"Two functions, one token",
-		// *One function* the module exports, which is the other direction entirely:
-		// everything else in this file counts what the host offers. Invisible until
-		// [spelledNumber] stopped consulting the anchors' own vocabulary.
-		"There is one function it must export",
+		// The redirect-inline subset's own pair — redirect_decision_read and
+		// redirect_answer_write — and not a count of the list. It replaced *one
+		// function it must export* at M66, which stopped being true when the
+		// redirect classes gave a module two more exports; the other direction that
+		// exemption named is now a table rather than a sentence, so there is no
+		// count in it to excuse.
+		"and the two functions above",
+	},
+	// The host functions M66's timing fixture calls, which is what the deadline was
+	// measured against and is not a count of the published list.
+	"docs/slo.md": {
+		"probe six host functions",
 	},
 	"sdk/doc.go": {
 		"The fix is underneath crypto/rand and time.Now, not in the two functions",
@@ -750,6 +764,9 @@ var notThisFunctionCount = map[string][]string{
 	// is a count of this list, and all four were invisible while [spelledNumber]
 	// asked whether a word was a number the *anchors* could have spelled.
 	"docs/SECURITY.md": {
+		// The redirect-inline subset's own pair — redirect_decision_read and
+		// redirect_answer_write — and not a count of the list.
+		"the two functions the class exists for",
 		"overshoots by however long that one function takes",
 		"left standing one function away from where the argument against it was made",
 		"The two questions are answered by one function",
