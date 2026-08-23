@@ -469,6 +469,7 @@ file. Append a row when you append an entry.
 | [M66, what the extension point costs and where it sits](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits) | D318–D323, taken while building: the deadline's measured default, why an inline invocation gets a fresh instance rather than a pooled one, why the point sits before the gates, why a veto is a gate refusal that records no click, why a saturated host skips the add-on instead of queueing the visitor, and the add-on name the new variable reserves |
 | [M66, core's histogram excludes what the add-on held](#2026-08-23--m66-cores-histogram-excludes-what-the-add-on-held) | D324, taken on the milestone's second attempt after the first was rejected on it: attribution is two curves that can disagree, so the redirect handler subtracts the whole extension point before observing the SLO series — what that costs, why the excluded amount is the extension point rather than the sum of the invocations recorded, and which four measurements are deliberately left enclosing |
 | [M66, the deadline default put to the owner anyway](#2026-08-23--m66-the-deadline-default-put-to-the-owner-anyway) | D325: 25ms stands, owner-confirmed rather than inferred. Why an escape clause whose trigger did not fire still earned a prompt, and what the ceiling costs a visitor when a module reaches it |
+| [The test timeout, which had been the default all along](#2026-08-23--the-test-timeout-which-had-been-the-default-all-along) | D326: `-timeout 30m` on all four suite targets. Go's 10-minute per-package default had never been chosen, `internal/addon` grew to 429s under `-race`, and the limit announced itself by failing a docs-only commit |
 
 ---
 
@@ -37556,3 +37557,39 @@ so an operator can see whose latency it is.
 Recorded because the next reader of `LINKCTRL_ADDON_INLINE_DEADLINE` should find
 an answer rather than a clause, and because an escape clause that two actors read
 opposite ways is worth one prompt to close.
+
+## 2026-08-23 — the test timeout, which had been the default all along
+
+Prompted by CI going red on `b923ed5`, a commit that changed one markdown file.
+
+### D326 — `-timeout 30m` on every suite target, local and CI alike
+
+`go test` defaults to **10 minutes per package** and nothing in this repository
+had ever said otherwise. `internal/addon` takes **429s** on this VM under
+`-race` — every test in it builds and instantiates wasm fixtures — and a hosted
+runner is slower than this VM, so the package started being killed mid-suite
+with `panic: test timed out after 10m0s` and one test four seconds into its own
+run.
+
+The announcement is the part worth recording: it first fired on a **docs-only**
+commit. Nothing had changed about the code, the tests or the runner. The margin
+had simply gone, invisibly, over the several milestones that grew that package,
+and the first commit unlucky enough to land on a slow runner is what reported
+it. A limit nobody chose is a limit nobody watches.
+
+**30m, and the number is a claim about hangs rather than about hardware.** It is
+what a genuinely stuck test costs before the job gives up, and no passing package
+is within a factor of four of it. A timeout tuned close to the slowest real
+package would have to be re-tuned by whoever next adds a fixture, and would fail
+for them the same way it failed here.
+
+Applied to `test`, `test-integration`, `ci-test` and `ci-integration` together,
+because `ci-test` exists to be what CI runs of `test` and a flag on one of them
+is a difference between the two that nobody would think to look for.
+
+**Not the cause, and deliberately not fixed here**: `internal/addon` legitimately
+taking seven minutes. The fixtures are built per test where they could be built
+once for the package, and every add-on milestone makes it worse. That is its own
+unit of work with its own commit, offered to the owner alongside this and
+declined for now in favour of the smaller change — recorded so the smell is on
+the record rather than absorbed by a larger number.

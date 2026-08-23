@@ -131,7 +131,7 @@ clean: ## Remove build output
 
 .PHONY: test
 test: addon-fixtures ## Unit tests with the race detector
-	go test -race -covermode=atomic -coverprofile=cover.out ./...
+	go test -race -covermode=atomic -coverprofile=cover.out -timeout 30m ./...
 
 # LINKCTRL_REDIS_URL matters as much as the DSN: without it the Redis tier tests
 # fall back to localhost:6379, find nothing there and *skip*. The suite stays
@@ -144,7 +144,7 @@ test: addon-fixtures ## Unit tests with the race detector
 .PHONY: test-integration
 test-integration: require-db-password guard-test-integration require-stack ## Integration tests (needs Postgres and Redis)
 	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
-		go test -race -tags=integration ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
+		go test -race -tags=integration -timeout 30m ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
 .PHONY: cover
 cover: test ## Open the coverage report
@@ -357,9 +357,17 @@ verify-scan: ## Decode every logo'd code the product can draw, at simulated dist
 # failure still names itself in the log — that is the trade, and it is what buys
 # a CI check that can be added without a workflow edit.
 
+# `-timeout 30m` is not slack for a slow machine, it is the line between slow and
+# stuck. Go's default is 10 minutes **per package**, and `internal/addon` takes
+# 429s of it on this VM under `-race` because every test builds and instantiates
+# wasm fixtures. A runner is slower than this VM, so the default started killing
+# that package mid-suite — first on a docs-only commit, which is how it announced
+# that the margin had gone rather than that anything was wrong. 30m is what a
+# genuinely hung test costs before the job gives up, and no passing package is
+# within a factor of four of it.
 .PHONY: ci-test
 ci-test: addon-fixtures ## Unit tests with the race detector, uncached — what CI runs
-	go test -race -count=1 ./...
+	go test -race -count=1 -timeout 30m ./...
 
 .PHONY: ci-build
 ci-build: verify-assets css build check-version-stamp vet ci-test openapi check-tidy check-generate check-links ## The CI build job, end to end
@@ -400,7 +408,7 @@ ci-integration: addon-fixtures ## Integration tests against caller-provided serv
 	@# whole claim is that it runs without leadership. Neither can live in
 	@# `test/integration`, because that package cannot import package main —
 	@# which is exactly why they were easy to leave out of CI and hard to notice.
-	go test -tags=integration -race -count=1 ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
+	go test -tags=integration -race -count=1 -timeout 30m ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
 IMAGE         ?= linkctrl:ci
 IMAGE_VERSION ?= ci
