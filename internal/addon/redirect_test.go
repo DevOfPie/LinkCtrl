@@ -3,7 +3,9 @@ package addon
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,26 +23,45 @@ import (
 // What changes between tests is the *manifest*, which is the thing the host reads.
 func redirectHost(t *testing.T, permissions ...string) (*Host, *logSink, *observability.Metrics) {
 	t.Helper()
-	return redirectHostNamed(t, "redirect", testInlineDeadline, permissions...)
+	return redirectHostNamed(t, "redirect", permissions...)
 }
 
-// testInlineDeadline is the budget every test in this file that is **not** about
-// the deadline runs with, and it is deliberately not [DefaultInlineDeadline].
+// testInlineDeadline and testInstantiateDeadline are the budgets every test in
+// this file that is **not** about a bound runs with, and they are deliberately not
+// the shipped defaults.
 //
-// The shipped default is 25 ms, which is roughly six times what an invocation
+// The shipped call deadline is 25 ms, which is roughly six times what a guest call
 // costs on this machine — and the race detector costs this measurement an order of
 // magnitude (D225's effect, on the invocation path). Under `-race`, with the rest
 // of this package running in parallel, an ordinary invocation reaches and passes
 // 25 ms, so a test asserting what a module *answered* would fail because the host
 // correctly killed it. That is the deadline working, reported as a broken rewrite.
 //
-// So the behaviour tests buy room and the deadline tests set their own. What holds
-// the shipped default honest is [TestAnInlineInvocationCostsAnInstantiation],
-// which measures rather than assumes and says so when the detector makes the
-// comparison meaningless.
-const testInlineDeadline = 10 * time.Second
+// **The instantiation budget is here for a harder reason, and it is F326's.** The
+// five integration tests that shipped a broken M66 were green on this VM and could
+// not pass on a hosted runner, because they left that bound at the shipped default
+// and the runner needed more of it than this machine does. A test that leaves a
+// machine-dependent bound at its default is a test asserting that this machine is
+// fast. So a behaviour test here buys room it could never plausibly need, and the
+// tests that are *about* a bound set a hostile one with [redirectHostBounded] —
+// which is what makes a slow machine reachable on a machine that is not slow.
+const (
+	testInlineDeadline      = 10 * time.Second
+	testInstantiateDeadline = 10 * time.Second
+)
 
-func redirectHostNamed(t *testing.T, module string, deadline time.Duration,
+// redirectHostNamed opens a host on one fixture with room to spare on both bounds.
+func redirectHostNamed(t *testing.T, module string,
+	permissions ...string,
+) (*Host, *logSink, *observability.Metrics) {
+	t.Helper()
+	return redirectHostBounded(t, module, testInlineDeadline, testInstantiateDeadline,
+		permissions...)
+}
+
+// redirectHostBounded is the same with both bounds named, for the tests whose
+// subject is a bound.
+func redirectHostBounded(t *testing.T, module string, deadline, instantiate time.Duration,
 	permissions ...string,
 ) (*Host, *logSink, *observability.Metrics) {
 	t.Helper()
@@ -57,10 +78,11 @@ func redirectHostNamed(t *testing.T, module string, deadline time.Duration,
 	metrics := observability.NewMetrics()
 	sink := &logSink{}
 	h, err := Open(t.Context(), Options{
-		Dir:            dir,
-		Metrics:        metrics,
-		Logger:         slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		InlineDeadline: deadline,
+		Dir:                 dir,
+		Metrics:             metrics,
+		Logger:              slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		InlineDeadline:      deadline,
+		InstantiateDeadline: instantiate,
 	})
 	if err != nil {
 		t.Fatalf("the %s fixture did not load: %v", module, err)
@@ -163,8 +185,8 @@ func TestAnInlineModuleReadsTheDecisionAndMayLeaveItAlone(t *testing.T) {
 		t.Errorf("the scrape does not carry %s\n%s", series,
 			seriesLike(scraped, "linkctrl_addon_redirect_duration_seconds"))
 	}
-	if strings.Contains(scraped, `linkctrl_addon_redirect_kills_total{addon="redirect"} 1`) {
-		t.Error("a module that answered on time was counted as killed")
+	if killed := seriesLike(scraped, "linkctrl_addon_redirect_kills_total"); killed != "" {
+		t.Errorf("a module that answered on time was counted as killed: %s", killed)
 	}
 }
 
@@ -357,8 +379,8 @@ func TestTheInlineSafeSetHoldsNoStorageFunction(t *testing.T) {
 func TestAnOverrunningInlineModuleIsKilledAndTheRedirectSurvives(t *testing.T) {
 	// A budget a test can afford to spend. The default is measured against a real
 	// module doing real work; this one is measuring that the kill happens at all.
-	h, sink, metrics := redirectHostNamed(t, "slow", 50*time.Millisecond,
-		PermissionRedirectInline, PermissionRewriteQuery)
+	h, sink, metrics := redirectHostBounded(t, "slow", 50*time.Millisecond,
+		testInstantiateDeadline, PermissionRedirectInline, PermissionRewriteQuery)
 
 	const dest = "https://example.test/still-here?a=1"
 	start := time.Now()
@@ -376,7 +398,7 @@ func TestAnOverrunningInlineModuleIsKilledAndTheRedirectSurvives(t *testing.T) {
 		t.Fatalf("the invocation took %s, so the deadline bounded nothing", took)
 	}
 	scraped := scrape(t, metrics)
-	if want := `linkctrl_addon_redirect_kills_total{addon="slow"} 1`; !strings.Contains(scraped, want) {
+	if want := `linkctrl_addon_redirect_kills_total{addon="slow",step="call"} 1`; !strings.Contains(scraped, want) {
 		t.Errorf("the scrape does not carry %s\n%s", want,
 			seriesLike(scraped, "linkctrl_addon_redirect_kills_total"))
 	}
@@ -393,7 +415,7 @@ func TestAnOverrunningInlineModuleIsKilledAndTheRedirectSurvives(t *testing.T) {
 	// the *module*, so a repeatedly overrunning add-on must go on being killed
 	// rather than turning into something else.
 	h.Inline(t.Context(), decisionFor("veto", dest))
-	if want := `linkctrl_addon_redirect_kills_total{addon="slow"} 2`; !strings.Contains(scrape(t, metrics), want) {
+	if want := `linkctrl_addon_redirect_kills_total{addon="slow",step="call"} 2`; !strings.Contains(scrape(t, metrics), want) {
 		t.Errorf("a second overrun was not counted; a thrashing module has to stay visible")
 	}
 }
@@ -402,7 +424,8 @@ func TestAnOverrunningInlineModuleIsKilledAndTheRedirectSurvives(t *testing.T) {
 // counting it as one would put a number on the Add-on manager that blames the
 // wrong party.
 func TestAVisitorLeavingIsNotAnAddonOverrun(t *testing.T) {
-	h, _, metrics := redirectHostNamed(t, "slow", time.Minute, PermissionRedirectInline)
+	h, _, metrics := redirectHostBounded(t, "slow", time.Minute, testInstantiateDeadline,
+		PermissionRedirectInline)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	got := h.Inline(ctx, decisionFor("veto", "https://example.test/"))
@@ -414,6 +437,209 @@ func TestAVisitorLeavingIsNotAnAddonOverrun(t *testing.T) {
 	}
 }
 
+// **The two bounds must not add up, and they must not eat each other.**
+//
+// Splitting one deadline into two leaves a trap on the other side: a call context
+// created before the instance exists is already part-spent when the guest is
+// finally called, so the add-on's 25 ms quietly becomes 25 ms *minus whatever this
+// machine took to start it* — F326 again with the numbers rearranged, and just as
+// invisible. This is the assertion that the guest's budget starts when the guest
+// does.
+//
+// Asserted on a module that never returns, because that is the only module whose
+// guest-call duration is known: it is exactly the deadline. So the whole
+// invocation has to cost the deadline **plus** an instantiation, and one
+// millisecond is a floor no instantiation has ever come near — 1.6 ms measured
+// idle, 9.6 ms mean under contention. The comparison is one-sided by construction:
+// a host that charged instantiation to the guest can only be *faster* than this,
+// never slower, so the test cannot fail for being on a slow machine.
+func TestTheGuestsBudgetStartsWhenTheGuestDoes(t *testing.T) {
+	const deadline = 50 * time.Millisecond
+	h, _, _ := redirectHostBounded(t, "slow", deadline, testInstantiateDeadline,
+		PermissionRedirectInline)
+
+	start := time.Now()
+	h.Inline(t.Context(), decisionFor("veto", "https://example.test/"))
+	took := time.Since(start)
+
+	if took < deadline+time.Millisecond {
+		t.Errorf("a module that never returns was killed after %s against a %s "+
+			"deadline, so instantiating it was charged to its own budget: the add-on "+
+			"gets less of its deadline the slower the machine is", took, deadline)
+	}
+}
+
+// F326, as a test that fails on a fast machine.
+//
+// **The defect this milestone was reopened for could not be reached by any suite
+// on this VM**, because reaching it needed a machine that instantiates slowly and
+// this one does not. The bound coming from configuration is what makes it
+// reachable anyway: a hostile instantiation budget is a slow runner, deterministic
+// and on any hardware.
+//
+// What it asserts is the pair of facts that were indistinguishable before. The
+// redirect is unharmed — the module contributes nothing and nothing means allow —
+// and an operator can tell *the add-on never ran* from *the add-on declined to
+// act*, on the counter and in the log, without owning the machine.
+func TestAModuleThisHostCannotStartInTimeIsNotTheAddonsFault(t *testing.T) {
+	// One nanosecond, which no instantiation on any machine fits inside, so what
+	// this measures is the branch rather than the hardware. The call budget is
+	// generous: the point is that the invocation dies before the guest, not that
+	// something died.
+	h, sink, metrics := redirectHostBounded(t, "redirect", testInlineDeadline, time.Nanosecond,
+		PermissionRedirectInline, PermissionRewriteQuery, "config.read")
+
+	const dest = "https://shop.example.test/item/42?utm_source=x&id=7"
+	got := h.Inline(t.Context(), decisionFor("strip", dest))
+
+	// The `strip` alias is the fixture rewriting the query. Unrewritten is the whole
+	// point: the module did not run, and a module that did not run changes nothing.
+	if got.Vetoed || got.Rewritten || got.Destination != dest {
+		t.Errorf("a module that was never started changed the redirect: %+v", got)
+	}
+	scraped := scrape(t, metrics)
+	if want := `linkctrl_addon_redirect_kills_total{addon="redirect",step="instantiate"} 1`; !strings.Contains(scraped, want) {
+		t.Errorf("the scrape does not carry %s, so nothing tells an operator the "+
+			"add-on never ran\n%s", want,
+			seriesLike(scraped, "linkctrl_addon_redirect_kills_total"))
+	}
+	if strings.Contains(scraped, `step="call"`) {
+		t.Error("a module that was never started was counted as having overrun its " +
+			"own deadline, which is the attribution F326 was about")
+	}
+	logs := sink.String()
+	if !strings.Contains(logs, "could not start an add-on") ||
+		!strings.Contains(logs, "LINKCTRL_ADDON_INSTANTIATE_DEADLINE") {
+		t.Errorf("the log does not name the bound that was missed or the variable "+
+			"that moves it\n%s", logs)
+	}
+	if strings.Contains(logs, "overran its deadline") {
+		t.Errorf("the host blamed the add-on for its own setup cost\n%s", logs)
+	}
+}
+
+// The observe class has the same two bounds and the same attribution, and it is
+// worth its own case because F326 was in both call sites and only the inline one
+// was found.
+func TestAnObservingModuleThisHostCannotStartIsCountedTheSameWay(t *testing.T) {
+	h, sink, metrics := redirectHostBounded(t, "redirect", testInlineDeadline,
+		time.Nanosecond, PermissionRedirectObserve, "config.read")
+	h.Observe(RedirectEvent{LinkID: "a-link", WorkspaceID: "a-workspace"})
+	waitFor(t, sink, "could not start an add-on")
+	if want := `linkctrl_addon_redirect_kills_total{addon="redirect",step="instantiate"}`; !strings.Contains(scrape(t, metrics), want) {
+		t.Errorf("an observation that never reached the module was not counted\n%s",
+			seriesLike(scrape(t, metrics), "linkctrl_addon_redirect_kills_total"))
+	}
+}
+
+// What instantiation costs when the host is busy, which is the measurement D327
+// asks for and the one D318 did not take.
+//
+// **The number D318 published was best-case** — one invocation at a time on an
+// idle VM — and every entry that rests on it rests on that. This runs
+// [maxConcurrentRoutes] instantiations against each other, which is the state a
+// redirect meets when an add-on is installed and the instance is under load, and
+// it is the number [DefaultInstantiateDeadline] is argued from.
+//
+// It reports rather than asserts a budget, for the reason the invocation
+// measurement beside it does: a threshold on a shared machine is a flake. The one
+// comparison it makes is against the shipped bound, because a bound a busy machine
+// cannot instantiate inside is a bound that kills add-ons that were working — the
+// same failure as F326, one step later.
+func TestInstantiationCostsWhatItCostsUnderContention(t *testing.T) {
+	if testing.Short() {
+		t.Skip("a timing measurement")
+	}
+	h, _, _ := redirectHost(t, PermissionRedirectInline, "config.read")
+	if len(h.inline) != 1 {
+		t.Fatalf("the fixture is not on the redirect path: %v", h.InlineAddons())
+	}
+	l := &h.inline[0]
+	d := decisionFor("quiet", "https://example.test/landing")
+
+	// One instantiation is the unit: what the redirect path does per invocation,
+	// registered exactly as invokeInline registers it, because a module whose
+	// package initialization calls a host function must find its state.
+	instantiate := func() time.Duration {
+		instance := l.Manifest.Name + "#measured-" + strconv.FormatUint(h.instances.Add(1), 10)
+		st := h.hostState(l.Manifest.Name).forRedirect(&d, nil)
+		h.mu.Lock()
+		if h.states == nil {
+			h.states = make(map[string]*hostState)
+		}
+		h.states[instance] = st
+		h.mu.Unlock()
+		defer func() {
+			h.mu.Lock()
+			delete(h.states, instance)
+			h.mu.Unlock()
+		}()
+		at := time.Now()
+		mod, err := h.runtime.InstantiateModule(t.Context(), l.compiled, guestModuleConfig(instance))
+		took := time.Since(at)
+		if err != nil {
+			t.Errorf("the module did not instantiate, so this measured nothing: %v", err)
+			return took
+		}
+		_ = mod.Close(context.Background())
+		return took
+	}
+
+	instantiate() // Whatever the runtime caches on first use is not what a redirect pays.
+
+	const each = 8
+	took := make([][]time.Duration, maxConcurrentRoutes)
+	var wg sync.WaitGroup
+	start := time.Now()
+	for i := range maxConcurrentRoutes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range each {
+				took[i] = append(took[i], instantiate())
+			}
+		}()
+	}
+	wg.Wait()
+	wall := time.Since(start)
+
+	var total, worst time.Duration
+	var n int
+	for _, run := range took {
+		for _, d := range run {
+			total += d
+			n++
+			if d > worst {
+				worst = d
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("nothing was measured")
+	}
+	mean := total / time.Duration(n)
+	t.Logf("instantiation with %d in flight costs mean %s, worst of %d %s "+
+		"(%d instantiations in %s of wall clock); the shipped bound is %s",
+		maxConcurrentRoutes, mean.Round(time.Microsecond), n,
+		worst.Round(time.Microsecond), n, wall.Round(time.Millisecond),
+		DefaultInstantiateDeadline)
+
+	if raceDetector {
+		// Reported, not asserted, exactly as the invocation measurement is: the
+		// detector costs this an order of magnitude, and `make check` runs with it.
+		// What checks the shipped bound is a plain `go test`, and this says so when
+		// it cannot.
+		t.Log("built with -race, so the comparison against the shipped bound is " +
+			"skipped: the detector's own cost is most of the number above")
+		return
+	}
+	if worst >= DefaultInstantiateDeadline {
+		t.Errorf("instantiating under contention took %s against a shipped bound of "+
+			"%s, so a busy instance kills add-ons before their code runs — which is "+
+			"F326 with a different number", worst, DefaultInstantiateDeadline)
+	}
+}
+
 // --- the observe class ---------------------------------------------------------
 
 // m66.md's first bullet, other half: the observe class *can delay nothing*.
@@ -422,7 +648,8 @@ func TestAVisitorLeavingIsNotAnAddonOverrun(t *testing.T) {
 // shared machine is a flake — by handing over an event the worker will spend the
 // whole deadline on and measuring the call that hands it over.
 func TestObservingCannotDelayAnything(t *testing.T) {
-	h, _, _ := redirectHostNamed(t, "slow", time.Minute, PermissionRedirectObserve)
+	h, _, _ := redirectHostBounded(t, "slow", time.Minute, testInstantiateDeadline,
+		PermissionRedirectObserve)
 	if got := h.ObservingAddons(); len(got) != 1 {
 		t.Fatalf("the observe class carries %v", got)
 	}

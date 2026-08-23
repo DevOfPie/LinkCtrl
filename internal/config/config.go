@@ -521,9 +521,35 @@ type AddonsConfig struct {
 	// path; this is the point at which the host stops waiting for somebody else's
 	// code, and setting it under the target would kill add-ons that were working.
 	//
-	// It bounds instantiation as well as the call, because a module's package
-	// initialization runs while it is being instantiated and can hang there.
+	// It bounds the **guest call and nothing else**. Starting the module is this
+	// host's own cost on this host's machine, so it is bounded separately by
+	// [AddonsConfig.InstantiateDeadline] below. The two shipped as one number and
+	// that was F326: on a machine slower than the one 25 ms was measured on, every
+	// invocation was killed before the add-on's code ran, and the counter blamed
+	// the add-on.
 	InlineDeadline time.Duration `env:"ADDON_INLINE_DEADLINE" envDefault:"25ms"`
+
+	// InstantiateDeadline is how long this instance will spend starting an add-on's
+	// module for a redirect — inline or observing — before it gives up and serves
+	// the redirect without it (M66, reopened; D327).
+	//
+	// **Separate from the deadline above because it is somebody else's cost.** What
+	// a module does is the add-on's and is bounded by a number an operator sets
+	// against their tolerance for latency; what instantiating costs is a property
+	// of this machine, this load and this build, none of which the add-on chose.
+	// Charging it to the add-on's budget made the add-on's budget a function of how
+	// fast the hardware is, which is what F326 found on a CI runner.
+	//
+	// **Wider, and not borrowed from either number that already exists.**
+	// LINKCTRL_ADDON_LOAD_TIMEOUT bounds a module that hangs at boot at 30 seconds
+	// and no redirect may wait that; the inline deadline is the number that proved
+	// too small. 500 ms is eight times instantiation measured under contention on
+	// the machine the figure was taken on, and it is what a module hanging in
+	// package initialization costs the one redirect it arrived on — see
+	// addon.DefaultInstantiateDeadline for the measurement and the arithmetic. It
+	// leans wide on purpose: a bound that is too small stops add-ons running and
+	// blames them for it, which is the defect this variable exists because of.
+	InstantiateDeadline time.Duration `env:"ADDON_INSTANTIATE_DEADLINE" envDefault:"500ms"`
 }
 
 // Enabled reports whether this instance has an add-on host at all.
@@ -582,9 +608,11 @@ var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
 // AddonReservedNames are add-on names no manifest may take, because this file
 // already spells a variable that a setting of that add-on would spell too.
 //
-// One entry, and it is [AddonsConfig.InlineDeadline]'s:
-// `LINKCTRL_ADDON_INLINE_DEADLINE` is instance-wide, and it is also exactly what
-// a setting called `deadline` on an add-on called `inline` would be read from.
+// Two entries, and both are a redirect bound's: `LINKCTRL_ADDON_INLINE_DEADLINE`
+// ([AddonsConfig.InlineDeadline]) and `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`
+// ([AddonsConfig.InstantiateDeadline]) are instance-wide, and each is also exactly
+// what a setting called `deadline` on an add-on called `inline` or `instantiate`
+// would be read from.
 // The collision is the same one [AddonOverrideNames] closes and it is closed the
 // same way — the ambiguity is made not to exist rather than resolved, because a
 // concatenation offers nothing to resolve it with.
@@ -595,7 +623,7 @@ var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
 // collision. internal/addon's manifest validation is where it is refused, for the
 // reason the override names are refused there — this package is imported by that
 // one and not the other way round.
-var AddonReservedNames = []string{"inline"}
+var AddonReservedNames = []string{"inline", "instantiate"}
 
 // AddonOverrides reads the operator's answers about one add-on.
 //

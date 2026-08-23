@@ -52,6 +52,16 @@ import (
 // is bounded and drops rather than blocks, which is the same contract the click
 // ingester it is fed from already keeps with the hot path.
 //
+// **What bounds an inline invocation is two numbers, not one.** The guest's own
+// code is bounded by LINKCTRL_ADDON_INLINE_DEADLINE and starting the module is
+// bounded, more widely, by LINKCTRL_ADDON_INSTANTIATE_DEADLINE. They are two
+// parties' costs — the add-on's work against this host's machine — and F326 is
+// what one number over both did: on hardware slower than the one the number was
+// measured on, every invocation was killed before the add-on's code ran, and the
+// counter said the add-on had overrun. Which bound a kill hit is a label on
+// linkctrl_addon_redirect_kills_total, because *fix your add-on* and *this
+// instance cannot start add-ons* go to different people.
+//
 // **redirect.inline** runs inside RedirectHandler.ServeHTTP, at one named point:
 // after the destination is decided and **before the gates** that spend a link's
 // budget. Before the gates is not a detail — a veto after a one-time link's
@@ -98,8 +108,9 @@ const (
 	ClassObserve = "observe"
 )
 
-// DefaultInlineDeadline is how long an inline add-on may hold a redirect open,
-// unless an operator says otherwise with LINKCTRL_ADDON_INLINE_DEADLINE.
+// DefaultInlineDeadline is how long an inline add-on's **own code** may hold a
+// redirect open, unless an operator says otherwise with
+// LINKCTRL_ADDON_INLINE_DEADLINE.
 //
 // **Measured into, not chosen.** The upcoming-decisions entry M66 was planned
 // with fixed the shape of this answer a phase in advance: one instance-wide knob,
@@ -107,15 +118,23 @@ const (
 // this milestone's own runs rather than from a guess. The runs are in
 // docs/slo.md and the arithmetic is D318.
 //
-// What the budget has to cover is an instantiation *and* the guest's own work,
-// because package initialization runs during instantiation under
-// -buildmode=c-shared — the `spinning` fixture is a module that never finishes
-// loading, and a deadline that started after the instance existed would not bound
-// it at all. Measured on this machine, 2026-08-22: a fixture that reads its
-// decision, probes six host functions and writes a query rewrite costs a mean of
-// **3.27 ms** and a worst-of-twenty of **4.34 ms** end to end, against M60's
-// separately measured ~1.6 ms to instantiate the same class of module. So 25 ms is
-// roughly six times a module doing real work.
+// What the budget covers is the **guest call and nothing else** — the second half
+// of an invocation, after this host has an instance to call into. It shipped
+// covering instantiation as well, and that was F326: instantiating a module is
+// this host's cost on this host's machine, and charging it to the add-on's budget
+// meant that on hardware slower than the machine the 25 ms was measured on, every
+// invocation died before the module's own code ran. The instantiation half is
+// [DefaultInstantiateDeadline] now, which is deliberately wider and is bounded for
+// a different reason. D327.
+//
+// Measured on this machine, 2026-08-22: a fixture that reads its decision, probes
+// six host functions and writes a query rewrite costs a mean of **3.27 ms** and a
+// worst-of-twenty of **4.34 ms** end to end, against M60's separately measured
+// ~1.6 ms to instantiate the same class of module. So 25 ms is roughly six times a
+// module doing real work, and rather more than that now that it no longer pays for
+// the instance. **Those figures are best-case** — an idle VM, nothing else on it —
+// which is exactly what F326 was about, and D327 records that the number was
+// confirmed by the owner on them.
 //
 // **That figure is taken without the race detector**, which costs this measurement
 // an order of magnitude — the same effect D225 records for the load path. The test
@@ -129,6 +148,66 @@ const (
 // working, which trades an operator's feature for a number that no longer
 // describes their instance anyway.
 const DefaultInlineDeadline = 25 * time.Millisecond
+
+// DefaultInstantiateDeadline is how long this host will spend **starting** a
+// module for a redirect-class invocation before it gives up and serves the
+// redirect without it, unless an operator says otherwise with
+// LINKCTRL_ADDON_INSTANTIATE_DEADLINE.
+//
+// It exists because the two halves of an invocation are two parties' costs. What
+// the guest does is the add-on's and is bounded by [DefaultInlineDeadline]; making
+// the instance is this host's work on this host's machine, and its cost is a
+// property of the hardware, the load and — in a test binary — the race detector,
+// none of which the add-on chose. F326 is what one bound over both looked like: on
+// a hosted runner every invocation died at [StepInstantiate], the redirect
+// completed, the kill counter moved, and nothing distinguished an add-on that
+// declined to act from one that never ran.
+//
+// **It is not borrowed from either number that already exists**, and it could not
+// be. [DefaultLoadTimeout] bounds a module that hangs at boot at 30 seconds, and
+// nothing on the redirect path may wait anything like that. The inline deadline is
+// the number F326 proved too small for this. So it is argued from its own
+// measurement and from what it costs when it is reached:
+//
+//   - **Measured**, by TestInstantiationCostsWhatItCostsUnderContention, which
+//     instantiates the redirect fixture with every one of [maxConcurrentRoutes]
+//     slots busy — the state a redirect meets under load, not the idle one D318's
+//     numbers came from. On this machine, 2026-08-23: **mean 9.6 ms, worst of 128
+//     62.7 ms**, against the ~1.6 ms M60 measured for one instantiation on an idle
+//     VM. Contention alone is therefore enough to put instantiation past the whole
+//     25 ms inline deadline, on the fast machine, with no slow hardware involved —
+//     F326 was not only a CI-runner problem. Under `-race` the same run costs mean
+//     91 ms and worst 304 ms, which no instance runs in but which is the closest
+//     thing this project has to a machine an order of magnitude slower.
+//   - **Priced**, because this is what a module that hangs in package
+//     initialization costs the redirect it arrived on — one visitor waiting, once
+//     per invocation, on a path whose core target is 20 ms.
+//
+// So 500 ms, and the choice leans wide deliberately, because the two ways of being
+// wrong do not cost the same. Too narrow is F326: add-ons silently do not run, on
+// hardware nobody measured, and the counter blames the add-on. Too wide costs one
+// visitor a longer wait in the case where a module is already broken, and it
+// announces itself — `linkctrl_addon_redirect_kills_total{step="instantiate"}`
+// moves, the log names the variable, and an operator lowers it. Half a second is
+// eight times the contended worst case here, above the `-race` figure that stands
+// in for far slower hardware, and sixty times under the 30 s a hanging module
+// meets at load.
+const DefaultInstantiateDeadline = 500 * time.Millisecond
+
+// The two steps a redirect-class invocation can be killed at, which are metric
+// label values and a closed vocabulary for the reason the class labels are.
+//
+// They name *whose bound was overrun* rather than where the code was: a kill at
+// [StepCall] is the add-on holding a redirect past
+// LINKCTRL_ADDON_INLINE_DEADLINE, and a kill at [StepInstantiate] is this host
+// failing to start the module inside LINKCTRL_ADDON_INSTANTIATE_DEADLINE. An
+// operator reads the first as *go and fix that add-on* and the second as *this
+// instance cannot start add-ons fast enough*, and F326 is the outage-shaped bug
+// that comes of the two being one number.
+const (
+	StepInstantiate = "instantiate"
+	StepCall        = "call"
+)
 
 // RedirectDecision is where a visitor is about to be sent, as an inline add-on
 // sees it. The ABI record is abi.Records' RedirectDecision and the field names
@@ -313,12 +392,19 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 	}
 
 	start := time.Now()
-	// The deadline covers instantiation as well as the call, because package
-	// initialization runs during instantiation and a module can hang there — which
-	// is not a hypothetical, it is the `spinning` fixture. WithCloseOnContextDone
-	// is what makes cancelling this close the guest.
-	callCtx, cancel := context.WithTimeout(ctx, h.inlineDeadline)
-	defer cancel()
+	// **Two bounds, one per party.** Instantiating the module is this host's work
+	// and gets h.instantiateDeadline; the guest's own code gets h.inlineDeadline,
+	// which is the knob whose name and documentation say *how long a module may
+	// hold a redirect*. One context over both was F326, and it made the add-on's
+	// budget a function of how fast this machine happens to be.
+	//
+	// Both are needed, and the wider one is not slack: package initialization runs
+	// during instantiation, so a module can hang before it has been called at all —
+	// not a hypothetical, it is the `spinning` fixture. WithCloseOnContextDone is
+	// what makes either deadline close the guest, and it watches whichever context
+	// the call in flight was given.
+	instCtx, cancelInst := context.WithTimeout(ctx, h.instantiateDeadline)
+	defer cancelInst()
 
 	instance := name + "#" + strconv.FormatUint(h.instances.Add(1), 10)
 	st := h.hostState(name)
@@ -338,15 +424,37 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 		h.mu.Unlock()
 	}()
 
-	mod, err := h.runtime.InstantiateModule(callCtx, l.compiled, guestModuleConfig(instance))
+	mod, err := h.runtime.InstantiateModule(instCtx, l.compiled, guestModuleConfig(instance))
 	if err != nil {
 		if mod != nil {
-			_ = mod.Close(context.WithoutCancel(callCtx))
+			_ = mod.Close(context.WithoutCancel(ctx))
 		}
-		h.redirectFailed(name, ClassInline, callCtx, ctx, start, "instantiate", err)
+		h.redirectFailed(name, ClassInline, StepInstantiate, h.instantiateDeadline,
+			instCtx, ctx, start, err)
 		return RedirectAnswer{}, false
 	}
-	defer func() { _ = mod.Close(context.WithoutCancel(callCtx)) }()
+	defer func() { _ = mod.Close(context.WithoutCancel(ctx)) }()
+	if err := instCtx.Err(); err != nil && ctx.Err() == nil {
+		// **The bound is this host's to enforce, not the runtime's to notice.**
+		// wazero interrupts a guest cooperatively — at loop back-edges in compiled
+		// code — so an instantiation that runs long without one finishes late rather
+		// than being killed, and the visitor has already waited the whole bound by
+		// the time it does. Handing that invocation its full call budget on top
+		// would let one redirect cost both numbers, which is the arithmetic F326's
+		// fix exists to stop. So the deadline is re-read after the instance exists,
+		// and a late one is a kill like any other.
+		h.redirectFailed(name, ClassInline, StepInstantiate, h.instantiateDeadline,
+			instCtx, ctx, start, err)
+		return RedirectAnswer{}, false
+	}
+	// From here the add-on's own budget starts, and the context is made *here*
+	// rather than at the top of this function on purpose: a deadline created before
+	// the instance exists is already part-spent when the guest is called, which is
+	// F326 again with the numbers rearranged. What the guest is charged for is the
+	// guest.
+	callCtx, cancel := context.WithTimeout(ctx, h.inlineDeadline)
+	defer cancel()
+	callStart := time.Now()
 
 	fn := mod.ExportedFunction(abi.GuestRedirectInline)
 	if fn == nil {
@@ -361,9 +469,18 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 		return RedirectAnswer{}, false
 	}
 	if _, err := fn.Call(callCtx); err != nil {
-		h.redirectFailed(name, ClassInline, callCtx, ctx, start, "call", err)
+		h.redirectFailed(name, ClassInline, StepCall, h.inlineDeadline,
+			callCtx, ctx, callStart, err)
 		return RedirectAnswer{}, false
 	}
+	// The whole invocation, deliberately, and it is not the same window as the
+	// deadline above. What the histogram answers is *what did this add-on cost this
+	// redirect*, which is everything between the slot and the answer — the visitor
+	// waited for the instance too. What the deadline bounds is *how long the module
+	// may take*, which is the guest call alone. Two questions, two windows, and
+	// D332 says why neither may borrow the other's — including why this one still
+	// charges instantiation to the add-on in a milestone that took it out of the
+	// add-on's deadline.
 	h.metrics.ObserveAddonRedirect(name, ClassInline, time.Since(start))
 	if st.answer == nil {
 		return RedirectAnswer{}, false
@@ -372,7 +489,13 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 }
 
 // redirectFailed is the one place a failed redirect invocation is reported, and
-// it is where a **kill** is told apart from everything else.
+// it is where a **kill** is told apart from everything else — and, since F326,
+// where one kind of kill is told apart from the other.
+//
+// bound is the deadline that applied to this step, passed in rather than read off
+// the host, because which of the two applies is exactly what the caller knows and
+// this function must not guess. It is what the log line quotes and it is why the
+// two lines below name different variables.
 //
 // The distinction cannot be read off the error: a module closed underneath a
 // running call reports what it was doing rather than why it stopped — "module
@@ -382,12 +505,29 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 // own request was cancelled, or an instance shutting down, is not an add-on
 // overrunning, and counting it as one would put a number on the Add-on manager
 // that blames the wrong party.
-func (h *Host) redirectFailed(name, class string, callCtx, parent context.Context,
-	start time.Time, step string, err error,
+func (h *Host) redirectFailed(name, class, step string, bound time.Duration,
+	stepCtx, parent context.Context, start time.Time, err error,
 ) {
-	killed := errors.Is(callCtx.Err(), context.DeadlineExceeded) && parent.Err() == nil
+	killed := errors.Is(stepCtx.Err(), context.DeadlineExceeded) && parent.Err() == nil
 	if killed {
-		h.metrics.ObserveAddonRedirectKill(name)
+		h.metrics.ObserveAddonRedirectKill(name, step)
+		if step == StepInstantiate {
+			// **A different fault, said differently**, which is F326's other half. The
+			// add-on has not overrun anything — its code has not run — and telling an
+			// operator to go and fix it would send them after the wrong party. What
+			// they have is an instance that cannot start a module inside the bound,
+			// which is a machine, a load or a module too big for either, and the
+			// variable named here is the one that moves.
+			h.log.Warn("this instance could not start an add-on inside its "+
+				"instantiation bound, so the redirect was served without it; the "+
+				"add-on's own code did not run",
+				slog.String("addon", name),
+				slog.String("class", class),
+				slog.String("bound", bound.String()),
+				slog.String("variable", "LINKCTRL_ADDON_INSTANTIATE_DEADLINE"),
+				slog.String("step", step))
+			return
+		}
 		// Warn, and it is the one line in this file an operator is meant to act
 		// on: a module being killed repeatedly is an add-on to go and fix, and it
 		// is the fact the owner's boundary rests on being visible.
@@ -395,7 +535,7 @@ func (h *Host) redirectFailed(name, class string, callCtx, parent context.Contex
 			"the redirect completed without it",
 			slog.String("addon", name),
 			slog.String("class", class),
-			slog.String("deadline", h.inlineDeadline.String()),
+			slog.String("deadline", bound.String()),
 			slog.String("step", step))
 		return
 	}
@@ -501,21 +641,29 @@ func (h *Host) startObserving(ctx context.Context) {
 // It takes a slot from the same bound the inline path and the routes path draw
 // from, and unlike the inline path it **waits** for one: nothing is holding a
 // visitor open here, so queueing is the right answer and dropping would be
-// throwing away work for no gain. The deadline is the inline one, for the reason
-// there is one knob rather than two — an add-on that hangs is an add-on that
-// hangs, and an operator has no more information with which to choose a second
-// number than they had for the first.
+// throwing away work for no gain. The two deadlines are the inline path's two, for
+// the reason there is one pair of knobs rather than two pairs — an add-on that
+// hangs is an add-on that hangs, and an operator has no more information with
+// which to choose a second number than they had for the first.
+//
+// The wait for a slot is charged to a **setup** budget rather than to the
+// module's, which is the same split the rest of this function makes: queueing
+// behind another invocation is this host being busy, and an observing add-on
+// should not lose its own budget to it. It is a budget of its own rather than a
+// share of the instantiation one, so that waiting and starting cannot eat each
+// other — two sequential setup bounds are only ever paid off the request path,
+// where nothing is waiting on the total.
 func (h *Host) invokeObserve(ctx context.Context, l *Loaded, ev RedirectEvent) {
 	name := l.Manifest.Name
-	callCtx, cancel := context.WithTimeout(ctx, h.inlineDeadline)
-	defer cancel()
-	select {
-	case h.slots <- struct{}{}:
-		defer func() { <-h.slots }()
-	case <-callCtx.Done():
+	waitCtx, cancelWait := context.WithTimeout(ctx, h.instantiateDeadline)
+	defer cancelWait()
+	if !h.takeSlot(waitCtx) {
 		h.metrics.ObserveThrottled("addon_observe")
 		return
 	}
+	defer func() { <-h.slots }()
+	instCtx, cancelInst := context.WithTimeout(ctx, h.instantiateDeadline)
+	defer cancelInst()
 
 	start := time.Now()
 	instance := name + "#" + strconv.FormatUint(h.instances.Add(1), 10)
@@ -536,15 +684,27 @@ func (h *Host) invokeObserve(ctx context.Context, l *Loaded, ev RedirectEvent) {
 		h.mu.Unlock()
 	}()
 
-	mod, err := h.runtime.InstantiateModule(callCtx, l.compiled, guestModuleConfig(instance))
+	mod, err := h.runtime.InstantiateModule(instCtx, l.compiled, guestModuleConfig(instance))
 	if err != nil {
 		if mod != nil {
-			_ = mod.Close(context.WithoutCancel(callCtx))
+			_ = mod.Close(context.WithoutCancel(ctx))
 		}
-		h.redirectFailed(name, ClassObserve, callCtx, ctx, start, "instantiate", err)
+		h.redirectFailed(name, ClassObserve, StepInstantiate, h.instantiateDeadline,
+			instCtx, ctx, start, err)
 		return
 	}
-	defer func() { _ = mod.Close(context.WithoutCancel(callCtx)) }()
+	defer func() { _ = mod.Close(context.WithoutCancel(ctx)) }()
+	if err := instCtx.Err(); err != nil && ctx.Err() == nil {
+		// Re-read for the reason the inline path re-reads it, and it costs the same
+		// nothing: an observation delivered late is worth less than the slot it is
+		// holding, and the two bounds must not add up here either.
+		h.redirectFailed(name, ClassObserve, StepInstantiate, h.instantiateDeadline,
+			instCtx, ctx, start, err)
+		return
+	}
+	callCtx, cancel := context.WithTimeout(ctx, h.inlineDeadline)
+	defer cancel()
+	callStart := time.Now()
 
 	fn := mod.ExportedFunction(abi.GuestRedirectObserve)
 	if fn == nil {
@@ -555,10 +715,33 @@ func (h *Host) invokeObserve(ctx context.Context, l *Loaded, ev RedirectEvent) {
 		return
 	}
 	if _, err := fn.Call(callCtx); err != nil {
-		h.redirectFailed(name, ClassObserve, callCtx, ctx, start, "call", err)
+		h.redirectFailed(name, ClassObserve, StepCall, h.inlineDeadline,
+			callCtx, ctx, callStart, err)
 		return
 	}
 	h.metrics.ObserveAddonRedirect(name, ClassObserve, time.Since(start))
+}
+
+// takeSlot acquires one instance slot, waiting up to ctx's bound for it.
+//
+// **A free slot is never declined**, whatever the clock says, which is why this is
+// two selects rather than one. A single select over both cases picks at random
+// when both are ready, so an already-expired budget would drop one observation in
+// two on an idle host — and an already-expired budget is exactly what a test sets
+// to make a slow machine reachable. Behaviour that depends on which of two ready
+// channels Go picks is not behaviour anything can assert.
+func (h *Host) takeSlot(ctx context.Context) bool {
+	select {
+	case h.slots <- struct{}{}:
+		return true
+	default:
+	}
+	select {
+	case h.slots <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // stopObserving ends the workers and waits for them.

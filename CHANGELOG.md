@@ -62,21 +62,26 @@ migrations run at boot.
   [docs/SECURITY.md](docs/SECURITY.md), both edited in the same change that made
   an inline add-on possible. That is the boundary rather than a retreat: an
   add-on's own latency is the add-on's, and **availability stays LinkCtrl's**. An
-  invocation is bounded by `LINKCTRL_ADDON_INLINE_DEADLINE` (25 ms by default,
-  measured rather than chosen), the runtime kills a module that overruns, the
-  redirect completes without it, and the kill is counted per module on
-  `linkctrl_addon_redirect_kills_total{addon}`. A module that fails, is killed or
-  cannot be given an instance always means *allow, unchanged* — never a refusal —
-  because a bug in an add-on must not be able to take somebody's links down.
+  invocation is bounded twice, once per party: the module's own code by
+  `LINKCTRL_ADDON_INLINE_DEADLINE` (25 ms by default, measured rather than
+  chosen), and LinkCtrl's own work *starting* the module by
+  `LINKCTRL_ADDON_INSTANTIATE_DEADLINE` (500 ms). The runtime kills whichever is
+  overrun, the redirect completes without it, and the kill is counted per module
+  and per step on `linkctrl_addon_redirect_kills_total{addon,step}` — `call` is an
+  add-on to go and fix, `instantiate` is an instance that could not start one, and
+  they are different problems with different fixes. A module that fails, is killed
+  or cannot be given an instance always means *allow, unchanged* — never a refusal
+  — because a bug in an add-on must not be able to take somebody's links down.
 
   Both halves are measured. Against 2,000 rps for two minutes on 100k links and
   5M click events, core is unmoved at **100% of requests under 20 ms**, and the
-  same run with a module that never returns served **every one of 239,944
-  redirects with zero failures** while 40,439 invocations were killed. That second
-  run still reads **99.84% of redirects under 20 ms server-side**, because the
+  same run with a module that never returns served **every one of 239,932
+  redirects with zero failures** while 32,866 invocations were killed. That second
+  run still reads **99.83% of redirects under 20 ms server-side**, because the
   figure is core's own work and the time a module held the request is not in it.
-  Both runs are in [docs/slo.md](docs/slo.md) with what each one does and does not
-  show.
+  Not one invocation in that run failed to *start* inside its 500 ms bound, with
+  all sixteen instance slots held throughout. Both runs are in
+  [docs/slo.md](docs/slo.md) with what each one does and does not show.
 
   Per-module attribution is first-class:
   `linkctrl_addon_redirect_duration_seconds{addon,class}` is a separate curve from
@@ -93,10 +98,11 @@ migrations run at boot.
   ungated host facts, its own settings and the two functions the class exists for.
   Storage, the request, the session and templates are refused there whatever the
   manifest declared, which is the redirect tree's own *no session lookup, no CSRF,
-  no template rendering* rule reaching across the boundary. One add-on name is
-  reserved as a consequence of the new variable: an add-on called `inline` is
-  refused at load, because a setting of its called `deadline` would be read from
-  `LINKCTRL_ADDON_INLINE_DEADLINE`.
+  no template rendering* rule reaching across the boundary. Two add-on names are
+  reserved as a consequence of the new variables: an add-on called `inline` or
+  `instantiate` is refused at load, because a setting of its called `deadline`
+  would be read from `LINKCTRL_ADDON_INLINE_DEADLINE` or
+  `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`.
 
 - **An add-on can sign somebody in, and LinkCtrl decides what that means.**
 

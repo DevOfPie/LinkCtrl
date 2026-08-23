@@ -1302,6 +1302,10 @@ var documentedNumberSites = []struct {
 	{path: "docs/configuration.md",
 		sentences: []string{
 			"{n} add-on invocations are served at once",
+			// M66's reopening: what instantiating one of them costs when all of
+			// them are busy, which is the measurement the second redirect bound is
+			// argued from.
+			"measured here with all {n} instance slots busy",
 			"each instance is bounded at {mem} of memory",
 			"{n} instances of {mem} is a ceiling of {ceiling}",
 		}},
@@ -1316,6 +1320,7 @@ var documentedNumberSites = []struct {
 	{path: "CHANGELOG.md",
 		sentences: []string{
 			"{n} add-on invocations run at once across the instance",
+			"with all {n} instance slots held throughout",
 			"each instance is capped at {mem} of memory, so add-ons add at most {ceiling}",
 			"skipped because all {n} instance slots were busy",
 		},
@@ -1357,6 +1362,10 @@ var documentedNumberSites = []struct {
 			"{n} instance slots exist across the whole host and an inline invocation " +
 				"takes one without waiting",
 			"while {n} are held by modules being killed",
+			// The reopening's own reading of the same run: the instantiation bound
+			// was never approached with every slot held, which is what makes it a
+			// measurement of instantiation under load rather than of an idle machine.
+			"with all {n} instance slots continuously held by modules being killed",
 		},
 		untied: []string{
 			// Cache-hit runs in the performance record.

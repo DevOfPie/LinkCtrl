@@ -492,12 +492,26 @@ type Options struct {
 	// can afford to spend watching a module that will not return.
 	LoadTimeout time.Duration
 
-	// InlineDeadline is how long an add-on may hold a redirect open (M66). Zero
-	// means [DefaultInlineDeadline], and an instance sets it from
+	// InlineDeadline is how long an add-on's own code may hold a redirect open
+	// (M66). Zero means [DefaultInlineDeadline], and an instance sets it from
 	// LINKCTRL_ADDON_INLINE_DEADLINE. Unlike LoadTimeout it is an operator's knob
 	// and not only a test's, because what it bounds is somebody else's code on the
 	// path this product makes a latency promise about — see redirect.go.
 	InlineDeadline time.Duration
+
+	// InstantiateDeadline is how long this host will spend starting a module for a
+	// redirect-class invocation (M66, reopened). Zero means
+	// [DefaultInstantiateDeadline], and an instance sets it from
+	// LINKCTRL_ADDON_INSTANTIATE_DEADLINE.
+	//
+	// **A test sets it for a reason no other bound here has.** It is the one number
+	// in this package whose right value depends on the machine, so a suite that
+	// leaves it at the default is a suite asserting that this machine is fast:
+	// F326 shipped because five integration tests were green here and could not
+	// pass on a hosted runner. Behaviour tests therefore buy room with it, and the
+	// tests that are *about* the bound set a hostile one and make a slow machine
+	// reachable on any machine at all.
+	InstantiateDeadline time.Duration
 }
 
 // FailureClassError is an operator override this host cannot interpret.
@@ -713,8 +727,13 @@ type Host struct {
 	// has to be the whole cost on an instance that installed none.
 	inline []Loaded
 	// inlineDeadline is Options.InlineDeadline with its default applied: how long
-	// a module may hold a redirect, instantiation included.
+	// a module's own code may hold a redirect. Instantiation is not in it — that is
+	// instantiateDeadline below, and F326 is what the two being one number cost.
 	inlineDeadline time.Duration
+	// instantiateDeadline is Options.InstantiateDeadline with its default applied:
+	// how long this host will spend starting a module for a redirect-class
+	// invocation before serving the redirect without it.
+	instantiateDeadline time.Duration
 	// observe is the out-of-band queue, and it is nil unless something declared
 	// the grant — which is what makes the observe class cost an ordinary instance
 	// nothing at all: no channel, no goroutine.
@@ -792,6 +811,10 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if deadline <= 0 {
 		deadline = DefaultInlineDeadline
 	}
+	instantiate := opts.InstantiateDeadline
+	if instantiate <= 0 {
+		instantiate = DefaultInstantiateDeadline
+	}
 	h := &Host{
 		log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN,
 		settings:    settings,
@@ -799,8 +822,9 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		sessions:    opts.Sessions,
 		slots:       make(chan struct{}, maxConcurrentRoutes),
 
-		loadTimeout:    timeout,
-		inlineDeadline: deadline,
+		loadTimeout:         timeout,
+		inlineDeadline:      deadline,
+		instantiateDeadline: instantiate,
 	}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
@@ -939,7 +963,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			"latency is no longer core's alone, and the measured figure in docs/slo.md "+
 			"is core with no inline add-on on the path",
 			slog.Any("addons", h.InlineAddons()),
-			slog.String("deadline", h.inlineDeadline.String()))
+			slog.String("deadline", h.inlineDeadline.String()),
+			// Both bounds, because an operator reading one of them and not the other
+			// has the wrong picture of what a redirect can cost here: the worst case
+			// is a module that hangs at startup, and that is the second number.
+			slog.String("instantiate_deadline", h.instantiateDeadline.String()))
 	}
 	h.startObserving(ctx)
 	if observers := h.ObservingAddons(); len(observers) > 0 {

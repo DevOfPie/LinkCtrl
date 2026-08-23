@@ -814,14 +814,27 @@ sentence that stops being true one release after somebody writes it.
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `LINKCTRL_ADDONS_DIR` | *(empty — no add-ons)* | A directory holding one subdirectory per add-on. Validated at startup: a path that is not there, or is a file rather than a directory, refuses to boot rather than being read as "no add-ons". **On compose, add the mount before you set this.** The shipped `docker-compose.yml` has no `/addons` volume, so a container path set here is not readable inside the container and the refusal above takes the instance down — add the `volumes:` snippet from [the trust boundary](#the-trust-boundary) below in the same change. `lctl` reads the same `.env`, so it stops starting too, exactly as `GEOIP_MMDB_PATH` does. |
-| `LINKCTRL_ADDON_INLINE_DEADLINE` | `25ms` | How long an add-on holding `redirect.inline` may hold a redirect open before this instance stops waiting for it, kills the invocation and answers the visitor without it. It applies to no other add-on, so on an instance where nothing declared that class it bounds nothing and costs nothing. **It is deliberately larger than the 20ms cached-redirect target**, which is core's and is measured with nothing on the path — see [the redirect classes](#the-redirect-classes) below. It covers instantiating the module as well as calling it, because a module's package initialization runs while it is being instantiated and can hang there. `linkctrl_addon_redirect_kills_total` is what tells you whether it is set where you meant. |
+| `LINKCTRL_ADDON_INLINE_DEADLINE` | `25ms` | How long **an add-on's own code** may hold a redirect open before this instance stops waiting for it, kills the invocation and answers the visitor without it. It applies to no add-on that did not declare a redirect class, so on an instance where nothing did it bounds nothing and costs nothing. **It is deliberately larger than the 20ms cached-redirect target**, which is core's and is measured with nothing on the path — see [the redirect classes](#the-redirect-classes) below. `linkctrl_addon_redirect_kills_total{step="call"}` is what tells you whether it is set where you meant. |
+| `LINKCTRL_ADDON_INSTANTIATE_DEADLINE` | `500ms` | How long this instance will spend **starting** an add-on's module for a redirect — inline or observing — before it gives up and serves the redirect without it. Not the add-on's budget: instantiating is work this host does on this machine, and it costs what the hardware and the load make it cost. Measured here with all sixteen instance slots busy it is a mean of 9.6ms and a worst of 62.7ms, against about 1.6ms for one instantiation on an idle machine, which is why it is both separate and much wider. What it really bounds is a module that hangs in *package initialization* — code that runs while the module is being started, before anything has called it — so it is the longest one visitor waits for one broken module. `linkctrl_addon_redirect_kills_total{step="instantiate"}` moving means this instance could not start an add-on in time, which is a wider bound or a less busy machine, and not an add-on to go and fix. |
 
-**One name in the add-on variable namespace is this product's own**, and it is a
-consequence of the row above. `LINKCTRL_ADDON_<NAME>_<SETTING>` is how an add-on's
-settings are read, so an add-on called `inline` declaring a setting called
-`deadline` would be read from the same variable as the one above. There is nothing
-to resolve that with, so the ambiguity is removed instead: **an add-on named
-`inline` is refused at load**, naming the reservation. It is the same answer
+**Why there are two numbers and not one.** They price two different parties. What
+a module does with a redirect is the add-on's cost and you set your tolerance for
+it; what it costs to *start* that module is this instance's cost, and it depends
+on the hardware, on how loaded the instance is, and on nothing the add-on chose.
+They shipped as one number in 0.5.0's development and that was a defect: on a
+machine slower than the one the 25ms was measured on, every invocation was killed
+before the add-on's code ran, the redirect completed as though no add-on were
+installed, and the kill counter blamed the add-on. If you only ever touch one of
+these, touch the first; the second exists so that being on slow or busy hardware
+does not silently turn your add-ons off.
+
+**Two names in the add-on variable namespace are this product's own**, and it is a
+consequence of the rows above. `LINKCTRL_ADDON_<NAME>_<SETTING>` is how an add-on's
+settings are read, so an add-on called `inline` or `instantiate` declaring a
+setting called `deadline` would be read from the same variable as one of those.
+There is nothing to resolve that with, so the ambiguity is removed instead: **an
+add-on named `inline` or `instantiate` is refused at load**, naming the
+reservation. It is the same answer
 `failure_class` and `mfa_satisfied` get from the other direction — those are
 setting names no add-on may declare.
 
@@ -1173,9 +1186,12 @@ is deliberate and it is stated rather than hidden: an add-on's latency is the
 add-on's. The boot log warns when a module is on that path, for exactly this
 reason.
 
-**What stays this product's.** Availability. An invocation is bounded by
-`LINKCTRL_ADDON_INLINE_DEADLINE`; the runtime kills a module that overruns; the
-redirect completes without it; and the kill is counted per module. A module that
+**What stays this product's.** Availability. An invocation is bounded twice — the
+module's own code by `LINKCTRL_ADDON_INLINE_DEADLINE` and this host's work
+starting it by `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`; the runtime kills whichever
+overruns; the redirect completes without it; and the kill is counted per module
+with the step that was missed, because *your add-on is slow* and *this instance
+cannot start add-ons* are different problems with different fixes. A module that
 fails, is killed, or cannot be given an instance always means *allow, unchanged* —
 never a refusal — so a bug in an add-on cannot take your links down.
 
@@ -1203,7 +1219,7 @@ advanced when the arm was chosen, so a vetoed redirect costs one step of it.
 | --- | --- |
 | `linkctrl_addon_redirect_duration_seconds{addon,class}` | What each add-on costs a redirect, separate from `linkctrl_redirect_duration_seconds` so core's latency and each module's are different curves. Separate in both directions: the redirect histogram *excludes* the time an add-on held the request, so installing one does not move it |
 | `linkctrl_redirects_total{outcome="vetoed"}` | Redirects an add-on refused. Zero until you install a module that vetoes, and every one of them is a visitor who got a 403 instead of their link — worth an alert if the add-on is not meant to refuse routinely. The refusal records no click, so the link's own analytics show the drop too |
-| `linkctrl_addon_redirect_kills_total{addon}` | Invocations killed for overrunning the deadline. Non-zero is an add-on to go and fix |
+| `linkctrl_addon_redirect_kills_total{addon,step}` | Invocations killed for overrunning a bound. `step="call"` is the add-on overrunning `LINKCTRL_ADDON_INLINE_DEADLINE` and is an add-on to go and fix; `step="instantiate"` is this instance failing to *start* the module inside `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, which is your machine and not the add-on — the module's own code never ran |
 | `linkctrl_rate_limited_total{limit="addon_inline"}` | Redirects served with the add-on **skipped**, because every instance slot was busy. A high rate beside a high kill rate is the host protecting itself from a module that hangs |
 | `linkctrl_rate_limited_total{limit="addon_observe"}` | Observations dropped because the out-of-band queue was full |
 

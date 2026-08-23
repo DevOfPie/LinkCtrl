@@ -56,12 +56,32 @@ type inlineFixture struct {
 	log     *logSink
 }
 
-// newInlineAddon installs one redirect fixture with the grants given and builds
-// the redirect tree around it.
+// testInstantiateDeadline is the instantiation budget every test here that is not
+// *about* a bound runs with, and it is the direct answer to F326.
 //
-// module is `redirect` for the behaving one and `slow` for the module that hangs;
-// deadline of zero takes the shipped default.
-func newInlineAddon(t *testing.T, module string, deadline time.Duration,
+// **These are the five tests that shipped the defect.** They left both redirect
+// bounds at their shipped defaults, were green on the machine that wrote them, and
+// could not pass on a hosted runner, where instantiating under `-race` costs more
+// than the whole 25 ms an add-on was being given. A green suite that only proves
+// this VM is fast is what shipped M66 broken, so a behaviour test here now buys
+// room no machine plausibly needs, and the tests whose subject *is* a bound set a
+// hostile one with [newInlineAddonBounded] — deterministic on hardware of any
+// speed, which is the only way a slow machine is reachable from a fast one.
+const testInstantiateDeadline = 30 * time.Second
+
+// newInlineAddon installs one redirect fixture with the grants given and builds
+// the redirect tree around it, with room to spare on both bounds.
+//
+// module is `redirect` for the behaving one and `slow` for the module that hangs.
+func newInlineAddon(t *testing.T, module string, perms ...string) *inlineFixture {
+	t.Helper()
+	return newInlineAddonBounded(t, module, 30*time.Second, testInstantiateDeadline, perms...)
+}
+
+// newInlineAddonBounded is the same with both bounds named, for the tests whose
+// subject is a bound: deadline is how long the module's own code may run, and
+// instantiate is how long this host may spend starting it.
+func newInlineAddonBounded(t *testing.T, module string, deadline, instantiate time.Duration,
 	perms ...string,
 ) *inlineFixture {
 	t.Helper()
@@ -74,12 +94,13 @@ func newInlineAddon(t *testing.T, module string, deadline time.Duration,
 	sink := &logSink{}
 	metrics := observability.NewMetrics()
 	host, err := addon.Open(t.Context(), addon.Options{
-		Dir:            root,
-		Logger:         slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Metrics:        metrics,
-		DB:             pool,
-		DSN:            dsnFor(dbNameOf(t, pool)),
-		InlineDeadline: deadline,
+		Dir:                 root,
+		Logger:              slog.New(slog.NewTextHandler(sink, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Metrics:             metrics,
+		DB:                  pool,
+		DSN:                 dsnFor(dbNameOf(t, pool)),
+		InlineDeadline:      deadline,
+		InstantiateDeadline: instantiate,
 	})
 	if err != nil {
 		t.Fatalf("the %s fixture did not load: %v", module, err)
@@ -175,7 +196,7 @@ func (f *inlineFixture) scrape() string {
 // redirect on an instance with an observing-only add-on takes and is the baseline
 // the two below are read against.
 func TestAnInlineAddonThatAllowsChangesNothing(t *testing.T) {
-	f := newInlineAddon(t, "redirect", 0, addon.PermissionRedirectInline)
+	f := newInlineAddon(t, "redirect", addon.PermissionRedirectInline)
 	f.seed("quiet", "https://shop.example.test/landing")
 
 	resp := f.visit("/quiet")
@@ -198,7 +219,7 @@ func TestAnInlineAddonThatAllowsChangesNothing(t *testing.T) {
 
 // A veto, which is the refusal m66.md sends to the gate-refusal path.
 func TestAVetoedRedirectIsRefusedAndTellsTheVisitorNothing(t *testing.T) {
-	f := newInlineAddon(t, "redirect", 0, addon.PermissionRedirectInline)
+	f := newInlineAddon(t, "redirect", addon.PermissionRedirectInline)
 	f.seed("veto", "https://shop.example.test/secret-landing")
 
 	resp := f.visit("/veto")
@@ -227,7 +248,7 @@ func TestAVetoedRedirectIsRefusedAndTellsTheVisitorNothing(t *testing.T) {
 // The rewrite, end to end: what reaches the browser is the destination with the
 // module's query and the same everything else.
 func TestARewritingAddonChangesTheQueryAndNothingElse(t *testing.T) {
-	f := newInlineAddon(t, "redirect", 0,
+	f := newInlineAddon(t, "redirect",
 		addon.PermissionRedirectInline, addon.PermissionRewriteQuery)
 	f.seed("strip", "https://shop.example.test/item/42?utm_source=ads&id=7")
 
@@ -245,7 +266,7 @@ func TestARewritingAddonChangesTheQueryAndNothingElse(t *testing.T) {
 // add-on that declared *run on the redirect path* has not declared *and edit where
 // the visitor goes*, and the browser is where that difference shows.
 func TestARewriteWithoutItsGrantLeavesTheVisitorWhereTheLinkPointed(t *testing.T) {
-	f := newInlineAddon(t, "redirect", 0, addon.PermissionRedirectInline)
+	f := newInlineAddon(t, "redirect", addon.PermissionRedirectInline)
 	const dest = "https://shop.example.test/item/42?utm_source=ads&id=7"
 	f.seed("strip", dest)
 
@@ -265,7 +286,7 @@ func TestARewriteWithoutItsGrantLeavesTheVisitorWhereTheLinkPointed(t *testing.T
 // Asserted by asking the link again with the add-on gone — if the budget had been
 // spent, the second visit would be a 410 whatever answers it.
 func TestAVetoDoesNotSpendAOneTimeLinksClick(t *testing.T) {
-	f := newInlineAddon(t, "redirect", 0, addon.PermissionRedirectInline)
+	f := newInlineAddon(t, "redirect", addon.PermissionRedirectInline)
 	f.seed("veto", "https://shop.example.test/one-time", func(in *link.CreateInput) {
 		in.OneTime = true
 	})
@@ -294,7 +315,8 @@ func TestAVetoDoesNotSpendAOneTimeLinksClick(t *testing.T) {
 // The availability half of the owner's boundary, seen from the browser: a module
 // that never returns costs the visitor the deadline and **not** the redirect.
 func TestAnOverrunningAddonDoesNotCostTheVisitorTheirRedirect(t *testing.T) {
-	f := newInlineAddon(t, "slow", 100*time.Millisecond, addon.PermissionRedirectInline)
+	f := newInlineAddonBounded(t, "slow", 100*time.Millisecond, testInstantiateDeadline,
+		addon.PermissionRedirectInline)
 	f.seed("hang", "https://shop.example.test/still-works")
 
 	start := time.Now()
@@ -310,12 +332,58 @@ func TestAnOverrunningAddonDoesNotCostTheVisitorTheirRedirect(t *testing.T) {
 	if took > 10*time.Second {
 		t.Fatalf("the redirect took %s, so nothing bounded the add-on", took)
 	}
-	if want := `linkctrl_addon_redirect_kills_total{addon="slow"} 1`; !strings.Contains(f.scrape(), want) {
+	if want := `linkctrl_addon_redirect_kills_total{addon="slow",step="call"} 1`; !strings.Contains(f.scrape(), want) {
 		t.Errorf("the scrape does not carry %s\n%s", want,
 			seriesLike(f.scrape(), "linkctrl_addon_redirect_kills_total"))
 	}
 	if logs := f.log.String(); !strings.Contains(logs, "overran its deadline") {
 		t.Errorf("the kill was not logged where an operator would read it\n%s", logs)
+	}
+}
+
+// **F326, driven through a visitor.** The defect that reopened M66 was not that a
+// redirect broke — it did not — but that a module which never ran and a module
+// which chose to do nothing were the same observation. This is the case a hosted
+// runner produced by being slow, made deterministic by making the bound hostile.
+//
+// The fixture holds the rewrite grant and the alias it rewrites, so a module that
+// ran would visibly change the Location. It does not, the visitor is served the
+// destination the link points at, and what tells an operator why is the step on
+// the kill counter and the variable in the log.
+func TestAnAddonThisInstanceCannotStartInTimeIsVisiblyNotTheAddonsFault(t *testing.T) {
+	f := newInlineAddonBounded(t, "redirect", 30*time.Second, time.Nanosecond,
+		addon.PermissionRedirectInline, addon.PermissionRewriteQuery)
+	const dest = "https://shop.example.test/item/42?utm_source=ads&id=7"
+	f.seed("strip", dest)
+
+	resp := f.visit("/strip")
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("a redirect behind an add-on that could not be started answered %d, "+
+			"want 302", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != dest {
+		t.Errorf("Location is %q, want the untouched destination %q — a module that "+
+			"never ran rewrote a query", got, dest)
+	}
+
+	body := f.scrape()
+	if want := `linkctrl_addon_redirect_kills_total{addon="redirect",step="instantiate"} 1`; !strings.Contains(body, want) {
+		t.Errorf("the scrape does not carry %s, so an operator cannot tell an add-on "+
+			"that never ran from one that declined to act\n%s", want,
+			seriesLike(body, "linkctrl_addon_redirect_kills_total"))
+	}
+	if strings.Contains(body, `step="call"`) {
+		t.Errorf("this instance's own setup cost was counted against the add-on\n%s",
+			seriesLike(body, "linkctrl_addon_redirect_kills_total"))
+	}
+	logs := f.log.String()
+	if !strings.Contains(logs, "LINKCTRL_ADDON_INSTANTIATE_DEADLINE") {
+		t.Errorf("the log does not name the variable that moves the bound that was "+
+			"missed\n%s", logs)
+	}
+	if strings.Contains(logs, "overran its deadline") {
+		t.Errorf("the host told an operator to go and fix an add-on whose code never "+
+			"ran\n%s", logs)
 	}
 }
 
@@ -340,7 +408,8 @@ func TestAnOverrunningAddonDoesNotCostTheVisitorTheirRedirect(t *testing.T) {
 // test fails on a nesting handler and does not fail on a slow machine.
 func TestCoresLatencyExcludesWhatAnInlineAddonHeldTheRedirectFor(t *testing.T) {
 	const deadline = 200 * time.Millisecond
-	f := newInlineAddon(t, "slow", deadline, addon.PermissionRedirectInline)
+	f := newInlineAddonBounded(t, "slow", deadline, testInstantiateDeadline,
+		addon.PermissionRedirectInline)
 	f.seed("attributed", "https://shop.example.test/attributed")
 
 	start := time.Now()
@@ -367,7 +436,7 @@ func TestCoresLatencyExcludesWhatAnInlineAddonHeldTheRedirectFor(t *testing.T) {
 	// kill counter by name, which is where an operator reads what the add-on cost
 	// them, and the histogram is deliberately empty for it — see the series' own
 	// comment in internal/observability/metrics.go.
-	if want := `linkctrl_addon_redirect_kills_total{addon="slow"} 1`; !strings.Contains(body, want) {
+	if want := `linkctrl_addon_redirect_kills_total{addon="slow",step="call"} 1`; !strings.Contains(body, want) {
 		t.Errorf("the scrape does not carry %s\n%s", want,
 			seriesLike(body, "linkctrl_addon_redirect_kills_total"))
 	}
@@ -418,7 +487,7 @@ func histogramSum(t *testing.T, body, name string) float64 {
 // country — from an address it discards in the same statement, and a unit test
 // would have to build them itself and would then be asserting its own arithmetic.
 func TestAnObservingAddonIsFedFromTheClickPipeline(t *testing.T) {
-	f := newInlineAddon(t, "redirect", 0, addon.PermissionRedirectObserve)
+	f := newInlineAddon(t, "redirect", addon.PermissionRedirectObserve)
 	if got := f.host.ObservingAddons(); len(got) != 1 {
 		t.Fatalf("the observe class carries %v", got)
 	}
@@ -436,9 +505,21 @@ func TestAnObservingAddonIsFedFromTheClickPipeline(t *testing.T) {
 		t.Fatalf("flushing the click: %v", err)
 	}
 
-	logs := waitForLog(t, f.log, "redirect: observed_link=")
-	if !strings.Contains(logs, "redirect: observed_browser=") {
-		t.Errorf("the observing add-on was handed no derived fields\n%s", logs)
+	// **Waited on the fixture's *last* line, not its first.** Each `report` is a
+	// separate host call and the sink sees them one at a time, so waiting for
+	// `observed_link` and then reading `observed_browser` is a race the test loses
+	// whenever the goroutine is descheduled between the two — seen failing here on
+	// 2026-08-23. `observed_bot` is the last thing the fixture writes, so seeing it
+	// means the lines before it are there, which is the same discipline the unit
+	// suite's `waitFor` already documents.
+	logs := waitForLog(t, f.log, "redirect: observed_bot=")
+	for _, want := range []string{
+		"redirect: observed_link=", "redirect: observed_browser=",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("the observing add-on was handed no derived fields: %q is missing"+
+				"\n%s", want, logs)
+		}
 	}
 }
 

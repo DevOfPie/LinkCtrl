@@ -329,10 +329,14 @@ func run(cfg config.Config, _ io.Writer) error {
 		// assertion, refuses what it knows better than the module does, and hands the
 		// rest to the same service the sign-in form uses.
 		Sessions: authSvc,
-		// M66. How long an add-on may hold a redirect open before the host stops
-		// waiting for it. The one knob on the redirect limb, and the one place an
-		// operator's answer about somebody else's code enters this product.
-		InlineDeadline: cfg.Addons.InlineDeadline,
+		// M66. The redirect limb's two bounds, and the place an operator's answer
+		// about somebody else's code enters this product. They are two because they
+		// price two parties: how long the add-on's own code may hold a redirect, and
+		// how long this host will spend starting the module before serving the
+		// redirect without it. F326 is what one number over both did on a machine
+		// slower than the one it was measured on.
+		InlineDeadline:      cfg.Addons.InlineDeadline,
+		InstantiateDeadline: cfg.Addons.InstantiateDeadline,
 	})
 	if err != nil {
 		return fmt.Errorf("add-on host: %w", err)

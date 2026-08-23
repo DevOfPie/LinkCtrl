@@ -630,9 +630,18 @@ budget core holds itself to is a cached p99 under 20 ms.
 `LINKCTRL_ADDON_INLINE_DEADLINE` — 25 ms by default — and the runtime closes your
 module when you overrun it. The redirect completes without you, the kill is
 counted against your add-on by name, and there is no way for a module to ask for
-more. The deadline covers **instantiation as well as the call**, because your
-package initialization runs while you are being instantiated: work you do there is
-work the visitor waits for.
+more. That deadline is **your code**: it starts once the host has an instance to
+call into.
+
+**Your package initialization is bounded too, separately and more widely.** Work
+you do while being instantiated is work the visitor waits for, and it runs before
+the deadline above starts, under `LINKCTRL_ADDON_INSTANTIATE_DEADLINE` — 500 ms by
+default, because how long it takes to start a module is mostly a fact about the
+operator's machine rather than about you. Do not read the larger number as room:
+it is a ceiling on a host that is struggling, the kill it produces is labelled
+against the *host* rather than against you, and an add-on that needs hundreds of
+milliseconds of package initialization is an add-on that costs a visitor that much
+on every redirect they make.
 
 **You reach less of this ABI here than your manifest declared.** An inline
 invocation may call `abi_version`, `log`, `random_bytes`, `time_now`,

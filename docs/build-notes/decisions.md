@@ -470,6 +470,9 @@ file. Append a row when you append an entry.
 | [M66, core's histogram excludes what the add-on held](#2026-08-23--m66-cores-histogram-excludes-what-the-add-on-held) | D324, taken on the milestone's second attempt after the first was rejected on it: attribution is two curves that can disagree, so the redirect handler subtracts the whole extension point before observing the SLO series — what that costs, why the excluded amount is the extension point rather than the sum of the invocations recorded, and which four measurements are deliberately left enclosing |
 | [M66, the deadline default put to the owner anyway](#2026-08-23--m66-the-deadline-default-put-to-the-owner-anyway) | D325: 25ms stands, owner-confirmed rather than inferred. Why an escape clause whose trigger did not fire still earned a prompt, and what the ceiling costs a visitor when a module reaches it |
 | [The test timeout, which had been the default all along](#2026-08-23--the-test-timeout-which-had-been-the-default-all-along) | D326: `-timeout 30m` on all four suite targets. Go's 10-minute per-package default had never been chosen, `internal/addon` grew to 429s under `-race`, and the limit announced itself by failing a docs-only commit |
+| [M66 reopened, the deadline stops charging the host's setup to the add-on](#2026-08-23--m66-reopened-the-deadline-stops-charging-the-hosts-setup-to-the-add-on) | D327, owner-answered: instantiation leaves the inline deadline and gets its own wider bound; pooling and a bigger default both declined; what the reopening owes D318, D319 and D325, all decided on best-case measurements; and why the gap is the test environment rather than the code |
+| [M66 reopened, the second bound and what measuring it under contention said](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said) | D328–D331, taken while building the reopening: the instantiation bound's name, its 500ms default and the asymmetry that chose it; the kill counter's `step` label; why the host re-reads the bound instead of trusting the runtime to notice; and what contention did to D318's figures — which is that F326 was never only a CI problem |
+| [M66, the histogram keeps what the deadline gave up](#2026-08-23--m66-the-histogram-keeps-what-the-deadline-gave-up) | D332: why `linkctrl_addon_redirect_duration_seconds` still times instantiation in the milestone that took instantiation out of the add-on's deadline — whose fault it is and what it cost the visitor are different facts, and they belong in different places |
 
 ---
 
@@ -37593,3 +37596,220 @@ once for the package, and every add-on milestone makes it worse. That is its own
 unit of work with its own commit, offered to the owner alongside this and
 declined for now in favour of the smaller change — recorded so the smell is on
 the record rather than absorbed by a larger number.
+
+## 2026-08-23 — M66 reopened, the deadline stops charging the host's setup to the add-on
+
+### D327 — instantiation gets its own bound, and M66 comes back rather than a successor
+
+[F326](deferred-findings.md#open): `Host.Inline` and `startObserving` wrap
+instantiating the module and calling the guest in one
+`context.WithTimeout(ctx, h.inlineDeadline)`
+(`internal/addon/redirect.go:320`, `:510`), and 25ms was chosen on a machine
+where instantiation is ~1.6ms. On a hosted runner under `-race` instantiation
+alone exceeds the whole deadline, every invocation dies at `step=instantiate`,
+and the two classes M66 exists to build do not run.
+
+**Owner: exclude instantiation, give it its own wider bound.** Pooling was the
+other option put — it removes instantiation from the request path entirely and
+is what [D319](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)
+declined on the same optimistic data — and was declined here as several days
+against the smallest correct fix. D319 therefore stands, and the reopening is
+forbidden to reargue it: if instantiation cost under load turns out to argue for
+pooling, that is a prompt.
+
+A third option, raising the default until a slow runner fits inside it, was put
+and argued against in the same prompt: it answers a question about the host's
+startup cost with a number that bounds the module's work, so a real add-on would
+gain permission to hold a visitor five times the published core figure.
+
+**Reopened rather than succeeded**, per [workflow.md](workflow.md): a successor
+would leave M66's row reading `done` while its central claim — that an add-on
+runs on the redirect path — is false on any sufficiently slow machine.
+
+**What this costs the three entries decided on the same data**, named here so
+nobody quotes them as current without reading this one. [D318](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)'s
+instantiation and invocation figures are best-case, taken on an idle VM.
+D319's decision not to pool rests on those figures. [D325](#2026-08-23--m66-the-deadline-default-put-to-the-owner-anyway)'s
+confirmation of 25ms was given on them, and the prompt that asked for it did not
+say the measurements came from the best case — that omission is the
+orchestrator's, and it is why the reopening re-takes or re-scopes them rather
+than inheriting them.
+
+**The gap is not in the code.** Every gate this repository names was green on
+code that cannot work on a hosted runner: `make check`, `make test-integration`
+forced with `-count=1`, `make check-links`, `make generate`, two independent
+reviews and a k6 pair on a built image. CI found it, on the one machine nobody
+tuned the tests to. The reopening's third bullet is aimed at that rather than at
+the deadline — a bound that comes from configuration is a bound a test can make
+hostile, and a suite that only proves this VM is fast will ship the next
+timing-shaped defect exactly the same way.
+
+
+## 2026-08-23 — M66 reopened, the second bound and what measuring it under contention said
+
+Four decisions taken while building the reopening
+[D327](#2026-08-23--m66-reopened-the-deadline-stops-charging-the-hosts-setup-to-the-add-on)
+ordered. The owner decided *instantiation gets its own wider bound*; these are the
+things that answer left open.
+
+### D328 — the bound is `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, and it ships at 500ms
+
+**Measured first, and the measurement is the interesting part.**
+`TestInstantiationCostsWhatItCostsUnderContention` instantiates the `redirect`
+fixture with all sixteen instance slots busy — the state a redirect meets when an
+add-on is installed and the instance is under load, rather than the idle one
+[D318](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)'s
+figures came from. On this machine, 2026-08-23:
+
+| | mean | worst of 128 |
+| --- | --- | --- |
+| plain | **9.6 ms** | **62.7 ms** |
+| `-race` | **91 ms** | **304 ms** |
+
+Against M60's ~1.6 ms for one instantiation on an idle VM. **Contention alone is
+enough to put instantiation past the whole 25 ms inline deadline, on the fast
+machine, with no slow hardware anywhere near it.** F326 was reported as a
+CI-runner problem and it is not: an instance of this product, on this hardware,
+under load, with an inline add-on installed, would have killed invocations before
+the add-on's code ran. That is the strongest argument the reopening produced and
+it is why the entry leads with it.
+
+**500 ms, and the choice leans wide on purpose**, because the two ways of being
+wrong do not cost the same. Too narrow is F326 itself: add-ons silently stop
+running, on hardware nobody measured, and the counter blames the add-on. Too wide
+costs one visitor a longer wait in a case where a module is already broken, and it
+announces itself — the kill counter moves at `step="instantiate"`, the log names
+the variable, and an operator lowers it. So the number is eight times the
+contended worst case here, above the `-race` figure that stands in for far slower
+hardware, and sixty times under the 30 s a hanging module meets at load.
+
+**It is neither of the two numbers that already existed**, which the reopening's
+own risk section required be argued rather than borrowed. `load_timeout`'s 30 s
+bounds a module hanging at boot and no redirect may wait that; the inline deadline
+is the number F326 proved too small for this.
+
+**The name costs a second reserved add-on name.** `AddonReservedNames` becomes
+`inline, instantiate`, for the reason
+[D323](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits) reserved
+the first: an add-on called `instantiate` declaring a setting called `deadline`
+would be read from this instance's own variable, and a concatenation offers
+nothing to resolve that with. The alternative was a name that stays inside the
+existing reservation — `LINKCTRL_ADDON_INLINE_START_DEADLINE` — and it was
+declined because the bound is not the inline class's: the observe path
+instantiates too, and a name that says otherwise would be wrong in the file where
+an operator meets it.
+
+### D329 — the kill counter gains `step`, rather than a second counter
+
+`linkctrl_addon_redirect_kills_total` becomes `{addon,step}`, `step` being the
+closed pair `instantiate` / `call`. One series with a label rather than two
+series, because the two are the same event — *the host stopped waiting and served
+the redirect without the module* — asked about a different party, and an operator
+who wants the total should not have to know to add two names together.
+
+**The label is the half of F326 that was not the deadline.** The finding's own
+words: *it is silent in the shape that matters — the redirect completes, the kill
+counter moves, and nothing distinguishes the add-on declined to act from the
+add-on never ran.* Splitting the bound without splitting the number would have
+fixed the failure and left the blindness, and the blindness is what let a broken
+build look healthy on a runner.
+
+The two also get different log lines, and the difference is who is being told to
+do something. A `call` kill keeps the existing warning — an add-on to go and fix.
+An `instantiate` kill says *this instance could not start an add-on* and names
+`LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, because telling an operator to take a slow
+host to the add-on's publisher is worse than telling them nothing.
+
+### D330 — the host re-reads the bound after instantiating, rather than trusting the runtime to notice
+
+wazero interrupts a guest **cooperatively** — `WithCloseOnContextDone` closes a
+module at a check the compiler inserted, which is to say at a loop back-edge — so
+an instantiation that runs long without one finishes late rather than being
+killed. Left there, that invocation would then be handed its *full* call budget on
+top of a bound it had already overrun, and one redirect could cost both numbers.
+That is the arithmetic the reopening exists to stop, arriving by a different door.
+
+So `invokeInline` and `invokeObserve` re-read the instantiation context after the
+instance exists and treat a late one as a kill like any other. It is a few lines,
+and it buys two things: the bound is enforced by this host rather than by a
+property of somebody else's compiler, and a hostile bound in a test is
+**deterministic** — which is what makes the F326 case reachable on a machine that
+is not slow. See D331.
+
+A related determinism bug was found and fixed in the same pass: the observe path
+selected over *take a slot* and *the budget expired* in one `select`, so with an
+already-expired budget Go picked between them at random and dropped one
+observation in two on an idle host. A free slot is now never declined, whatever
+the clock says.
+
+### D331 — the tests buy room by default and take a hostile bound explicitly
+
+**The gap F326 came through was the test environment**, which D327 says in as many
+words, so the reopening's tests are shaped against it rather than against the
+deadline.
+
+Both redirect harnesses — `internal/addon/redirect_test.go` and
+`test/integration/addon_redirect_test.go` — now open a host with **generous bounds
+by default** and take a bound only when the test's subject *is* a bound. The five
+integration tests CI caught left both bounds at their shipped defaults, which is
+how a suite ends up asserting that this machine is fast; the shipped default is
+not what any of them was about.
+
+**And the hostile direction is what makes a slow machine reachable from a fast
+one.** Two new tests set an instantiation bound of one nanosecond — a bound no
+hardware fits inside, so what they exercise is the branch rather than the
+hardware — and assert the pair of facts that were indistinguishable before: the
+redirect is unharmed, and an operator can tell *the add-on never ran* from *the
+add-on declined to act*, on the counter and in the log. One of them drives it
+through a visitor end to end. Neither can pass on a build with F326 in it, on any
+machine, which is the property the old suite did not have.
+
+**A third robustness fix came out of running the suite rather than out of
+reasoning about it.** `TestAnObservingAddonIsFedFromTheClickPipeline` — one of the
+five CI caught — waited for the fixture's *first* log line and then asserted on a
+later one, which is a race it loses whenever the worker is descheduled between two
+host calls; it failed once here on 2026-08-23 and passed on the reruns. It now
+waits on the fixture's **last** line, which is the discipline the unit suite's own
+`waitFor` already documents and states the reason for. Worth recording because it
+is the same defect class as F326 wearing different clothes: a test that passes
+because this machine is quick.
+
+## 2026-08-23 — M66, the histogram keeps what the deadline gave up
+
+### D332 — instantiation leaves the add-on's *deadline* and stays in the add-on's *histogram*
+
+Raised by the reopening's reviewer, which found the comment at
+`internal/addon/redirect.go:481` citing
+[D328](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said) for a claim
+D328 does not make. The citation is corrected to this entry; the tension under it
+is worth more than the citation was.
+
+`linkctrl_addon_redirect_duration_seconds{addon,class}` times the whole
+invocation — the slot, the instantiation and the guest call — in a milestone
+whose reopening exists because instantiation is the **host's** cost and not the
+module's. Read as an inconsistency, it is one. It is deliberate, and the two
+windows answer different questions:
+
+- **The deadline** bounds *how long the module may take*, and charging it for
+  the host's startup made what an add-on could do depend on how fast the machine
+  starting it happened to be. That is [F326](deferred-findings.md#closed).
+- **The histogram** answers *what did this add-on cost this redirect*, and the
+  visitor waited for the instance too. An operator asking why a redirect took
+  60ms is not helped by a number that omits the 50ms spent starting the module
+  the add-on brought.
+
+Whose *fault* the instantiation is and what it *cost the visitor* are separate
+facts, and the milestone's own boundary is that the first belongs in the bound
+and the second in the measurement. Nothing is falsified by the pair:
+[docs/operations.md](../operations.md)'s row for the series has said *"it times
+the invocation — instantiating the module and calling it"* since M66 shipped, and
+still does.
+
+**What it means for a reader of the two curves.** Subtracting the add-on
+histogram from the request histogram does not leave core's work, because a
+killed guest call is absent from the add-on series while its instantiation was
+real. That is stated in the operations row already and is not new here; what is
+new is that the same series now also carries the setup a *different* bound
+governs, so the p99 of it moves with machine load rather than only with the
+module. An add-on whose histogram rises while its kill counter does not is an
+instance under contention, not an add-on that got slower.

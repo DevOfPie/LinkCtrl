@@ -501,8 +501,8 @@ func (m Manifest) Validate() error {
 	if slices.Contains(config.AddonReservedNames, m.Name) {
 		// The other half of the LINKCTRL_ADDON_<NAME>_<X> namespace's ambiguity, and
 		// the same answer the reserved *setting* names get: an add-on named `inline`
-		// with a setting called `deadline` would read the instance-wide
-		// LINKCTRL_ADDON_INLINE_DEADLINE, and no lookup could tell which was meant.
+		// or `instantiate` with a setting called `deadline` would read one of the
+		// instance-wide redirect bounds, and no lookup could tell which was meant.
 		add("name %q is reserved: this product reads a variable of its own from the "+
 			"%s namespace under that name, and a setting of yours would be read from "+
 			"the same variable. The reserved names are %s", m.Name,

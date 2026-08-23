@@ -1234,27 +1234,43 @@ answered neither question.
 Both are the same 2,000 rps for two minutes against the same 100k links and 5M
 click events, on an image built from the milestone's own code.
 
-**Both were re-taken on 2026-08-23**, and the figures below are that pair. The
-first build of this milestone let core's histogram enclose the add-on's time, so
-its second column measured the defect rather than the deadline; the heading keeps
-its original date because it names this measurement rather than its latest
-revision, and what changed between the two is D324.
+**Both were re-taken twice, and the figures below are the pair from
+2026-08-23's second re-take** — the milestone's reopening, which split the
+deadline in two. The heading keeps its original date because it names this
+measurement rather than its latest revision. What changed each time is worth
+keeping straight: the first re-take fixed a build where core's histogram enclosed
+the add-on's time and measured the defect rather than the deadline (D324); this
+one fixed a build where the deadline covered instantiation as well as the call, so
+that on a slower machine an add-on was killed before its own code ran (F326,
+D327–D328).
 
 | | Core, no add-on | With a deliberately hostile inline add-on |
 | --- | --- | --- |
-| Generator p99 | **136.61µs** | **132.07ms** |
-| Server-side under 20ms | **100%** of 240,002 | **99.84%** of 239,944 |
-| Server-side histogram total | 240,002 redirects | 239,944 redirects in **17.87 s**, a mean of **74µs** |
+| Generator p99 | **138.46µs** | **159.67ms** |
+| Server-side under 20ms | **100%** of 240,002 | **99.83%** of 239,932 |
+| Server-side histogram total | 240,002 redirects | 239,932 redirects in **23.90 s**, a mean of **100µs** |
 | Requests failed | **0** | **0** |
-| Sustained rate | 2,000.00/s | 1,998.74/s, 57 iterations dropped by the generator |
-| Cache mix | 240,002 memory | 239,944 memory |
+| Sustained rate | 2,000.00/s | 1,997.67/s, 69 iterations dropped by the generator |
+| Cache mix | 240,002 memory | 239,932 memory |
 | Redirect pool acquire waits | 0 | 0 |
-| `linkctrl_addon_redirect_kills_total{addon="slow"}` | — | **40,439** in the measured window |
-| `linkctrl_rate_limited_total{limit="addon_inline"}` | — | **199,505** in the measured window |
+| `linkctrl_addon_redirect_kills_total{addon="slow",step="call"}` | — | **32,866** in the measured window |
+| `linkctrl_addon_redirect_kills_total{addon="slow",step="instantiate"}` | — | **zero, and the series was never created** |
+| `linkctrl_rate_limited_total{limit="addon_inline"}` | — | **207,066** in the measured window |
 | `linkctrl_addon_redirect_duration_seconds` | — | **no samples**, and that is correct: every invocation was killed, and a kill is on the counter above rather than in the histogram |
 
+**The `instantiate` row is a measurement and not a blank.** It is the reopening's
+own question — *what does instantiating a module cost when the instance is
+busy* — answered under the only load this repository can produce: 239,932
+redirects at 2,000 rps with all sixteen instance slots continuously held by
+modules being killed, and not one invocation failed to start inside its 500 ms
+bound. Under contention in a unit test the same instantiation costs a mean of
+9.6 ms and a worst of 62.7 ms, which is the number the bound is eight times of
+(D328). The two together are why the bound is not the thing to tune next; whether
+instantiation should be on the request path *at all* is D319's question, and it
+stays the owner's.
+
 **The first column is the claim, and it did not move.** 100% under 20ms with a
-generator p99 of 136.61µs is where this measurement has been since
+generator p99 of 138.46µs is where this measurement has been since
 [M50](#re-measured-for-m50-2026-08-07), and it is taken on a build that carries
 the whole extension point — the interface, the guard, the moved query merge, and
 the subtraction below. An instance that installs no add-on pays a nil check, a
@@ -1268,7 +1284,7 @@ than a slow one: there is no work it is doing and no point at which it would hav
 finished. Every number in that column is what the host does about that.
 
 *Zero failed requests* is the whole of the availability claim. Every one of the
-239,944 visitors got their redirect, to the destination their link points at,
+239,932 visitors got their redirect, to the destination their link points at,
 while a module on the path was refusing to return.
 
 **The two columns of *server-side under 20ms* are comparable, and that is the
@@ -1276,27 +1292,27 @@ point of the number.** `linkctrl_redirect_duration_seconds` is core's own work:
 the handler times the extension point and subtracts it before it observes, so the
 25 ms a killed module held the request is **not** in the second column's histogram
 (D324). The arithmetic is worth doing, because it is the difference between a
-measurement and a tautology — 40,439 kills at the 25 ms deadline is **1,011
-seconds**, against a histogram that totals **17.87 s** for the whole run. An
+measurement and a tautology — 32,866 kills at the 25 ms deadline is **822
+seconds**, against a histogram that totals **23.90 s** for the whole run. An
 earlier build of this milestone did not subtract, and the same run read 83.17%
 under 20 ms; that figure was core's curve absorbing somebody else's deadline, and
 it is what the rejection of that build was about.
 
-*The 0.16% that is still over 20 ms is real and is not the add-on's time.* 383
-redirects of 239,944, and what they measure is a host doing this product's work
-while 40,000 goroutines are being killed on a two-minute clock: contention for CPU
+*The 0.17% that is still over 20 ms is real and is not the add-on's time.* 410
+redirects of 239,932, and what they measure is a host doing this product's work
+while 33,000 goroutines are being killed on a two-minute clock: contention for CPU
 and for the runtime, not a module holding anything. Core is *almost* unmoved
 rather than unmoved, and the honest form of that claim is a number rather than an
 adjective.
 
-*199,505 skips against 40,439 kills* is the mechanism that keeps the first
-sentence true, and the two add to exactly the 239,944 redirects served. Sixteen
+*207,066 skips against 32,866 kills* is the mechanism that keeps the first
+sentence true, and the two add to exactly the 239,932 redirects served. Sixteen
 instance slots exist across the whole host and an inline invocation takes one
 **without waiting**: while sixteen are held by modules being killed, every other
 redirect is served with the add-on skipped — that is 83% of the run, at core's own
 latency and never queued behind anything.
 
-*The generator p99 of 132.07ms* is what a **visitor** waits, and it is the number
+*The generator p99 of 159.67ms* is what a **visitor** waits, and it is the number
 the scope above is about. It is five times the deadline and it is the honest
 figure: at 2,000 rps a module holding a slot for 25 ms means slots are the scarce
 thing, and what a visitor waits for is the queue rather than the module. A product
@@ -1307,7 +1323,7 @@ is the add-on's, publishes what the visitor waited on
 `linkctrl_redirect_duration_seconds` describing itself.
 
 *The kill counter moving is the point of the deadline*, not a side effect. A
-module that hangs is an add-on to go and fix, and 40,439 kills in two minutes is
+module that hangs is an add-on to go and fix, and 32,866 kills in two minutes is
 an operator's alert rather than a mystery. It is also the **only** per-module
 series this run produced: `linkctrl_addon_redirect_duration_seconds` has no
 samples at all, because an invocation that was killed is deliberately absent from
@@ -1335,6 +1351,13 @@ rather than this class.
 An operator who sets `LINKCTRL_ADDON_INLINE_DEADLINE` lower gets more kills and
 less queueing, and higher gets the reverse; the arithmetic is visible in the two
 counters above and does not need a run per value.
+
+**A machine slow enough to miss the instantiation bound.** The second column
+proves 500 ms was never approached at 2,000 rps here; it cannot prove what happens
+on hardware where it is. That case is reached deliberately in the suite instead,
+by a test that sets a bound of one nanosecond — see D331 — because the honest way
+to test a machine-dependent bound is to make the bound hostile rather than to hope
+for a slow machine. F326 is what hoping cost.
 
 **The observe class.** Nothing about it is on this path — it is fed from the
 click pipeline after the response and after the commit — so a load test of the
@@ -1500,9 +1523,13 @@ Then point the instance at it, run, and put it back. Both lines go in
 printf '\nLINKCTRL_ADDONS_DIR=/addons\nLINKCTRL_TAG=test-slowaddon\n' >> .env.test
 docker compose -p linkctrl-test --env-file .env.test up -d --force-recreate --wait app
 make load                                  # exits 99: the threshold is crossed, which is the result
-docker compose -p linkctrl-test --env-file .env.test exec app \
-  wget -qO- http://localhost:9090/metrics | grep addon_redirect
+grep addon_redirect /tmp/lc-before.txt /tmp/lc-after.txt
 ```
+
+The scrape comes from the two files `scripts/load-test.sh` already writes rather
+than from inside the container: **the app image carries no `wget` and no `curl`**,
+so an `exec` into it cannot read its own metrics, and those two files are the
+before-and-after the deltas below are taken from anyway.
 
 `make load` **failing is the measurement succeeding** here: the k6 threshold is
 `p(99)<20`ms and the whole point of the run is that an add-on's latency is not

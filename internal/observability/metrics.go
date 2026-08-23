@@ -365,11 +365,21 @@ func NewMetrics() *Metrics {
 		// linkctrl_rate_limited_total, and one that trapped is in the log: neither is
 		// an overrun, and counting them here would put a number on the Add-on manager
 		// that blames the wrong thing.
+		//
+		// `step` is the closed pair instantiate/call, and it is F326's half of this
+		// series. The two are different faults with different owners: a kill at
+		// `call` is the add-on holding a redirect open past its deadline, which is
+		// what this counter was built for, and a kill at `instantiate` is this host
+		// failing to *start* the module inside a bound of its own — a cold or slow
+		// machine rather than a slow add-on. Sharing one number made them
+		// indistinguishable, and an instance where every invocation died at
+		// `instantiate` looked exactly like an add-on that had declined to act.
 		addonRedirectKill: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "linkctrl_addon_redirect_kills_total",
-			Help: "Add-on invocations killed for overrunning the redirect deadline. The " +
-				"redirect completed without them.",
-		}, []string{"addon"}),
+			Help: "Add-on invocations killed for overrunning a redirect bound, by " +
+				"add-on and step (instantiate, call). The redirect completed without " +
+				"them.",
+		}, []string{"addon", "step"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -806,12 +816,16 @@ func (m *Metrics) ObserveAddonRedirect(addon, class string, d time.Duration) {
 	m.addonRedirect.WithLabelValues(addon, class).Observe(d.Seconds())
 }
 
-// ObserveAddonRedirectKill counts an add-on the host stopped waiting for.
-func (m *Metrics) ObserveAddonRedirectKill(addon string) {
+// ObserveAddonRedirectKill counts an invocation the host stopped waiting for, at
+// the step whose bound it overran.
+//
+// step is addon.StepInstantiate or addon.StepCall, spelled there rather than here
+// because that package is the one that knows which bound applies to which step.
+func (m *Metrics) ObserveAddonRedirectKill(addon, step string) {
 	if m == nil {
 		return
 	}
-	m.addonRedirectKill.WithLabelValues(addon).Inc()
+	m.addonRedirectKill.WithLabelValues(addon, step).Inc()
 }
 
 // SetAddonLargeObjects records how many large objects one add-on's role owns
