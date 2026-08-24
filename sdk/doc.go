@@ -45,7 +45,18 @@
 // fresh instance per request — and growing past it traps, which the host answers
 // as a 502 for that one request. It is room for a request's work rather than for
 // a cache: what an add-on wants to keep goes in the schema its storage grant
-// gives it, which is also the only thing that outlives the instance. A module
+// gives it, which is also the only thing that outlives the instance.
+//
+// **On the redirect path the instance is reused, and it makes no difference to
+// what you may keep.** Building one per redirect cost the visitor 11 ms on a path
+// whose target is 20 ms, so the host keeps instances and hands them on — after
+// restoring your module's memory to exactly what your package initialization left.
+// A package-level variable you write during one redirect is empty on the next, the
+// same as if the instance had been destroyed, and the schema is still the only
+// thing that survives. What *is* different is that your `init` runs once per
+// instance rather than once per invocation, so anything it does outside memory —
+// a log line, a storage write — happens once for many redirects rather than once
+// each. A module
 // whose memory section *demands* more than the bound as its minimum is refused at
 // load, with the add-on named. A toolchain that pins a larger maximum instead
 // costs nothing and changes nothing: the runtime substitutes its own limit for

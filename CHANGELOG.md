@@ -83,6 +83,38 @@ migrations run at boot.
   all sixteen instance slots held throughout. Both runs are in
   [docs/slo.md](docs/slo.md) with what each one does and does not show.
 
+  **A third run measured the case anybody would actually deploy — an add-on that
+  behaves — and the answer was bad enough to change the design.** A module that
+  reads its decision and allows the redirect cost the visitor **44.89 ms at p99**
+  against a 20 ms target, and none of it was the add-on: **11.05 ms of every
+  invocation** was LinkCtrl allocating the module's memory, running its startup
+  code and destroying all of it, once per redirect. Two fifths of redirects
+  skipped the add-on entirely because every instance slot was busy doing that.
+
+  **So an add-on's instance is now kept and reused rather than built per
+  redirect.** The same run reads **1.08 ms at p99**, an invocation costs **451 µs**,
+  **9 redirects of 240,001** skipped the add-on instead of 92,546, and no
+  invocation was killed at all. Core's own histogram went from 99.996% to **100%**
+  under 20 ms.
+
+  **Reuse does not weaken the isolation that came from destroying the instance.**
+  A reused instance still holds the guest's own memory, so before one is handed to
+  the next redirect LinkCtrl writes back the copy of that memory it took when the
+  module started: a package-level variable an add-on wrote during one redirect is
+  empty on the next, and a test drives two redirects through one instance to say
+  so. An invocation that was killed or trapped is closed rather than reused, so a
+  module being killed on every invocation degrades to an instance each — the old
+  behaviour — instead of filling the pool with dead ones. Add-on **pages** are not
+  pooled and still get an instance per request. What it costs is memory held while
+  nothing is running: `LINKCTRL_ADDON_POOL_SIZE` (8) bounds how many instances are
+  kept, `LINKCTRL_ADDON_POOL_TTL` (1m) how long an unused one is kept for, and
+  `pool` joins the reserved add-on names for the reason the two below do. **It also
+  costs a second copy** — the image an instance is reset to is held beside it,
+  under the same per-instance cap and outside the guest ceiling — so
+  [docs/deployment.md](docs/deployment.md) now sizes a host by that ceiling twice. Neither
+  variable changes how many add-on invocations run at once, which is still sixteen
+  and still fixed in the build.
+
   Per-module attribution is first-class:
   `linkctrl_addon_redirect_duration_seconds{addon,class}` is a separate curve from
   `linkctrl_redirect_duration_seconds`, and separate in both directions — the
@@ -98,11 +130,12 @@ migrations run at boot.
   ungated host facts, its own settings and the two functions the class exists for.
   Storage, the request, the session and templates are refused there whatever the
   manifest declared, which is the redirect tree's own *no session lookup, no CSRF,
-  no template rendering* rule reaching across the boundary. Two add-on names are
+  no template rendering* rule reaching across the boundary. Three add-on names are
   reserved as a consequence of the new variables: an add-on called `inline` or
   `instantiate` is refused at load, because a setting of its called `deadline`
   would be read from `LINKCTRL_ADDON_INLINE_DEADLINE` or
-  `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`.
+  `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`. `pool` is reserved the same way, for
+  `LINKCTRL_ADDON_POOL_SIZE` and `LINKCTRL_ADDON_POOL_TTL`.
 
 - **An add-on can sign somebody in, and LinkCtrl decides what that means.**
 
@@ -256,12 +289,16 @@ migrations run at boot.
   is never permanent. And sixteen add-on invocations run at once across the instance,
   a further page request waiting on the request's own timeout: each gets an
   instance of the module to itself and each instance is capped at **8 MiB** of
-  memory, so add-ons add at most **128 MiB** to what this instance holds while they
-  are working. That
+  memory, and eight instances are kept warm between invocations, so add-ons add at
+  most **192 MiB** to what this instance holds. That
   isolation is deliberate — one visitor's state cannot be left where another
   visitor's request can read it — and it means an add-on keeping state between two
   requests of one flow keeps it in the schema it owns, where it survives a restart
-  and every replica can see it. A module that asks for more memory than its cap is
+  and every replica can see it. **Kept warm does not weaken it.** A reused instance
+  still carries the guest's own memory, so before one is handed on LinkCtrl writes
+  back the copy it took of that memory when the module started: what the last
+  redirect left is not what the next one reads, and an invocation that was killed
+  or trapped is closed rather than reused at all. A module that asks for more memory than its cap is
   stopped by the runtime and answers 502 for that one request; one whose memory
   section *demands* more than the cap as its minimum is refused at load, with the
   add-on named. A module that merely declares a larger *maximum* loads and is held

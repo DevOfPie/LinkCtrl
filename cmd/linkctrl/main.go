@@ -337,6 +337,8 @@ func run(cfg config.Config, _ io.Writer) error {
 		// slower than the one it was measured on.
 		InlineDeadline:      cfg.Addons.InlineDeadline,
 		InstantiateDeadline: cfg.Addons.InstantiateDeadline,
+		PoolSize:            cfg.Addons.PoolSize,
+		PoolTTL:             cfg.Addons.PoolTTL,
 	})
 	if err != nil {
 		return fmt.Errorf("add-on host: %w", err)

@@ -1213,15 +1213,15 @@ instead. HAProxy 3.1, `balance roundrobin`, `option httpchk GET /readyz`,
 `inter 1s fall 2 rise 1`. Same host as
 [M35](#re-measured-for-m35-2026-08-03) onward.
 
-Thirty-one cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
+Thirty-two cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%, 100%,
-100%, 99.405%, 100%, 99.826%, 100%, 100%, 100%, 100%, **100%**, **100%** and
-**100%** under 20ms — the two before the last being the rolling deploy and the
-rolling kill, which are the only two taken while the processes serving them were
-being replaced, and the last being
-[M66](#re-measured-for-m66-2026-08-22)'s core run. **The M66 run with an add-on on
-the path is deliberately not in that tally**, because the tally is what this
-document promises and that run is what the promise is scoped away from.
+100%, 99.405%, 100%, 99.826%, 100%, 100%, 100%, 100%, **100%**, **100%**, **100%**
+and **100%** under 20ms — the rolling deploy and the rolling kill are in there,
+the only two taken while the processes serving them were being replaced, and the
+last two are [M66](#re-measured-for-m66-2026-08-22)'s core run and
+[M66.5](#re-measured-for-m665-2026-08-24)'s. **The runs with an add-on on the path
+are deliberately not in that tally**, because the tally is what this document
+promises and those runs are what the promise is scoped away from.
 
 ### Re-measured for M66 (2026-08-22)
 
@@ -1334,8 +1334,11 @@ overran.
 
 #### What this run did **not** measure
 
-**A well-behaved inline add-on.** There is no such module in this repository to
-measure — the fixture that answers correctly returns in microseconds and would
+**A well-behaved inline add-on.** *(Measured on 2026-08-24 —
+[M66.5](#re-measured-for-m665-2026-08-24) is the run, and it is what made the
+paragraph below out of date rather than wrong: the fixture named in it did become
+the module, at 2,000 rps, and what it measured was mostly the host.)* There is no
+such module in this repository to measure — the fixture that answers correctly returns in microseconds and would
 have measured the host's overhead rather than an add-on's, and inventing a
 plausible one would be measuring a guess. What a real module costs is bounded
 below by an instantiation, which is measured elsewhere: **~1.6 ms** on this
@@ -1363,6 +1366,124 @@ for a slow machine. F326 is what hoping cost.
 click pipeline after the response and after the commit — so a load test of the
 redirect path cannot say anything about it that is not already true of the
 pipeline it rides on.
+
+### Re-measured for M66.5 (2026-08-24)
+
+[M66.5](build-notes/phase-details/m66.5.md) exists because of a number on this
+page's neighbour rather than on this page: an add-on that does nothing wrong cost
+the visitor **44.89 ms** at p99 against a 20 ms target, and 11.05 ms of every
+invocation was this host building and destroying a Go runtime. The milestone pools
+instances instead. So this is **three** runs and not two — the pair
+[M66](#re-measured-for-m66-2026-08-22) took, re-run on the milestone's own image,
+and the well-behaved column that was previously a paragraph explaining why it
+could not be measured.
+
+All three are 2,000 rps for two minutes against the same 100k links and 5M click
+events. The well-behaved module is the `redirect` fixture holding
+`redirect.inline` alone — it reads its decision, parses it, probes the host
+functions an inline invocation is refused, and allows the redirect unchanged.
+
+| | Core, no add-on | Well-behaved inline add-on | Deliberately hostile inline add-on |
+| --- | --- | --- | --- |
+| Generator p99 | **143.16µs** | **1.08ms** | **163.93ms** |
+| Generator median / mean | 132µs / 143µs | **518.63µs / 558.23µs** | 12.70ms / 25.01ms |
+| Server-side under 20ms | **100%** of 240,001 | **100%** of 240,001 | **99.795%** of 239,933 |
+| Requests failed | **0** | **0** | **0** |
+| Sustained rate | 2,000.00/s | 2,000.00/s | 1,997.28/s, 67 iterations dropped |
+| Mean add-on invocation, from its own histogram | — | **451µs** | no samples: every invocation was killed |
+| Invocations recorded | — | **239,992** | 0 |
+| Redirects that skipped the add-on | — | **9 — 0.004%** | 207,599 — 86.5% |
+| `linkctrl_addon_redirect_kills_total{step="call"}` | — | **zero, and the series was never created** | **32,334** |
+| `linkctrl_addon_redirect_kills_total{step="instantiate"}` | — | **zero, and the series was never created** | **zero, and the series was never created** |
+| Redirect **database** pool acquire waits | 0 | 0 | 0 |
+
+That last row is the pgx connection pool the redirect path reads through, the
+same row every measurement in this file carries. It is **not** the add-on
+instance pool this milestone built, which has no acquire-wait instrument at all
+because it never blocks: a request that finds the pool empty instantiates, and
+one that finds no concurrency slot is skipped rather than queued.
+
+
+**The middle column is the milestone**, and it is the one to read against
+[D333](build-notes/decisions.md#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)'s
+baseline rather than against either neighbour:
+
+| | M66, 2026-08-23 | M66.5, 2026-08-24 |
+| --- | --- | --- |
+| Generator p99 | 44.89ms | **1.08ms** |
+| Generator mean | 11.46ms | **558µs** |
+| Mean invocation | 11.05ms | **451µs** |
+| Redirects that skipped the add-on | 92,546 — 38.6% | **9 — 0.004%** |
+| Guest-deadline kills | 208 | **0** |
+| Core's own histogram under 20ms | 99.996% | **100%** |
+
+**The bar was the inherited one and it is met by a factor of eighteen.** The
+owner set *generator p99 under 20 ms* on 2026-08-23, over a fraction-of-baseline
+target and over a bar with an escape clause, knowing the risk that part of the
+44.89 ms was contention rather than startup and might not move. It moved: the
+p99 is 1.08 ms, which is under the target this document publishes for core with
+nothing on the path.
+
+**Why the skip rate collapsed is the same arithmetic read forwards.** Sixteen
+instance slots at 11.05 ms of occupancy carry ~1,448 invocations a second against
+2,000 offered, which is what put 38.6% of redirects past the add-on entirely. At
+451µs the same sixteen slots carry ~35,000 a second, so the budget stops binding
+and the nine skips left are arrival jitter. That is also why *the module now runs
+for almost everybody* — the old figure was flattering because two fifths of the
+population never paid it.
+
+**Why 451µs and not less.** What is left is the guest's own work: a JSON parse,
+six refused host calls and a log line each, plus the host's memory reset — 3.4 MB
+copied back over the instance before it is handed on, which
+`TestResettingAPooledInstanceIsCheaperThanBuildingOne` measures at **59µs** against
+**3.44ms** to build an instance instead. Startup is gone from the number; nothing else is.
+
+**Zero guest-deadline kills, against 208 before.** Those 208 were a module doing
+nothing being descheduled past a 25 ms wall-clock deadline on a saturated box, and
+they are the clearest single reading of what the milestone removed: the box is no
+longer saturated by add-on startup.
+
+**The third column is a module that never returns, and the claim about it is that
+it is no worse.** It is the harder half to read, because pooling cannot help a
+module whose every invocation is killed — a killed instance is closed by the
+runtime and evicted rather than returned, so a thrashing add-on degrades to
+exactly M66's behaviour of an instance per invocation. That is the floor, and the
+three things the claim rests on all hold: **zero failed requests**, core's own
+histogram still describing core, and the kill counter still naming the add-on and
+the step.
+
+**The generator p99 in that column moved by about 4%, in both directions, across
+two takes**, and it is reported rather than rounded away: 163.93 ms and 169.93 ms
+on 2026-08-24 against M66's single 159.67 ms, with core's histogram reading
+99.795% and 99.865% against M66's 99.83%. Both figures bracket M66's on both
+metrics, the kill count is within 2% (32,334 and 32,230 against 32,866) and the
+skip count within 0.3%, so what this says is that the hostile column has a few
+percent of run-to-run variance and not that pooling cost it anything. There is no
+mechanism by which it could: the pool is empty for a module that is always
+killed, so every invocation in that column takes the same path it took in M66.
+
+**Thirty-two cached runs** now read 100% under 20ms for core. The two add-on
+columns are deliberately outside that tally, for the reason M66's was: the tally
+is what this document promises, and those runs are what the promise is scoped
+away from.
+
+#### What this run did **not** measure
+
+**An instance holding more than one add-on.** Every column here installs one
+module. The pool is per add-on and per class, and what an instance with three
+inline add-ons costs is three times the instances and three invocations per
+redirect, which is arithmetic rather than a measurement — but the *contention*
+between them is not, and nothing here says anything about it.
+
+**A pool bound being reached.** `LINKCTRL_ADDON_POOL_SIZE` is eight and the run
+never wanted more than two instances at once, so the eviction path — an instance
+released into a full pool and closed — ran on this workload zero times. It is
+covered by unit tests with the bound set to two, not by a run.
+
+**Memory at rest.** The ceiling is arithmetic — sixteen in flight plus eight kept
+warm, each held to 8 MiB — and this page measures latency. What an idle pool costs
+an instance in resident bytes is `docs/deployment.md`'s question and its figures
+predate the pool.
 
 ## Reproducing it
 
@@ -1492,10 +1613,10 @@ them before believing the latency: a cached measurement with database reads in i
 is not a cached measurement, and a starved pool is the difference between "the
 query was slow" and "the request never got a connection".
 
-### Reproducing the M66 add-on runs
+### Reproducing the M66 and M66.5 add-on runs
 
 The core column is `make load` on an ordinary instance and needs no recipe. The
-second column needs a module inside the container, and there is deliberately no
+add-on columns need a module inside the container, and there is deliberately no
 compose mount for one: an add-ons directory is an operator's own path and
 `docs/configuration.md` is where that is described, so the measurement builds a
 throwaway image rather than adding a developer convenience that would then be
@@ -1540,6 +1661,24 @@ and the figures in the table above are deltas across the measured window.
 Undo it by removing the two lines and recreating the container. The image is a
 throwaway; `docker image rm linkctrl:test-slowaddon` when the run is done, or the
 next `make rebuild` will be building against a tag nothing points at.
+
+**The well-behaved column is the same recipe with a different fixture**, and it
+is the one M66.5 is measured by. Substitute `redirect` for `slow` throughout —
+the module, the directory, the manifest's `name` and `module`, the image tag —
+and keep the permission list at `["redirect.inline"]` alone: the fixture probes
+the host functions an inline invocation may not call, and granting them would
+measure a different module. `make load` **passes** for this column, which is the
+result; the counters to read afterwards are the same two plus the histogram:
+
+```sh
+grep -E 'addon_redirect_duration_seconds_(sum|count)|rate_limited_total\{limit="addon_inline"\}|addon_redirect_kills_total' \
+  /tmp/lc-before.txt /tmp/lc-after.txt
+```
+
+The mean invocation is the `sum` delta over the `count` delta, and it is the
+number the milestone moved: 11.05ms before pooling, 451µs after. A missing
+`kills_total` series is not a missing measurement — the series is created by the
+first kill, so its absence is zero.
 
 ### Reproducing the rolling-deploy measurement
 

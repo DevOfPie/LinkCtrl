@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -68,18 +67,20 @@ import (
 // single click had been spent would refuse the visitor and consume the link, and
 // m66.md names that exact hazard.
 //
-// # What an inline invocation costs, and why there is no pool
+// # What an inline invocation costs, and where the instance comes from
 //
-// A fresh instance per invocation, exactly as a route gets one (D260), closed
-// when the invocation ends. Measured rather than assumed —
-// TestAnInlineInvocationCostsAnInstantiation is the number — and the reasoning is
-// in decisions.md: a pool would be an order of magnitude cheaper per call and it
-// would put an add-on's guest memory across two visitors' redirects, on the one
-// path in this product where the host hands a module something *while somebody
-// waits*. It would also raise the guest-memory ceiling four documents state,
-// because a pooled instance holds its memory whether or not anything is using it.
-// The cost of not pooling is paid by the operator who installed an inline add-on
-// and is visible per module in the histogram this file writes.
+// A pooled instance, reset before it is handed on (M66.5, D335). D319 decided the
+// opposite — a fresh instance per invocation, exactly as a route gets one
+// (D260) — on an instantiation figure measured with nothing else running, and the
+// first load run with a well-behaved add-on on the path charged the visitor
+// 44.89 ms at p99 against a 20 ms target, of which 11.05 ms per invocation was
+// this host building and destroying a Go runtime. D333 reverses it on that
+// measurement; pool.go holds the mechanism, the reset that makes reuse safe, and
+// the two bounds on what is held at rest. What is left in the number below is
+// what the add-on's own code does.
+//
+// The cost an add-on puts on a redirect is still the operator's, and it is still
+// visible per module in the histogram this file writes.
 //
 // The instance budget is the host's existing one — [maxConcurrentRoutes] slots,
 // shared with add-on pages and with out-of-band observation — and it is taken
@@ -87,6 +88,9 @@ import (
 // cannot get a slot is served without the add-on and counted as throttled. That
 // is the backpressure that makes "core availability survives a slow add-on" true
 // rather than hoped for: sixteen slow invocations do not become sixteen thousand.
+// Pooling did not touch it and deliberately did not become a fourth thing it
+// bounds (F324); what it changed is how long a slot is held, which at 2,000 rps
+// took the share of redirects skipped for want of one from 38.6% to 0.004%.
 
 // The three grants this file branches on, named for the reason
 // [PermissionRoutes] is: a second spelling of a permission is the drift a closed
@@ -392,48 +396,31 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 	}
 
 	start := time.Now()
-	// **Two bounds, one per party.** Instantiating the module is this host's work
-	// and gets h.instantiateDeadline; the guest's own code gets h.inlineDeadline,
-	// which is the knob whose name and documentation say *how long a module may
-	// hold a redirect*. One context over both was F326, and it made the add-on's
-	// budget a function of how fast this machine happens to be.
+	// **Two bounds, one per party.** Starting the module is this host's work and
+	// gets h.instantiateDeadline; the guest's own code gets h.inlineDeadline, which
+	// is the knob whose name and documentation say *how long a module may hold a
+	// redirect*. One context over both was F326, and it made the add-on's budget a
+	// function of how fast this machine happens to be.
 	//
 	// Both are needed, and the wider one is not slack: package initialization runs
 	// during instantiation, so a module can hang before it has been called at all —
 	// not a hypothetical, it is the `spinning` fixture. WithCloseOnContextDone is
 	// what makes either deadline close the guest, and it watches whichever context
 	// the call in flight was given.
+	//
+	// Since M66.5 the instantiation half is usually not paid at all: the instance
+	// comes from the pool. The bound still applies to the case that does pay it —
+	// the first invocation, a burst wider than the pool, an entry the last
+	// invocation had to evict — and it is the same number for the same reason.
 	instCtx, cancelInst := context.WithTimeout(ctx, h.instantiateDeadline)
 	defer cancelInst()
 
-	instance := name + "#" + strconv.FormatUint(h.instances.Add(1), 10)
-	st := h.hostState(name)
-	if st == nil {
-		return RedirectAnswer{}, false
-	}
-	st = st.forRedirect(&d, nil)
-	h.mu.Lock()
-	if h.states == nil {
-		h.states = make(map[string]*hostState)
-	}
-	h.states[instance] = st
-	h.mu.Unlock()
-	defer func() {
-		h.mu.Lock()
-		delete(h.states, instance)
-		h.mu.Unlock()
-	}()
-
-	mod, err := h.runtime.InstantiateModule(instCtx, l.compiled, guestModuleConfig(instance))
+	e, err := h.acquireInstance(instCtx, l, ClassInline)
 	if err != nil {
-		if mod != nil {
-			_ = mod.Close(context.WithoutCancel(ctx))
-		}
 		h.redirectFailed(name, ClassInline, StepInstantiate, h.instantiateDeadline,
 			instCtx, ctx, start, err)
 		return RedirectAnswer{}, false
 	}
-	defer func() { _ = mod.Close(context.WithoutCancel(ctx)) }()
 	if err := instCtx.Err(); err != nil && ctx.Err() == nil {
 		// **The bound is this host's to enforce, not the runtime's to notice.**
 		// wazero interrupts a guest cooperatively — at loop back-edges in compiled
@@ -442,11 +429,26 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 		// the time it does. Handing that invocation its full call budget on top
 		// would let one redirect cost both numbers, which is the arithmetic F326's
 		// fix exists to stop. So the deadline is re-read after the instance exists,
-		// and a late one is a kill like any other.
+		// and a late one is a kill like any other. The entry is evicted rather than
+		// pooled: an instance this host could not start in time is not one to hand
+		// the next visitor.
+		h.releaseInstance(ctx, e, false)
 		h.redirectFailed(name, ClassInline, StepInstantiate, h.instantiateDeadline,
 			instCtx, ctx, start, err)
 		return RedirectAnswer{}, false
 	}
+	// The invocation's own state, attached to the instance now that there is one.
+	// A pooled entry has been resting under a state carrying no decision, so this
+	// is also the line that makes the record readable at all — and releaseInstance
+	// is what puts the resting state back.
+	st := h.hostState(name)
+	if st == nil {
+		h.releaseInstance(ctx, e, false)
+		return RedirectAnswer{}, false
+	}
+	st = st.forRedirect(&d, nil)
+	h.setState(e.name, st)
+
 	// From here the add-on's own budget starts, and the context is made *here*
 	// rather than at the top of this function on purpose: a deadline created before
 	// the instance exists is already part-spent when the guest is called, which is
@@ -456,12 +458,13 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 	defer cancel()
 	callStart := time.Now()
 
-	fn := mod.ExportedFunction(abi.GuestRedirectInline)
+	fn := e.mod.ExportedFunction(abi.GuestRedirectInline)
 	if fn == nil {
 		// Declared the grant, exports nothing. Refused at the invocation rather
 		// than at load, exactly as a missing request handler is: the export is a
 		// property of the wasm and taking an instance down for it would take the
 		// instance down for a redirect nobody asked the add-on about.
+		h.releaseInstance(ctx, e, true)
 		h.log.Error("an add-on declared the redirect-inline permission and exports no "+
 			"handler; it is doing nothing on the redirect path until it is rebuilt",
 			slog.String("addon", name),
@@ -469,10 +472,19 @@ func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) 
 		return RedirectAnswer{}, false
 	}
 	if _, err := fn.Call(callCtx); err != nil {
+		// Not clean, so the entry is closed rather than reused. A killed instance is
+		// one the runtime has already closed underneath the call and a trapped one is
+		// in a state no image describes, and both would otherwise sit in the pool
+		// waiting to fail the next redirect faster.
+		h.releaseInstance(ctx, e, false)
 		h.redirectFailed(name, ClassInline, StepCall, h.inlineDeadline,
 			callCtx, ctx, callStart, err)
 		return RedirectAnswer{}, false
 	}
+	// Before the histogram, deliberately: resetting the guest is work the visitor
+	// waits for, so it belongs inside what this add-on cost this redirect rather
+	// than outside it where it would be invisible.
+	h.releaseInstance(ctx, e, true)
 	// The whole invocation, deliberately, and it is not the same window as the
 	// deadline above. What the histogram answers is *what did this add-on cost this
 	// redirect*, which is everything between the slot and the answer — the visitor
@@ -666,48 +678,36 @@ func (h *Host) invokeObserve(ctx context.Context, l *Loaded, ev RedirectEvent) {
 	defer cancelInst()
 
 	start := time.Now()
-	instance := name + "#" + strconv.FormatUint(h.instances.Add(1), 10)
-	st := h.hostState(name)
-	if st == nil {
-		return
-	}
-	st = st.forRedirect(nil, &ev)
-	h.mu.Lock()
-	if h.states == nil {
-		h.states = make(map[string]*hostState)
-	}
-	h.states[instance] = st
-	h.mu.Unlock()
-	defer func() {
-		h.mu.Lock()
-		delete(h.states, instance)
-		h.mu.Unlock()
-	}()
-
-	mod, err := h.runtime.InstantiateModule(instCtx, l.compiled, guestModuleConfig(instance))
+	e, err := h.acquireInstance(instCtx, l, ClassObserve)
 	if err != nil {
-		if mod != nil {
-			_ = mod.Close(context.WithoutCancel(ctx))
-		}
 		h.redirectFailed(name, ClassObserve, StepInstantiate, h.instantiateDeadline,
 			instCtx, ctx, start, err)
 		return
 	}
-	defer func() { _ = mod.Close(context.WithoutCancel(ctx)) }()
 	if err := instCtx.Err(); err != nil && ctx.Err() == nil {
 		// Re-read for the reason the inline path re-reads it, and it costs the same
 		// nothing: an observation delivered late is worth less than the slot it is
 		// holding, and the two bounds must not add up here either.
+		h.releaseInstance(ctx, e, false)
 		h.redirectFailed(name, ClassObserve, StepInstantiate, h.instantiateDeadline,
 			instCtx, ctx, start, err)
 		return
 	}
+	st := h.hostState(name)
+	if st == nil {
+		h.releaseInstance(ctx, e, false)
+		return
+	}
+	st = st.forRedirect(nil, &ev)
+	h.setState(e.name, st)
+
 	callCtx, cancel := context.WithTimeout(ctx, h.inlineDeadline)
 	defer cancel()
 	callStart := time.Now()
 
-	fn := mod.ExportedFunction(abi.GuestRedirectObserve)
+	fn := e.mod.ExportedFunction(abi.GuestRedirectObserve)
 	if fn == nil {
+		h.releaseInstance(ctx, e, true)
 		h.log.Error("an add-on declared the redirect-observe permission and exports no "+
 			"handler; it is seeing nothing until it is rebuilt",
 			slog.String("addon", name),
@@ -715,10 +715,12 @@ func (h *Host) invokeObserve(ctx context.Context, l *Loaded, ev RedirectEvent) {
 		return
 	}
 	if _, err := fn.Call(callCtx); err != nil {
+		h.releaseInstance(ctx, e, false)
 		h.redirectFailed(name, ClassObserve, StepCall, h.inlineDeadline,
 			callCtx, ctx, callStart, err)
 		return
 	}
+	h.releaseInstance(ctx, e, true)
 	h.metrics.ObserveAddonRedirect(name, ClassObserve, time.Since(start))
 }
 

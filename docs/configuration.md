@@ -816,6 +816,8 @@ sentence that stops being true one release after somebody writes it.
 | `LINKCTRL_ADDONS_DIR` | *(empty — no add-ons)* | A directory holding one subdirectory per add-on. Validated at startup: a path that is not there, or is a file rather than a directory, refuses to boot rather than being read as "no add-ons". **On compose, add the mount before you set this.** The shipped `docker-compose.yml` has no `/addons` volume, so a container path set here is not readable inside the container and the refusal above takes the instance down — add the `volumes:` snippet from [the trust boundary](#the-trust-boundary) below in the same change. `lctl` reads the same `.env`, so it stops starting too, exactly as `GEOIP_MMDB_PATH` does. |
 | `LINKCTRL_ADDON_INLINE_DEADLINE` | `25ms` | How long **an add-on's own code** may hold a redirect open before this instance stops waiting for it, kills the invocation and answers the visitor without it. It applies to no add-on that did not declare a redirect class, so on an instance where nothing did it bounds nothing and costs nothing. **It is deliberately larger than the 20ms cached-redirect target**, which is core's and is measured with nothing on the path — see [the redirect classes](#the-redirect-classes) below. `linkctrl_addon_redirect_kills_total{step="call"}` is what tells you whether it is set where you meant. |
 | `LINKCTRL_ADDON_INSTANTIATE_DEADLINE` | `500ms` | How long this instance will spend **starting** an add-on's module for a redirect — inline or observing — before it gives up and serves the redirect without it. Not the add-on's budget: instantiating is work this host does on this machine, and it costs what the hardware and the load make it cost. Measured here with all sixteen instance slots busy it is a mean of 9.6ms and a worst of 62.7ms, against about 1.6ms for one instantiation on an idle machine, which is why it is both separate and much wider. What it really bounds is a module that hangs in *package initialization* — code that runs while the module is being started, before anything has called it — so it is the longest one visitor waits for one broken module. `linkctrl_addon_redirect_kills_total{step="instantiate"}` moving means this instance could not start an add-on in time, which is a wider bound or a less busy machine, and not an add-on to go and fix. |
+| `LINKCTRL_ADDON_POOL_SIZE` | `8` | How many add-on instances this instance keeps ready, across every add-on, when nothing is using them. **Not how many run at once** — that is sixteen, it is fixed in the build, and no variable moves it. This is how many of the instances they run in are kept afterwards instead of being destroyed. A redirect that finds one waiting skips allocating the module's memory and running its startup code, which for a well-behaved add-on at 2,000 redirects a second was almost the whole of an 11.05ms invocation: pooling took that invocation to 451µs and the visitor's p99 from 44.89ms to 1.08ms, and the run is in [slo.md](slo.md). The cost is memory held while nothing is using it — up to this many instances of 8 MiB, on top of the sixteen that may be in flight — so eight is measured rather than generous: that rate wants about one instance at any moment. Reuse cannot leak one visitor's state to the next; the host restores the module's memory to what its startup left before handing the instance on. `0` means the default, not "no pool". |
+| `LINKCTRL_ADDON_POOL_TTL` | `1m` | How long an unused add-on instance is kept before it is closed. It keeps the memory above proportional to traffic rather than to the busiest minute since the process started: on an instance with a redirect an hour the pool holds nothing, and on one with a redirect a second the sweep never finds an idle instance at all. `0` means the default. |
 
 **Why there are two numbers and not one.** They price two different parties. What
 a module does with a redirect is the add-on's cost and you set your tolerance for
@@ -1149,11 +1151,22 @@ invocation that cannot get a slot does there, which is not to wait. Each in-flig
 invocation gets an instance of the module to itself,
 and each instance is bounded at **8 MiB** of memory — which is why an add-on
 cannot keep anything in memory between two requests of one flow, and has to keep
-it in the schema it owns. Sixteen instances of 8 MiB is a ceiling of **128 MiB**,
-and it is a ceiling rather than an estimate: a module asking for more is stopped
-by the runtime, its request answers 502, and the instance goes on serving. A
-typical module holds far less — the test fixtures measure 2.4 MB at load — but
-what an operator sizes a host by is the ceiling.
+it in the schema it owns.
+
+**Since 0.4.0 an instance is also kept after the redirect that made it.** The
+redirect path pools its instances (`LINKCTRL_ADDON_POOL_SIZE` below), so guest
+memory is no longer held only while something is running: sixteen in flight plus
+eight kept warm, each of 8 MiB, is a ceiling of **192 MiB** of guest memory —
+plus, since reuse needs something to reset an instance *to*, a host-side copy of
+each live instance's memory under the same per-instance cap, so **384 MiB**
+resident in the worst case. That is a ceiling
+rather than an estimate — a module asking for more is stopped by the runtime, its
+request answers 502, and the instance goes on serving. A typical module holds far
+less — the test fixtures measure 2.4 MB at load, and the redirect fixture 3.4 MB —
+but what an operator sizes a host by is the ceiling. Reuse does not let one
+visitor's state reach another: the host restores the module's memory to what its
+package initialization left before the instance is handed on, so an add-on still
+cannot keep a flow's state in memory across two requests.
 
 **An add-on's cookies live in one cookie of the host's.** Whatever a module names
 its cookies, LinkCtrl packs them into `linkctrl_addon_<name>` — a second,

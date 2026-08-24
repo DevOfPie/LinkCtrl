@@ -474,6 +474,7 @@ file. Append a row when you append an entry.
 | [M66 reopened, the second bound and what measuring it under contention said](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said) | D328–D331, taken while building the reopening: the instantiation bound's name, its 500ms default and the asymmetry that chose it; the kill counter's `step` label; why the host re-reads the bound instead of trusting the runtime to notice; and what contention did to D318's figures — which is that F326 was never only a CI problem |
 | [M66, the histogram keeps what the deadline gave up](#2026-08-23--m66-the-histogram-keeps-what-the-deadline-gave-up) | D332: why `linkctrl_addon_redirect_duration_seconds` still times instantiation in the milestone that took instantiation out of the add-on's deadline — whose fault it is and what it cost the visitor are different facts, and they belong in different places |
 | [M66.5 added: pooling, because a well-behaved add-on cost 44.89ms](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms) | D333: D319 reversed on the measurement it was taken without — the third k6 column, why a module that does nothing costs 11ms and misses 38.6% of traffic, and where the new milestone sits. D334: what the plan review sent back — the reserved slot spent and Plan.md rewritten to say so, and the 20ms bar the milestone had been missing |
+| [M66.5, the reset is the host's, because a pooled instance keeps what the last visitor left](#2026-08-24--m665-the-reset-is-the-hosts-because-a-pooled-instance-keeps-what-the-last-visitor-left) | D335: how reuse is made safe — a memory image taken after package initialization and written back before the instance is handed on, why the guest is not asked to cooperate, what is evicted rather than reused, and the two bounds on what is held at rest. D336: the ceiling gains a second term, and the sweep that ties it does not gain a fourth word. D337: three figures and one citation the reviewer's read corrected, and the M66 test this diff relaxed on purpose |
 
 ---
 
@@ -37962,3 +37963,188 @@ guest-deadline kills in the baseline run were on a module doing nothing, so part
 of the 44.89ms is scheduling under contention rather than startup, and pooling
 cannot remove it. The bar may therefore be unreachable by this milestone's own
 means. It was set knowing that.
+
+## 2026-08-24 — M66.5, the reset is the host's, because a pooled instance keeps what the last visitor left
+
+### D335 — an instance is reused, and the guest's memory is restored rather than trusted
+
+[D333](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)
+decided *pool*, and left the milestone the question it named as its own first
+design bullet and its own first risk: a destroyed instance cannot leak one
+visitor's residue to the next and a pooled one can. M61's privacy argument does
+not reach it — that argument is about what a module is **given**, and this is
+about what it **keeps**.
+
+**The answer is a memory image, and it is the host's.** A WebAssembly instance's
+whole mutable state is its linear memory. So [pool.go](../../internal/addon/pool.go)
+reads that memory out the moment `_initialize` returns, keeps the copy beside the
+instance, and writes it back over the instance before anything else may have it.
+A module that stored the last visitor's destination in a package-level variable
+reads an empty one, because the bytes that held it are the bytes package
+initialization left there.
+
+**Three alternatives were considered and each fails on something specific.**
+
+- **Ask the guest to reset itself** — a `linkctrl_reset` export the SDK
+  implements. It is not enforcement: a module that ignores it keeps its state and
+  the host cannot tell. The add-ons directory is a trust boundary an operator
+  owns, but *the operator installed it* is not a reason to make a boundary
+  advisory when a non-advisory one is available for ~59µs — the figure
+  `TestResettingAPooledInstanceIsCheaperThanBuildingOne` prints, and the one
+  [docs/slo.md](../slo.md) carries; this entry first said 56µs.
+- **Pool per something that makes sharing safe.** There is nothing to partition
+  by. An inline invocation carries a link's own facts and no visitor identity, so
+  there is no tenant to key on, and the milestone's own bullet requires a test in
+  which *the second cannot observe the first* through one instance — which no
+  partition satisfies.
+- **Restore the WebAssembly globals too.** This toolchain emits eight mutable
+  globals — a stack pointer, a goroutine register and six scratch slots — and
+  wazero exposes globals only through a module's export section, where a Go
+  `wasip1` module exports none. They are left, and that is safe for a reason
+  rather than by omission: an entry is only ever pooled **after a clean return**,
+  and the resting stack pointer after a clean return from any exported function is
+  the resting stack pointer after `_initialize`. What makes that hold is the
+  eviction rule below, not an assumption about the compiler.
+
+**What is evicted rather than reused**, each because the image would otherwise be
+a claim about an instance it does not describe:
+
+- **An invocation that did not return cleanly.** A kill closes the module
+  underneath the call — `WithCloseOnContextDone`, which M66 relied on and this
+  milestone makes load-bearing — and a trap leaves it in a state nothing
+  characterises. This is also what stops a module being killed on every
+  invocation from filling the pool with dead entries: a thrashing add-on degrades
+  to M66's instance-per-invocation, which is the floor.
+- **An instance whose memory grew.** WebAssembly memory cannot shrink, so an
+  image taken at 52 pages cannot restore an instance now holding 61 — the extra
+  pages would keep the guest's own bytes and its allocator would grow again on
+  every use, without bound.
+- **A module with no readable memory.** Nothing this toolchain produces reaches
+  it; the branch is there because *it always has memory* is an assumption about
+  somebody else's compiler.
+
+**The image costs what it copies, and the documents state it rather than leaving
+it to be inferred.** Every live instance carries a host-side copy of its own
+memory for as long as it exists, bounded by the same `maxGuestMemoryPages` the
+guest is — an instance whose memory grew past its image is evicted rather than
+re-imaged, so the copy cannot outgrow the cap. It is ordinary Go memory and is
+therefore **not inside** the guest-memory ceiling D336 restates, which is what
+makes it worth a sentence in `docs/deployment.md`, `docs/configuration.md`,
+`docs/SECURITY.md`, `.env.example` and `CHANGELOG.md`: the resident worst case is
+that ceiling twice, 384 MiB, against a typical module measuring 2.4 MB and the
+redirect fixture 3.4 MB. Sharing one image across the entries of an add-on was
+considered and declined — a Go module's package initialization writes a hash seed
+drawn from the host's random source, so two instances' post-initialization images
+are not the same bytes, and restoring one instance's image onto another would be
+a cleverness with no measurement behind it.
+
+**The image is a copy, and that sentence is load-bearing.** `api.Memory.Read`
+returns a window onto the live buffer rather than a copy of it, so an image taken
+that way would be the memory it is meant to restore and the restore would be a
+write of memory onto itself — resetting nothing while looking exactly like a reset
+that works.
+
+**Both redirect classes are pooled, and the two are pooled apart.** The observe
+class pays the same startup on the same slots — F326 was found in both call
+sites — so serving only the inline class would have been a choice with nothing to
+argue for it. They get an idle set each rather than sharing one, because package
+initialization runs once per entry and the redirect-safe subset applies to it: an
+entry whose init ran as an observer, where storage is allowed, must not later
+serve an inline invocation, where it is not.
+
+**Add-on pages are not pooled**, and that is scope rather than a claim they should
+not be. A page request has a 250 ms budget where a redirect has 20 ms, waits for
+its slot rather than skipping, and carries a request record where a redirect
+carries a link's own facts. `internal/addon/http.go`'s account of one instance per
+request is still what happens there, and the sentence this milestone had to make
+true by another means is narrowed to that path rather than deleted.
+
+**The two bounds are configuration and they are not the slot budget.**
+`LINKCTRL_ADDON_POOL_SIZE` (8) is how many instances are held at rest across every
+add-on; `LINKCTRL_ADDON_POOL_TTL` (1m) is how long one is kept before it is closed
+for lack of traffic. `maxConcurrentRoutes` is untouched and the pool takes nothing
+from it, waits on nothing of it, and did not become the fourth thing it bounds —
+which [F324](deferred-findings.md#open) is the row about and which m66.5.md named
+in advance. Eight is measured into: a pooled invocation is 451µs, so 2,000
+redirects a second want about **one** instance at any moment — 2,000/s x 451µs
+is 0.90, and an earlier draft of this sentence said one and a half — and the
+eviction path never ran in the k6 run at all.
+
+**What it bought**, from the run in [slo.md](../slo.md), against D333's baseline:
+generator p99 **44.89ms → 1.08ms**, mean invocation **11.05ms → 451µs**, redirects
+that skipped the add-on for want of a slot **38.6% → 0.004%**, guest-deadline kills
+**208 → 0**, core's own histogram **99.996% → 100%** under 20ms. The bar the owner
+set on 2026-08-23 was generator p99 under 20ms, over a fraction-of-baseline target
+and over an escape clause; it is met by a factor of eighteen. The risk the owner
+took knowingly — that part of the 44.89ms was contention rather than startup and
+could not be removed by pooling — did not materialise, and the 208 kills on a
+module doing nothing are the clearest reading of why: the box was saturated by
+add-on startup and no longer is.
+
+### D336 — the ceiling gains a term, and the sweep that ties it does not gain a word
+
+An instance is now held while nothing is using it, so **in flight** stops being
+the whole of the guest-memory ceiling. It was **sixteen in flight × 8 MiB =
+128 MiB**; it is **(sixteen in flight + eight kept warm) × 8 MiB = 192 MiB**.
+
+That number is machine-tied. `documentedNumberSites` and
+`TestTheGuestMemoryCeilingIsTheOneDocumented` (`internal/addon/http_test.go`) hold
+the sentence in every document that states it against the constants, so the change
+is a test that goes red rather than a sweep somebody has to remember — which is
+what m66.5.md required and what made this a bounded edit across
+`docs/SECURITY.md`, `docs/deployment.md`, `docs/configuration.md`,
+`docs/operations.md`, `CHANGELOG.md`, `Plan.md`, `docs/addon-abi.md`,
+`sdk/doc.go` and `docs/slo.md`.
+
+**`CHANGELOG.md` was the sharp one and it answered easily.** The paragraph stating
+the old ceiling is inside `[Unreleased]`, so what changed is unreleased history and
+no released entry was touched. D104's rule is unmoved and this milestone did not
+have to argue with it.
+
+**The pool default is tied by sentence and deliberately not by sweep.**
+`TestEveryDocumentedNumberIsTied` finds every occurrence of the two bounds in every
+document and fails on one no line accounts for; it works because those numbers are
+spelled in ways prose does not otherwise use — "sixteen" about anything else is
+rare enough to list, and "8 MiB" is a quantity. "eight" is an ordinary English
+word: adding it to that pattern would flag some thirty occurrences across the swept
+files plus README.md, docs/cli.md and docs/usage.md, every one of them about
+something else, and a sweep whose output is mostly exclusions is a sweep nobody
+reads. So the default is filled into the anchored sentences — a moved constant
+still reddens the build — and a *new* sentence stating it is not caught. The gap is
+stated here rather than discovered later, and it is the same trade
+[F322](deferred-findings.md#open) is a row about from the other side.
+
+### D337 — three corrections the reviewer's read forced, recorded rather than made silently
+
+The reviewer re-ran the gates, sabotaged the isolation test through an overlay
+against a scratch copy rather than trusting it, and read the diff against what is
+already shipped. Three of its findings are corrections to text this milestone
+itself wrote and were made in place; they are named here because two of them are
+numbers somebody will otherwise re-derive.
+
+- **`LINKCTRL_ADDON_POOL_SIZE`'s derivation said one and a half instances in two
+  places and one instance in two others.** 2,000 redirects a second at 451µs an
+  invocation is **0.90** instances at any moment, so *about one* is the true half
+  and the pair saying one and a half is corrected.
+- **The reset's cost was cited at 56µs in this log and 59µs in
+  [slo.md](../slo.md).** `TestResettingAPooledInstanceIsCheaperThanBuildingOne`
+  prints ~59-60µs over 3,407,872 bytes on this machine; slo.md was right and this
+  log was not.
+- **[D328](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said)
+  cites a test this milestone renamed.** `TestAnInlineInvocationCostsAnInstantiation`
+  is now `TestAnInlineInvocationCostsWhatTheGuestDoes`, because the old name
+  asserted the very thing pooling removes. This log is append-only, so D328's text
+  stands and this line is the pointer: a reader following that citation should
+  look for the new name. The name was changed rather than kept because a test
+  named for a cost that no longer exists is worse than a stale citation.
+
+**A shipped milestone's test was also relaxed by this diff, deliberately.**
+`TestAnObservingModuleIsHandedTheRecordedRedirect` asserted a scrape directly; the
+reset now sits between the guest's log line and the histogram observation, so the
+marker it waited on no longer implies the metric. It polls instead. That is a
+loosening of an M66 test inside an M66.5 diff, which is exactly the kind of thing
+that should be visible in the commit rather than only in a code comment — the
+assertion is unchanged and only the wait is, and the marker never implied the
+metric even before this milestone, which is what makes it a fix rather than a
+concession.
+

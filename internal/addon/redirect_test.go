@@ -702,10 +702,24 @@ func TestAnObservingModuleIsHandedTheRecordedRedirect(t *testing.T) {
 			t.Errorf("the fixture did not report %q\n%s", want, logs)
 		}
 	}
+	// **Polled for the same reason the log lines are**, and it is a distinct wait:
+	// the marker above is written *inside* the guest call and the histogram is
+	// observed after it, so the log arriving never implied the metric had. The gap
+	// was microseconds until M66.5 put the instance's reset between the two, and a
+	// test that reads the scrape the instant the marker lands measures that gap.
 	series := `linkctrl_addon_redirect_duration_seconds_count{addon="redirect",class="observe"} 1`
-	if scraped := scrape(t, metrics); !strings.Contains(scraped, series) {
-		t.Errorf("the scrape does not carry %s\n%s", series,
-			seriesLike(scraped, "linkctrl_addon_redirect_duration_seconds"))
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		scraped := scrape(t, metrics)
+		if strings.Contains(scraped, series) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("the scrape does not carry %s\n%s", series,
+				seriesLike(scraped, "linkctrl_addon_redirect_duration_seconds"))
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -851,17 +865,19 @@ func TestWhatARedirectAnswerMayCarry(t *testing.T) {
 
 // --- what an invocation costs ----------------------------------------------------
 
-// The measurement m66.md asks for and the number the deadline's default is chosen
-// against: *wazero invocation overhead at 2,000 rps is unmeasured until now (M60
-// measured instantiation, not steady-state call cost)*.
+// What one inline invocation costs end to end, measured rather than inherited.
 //
-// It reports rather than asserts a budget, for the reason M60's instantiation
-// measurement does: a threshold on a shared machine is a flake, and what this has
-// to keep true is that the number is **taken** rather than guessed at. The
-// assertion is against [DefaultInlineDeadline], which is the thing a wrong number
-// would break — if a module doing ordinary work cannot finish inside the shipped
-// default, the default is wrong and this fails.
-func TestAnInlineInvocationCostsAnInstantiation(t *testing.T) {
+// **It was TestAnInlineInvocationCostsAnInstantiation until M66.5**, and the
+// rename is the milestone: an invocation no longer builds an instance, so the old
+// name asserted the thing that was removed. What is left in the number is the
+// guest's own code plus the host resetting its memory before the instance goes
+// back to the pool, which [TestResettingAPooledInstanceIsCheaperThanBuildingOne]
+// separates out.
+//
+// The comparison is still against [DefaultInlineDeadline], because that is the
+// number this default is measured into, and it is still skipped under `-race` for
+// the reason racecost_test.go gives.
+func TestAnInlineInvocationCostsWhatTheGuestDoes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a timing measurement")
 	}

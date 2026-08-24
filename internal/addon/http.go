@@ -67,12 +67,25 @@ import (
 // which for an authentication add-on is the difference between a nonce and a
 // vulnerability — and it means an add-on keeping state between two requests of
 // one flow has to put it in its own schema, where it survives a restart and is
-// visible to every replica. The cost is that memory: a fixture holds about
-// 2.4 MB of it at load, the host allows one instance [maxGuestMemoryPages], and
-// [maxConcurrentRoutes] bounds how many instances are alive at once. The two
-// bounds multiply into the ceiling an operator sizes a host by; the 2.4 MB is a
-// measurement of one fixture, which is a different kind of sentence and was for a
-// while being read as this one.
+// visible to every replica.
+//
+// **That sentence is about this file's requests and no longer about the whole
+// host** (M66.5, D335). The redirect path pools its instances, because starting
+// one cost a visitor 11.05 ms against a 20 ms target, and it keeps the same
+// property by a different means: the host copies the guest's linear memory the
+// moment package initialization ends and writes the copy back before the instance
+// is handed out again, so what one redirect left is not what the next one reads.
+// pool.go is the mechanism and the argument. It is not applied here, and that is
+// scope rather than a claim it should not be: a page request has a 250 ms budget
+// where a redirect has 20 ms, so this path has never been the one paying.
+//
+// The cost of an instance is that memory: a fixture holds about 2.4 MB of it at
+// load, the host allows one instance [maxGuestMemoryPages], and
+// [maxConcurrentRoutes] bounds how many are alive at once *in flight* —
+// [DefaultPoolSize] is what may additionally be held at rest since the redirect
+// path started keeping them. The three bounds add into the ceiling an operator
+// sizes a host by; the 2.4 MB is a measurement of one fixture, which is a
+// different kind of sentence and was for a while being read as this one.
 
 // RoutePrefix is the path every add-on's routes live under. One segment, so the
 // reserved-word list needs exactly one entry for the whole feature.

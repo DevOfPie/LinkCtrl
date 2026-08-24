@@ -503,6 +503,8 @@ func (m Manifest) Validate() error {
 		// the same answer the reserved *setting* names get: an add-on named `inline`
 		// or `instantiate` with a setting called `deadline` would read one of the
 		// instance-wide redirect bounds, and no lookup could tell which was meant.
+		// `pool` joined them at M66.5 and covers two variables at once, which is why
+		// both of them keep their second half to one word — see config's own comment.
 		add("name %q is reserved: this product reads a variable of its own from the "+
 			"%s namespace under that name, and a setting of yours would be read from "+
 			"the same variable. The reserved names are %s", m.Name,

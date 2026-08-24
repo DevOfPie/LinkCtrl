@@ -1316,6 +1316,24 @@ func (s *hostState) forRedirect(decision *RedirectDecision, event *RedirectEvent
 	return &out
 }
 
+// forPool is the state a pooled instance rests in: on the redirect path, holding
+// its class, and carrying neither a decision nor an event (M66.5).
+//
+// It exists because package initialization runs during instantiation and an entry
+// is instantiated once for many redirects. Handing init the first redirect that
+// happened to need an instance would tell a module about a visitor it is not being
+// asked about, and would put that redirect's record in the image every later
+// invocation is reset to.
+//
+// The inline flag is kept anyway, so an instance made for the inline class is held
+// to abi.InlineSafe from its first instruction rather than from its first
+// invocation.
+func (s *hostState) forPool(class string) *hostState {
+	out := s.forRedirect(nil, nil)
+	out.inline = class == ClassInline
+	return out
+}
+
 // encodedRedirect marshals whichever redirect record this invocation carries,
 // once, and remembers it.
 func (s *hostState) encodedRedirect() ([]byte, error) {

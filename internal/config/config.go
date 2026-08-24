@@ -550,6 +550,33 @@ type AddonsConfig struct {
 	// leans wide on purpose: a bound that is too small stops add-ons running and
 	// blames them for it, which is the defect this variable exists because of.
 	InstantiateDeadline time.Duration `env:"ADDON_INSTANTIATE_DEADLINE" envDefault:"500ms"`
+
+	// PoolSize is how many add-on instances this instance keeps ready, across every
+	// add-on, when nothing is using them (M66.5).
+	//
+	// **It is not a concurrency bound**, and the difference is the whole reason it
+	// is its own variable. How many add-on invocations run at once is fixed at
+	// sixteen in the build and no variable moves it; this is how many of the
+	// instances they run in are kept afterwards instead of being destroyed. An
+	// invocation that finds the pool empty makes an instance, exactly as every
+	// invocation did before this existed.
+	//
+	// What it buys is the startup: a redirect through a pooled instance skips
+	// allocating the module's linear memory and running its package initialization,
+	// which for the fixture measured in docs/slo.md was almost the whole of an
+	// 11.05 ms invocation — 451 µs once it was pooled. What it costs is memory held at rest — up to this many instances
+	// of 8 MiB, on top of the sixteen in flight — which is why the default is small
+	// rather than generous. See addon.DefaultPoolSize for the arithmetic.
+	PoolSize int `env:"ADDON_POOL_SIZE" envDefault:"8"`
+
+	// PoolTTL is how long an unused add-on instance is kept before it is closed
+	// (M66.5).
+	//
+	// It is what makes the idle cost proportional to traffic rather than to the
+	// busiest minute since the process started. On an instance with a redirect an
+	// hour it means the pool holds nothing; on one with a redirect a second it means
+	// the sweep never finds an idle entry at all.
+	PoolTTL time.Duration `env:"ADDON_POOL_TTL" envDefault:"1m"`
 }
 
 // Enabled reports whether this instance has an add-on host at all.
@@ -608,11 +635,16 @@ var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
 // AddonReservedNames are add-on names no manifest may take, because this file
 // already spells a variable that a setting of that add-on would spell too.
 //
-// Two entries, and both are a redirect bound's: `LINKCTRL_ADDON_INLINE_DEADLINE`
+// Three entries. `LINKCTRL_ADDON_INLINE_DEADLINE`
 // ([AddonsConfig.InlineDeadline]) and `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`
 // ([AddonsConfig.InstantiateDeadline]) are instance-wide, and each is also exactly
 // what a setting called `deadline` on an add-on called `inline` or `instantiate`
-// would be read from.
+// would be read from. `pool` covers two at once —
+// `LINKCTRL_ADDON_POOL_SIZE` and `LINKCTRL_ADDON_POOL_TTL`
+// ([AddonsConfig.PoolSize], [AddonsConfig.PoolTTL]) — which is why both variables
+// keep their second half to one word: `LINKCTRL_ADDON_POOL_IDLE_TIMEOUT` would
+// also be an add-on called `pool_idle` with a setting called `timeout`, and one
+// reserved name could not close both readings.
 // The collision is the same one [AddonOverrideNames] closes and it is closed the
 // same way — the ambiguity is made not to exist rather than resolved, because a
 // concatenation offers nothing to resolve it with.
@@ -623,7 +655,7 @@ var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
 // collision. internal/addon's manifest validation is where it is refused, for the
 // reason the override names are refused there — this package is imported by that
 // one and not the other way round.
-var AddonReservedNames = []string{"inline", "instantiate"}
+var AddonReservedNames = []string{"inline", "instantiate", "pool"}
 
 // AddonOverrides reads the operator's answers about one add-on.
 //

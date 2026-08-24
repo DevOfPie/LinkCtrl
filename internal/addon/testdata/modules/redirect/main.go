@@ -24,6 +24,7 @@
 //	strip     — rewrites the query, dropping every fbclid and utm_ parameter
 //	drop      — rewrites the query to nothing at all
 //	badquery  — writes a query with a `#` in it, which the host must refuse
+//	remember  — reports what the last invocation of this instance left behind
 //	twice     — answers twice, and the second must be refused
 //	verdict   — writes a verdict outside the vocabulary
 //	anything  — allows, unchanged
@@ -68,6 +69,11 @@ type event struct {
 	ReferrerHost string `json:"referrer_host"`
 	IsBot        bool   `json:"is_bot"`
 }
+
+// remembered is guest state that outlives one invocation, and it exists for the
+// reuse test: a pooled instance that did not reset its guest hands the next
+// redirect whatever this holds.
+var remembered string
 
 func report(check, outcome string) { _ = sdk.Log(sdk.LevelInfo, "redirect: "+check+"="+outcome) }
 
@@ -168,6 +174,19 @@ func inline() int32 {
 		report("answer_badquery", status(write(answer{Rewrite: true, Query: "a=1#b"})))
 	case "verdict":
 		report("answer_bad_verdict", status(write(answer{Verdict: "maybe"})))
+	case "remember":
+		// The pooling fixture (M66.5). It reports what the *previous* invocation of
+		// this same instance left in a package-level variable, then leaves its own
+		// destination there for the next one. On a fresh instance, and on a pooled
+		// one whose guest memory was reset, the report is empty; on a pooled one
+		// that was handed back dirty, it is the last visitor's destination.
+		if remembered == "" {
+			report("remembered", "<none>")
+		} else {
+			report("remembered", remembered)
+		}
+		remembered = d.Destination
+		report("answer_allow", "silent")
 	case "twice":
 		report("answer_first", status(write(answer{})))
 		report("answer_second", status(write(answer{Verdict: "veto"})))

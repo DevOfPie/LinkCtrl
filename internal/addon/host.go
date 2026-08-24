@@ -512,6 +512,21 @@ type Options struct {
 	// tests that are *about* the bound set a hostile one and make a slow machine
 	// reachable on any machine at all.
 	InstantiateDeadline time.Duration
+
+	// PoolSize is how many idle add-on instances this host keeps across every
+	// add-on (M66.5). Zero means [DefaultPoolSize], and an instance sets it from
+	// LINKCTRL_ADDON_POOL_SIZE.
+	//
+	// It is not a concurrency bound. What bounds invocations in flight is
+	// [maxConcurrentRoutes] and the pool takes nothing from it; this is what may be
+	// held at rest, which is the term the guest-memory ceiling gained when an
+	// instance stopped being destroyed after every redirect.
+	PoolSize int
+
+	// PoolTTL is how long an idle instance is kept before it is closed for lack of
+	// traffic (M66.5). Zero means [DefaultPoolTTL], and an instance sets it from
+	// LINKCTRL_ADDON_POOL_TTL.
+	PoolTTL time.Duration
 }
 
 // FailureClassError is an operator override this host cannot interpret.
@@ -734,6 +749,26 @@ type Host struct {
 	// how long this host will spend starting a module for a redirect-class
 	// invocation before serving the redirect without it.
 	instantiateDeadline time.Duration
+	// The instance pool (M66.5); pool.go is where all of it is used.
+	//
+	// pools is one idle set per add-on on the redirect path, built at Open and
+	// never written after, so reading it needs no lock — each addonPool guards its
+	// own contents.
+	pools map[string]*addonPool
+	// idleInstances is how many entries are held at rest across every pool, which
+	// is the term this milestone added to the guest-memory ceiling. Instance-wide
+	// rather than per add-on because what an operator sizes a host by is the memory
+	// this process holds, not how it is divided between modules.
+	idleInstances atomic.Int64
+	// poolSize is Options.PoolSize with its default applied, and poolTTL is
+	// Options.PoolTTL with its default applied. Neither is [maxConcurrentRoutes]
+	// and neither is derived from it — see pool.go.
+	poolSize int
+	poolTTL  time.Duration
+	// poolStop cancels the idle sweep's context; poolWG waits for it.
+	poolStop context.CancelFunc
+	poolWG   sync.WaitGroup
+
 	// observe is the out-of-band queue, and it is nil unless something declared
 	// the grant — which is what makes the observe class cost an ordinary instance
 	// nothing at all: no channel, no goroutine.
@@ -825,6 +860,8 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		loadTimeout:         timeout,
 		inlineDeadline:      deadline,
 		instantiateDeadline: instantiate,
+		poolSize:            poolSizeFrom(opts.PoolSize),
+		poolTTL:             poolTTLFrom(opts.PoolTTL),
 	}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
@@ -969,6 +1006,25 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			// is a module that hangs at startup, and that is the second number.
 			slog.String("instantiate_deadline", h.instantiateDeadline.String()))
 	}
+	// One idle set per add-on on either redirect class, built here and never
+	// written after, so the redirect path reads it without a lock (M66.5).
+	for _, l := range h.loaded {
+		if l.compiled == nil {
+			continue
+		}
+		for class, declared := range map[string]bool{
+			ClassInline: l.RunsInline(), ClassObserve: l.ObservesRedirects(),
+		} {
+			if !declared {
+				continue
+			}
+			if h.pools == nil {
+				h.pools = make(map[string]*addonPool, 2*len(h.loaded))
+			}
+			h.pools[poolKey(l.Manifest.Name, class)] = &addonPool{}
+		}
+	}
+	h.startPoolSweep(ctx)
 	h.startObserving(ctx)
 	if observers := h.ObservingAddons(); len(observers) > 0 {
 		log.Info("add-ons are observing redirects out of band; nothing they do can delay "+
@@ -1492,6 +1548,10 @@ func (h *Host) Close(ctx context.Context) error {
 	// invocation in flight is a guest that may still be holding a statement open
 	// on one of them.
 	h.stopObserving()
+	// After the observers and before the runtime: an entry is a module, and closing
+	// one underneath an invocation still running would be the failure stopObserving
+	// exists to avoid.
+	h.stopPoolSweep(ctx)
 	for _, l := range h.loaded {
 		l.storage.Close()
 	}
@@ -1502,6 +1562,12 @@ func (h *Host) Close(ctx context.Context) error {
 	h.runtime = nil
 	h.loaded = nil
 	h.inline = nil
+	// h.pools is deliberately **not** nil'd. Every entry it held is closed by
+	// stopPoolSweep above, so what is left is a map of empty sets costing nothing —
+	// and the map is read on the redirect path, where nil'ing it unlocked would put
+	// a second field into the shape [F325](../../docs/build-notes/deferred-findings.md#open)
+	// is the row about: a hot-path read racing a teardown write. One is a filed
+	// finding; two would be a pattern this milestone chose to extend.
 	h.mu.Lock()
 	h.states = nil
 	h.mu.Unlock()

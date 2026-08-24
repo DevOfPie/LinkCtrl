@@ -759,7 +759,13 @@ can verify, and the second is a CSRF carve-out on a route anything holding
   way. The fixtures this ABI is tested
   against hold 2.4 MB at load and still allocate 4 MiB on top, so the room is for
   a request's work rather than for a cache: what an add-on wants to keep goes in
-  its own schema, which is also the only thing that survives the instance.
+  its own schema, which is also the only thing that survives the instance. **On
+  the redirect path an instance is reused rather than destroyed, and it changes
+  nothing you may keep**: before one is handed to the next redirect the host writes
+  back the copy of your memory it took when your module started, so a package-level
+  variable is empty again. What it does change is that your package initialization
+  runs once per instance rather than once per invocation, so anything it does
+  outside memory happens once for many redirects.
 - **Unmetered traffic to your routes.** Every request that reaches a route your
   add-on serves is charged against this instance's **per-address sign-in budget**,
   the same one the login form spends — `LINKCTRL_LOGIN_RATE_PER_MIN`, which an

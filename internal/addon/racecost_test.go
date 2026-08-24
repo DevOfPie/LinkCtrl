@@ -3,7 +3,7 @@
 package addon
 
 // raceDetector is whether this binary was built with `-race`, and it exists for
-// exactly one test: [TestAnInlineInvocationCostsAnInstantiation], which compares a
+// exactly one test: [TestAnInlineInvocationCostsWhatTheGuestDoes], which compares a
 // measured invocation against the deadline this product ships.
 //
 // **The detector moves that number by an order of magnitude**, which is not a

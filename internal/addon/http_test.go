@@ -1275,13 +1275,20 @@ var documentedNumberSites = []struct {
 	{path: "docs/SECURITY.md",
 		sentences: []string{
 			"the number of add-on invocations in flight is bounded at {n} across the instance",
+			// M66.5: the ceiling gained a second term when the redirect path started
+			// keeping instances, so the sentence names what is held at rest as well as
+			// what is in flight.
 			"each of those {n} instances is bounded at {mem} of guest memory, " +
+				"and {idle} more may be kept warm between invocations, " +
 				"a ceiling of {ceiling}",
 			// M66: the same budget, now stated as shared by three consumers rather
 			// than by add-on page requests alone.
 			"The {n} are shared by every reason an add-on runs",
 			"a module wanting more than its {mem} is stopped by the runtime",
 			"the instance is held to {mem} whatever the module's toolchain wrote",
+			// M66.5, in the redirect row: what the pool adds to the bound the pages row
+			// states, said where the reuse boundary is argued.
+			"the ceiling above is what the two add to the {n} in flight",
 		},
 		untied: []string{
 			// A domain-verification challenge, and a count of Unicode format
@@ -1296,8 +1303,12 @@ var documentedNumberSites = []struct {
 	{path: "docs/deployment.md",
 		sentences: []string{
 			"{n} add-on invocations run at once and each is capped at {mem} of guest " +
-				"memory, so {ceiling} is the ceiling",
+				"memory, with {idle} more instances kept warm between invocations, " +
+				"so {ceiling} is the ceiling",
 			"{n} across every reason an add-on runs",
+			// M66.5: the host-side image, which is not inside the ceiling because the
+			// ceiling states guest memory, so the sizing row quotes the ceiling twice.
+			"the resident worst case is {ceiling} twice over",
 		}},
 	{path: "docs/configuration.md",
 		sentences: []string{
@@ -1307,7 +1318,12 @@ var documentedNumberSites = []struct {
 			// argued from.
 			"measured here with all {n} instance slots busy",
 			"each instance is bounded at {mem} of memory",
-			"{n} instances of {mem} is a ceiling of {ceiling}",
+			"{n} in flight plus {idle} kept warm, each of {mem}, is a ceiling of {ceiling}",
+			// M66.5's two pool variables, in the table an operator reads them from. The
+			// first row says what the pool is *not*, which is the concurrency bound, and
+			// the second prices what it holds against the bound in flight.
+			"not how many run at once — that is {n}, it is fixed in the build",
+			"up to this many instances of {mem}, on top of the {n} that may be in flight",
 		}},
 	{path: "docs/operations.md",
 		sentences: []string{
@@ -1321,8 +1337,13 @@ var documentedNumberSites = []struct {
 		sentences: []string{
 			"{n} add-on invocations run at once across the instance",
 			"with all {n} instance slots held throughout",
-			"each instance is capped at {mem} of memory, so add-ons add at most {ceiling}",
+			"each instance is capped at {mem} of memory, and {idle} instances are kept " +
+				"warm between invocations, so add-ons add at most {ceiling}",
 			"skipped because all {n} instance slots were busy",
+			// M66.5, in the paragraph that adds the two pool variables: the sentence
+			// says what the pool is *not*, which is this bound.
+			"neither variable changes how many add-on invocations run at once, " +
+				"which is still {n} and still fixed in the build",
 		},
 		untied: []string{
 			// How many dashboard pages scrolled sideways at 360px, in 0.4.0.
@@ -1332,7 +1353,8 @@ var documentedNumberSites = []struct {
 		sentences: []string{
 			"{n} add-on invocations run at once across the instance, each bounded at " +
 				"{mem} of guest memory",
-			"the two bounds multiply into the {ceiling} ceiling",
+			"{idle} kept warm is what LINKCTRL_ADDON_POOL_SIZE bounds",
+			"the three bounds add into the {ceiling} ceiling",
 			"an out-of-band observation draw on the same {n}",
 		},
 		untied: []string{
@@ -1366,6 +1388,12 @@ var documentedNumberSites = []struct {
 			// was never approached with every slot held, which is what makes it a
 			// measurement of instantiation under load rather than of an idle machine.
 			"with all {n} instance slots continuously held by modules being killed",
+			// M66.5's run, where the slot budget is the arithmetic rather than the
+			// subject: the same sixteen carry twenty-four times the invocations once
+			// startup is out of the occupancy.
+			"{n} instance slots at 11.05 ms of occupancy carry ~1,448 invocations a second",
+			"the same {n} slots carry ~35,000 a second",
+			"{n} in flight plus {idle} kept warm, each held to {mem}",
 		},
 		untied: []string{
 			// Cache-hit runs in the performance record.
@@ -1392,13 +1420,21 @@ func documentedNumbers(t *testing.T) (*strings.Replacer, *regexp.Regexp) {
 			"number as a word; add the spelling here, then to each of them",
 			maxConcurrentRoutes)
 	}
+	// The pool's default, spelled the same way, and it is a *fourth* number since
+	// M66.5: an instance is now kept after the invocation that made it, so the
+	// ceiling is what may be in flight plus what may be held at rest.
+	idle, ok := inWords[DefaultPoolSize]
+	if !ok {
+		t.Fatalf("DefaultPoolSize is %d, and the documents spell it as a word; add the "+
+			"spelling here, then to each of them", DefaultPoolSize)
+	}
 	// 16 pages of 64 KiB to the MiB, which is the only arithmetic in this file
 	// that is not the documentation's own.
 	mem := strconv.Itoa(maxGuestMemoryPages/16) + " MiB"
-	ceiling := strconv.Itoa(maxConcurrentRoutes*maxGuestMemoryPages/16) + " MiB"
+	ceiling := strconv.Itoa((maxConcurrentRoutes+DefaultPoolSize)*maxGuestMemoryPages/16) + " MiB"
 	pages := strconv.Itoa(maxGuestMemoryPages)
 	fill := strings.NewReplacer("{n}", n, "{mem}", mem, "{ceiling}", ceiling,
-		"{pages}", pages)
+		"{pages}", pages, "{idle}", idle)
 	// Word boundaries, so that the ceiling is not read as the per-instance bound
 	// inside its own digits: "128 MiB" holds "8 MiB" as characters and not as a
 	// number, and \b is the difference.
@@ -1408,6 +1444,16 @@ func documentedNumbers(t *testing.T) (*strings.Replacer, *regexp.Regexp) {
 		regexp.QuoteMeta(strings.ToLower(ceiling)),
 		regexp.QuoteMeta(strings.ToLower(pages + " pages")),
 	}, "|") + `)\b`)
+	// **The pool default is tied by [documentedNumberSites] and is deliberately not
+	// in this pattern.** The sweep works because the two bounds are spelled in ways
+	// prose does not otherwise use — "sixteen" about anything else is rare enough to
+	// list, and "8 MiB" is a quantity. "eight" is an ordinary English word: adding it
+	// would flag some thirty occurrences across these files and README, cli.md and
+	// usage.md, every one of them about something else, and a sweep whose output is
+	// mostly exclusions is a sweep nobody reads. So a *new* sentence stating the pool
+	// default is not caught here, while every sentence this file already anchors
+	// still fails the moment the constant moves — which is the half the ceiling
+	// depends on.
 	return fill, find
 }
 
