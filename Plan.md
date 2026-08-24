@@ -626,9 +626,18 @@ Planned under the size rule as Phase 4's planning
 recorded it: **plan to fifteen, cap raised — once, deliberately — to
 eighteen** (owner-set 2026-08-18,
 [phase-4-candidates.md](docs/build-notes/phase-4-candidates.md#the-phases-shape)).
-One planned slot is deliberately unspent: an ABI is the kind of artifact
+One planned slot was deliberately unspent: an ABI is the kind of artifact
 insertions come from, and [M69](docs/build-notes/phase-details/m69.md) is
-designed to surface what the foundation got wrong.
+designed to surface what the foundation got wrong. **It was spent on
+2026-08-23**, before M69 ran, on
+[M66.5](docs/build-notes/phase-details/m66.5.md) — measuring what M66's inline
+class costs a visitor when nothing is pooled produced a milestone the build
+turned out to need, and the owner chose to spend the reserve on it knowing what
+the reserve was being held for. The phase is therefore at its planning target
+with no slack: an insertion M69 produces is a conversation about the cap of
+eighteen, not a slot. Recorded in
+[D333](docs/build-notes/decisions.md#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)
+rather than left as a sentence describing a reserve that no longer exists.
 
 The phase's shape, its owner-set answers and their dates are
 [phase-4-candidates.md](docs/build-notes/phase-4-candidates.md)'s record and
@@ -654,7 +663,8 @@ consumer that proves it.
 | [M64.9](docs/build-notes/phase-details/m64.9.md) | **Mid-phase adversarial review** | M59–M64 | — |
 | [M65](docs/build-notes/phase-details/m65.md) | The authentication hook: a session minted on an add-on's word | M61 · M62 · M64 | Reach: the session hook, last limb of *everything OIDC needs* |
 | [M66](docs/build-notes/phase-details/m66.md) | Add-ons on the redirect path: two classes, a deadline, and a promise rescoped | M60 · M62 | The redirect answer and its three requirements · owed-work #1 (core-only SLO claim) · the deadline question |
-| [M67](docs/build-notes/phase-details/m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 | The install/remove halves of the manager answer · split from the surface at the plan's review |
+| [M66.5](docs/build-notes/phase-details/m66.5.md) | Instances are reused, so a visitor stops paying for a cold start | M66 · M60 *(ordering)* | Owner-added scope 2026-08-23 — reverses D319, which declined pooling before an add-on had been measured under load |
+| [M67](docs/build-notes/phase-details/m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | The install/remove halves of the manager answer · split from the surface at the plan's review |
 | [M68](docs/build-notes/phase-details/m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | The manager answer's visible half: listing, per-module performance, orphaned data, the purge choice |
 | [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
 | [M69.9](docs/build-notes/phase-details/m69.9.md) | **Pre-release adversarial review** | everything below it | — |

@@ -473,6 +473,7 @@ file. Append a row when you append an entry.
 | [M66 reopened, the deadline stops charging the host's setup to the add-on](#2026-08-23--m66-reopened-the-deadline-stops-charging-the-hosts-setup-to-the-add-on) | D327, owner-answered: instantiation leaves the inline deadline and gets its own wider bound; pooling and a bigger default both declined; what the reopening owes D318, D319 and D325, all decided on best-case measurements; and why the gap is the test environment rather than the code |
 | [M66 reopened, the second bound and what measuring it under contention said](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said) | D328–D331, taken while building the reopening: the instantiation bound's name, its 500ms default and the asymmetry that chose it; the kill counter's `step` label; why the host re-reads the bound instead of trusting the runtime to notice; and what contention did to D318's figures — which is that F326 was never only a CI problem |
 | [M66, the histogram keeps what the deadline gave up](#2026-08-23--m66-the-histogram-keeps-what-the-deadline-gave-up) | D332: why `linkctrl_addon_redirect_duration_seconds` still times instantiation in the milestone that took instantiation out of the add-on's deadline — whose fault it is and what it cost the visitor are different facts, and they belong in different places |
+| [M66.5 added: pooling, because a well-behaved add-on cost 44.89ms](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms) | D333: D319 reversed on the measurement it was taken without — the third k6 column, why a module that does nothing costs 11ms and misses 38.6% of traffic, and where the new milestone sits. D334: what the plan review sent back — the reserved slot spent and Plan.md rewritten to say so, and the 20ms bar the milestone had been missing |
 
 ---
 
@@ -37813,3 +37814,151 @@ new is that the same series now also carries the setup a *different* bound
 governs, so the p99 of it moves with machine load rather than only with the
 module. An add-on whose histogram rises while its kill counter does not is an
 instance under contention, not an add-on that got slower.
+
+## 2026-08-23 — M66.5 added: pooling, because a well-behaved add-on cost 44.89ms
+
+### D333 — D319 is reversed, on the measurement it was taken without
+
+[D319](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)
+declined pooling and built a fresh wasm instance per invocation. It was decided
+on M60's idle-VM instantiation figure, ~1.6ms, and nobody had yet run an add-on
+under load. [D327](#2026-08-23--m66-reopened-the-deadline-stops-charging-the-hosts-setup-to-the-add-on)'s
+reopening then measured contention — 9.6ms mean and 62.7ms worst with all
+sixteen slots busy, reproduced independently at 10.0ms and 53.4ms — and
+forbade itself from acting on it, because scheduling is the owner's.
+
+**The measurement that settled it**, taken 2026-08-23 at the owner's instruction
+before the question was put a second time. `docs/slo.md`'s two M66 columns are
+*no add-on* and *a module that never returns*; neither is the case anybody would
+run. The third is the `redirect` fixture holding `redirect.inline`, parsing the
+decision and allowing it — the cheapest honest add-on there is — at 2,000 rps
+for two minutes:
+
+| | Core, no add-on | Well-behaved inline add-on |
+| --- | --- | --- |
+| Generator p99 | 138.46µs | **44.89ms** |
+| Generator median / mean | — | 9.18ms / 11.46ms |
+| Mean, **counting only requests that invoked** | — | **18.6ms** |
+| Mean add-on invocation, from its own histogram | — | **11.05ms** |
+| Requests failed | 0 | **0** of 240,002 |
+| Core's own histogram under 20ms | 100% | **99.996%** |
+| Invocations recorded | — | 147,248 |
+| Redirects that skipped the add-on | — | **92,546 — 38.6%** |
+| Guest-deadline kills | — | 208 |
+| Instantiate-deadline kills | — | 0 |
+
+The core column is not a fresh run: it is the reopening's, quoted from
+[docs/slo.md](../slo.md), which calls that figure stable across runs. Only the
+add-on column was measured on 2026-08-23.
+
+**Why an add-on that does nothing costs 11ms**, since that is the part worth
+recording: the guest's code is not what costs. Every invocation allocates the
+module's guest memory — 3,407,872 bytes for this fixture, from its own boot
+line — runs the module's package initialization, which for a Go module is a Go
+runtime starting, calls the export, and destroys all of it. The fixture's own
+work is a JSON parse. The number would be the same if the export body were
+`return`.
+
+**Three means, and they are not interchangeable** — the first draft of this entry
+used them as if they were, which the plan review caught. **11.05ms** is the
+add-on's own histogram, sum over count, and is what one invocation costs.
+**18.6ms** is what a request that actually reached the add-on waited, backed out
+of the run: 240,002 × 11.46ms of total time, less 92,546 skipped requests at
+core's ~140µs, over the 147,456 that invoked. **11.46ms** is the whole-population
+generator mean and is *lower* than 18.6ms only because 38.6% of the population
+skipped the add-on entirely. Quoting the population mean as the per-invocation
+cost understates what an add-on costs the visitors it actually runs for by
+roughly 60%.
+
+**Why 38.6% of traffic missed it** is the same fact through the slot budget.
+Sixteen concurrent add-on slots at 11.05ms of occupancy carry about **1,448**
+invocations a second against 2,000 offered, and an inline invocation that finds
+no slot is **skipped rather than queued** — deliberately, because queueing would
+let an add-on delay a redirect, which the class exists not to do.
+
+That arithmetic predicts a **27.6%** skip rate and the run measured **38.6%**,
+which is a gap worth stating rather than rounding away: the observed throughput
+is 147,456 invocations in 120s, or 1,229 a second, implying **13.0ms** of slot
+occupancy against the 11.05ms the histogram recorded. The histogram's window
+starts once a slot is held, so the ~2ms difference is slots standing idle between
+a release and the next acquisition — the acquisition is a non-blocking try, so a
+request arriving a moment early is skipped rather than waiting for the slot about
+to free. Whichever number is used, the conclusion is the same and the direction is
+against the add-on: capacity is short of offered load by a quarter to two fifths.
+
+**Why 208 kills on a module that does nothing**: the guest deadline is wall
+clock. On a saturated box the goroutine running the guest is descheduled, so
+25ms of wall time passes while the guest has had a fraction of it in CPU.
+
+**D324's subtraction is vindicated by the same run** and is worth naming, because
+it is the one thing that worked as designed: core's histogram stayed at 99.996%
+under 20ms while the visitor waited 44.89ms at p99. The attribution is correct —
+an operator reading the two curves sees exactly whose latency it is. What the
+run says is that being right about the blame does not help the visitor.
+
+**Owner: pool instances, as a milestone before M67.** Two alternatives were put
+and declined — the same work after M67, and shipping M66 as-is with a documented
+traffic ceiling of a few hundred rps. Raising the sixteen-slot budget was not
+offered: more slots multiply the guest memory rather than remove the startup, so
+it answers the symptom with the cost.
+
+**Placed at [M66.5](phase-details/m66.5.md)**, mid-band per
+[planning.md §4](planning.md#4-numbering) so a later insertion can still fall
+either side, and below M69.9 so it stays inside the pre-release review's range.
+The phase planned fourteen and is now fifteen — the planning target, not past
+it, and a milestone the build turned out to need rather than optimistic planning,
+which is the case [planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
+2026-08-11 clarification explicitly allows.
+
+**What the new milestone is warned about rather than trusted with.** Reuse is a
+security boundary M66 did not have: a destroyed instance cannot leak one
+visitor's residue to the next and a pooled one can, and the ABI's privacy
+argument is about what a module is *handed*, not what it *keeps*. That is
+`m66.5.md`'s first design bullet and its first risk. The second is the seam with
+[M67](phase-details/m67.md): removing an add-on must drain its pool, and M67
+builds removal afterwards, so the obligation is written in the earlier file and
+consumed by the later one.
+
+### D334 — the two the plan review sent back to the owner
+
+The addition was reviewed under
+[planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+before anything was built against it. Seven findings; five were corrections and
+were made — the arithmetic above, the core column's provenance, the tied-document
+count, [F326](deferred-findings.md#closed)'s resolution column, and a hard
+dependency edge M67 had gained in a bullet and in neither dependency list. Two
+changed a scope row or a definition of done, so they went to the owner.
+
+**The reserved slot is spent, and Plan.md now says so.** D211 held one of Phase
+4's fifteen planned slots unspent, in these terms: *an ABI is the kind of
+artifact insertions come from, and M69 is designed to surface what the
+foundation got wrong.* M66.5 spends it before M69 has run. The first draft of
+this entry said *the planning target, not past it* — true about the number and
+silent about what the number was for, which is the shape of contradicting a
+recorded decision without saying it reverses it. **Owner: spend it, and say so
+in writing.** `Plan.md`'s sentence is rewritten rather than left describing a
+reserve that no longer exists, and the consequence is stated where it will be
+met: an insertion M69 produces is a conversation about the cap of eighteen, not
+a slot. Two alternatives were declined — raising the plan to sixteen, which
+moves a number set deliberately across three phases and would have to say
+whether it moves for one phase or all; and folding pooling into M67, which is
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
+named trap and was argued against.
+
+**The milestone now has a number to hit.** Its justification is a measurement and
+its definition of done recorded the baseline without ever saying what counts as
+passing — *a p99 this milestone does not move is a milestone that did not happen*
+is satisfied by 44.89ms becoming 42ms, and a risk in the same file explicitly
+declined the obvious target. **Owner: the inherited bar, generator p99 under
+20ms**, over a fraction-of-baseline target and over a bar with an escape clause.
+The escape was declined on a specific ground worth keeping: M66's deadline
+carried one, two readers took it opposite ways, and settling it cost a prompt. So
+if pooling removes startup and the p99 still lands above 20ms, that is an
+unfinished milestone reported with its number, and what to do next is the owner's
+at that point rather than a clause written now.
+
+**The risk the owner took with that**, stated because it is real: the 208
+guest-deadline kills in the baseline run were on a module doing nothing, so part
+of the 44.89ms is scheduling under contention rather than startup, and pooling
+cannot remove it. The bar may therefore be unreachable by this milestone's own
+means. It was set knowing that.
