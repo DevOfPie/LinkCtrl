@@ -213,7 +213,7 @@ func TestDrainingAnAddonsPoolClosesItsInstances(t *testing.T) {
 	if idle := h.idleInstanceCount(); idle != 1 {
 		t.Fatalf("the redirect left %d instances in the pool, want 1", idle)
 	}
-	h.drainPool(t.Context(), "redirect")
+	h.drainPool(t.Context(), "redirect", h.current().pools)
 	if idle := h.idleInstanceCount(); idle != 0 {
 		t.Errorf("draining left %d instances in the pool", idle)
 	}
@@ -229,15 +229,17 @@ func TestDrainingAnAddonsPoolClosesItsInstances(t *testing.T) {
 func TestClosingAHostEmptiesThePool(t *testing.T) {
 	h, _, _ := redirectHost(t, PermissionRedirectInline, "config.read")
 	h.Inline(t.Context(), decisionFor("quiet", "https://example.test/"))
+	pools := h.current().pools
 	if err := h.Close(context.Background()); err != nil {
 		t.Fatalf("closing the host: %v", err)
 	}
 	if idle := h.idleInstanceCount(); idle != 0 {
 		t.Errorf("a closed host still holds %d add-on instances", idle)
 	}
-	// Emptied rather than discarded: the map itself outlives Close on purpose, and
-	// host.go says why. What matters is that no entry does.
-	for key, p := range h.pools {
+	// Emptied rather than discarded. The set a closed host publishes is the empty
+	// one (M67), so this reads the map the pool entries were actually in — the one
+	// Close drained — rather than what a reader would find now.
+	for key, p := range pools {
 		if left := p.drain(); len(left) != 0 {
 			t.Errorf("the %q pool still holds %d instances after Close", key, len(left))
 		}
@@ -272,7 +274,7 @@ func TestResettingAPooledInstanceIsCheaperThanBuildingOne(t *testing.T) {
 		t.Skip("a timing measurement")
 	}
 	h, _, _ := redirectHost(t, PermissionRedirectInline, "config.read")
-	l := &h.inline[0]
+	l := &h.current().inline[0]
 	ctx := t.Context()
 
 	// One outside each measurement, for the reason the invocation measurement takes

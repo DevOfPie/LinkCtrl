@@ -55,6 +55,20 @@ const (
 	// is named beside `audit.read`: the reader comparing the two is the reader
 	// this permission is for.
 	PermDomainsWriteInstance = "domains.write.instance"
+
+	// PermAddonsManage installs and removes add-ons on this instance at runtime
+	// (M67).
+	//
+	// Instance-level rather than a role permission, and the argument is 03400's
+	// applied to the sharpest case yet: an add-on is code this process executes,
+	// it is installed once for the whole box, and no organization owns one. A role
+	// grant would mean that on `SIGNUP_MODE=open` uploading a WASM module into the
+	// server is one registration away — F15's shape, with arbitrary code at the end
+	// of it instead of a dispute queue.
+	//
+	// Named to sort beside nothing: there is no `addons.*` role permission for a
+	// reader to compare it against, and that absence is the point.
+	PermAddonsManage = "addons.manage"
 )
 
 // InstancePrincipalScopes is everything the principal holds, enumerated.
@@ -72,6 +86,7 @@ var InstancePrincipalScopes = []string{
 	PermDestinationsDecide,
 	PermAuditReadInstance,
 	PermDomainsWriteInstance,
+	PermAddonsManage,
 }
 
 // InstanceGrantable is what the principal may confer on somebody else.
@@ -90,6 +105,13 @@ var InstancePrincipalScopes = []string{
 // administers the instance default domain; conferring *that* is not what D98
 // decided the principal may delegate, which was instance-level review of
 // disputes and nothing beside it.
+//
+// PermAddonsManage is absent for a harder reason than either (M67). What it
+// confers is the ability to put executable code in this process, so a principal
+// able to hand it on could hand on the box itself — and unlike the two above,
+// the delegatee would not need the principal again for anything. The scope of
+// people who may install an add-on is exactly the scope of people who administer
+// the instance, and this list is where somebody would have to decide otherwise.
 var InstanceGrantable = map[string]struct{}{
 	PermDestinationsReview: {},
 	PermDestinationsDecide: {},

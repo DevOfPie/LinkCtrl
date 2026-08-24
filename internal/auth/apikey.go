@@ -219,6 +219,23 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // not: reading the list says what a workspace has told the scheduler to do and
 // when each rule last fired, which is exactly what an integrator's tooling needs
 // and escalates nothing.
+//
+// addons.manage is the **second limb, and the widest instance of it this map
+// holds** (M67, applying D18). Every other entry describes a credential widening
+// its reach inside this product's own vocabulary: a permission it can confer, a
+// destination it can unblock, an instruction it can leave behind. This one leaves
+// the vocabulary. An add-on is a WebAssembly module the server executes, so a key
+// that may install one has acquired whatever that module can do — the ABI, the
+// permissions the module's own manifest declares, the schema M63 gives it, and,
+// with `session.mint`, the ability to decide who is signed in. Whatever scope the
+// key was issued with, the reach it has after an install is the reach of code
+// somebody else wrote, and no reasoning about the key's own scopes bounds it.
+//
+// There is no delegable half to split out, which is what makes this different
+// from `destinations.review`/`destinations.decide` and from `webhooks.read`/
+// `webhooks.write`. Listing what is installed is M68's, under the same scope, and
+// the same argument does not reach it — but it is not this milestone's to decide
+// and it is not in this map yet because the operation does not exist.
 var NonDelegableScopes = map[string]struct{}{
 	PermAPIKeysRead:        {},
 	PermAPIKeysWrite:       {},
@@ -229,6 +246,7 @@ var NonDelegableScopes = map[string]struct{}{
 	PermInstanceAdmin:      {},
 	PermDestinationsDecide: {},
 	PermAuditReadInstance:  {},
+	PermAddonsManage:       {},
 }
 
 // KeyIssuableRoles are the roles an API key may put somebody into (D43).

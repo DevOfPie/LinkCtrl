@@ -281,11 +281,15 @@ func (l Loaded) ObservesRedirects() bool { return l.grants.Has(PermissionRedirec
 
 // HasInline reports whether anything on this instance runs on the redirect path.
 //
-// It is the check the redirect handler makes on **every** redirect, so it is a
-// field read and nothing else: no lock, no allocation, no walk of the loaded set.
+// It is the check the redirect handler makes on **every** redirect, so it is one
+// atomic load and a length: no lock, no allocation, no walk of the loaded set.
 // Nil-safe, because an instance with no add-ons directory has no host at all and
 // that is the case this has to cost nothing in.
-func (h *Host) HasInline() bool { return h != nil && len(h.inline) > 0 }
+//
+// It was a plain field read until M67, which made the set swappable — see set.go
+// for why an atomic pointer was chosen over the RWMutex that would otherwise have
+// landed on this line.
+func (h *Host) HasInline() bool { return len(h.current().inline) > 0 }
 
 // InlineAddons is every add-on on the redirect path, in load order. The boot log
 // and M68's manager read it; the path itself does not.
@@ -293,8 +297,9 @@ func (h *Host) InlineAddons() []string {
 	if h == nil {
 		return nil
 	}
-	out := make([]string, 0, len(h.inline))
-	for _, l := range h.inline {
+	inline := h.current().inline
+	out := make([]string, 0, len(inline))
+	for _, l := range inline {
 		out = append(out, l.Manifest.Name)
 	}
 	return out
@@ -306,10 +311,8 @@ func (h *Host) ObservingAddons() []string {
 		return nil
 	}
 	var out []string
-	for _, l := range h.loaded {
-		if l.ObservesRedirects() && l.compiled != nil {
-			out = append(out, l.Manifest.Name)
-		}
+	for _, l := range h.current().observers {
+		out = append(out, l.Manifest.Name)
 	}
 	return out
 }
@@ -329,11 +332,15 @@ func (h *Host) ObservingAddons() []string {
 // installs one.
 func (h *Host) Inline(ctx context.Context, d RedirectDecision) InlineResult {
 	out := InlineResult{Destination: d.Destination}
-	if !h.HasInline() {
+	// One load, and the walk below runs against the set it returned rather than
+	// re-reading it per add-on. An install landing between two modules of the same
+	// redirect would otherwise show the second one a world the first did not see.
+	inline := h.current().inline
+	if len(inline) == 0 {
 		return out
 	}
-	for i := range h.inline {
-		l := &h.inline[i]
+	for i := range inline {
+		l := &inline[i]
 		d.Destination = out.Destination
 		answer, ok := h.invokeInline(ctx, l, d)
 		if !ok {
@@ -382,6 +389,15 @@ func (h *Host) Inline(ctx context.Context, d RedirectDecision) InlineResult {
 // to refuse somebody's links, so a failure is never a veto.
 func (h *Host) invokeInline(ctx context.Context, l *Loaded, d RedirectDecision) (RedirectAnswer, bool) {
 	name := l.Manifest.Name
+	// Removal in flight, and this add-on is the one being removed (M67). The
+	// redirect proceeds without it, which is what every other refusal on this path
+	// does — an add-on that cannot be run is an add-on the visitor is not made to
+	// wait for. Nothing is counted: this is not the host protecting itself from a
+	// busy or a broken module, it is an operator having removed one.
+	if !l.live.enter() {
+		return RedirectAnswer{}, false
+	}
+	defer l.live.leave()
 	// Without waiting. The bound exists because each instance holds guest memory,
 	// and the redirect path is the one caller that must never queue behind it: a
 	// visitor waiting for an add-on's *turn* is a visitor waiting for a resource
@@ -573,11 +589,15 @@ func (h *Host) redirectFailed(name, class, step string, bound time.Duration,
 // channel is nil then, and a send on a nil channel is not what happens, because
 // the guard below returns first.
 func (h *Host) Observe(ev RedirectEvent) {
-	if h == nil || h.observe == nil {
+	if h == nil {
+		return
+	}
+	q := h.observe.Load()
+	if q == nil {
 		return
 	}
 	select {
-	case h.observe <- ev:
+	case q.ch <- ev:
 	default:
 		// Counted where "is anything being throttled" is answered, which is the one
 		// place an operator looks. A dropped observation is not an error: the click
@@ -588,7 +608,17 @@ func (h *Host) Observe(ev RedirectEvent) {
 	}
 }
 
-// observeQueue is how many recorded redirects may wait to be shown to an
+// observeQueue is the out-of-band channel, in a struct so it can sit behind an
+// atomic pointer.
+//
+// A struct rather than the channel itself because a channel is not a pointer type
+// [atomic.Pointer] will take, and because *is there a queue at all* and *what is
+// in it* are then one load rather than two reads that can disagree — which is the
+// property [Host.Observe] needs now that an install can create the queue while a
+// click is being recorded.
+type observeQueue struct{ ch chan RedirectEvent }
+
+// observeQueueDepth is how many recorded redirects may wait to be shown to an
 // observing add-on.
 //
 // Small on purpose. The queue is not a buffer against a burst, it is the width of
@@ -597,7 +627,7 @@ func (h *Host) Observe(ev RedirectEvent) {
 // queue would hold memory to deliver stale facts. Anything past it is counted and
 // discarded, and the counter is what tells an operator the add-on is not keeping
 // up.
-const observeQueue = 256
+const observeQueueDepth = 256
 
 // observeWorkers is how many observing invocations run at once.
 //
@@ -611,17 +641,22 @@ const observeWorkers = 1
 
 // startObserving launches the out-of-band workers, and does nothing at all when
 // no add-on declared the grant.
+//
+// **Called again by Install** (M67), for the reason startPoolSweep is: an
+// instance that booted with no observing add-on has no queue and no worker, and
+// the first one installed brings both. Idempotent on `h.observe`, so a second
+// observing add-on joins the worker that is already running rather than starting
+// a second one — which would break the ordering promise below. Called under
+// installMu, which is what makes the load-then-store below safe against a second
+// install; the load in [Host.Observe] is safe because the field is atomic.
 func (h *Host) startObserving(ctx context.Context) {
-	var observers []Loaded
-	for _, l := range h.loaded {
-		if l.ObservesRedirects() && l.compiled != nil {
-			observers = append(observers, l)
-		}
-	}
-	if len(observers) == 0 {
+	if h.observe.Load() != nil {
 		return
 	}
-	h.observe = make(chan RedirectEvent, observeQueue)
+	if len(h.current().observers) == 0 {
+		return
+	}
+	q := &observeQueue{ch: make(chan RedirectEvent, observeQueueDepth)}
 	// Detached from the context Open was called with, which is a boot context and is
 	// done long before the first redirect, and then made cancellable again so that
 	// Close can end an invocation in flight. Both halves matter: without the first,
@@ -630,13 +665,22 @@ func (h *Host) startObserving(ctx context.Context) {
 	// running, which on a saturated queue is every module in turn.
 	worker, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	h.observeStop = cancel
+	// Published before the workers start, so a click recorded between the two is
+	// queued rather than dropped: the channel is buffered and the worker drains
+	// whatever is in it.
+	h.observe.Store(q)
 	for range observeWorkers {
 		h.observeWG.Add(1)
 		go func() {
 			defer h.observeWG.Done()
 			for {
 				select {
-				case ev := <-h.observe:
+				case ev := <-q.ch:
+					// Read per event rather than captured at start (M67). The
+					// worker outlives every install and removal on this host, so a
+					// captured slice would show a removed add-on every redirect
+					// and an installed one none.
+					observers := h.current().observers
 					for i := range observers {
 						h.invokeObserve(worker, &observers[i], ev)
 					}
@@ -667,6 +711,15 @@ func (h *Host) startObserving(ctx context.Context) {
 // where nothing is waiting on the total.
 func (h *Host) invokeObserve(ctx context.Context, l *Loaded, ev RedirectEvent) {
 	name := l.Manifest.Name
+	// The removal check the inline path makes, for the same reason (M67). This one
+	// matters more: an observation is delivered from a worker goroutine that may
+	// have picked the event up before the set was swapped, so the window between
+	// resolving an add-on and calling into it is a queue's depth wide rather than a
+	// function call.
+	if !l.live.enter() {
+		return
+	}
+	defer l.live.leave()
 	waitCtx, cancelWait := context.WithTimeout(ctx, h.instantiateDeadline)
 	defer cancelWait()
 	if !h.takeSlot(waitCtx) {

@@ -131,6 +131,14 @@ tags:
       review of disputed destinations on other accounts, and a holder of that
       review may not confer it onwards. None of these permissions is delegable
       to an API key, and no organization role carries any of them.
+  - name: addons
+    description: >
+      Installing and removing add-ons — WebAssembly modules this instance
+      executes. Both operations require `addons.manage`, which only the instance
+      principal holds and which no API key can hold at all: an add-on carries
+      whatever permissions its own manifest declares, so a credential that could
+      install one would have widened its reach past every scope it was issued
+      with. A module arrives in the request body and is never fetched from a URL.
   - name: feeds
     description: >
       Whether this instance sends destinations to a third party, and to whom.
@@ -149,6 +157,143 @@ tags:
     description: The API describing itself
 
 paths:
+  /addons:
+    post:
+      tags: [addons]
+      operationId: installAddon
+      summary: Install an add-on and start it without restarting the instance
+      description: |
+        Uploads a WebAssembly module and the `addon.json` that describes it. The
+        host parses the manifest and checks the module against the manifest's
+        `sha256` **before anything is written to disk**, then writes the pair
+        into the instance's add-ons directory and loads it — verification,
+        permission resolution, the add-on's own schema, and instantiation, in
+        the same order and with the same refusals a module placed by hand meets
+        at boot.
+
+        **Two parts, and nothing is fetched.** The body is
+        `multipart/form-data` carrying `manifest` and `module`, at most
+        32 MiB together. There is no field naming a URL for the server to
+        download a module from, and there will not be one: the danger of such a
+        field is the request rather than the response, which no validation
+        helps with.
+
+        **What it cannot install.** An add-on whose manifest declares migration
+        files ships `.sql` alongside its module, and those files are not part of
+        this upload; such an add-on is refused with `migrations_unsupported` and
+        is installed by placing its directory in the add-ons directory and
+        restarting. An add-on that owns a schema and creates its tables from its
+        own code installs here.
+
+        `409` means the name cannot be taken — by a running add-on, by a
+        directory this instance did not load, or because it overlaps a name the
+        add-ons directory already claims: two names where one plus an underscore
+        is a prefix of the other share a cookie prefix and a settings prefix, so
+        `oidc_x` cannot be installed beside `oidc`, or the other way round. That
+        check reads what the directory claims rather than what is running, which
+        is the same set the boot check reads — a directory whose manifest parses
+        and names itself claims its name even if the add-on behind it was refused,
+        and allowing the install would make the *next* start refuse both. Removal
+        is the path to replacing an add-on: this version has no upgrade-in-place.
+        `503` means the instance has no add-ons directory configured, or has one
+        it cannot write to, which is what a read-only mount produces.
+
+        Recorded as an **instance-wide** audit event, `addon.installed`, naming
+        the module, its version and its digest.
+
+        Rate-limited separately from the rest of this API — see
+        `UPLOAD_RATE_PER_MIN` — and it is **the same bucket a QR code's logo
+        upload spends**, because what the bucket is about is a body whose cost is
+        set by its content. So a `429` here can arrive while other calls are
+        still being served, and an address that has just uploaded logos has less
+        of it left. Removing an add-on carries no body and is not charged.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [manifest, module]
+              properties:
+                manifest:
+                  type: string
+                  format: binary
+                  description: The add-on's `addon.json`, verbatim.
+                module:
+                  type: string
+                  format: binary
+                  description: >
+                    The `.wasm` the manifest's `sha256` describes.
+      responses:
+        "201":
+          description: The add-on is installed and running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Addon"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /addons/{name}:
+    delete:
+      tags: [addons]
+      operationId: removeAddon
+      summary: Remove an add-on and unload it without restarting the instance
+      description: |
+        Takes the add-on out of the running set, then out of the add-ons
+        directory, then releases what it held: its pooled instances, its
+        compiled module and its database connections. Invocations already inside
+        the module are allowed to finish; ones that have not finished within a
+        few seconds are interrupted, and the answer says so in `draining`.
+
+        A removed add-on's directory is gone before anything is unloaded, so an
+        add-on whose `failure_class` is `required` cannot leave an instance that
+        will not start: the next boot has nothing to stop for.
+
+        **The data stays.** An add-on that owned a Postgres schema leaves it
+        behind, and the answer names it in `schema` — the one moment at which
+        somebody can decide what to do about it. Nothing here deletes it.
+
+        `404` means no add-on of that name is running on this instance.
+
+        Recorded as an **instance-wide** audit event, `addon.removed`, naming
+        the module, its version and its digest.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: The add-on's name, as its manifest declares it.
+      responses:
+        "200":
+          description: The add-on is removed, and what it left behind
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Addon"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
   /auth/setup:
     post:
       tags: [auth]
@@ -7212,17 +7357,21 @@ components:
           minItems: 1
           items: { type: string }
           description: |
-            Permission slugs you hold. Nine are never grantable to a key:
+            Permission slugs you hold. Ten are never grantable to a key:
             `apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`,
             `webhooks.write`, `automation.write`, `instance.admin`,
-            `destinations.decide` and `audit.read.instance`. A key that can mint
+            `destinations.decide`, `audit.read.instance` and `addons.manage`.
+            A key that can mint
             keys or delete an organization needs a human behind it; a webhook or
             an automation rule outlives the credential that created it; the audit
             log and its instance-wide surface disclose who acted from which
             network; deciding a disputed destination lifts an instance-wide
-            blocklist entry, widening what the deciding key may point at; and
+            blocklist entry, widening what the deciding key may point at;
             `instance.admin` confers instance-level review, so a key holding it
-            could grow the set that may delegate.
+            could grow the set that may delegate; and a key that could install an
+            add-on would carry whatever that add-on's own manifest declares —
+            including deciding who is signed in — past every scope the key was
+            issued with.
         expires_at:
           type: string
           format: date-time
@@ -7560,6 +7709,63 @@ components:
           type: string
           description: Opaque keyset cursor; present when `has_more`.
         has_more: { type: boolean }
+
+    Addon:
+      type: object
+      additionalProperties: false
+      required: [name, version, abi_version, sha256, failure_class, permissions]
+      description: |
+        One add-on, as a lifecycle operation reports it.
+
+        The same shape both ways. What is worth recording about an install —
+        which module, at which version, with which digest, holding which
+        permissions — is exactly what is worth recording about the removal of
+        one, and a client that installed something can compare the two answers
+        without a second call.
+      properties:
+        name:
+          type: string
+          description: The add-on's name, which is also its directory and its schema.
+        version:
+          type: string
+          description: The version its manifest declares. This host does not compare versions.
+        abi_version:
+          type: integer
+          description: The host ABI generation the module was built against.
+        sha256:
+          type: string
+          description: >
+            The module's digest, checked against the uploaded bytes before they
+            were written. It protects against the file changing after it was
+            published and against nothing else — a manifest and a module
+            replaced together verify perfectly.
+        failure_class:
+          type: string
+          enum: [required, degrade]
+          description: >
+            What this host applies, which is the manifest's answer only when
+            neither the operator's override nor the authentication-path default
+            outranked it. `required` means a future boot stops if the add-on
+            will not load.
+        permissions:
+          type: array
+          items: { type: string }
+          description: >
+            What the add-on *holds*, which is not what its manifest declared: a
+            permission the vocabulary carries and no host grants yet is
+            declarable and not held.
+        schema:
+          type: string
+          description: >
+            The Postgres schema the add-on owns, absent for one that declared
+            none. On a removal this is the orphan that has just been created —
+            the data is still there and nothing here deletes it.
+        draining:
+          type: boolean
+          description: >
+            Present on a removal whose in-flight invocations had not finished
+            when the grace expired, so they were interrupted. A statement about
+            what this instance did, not something to act on.
 
     InstanceReviewer:
       type: object

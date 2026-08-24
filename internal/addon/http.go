@@ -469,6 +469,16 @@ func (h *Host) route(ctx context.Context, name string, in RequestIn) (Response, 
 	if target == nil {
 		return Response{}, ErrNoRoute
 	}
+	// Announced before the slot, so that a removal in flight stops admitting
+	// requests at the same moment it stops resolving them (M67). A request that
+	// resolved the add-on a microsecond before the set was swapped is refused here
+	// rather than allowed to hold an instance of a module about to be closed, and
+	// what it gets is the 404 an add-on that is not installed gets — which by the
+	// time the answer is written is true.
+	if !target.live.enter() {
+		return Response{}, ErrNoRoute
+	}
+	defer target.live.leave()
 
 	// The slot, before anything is instantiated: the point of the bound is the
 	// memory an instance holds, so waiting has to happen before the allocation
@@ -638,10 +648,11 @@ func (h *Host) routed(name string) *Loaded {
 	if h == nil {
 		return nil
 	}
-	for i := range h.loaded {
-		if h.loaded[i].Manifest.Name == name && h.loaded[i].ServesRoutes() &&
-			h.loaded[i].compiled != nil {
-			return &h.loaded[i]
+	loaded := h.current().loaded
+	for i := range loaded {
+		if loaded[i].Manifest.Name == name && loaded[i].ServesRoutes() &&
+			loaded[i].compiled != nil {
+			return &loaded[i]
 		}
 	}
 	return nil
@@ -667,7 +678,7 @@ func (h *Host) RoutedAddons() []string {
 		return nil
 	}
 	var out []string
-	for _, l := range h.loaded {
+	for _, l := range h.current().loaded {
 		if l.ServesRoutes() {
 			out = append(out, l.Manifest.Name)
 		}

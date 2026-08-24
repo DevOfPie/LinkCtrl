@@ -551,10 +551,10 @@ func TestInstantiationCostsWhatItCostsUnderContention(t *testing.T) {
 		t.Skip("a timing measurement")
 	}
 	h, _, _ := redirectHost(t, PermissionRedirectInline, "config.read")
-	if len(h.inline) != 1 {
+	if len(h.current().inline) != 1 {
 		t.Fatalf("the fixture is not on the redirect path: %v", h.InlineAddons())
 	}
-	l := &h.inline[0]
+	l := &h.current().inline[0]
 	d := decisionFor("quiet", "https://example.test/landing")
 
 	// One instantiation is the unit: what the redirect path does per invocation,
@@ -654,7 +654,7 @@ func TestObservingCannotDelayAnything(t *testing.T) {
 		t.Fatalf("the observe class carries %v", got)
 	}
 	start := time.Now()
-	for range observeQueue + 8 {
+	for range observeQueueDepth + 8 {
 		h.Observe(RedirectEvent{LinkID: "l"})
 	}
 	// The queue is bounded and full sends drop, so this loop cannot block whatever
@@ -662,7 +662,7 @@ func TestObservingCannotDelayAnything(t *testing.T) {
 	// and orders of magnitude less than the minute the worker is going to spend.
 	if took := time.Since(start); took > time.Second {
 		t.Fatalf("handing %d observations over took %s; the pipeline waited on an add-on",
-			observeQueue+8, took)
+			observeQueueDepth+8, took)
 	}
 }
 
@@ -755,7 +755,7 @@ func TestAModuleHoldingBothClassesIsStillOnlyInOneAtATime(t *testing.T) {
 // "off costs nothing" the whole subsystem is held to.
 func TestNoObserverMeansNoQueue(t *testing.T) {
 	h, _, metrics := redirectHost(t, PermissionRedirectInline)
-	if h.observe != nil {
+	if h.observe.Load() != nil {
 		t.Error("a host with no observing add-on built an observation queue")
 	}
 	h.Observe(RedirectEvent{LinkID: "l"})

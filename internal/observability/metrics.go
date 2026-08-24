@@ -775,6 +775,43 @@ func (m *Metrics) SetAddonInfo(addon, version string, abiVersion int, failureCla
 		permissions).Set(1)
 }
 
+// ForgetAddon drops the gauges that describe an add-on this instance no longer
+// runs (M67).
+//
+// **Gauges only, and the counters deliberately stay.** `linkctrl_addon_info` and
+// the two size gauges are statements about the present tense — *this instance
+// runs this module, and its schema is this big* — and leaving them behind after a
+// removal makes each one a lie that reads exactly like a fact. The counters are
+// statements about the past: `linkctrl_addon_loads_total` and
+// `linkctrl_addon_refusals_total` describe attempts that really happened, and
+// deleting them would erase the record of an add-on that was installed and
+// removed, which is the history an operator reading a scrape after an incident
+// most needs.
+//
+// The info series is deleted by exact label values because that is the only way
+// to address one: its identity is every label it carries. The caller therefore
+// passes what it published, which is why this takes five arguments rather than a
+// name.
+//
+// **The two size gauges go too, and that is the answer to a real question.**
+// Removal leaves the add-on's schema behind — an orphan M63 makes enumerable and
+// M68 offers to purge — so there is an argument for keeping the number. It loses,
+// because nothing sets it any more: the maintenance job measures the *loaded*
+// add-ons, so a gauge left standing is a value frozen at the last measurement
+// before the removal, and a frozen gauge reads exactly like a live one. Silence
+// is the honest answer, and what an operator reads instead is the boot warning
+// naming every schema no loaded module owns.
+func (m *Metrics) ForgetAddon(addon, version string, abiVersion int,
+	failureClass, permissions string) {
+	if m == nil {
+		return
+	}
+	m.addonInfo.DeleteLabelValues(addon, version, strconv.Itoa(abiVersion),
+		failureClass, permissions)
+	m.addonSchemaBytes.DeleteLabelValues(addon)
+	m.addonLargeObjects.DeleteLabelValues(addon)
+}
+
 // ObserveAddonRefusal records one ABI call refused for want of a declared
 // permission (M62).
 //

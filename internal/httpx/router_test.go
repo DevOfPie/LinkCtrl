@@ -32,6 +32,9 @@ func maximalDeps() Deps {
 	// precisely the silence patternFloor and TestMaximalDepsFillsEveryDependency
 	// exist to break.
 	d.Web.Addons = nopAddonRouter{}
+	// The second interface field, for the same reason and with the same
+	// consequence if it is forgotten (M67).
+	d.AddonAdmin = nopAddonLifecycle{}
 	return d
 }
 

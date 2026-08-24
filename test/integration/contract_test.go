@@ -5,6 +5,8 @@ package integration
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -231,6 +234,108 @@ func (c *contract) upload(
 	// The same substitution `call` makes: a bearer replaces the session on a
 	// client with no cookie jar, so a call made as an API key is provably made
 	// as one.
+	client := c.f.client
+	if c.bearer != "" {
+		client = &http.Client{}
+	}
+
+	resp, err := client.Do(newReq())
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	if resp.StatusCode != wantStatus {
+		c.t.Fatalf("%s %s = %d, want %d\n%s", method, path, resp.StatusCode, wantStatus, respBody)
+	}
+
+	vreq := newReq()
+	route, pathParams, err := c.router.FindRoute(vreq)
+	if err != nil {
+		c.t.Fatalf("%s %s is not in openapi.yaml: %v", method, path, err)
+	}
+	opts := &openapi3filter.Options{
+		IncludeResponseStatus: true,
+		AuthenticationFunc:    openapi3filter.NoopAuthenticationFunc,
+	}
+	rvi := &openapi3filter.RequestValidationInput{
+		Request: vreq, PathParams: pathParams, Route: route, Options: opts,
+	}
+	if checkRequest {
+		if err := openapi3filter.ValidateRequest(c.t.Context(), rvi); err != nil {
+			c.t.Errorf("request %s %s violates the spec: %v", method, path, err)
+		}
+	}
+	if err := openapi3filter.ValidateResponse(c.t.Context(), &openapi3filter.ResponseValidationInput{
+		RequestValidationInput: rvi,
+		Status:                 resp.StatusCode,
+		Header:                 resp.Header,
+		Body:                   io.NopCloser(bytes.NewReader(respBody)),
+		Options:                opts,
+	}); err != nil {
+		c.t.Errorf("response %d from %s %s violates the spec: %v\n%s",
+			resp.StatusCode, method, path, err, respBody)
+	}
+
+	c.hit[route.Operation.OperationID] = true
+	return respBody
+}
+
+// uploadParts replays a multipart operation carrying more than one file part
+// (M67).
+//
+// [contract.upload] above sends one part and is written around that: it takes a
+// field, a filename and a declared type, because M50.5's claim is that the server
+// reads none of them. An install carries two files and no text fields, so what
+// this needs is a map and nothing else — and keeping it separate leaves that
+// milestone's assertion about a single part exactly where it was.
+func (c *contract) uploadParts(
+	method, path string, parts map[string][]byte, wantStatus int, checkRequest bool,
+) []byte {
+	c.t.Helper()
+
+	build := func() (string, []byte) {
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		// Sorted, so a body this test sends is the same body every run. Map order
+		// is not a thing to make a request out of.
+		names := make([]string, 0, len(parts))
+		for name := range parts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			part, err := w.CreateFormFile(name, name+".bin")
+			if err != nil {
+				c.t.Fatal(err)
+			}
+			if _, err := part.Write(parts[name]); err != nil {
+				c.t.Fatal(err)
+			}
+		}
+		if err := w.Close(); err != nil {
+			c.t.Fatal(err)
+		}
+		return w.FormDataContentType(), buf.Bytes()
+	}
+
+	newReq := func() *http.Request {
+		contentType, payload := build()
+		req, err := http.NewRequestWithContext(c.t.Context(), method,
+			c.f.server.URL+path, bytes.NewReader(payload))
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", contentType)
+		if c.bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+c.bearer)
+		}
+		return req
+	}
+
 	client := c.f.client
 	if c.bearer != "" {
 		client = &http.Client{}
@@ -1165,6 +1270,37 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("GET", p+"/instance/audit?limit=10", nil, http.StatusOK)
 	c.do("GET", p+"/instance/audit?cursor=not-a-cursor", nil, http.StatusUnprocessableEntity)
 
+	// --- add-ons (M67) ------------------------------------------------------
+	//
+	// The whole lifecycle, against a real WebAssembly module, because every claim
+	// the document makes here is about what the host did rather than about a
+	// row: that the digest is checked, that the answer names the permissions the
+	// add-on *holds*, and that removing one answers with what it left behind.
+	//
+	// The session is the account that claimed the instance, so it is the
+	// principal and holds `addons.manage`. That the scope cannot reach an API key
+	// is asserted in addon_lifecycle_test.go, where a key can be minted to try.
+	module := addonFixture(t, "minimal")
+	manifest := contractAddonManifest(t, "contract", module)
+	installed := c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": module,
+	}, http.StatusCreated, true)
+	if got := field(t, installed, "name"); got != "contract" {
+		t.Errorf("the install answered for %q", got)
+	}
+	// A module whose bytes are not the bytes the manifest describes, refused
+	// before anything is written — the one refusal on this endpoint that is about
+	// the upload rather than about the manifest.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": append([]byte{0x00}, module...),
+	}, http.StatusUnprocessableEntity, true)
+	// One name, one add-on: replacing is a removal and an install.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": module,
+	}, http.StatusConflict, true)
+	c.do("DELETE", p+"/addons/contract", nil, http.StatusOK)
+	c.do("DELETE", p+"/addons/contract", nil, http.StatusNotFound)
+
 	// --- reputation feeds ---------------------------------------------------
 	// One operation, and the fixture has no feed configured — which is the
 	// shipped default and the answer this replay validates against the schema:
@@ -1732,4 +1868,26 @@ func (c *contract) yamlSpecEndpoint() {
 		c.t.Error("served YAML differs from the embedded document")
 	}
 	c.hit["getOpenAPIYAML"] = true
+}
+
+// contractAddonManifest describes a module honestly, which is what makes the
+// mismatched-module replay above a refusal about the *bytes* rather than about
+// anything else in the file.
+func contractAddonManifest(t *testing.T, name string, module []byte) []byte {
+	t.Helper()
+	sum := sha256.Sum256(module)
+	m := map[string]any{
+		"schema_version": 1,
+		"name":           name,
+		"version":        "1.0.0",
+		"abi_version":    1,
+		"module":         name + ".wasm",
+		"sha256":         hex.EncodeToString(sum[:]),
+		"failure_class":  "degrade",
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

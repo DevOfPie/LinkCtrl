@@ -377,6 +377,26 @@ const (
 // two places.
 const ActionSessionMintedByAddon = "session.minted_by_addon"
 
+// The add-on lifecycle (M67).
+//
+// Declared here and not in internal/addon, for the reason the dispute comment
+// above gives: a vocabulary with two homes makes everything that enumerates it
+// from this package short by however many live elsewhere, which is F18 and is why
+// the count in docs/SECURITY.md was wrong twice. These arrived in internal/addon
+// and moved before the milestone landed.
+//
+// Instance-wide, and not by convention: an add-on is installed once for the whole
+// box and belongs to no organization, so filing the record under whichever tenant
+// the principal happened to be standing in is the misattribution F36 names.
+//
+// Two actions rather than one with a direction in the metadata, because they are
+// two different questions an operator asks — what has been put on this box, and
+// what has been taken off it — and the second is the one asked after an incident.
+const (
+	ActionAddonInstalled = "addon.installed"
+	ActionAddonRemoved   = "addon.removed"
+)
+
 // Event is one thing that happened.
 //
 // The actor is not a field: it is taken from the *auth.Identity passed to
@@ -1045,5 +1065,7 @@ func AllActions() []string {
 		ActionMFARecoveryCodeUsed,
 		ActionMFARecoveryCodesRegenerated,
 		ActionSessionMintedByAddon,
+		ActionAddonInstalled,
+		ActionAddonRemoved,
 	}
 }

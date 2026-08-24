@@ -1213,13 +1213,14 @@ instead. HAProxy 3.1, `balance roundrobin`, `option httpchk GET /readyz`,
 `inter 1s fall 2 rise 1`. Same host as
 [M35](#re-measured-for-m35-2026-08-03) onward.
 
-Thirty-two cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%,
-100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%, 100%,
-100%, 99.405%, 100%, 99.826%, 100%, 100%, 100%, 100%, **100%**, **100%**, **100%**
-and **100%** under 20ms — the rolling deploy and the rolling kill are in there,
-the only two taken while the processes serving them were being replaced, and the
-last two are [M66](#re-measured-for-m66-2026-08-22)'s core run and
-[M66.5](#re-measured-for-m665-2026-08-24)'s. **The runs with an add-on on the path
+Thirty-three cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
+100%, 100%, 100%, 100%, 100%, 99.743%, 100%, 100%, 99.505%, 100%, 100%, 100%,
+100%, 100%, 99.405%, 100%, 99.826%, 100%, 100%, 100%, 100%, **100%**, **100%**,
+**100%**, **100%** and **100%** under 20ms — the rolling deploy and the rolling
+kill are in there, the only two taken while the processes serving them were being
+replaced, and the last three are [M66](#re-measured-for-m66-2026-08-22)'s core
+run, [M66.5](#re-measured-for-m665-2026-08-24)'s and
+[M67](#re-measured-for-m67-2026-08-24)'s. **The runs with an add-on on the path
 are deliberately not in that tally**, because the tally is what this document
 promises and those runs are what the promise is scoped away from.
 
@@ -1484,6 +1485,101 @@ covered by unit tests with the bound set to two, not by a run.
 warm, each held to 8 MiB — and this page measures latency. What an idle pool costs
 an instance in resident bytes is `docs/deployment.md`'s question and its figures
 predate the pool.
+
+### Re-measured for M67 (2026-08-24)
+
+[M67](build-notes/phase-details/m67.md) makes the loaded set swappable while the
+instance is serving, and three of the changes that took land on the redirect
+path. `Host.HasInline` was a field read and is now an atomic load of a snapshot
+pointer. `Host.Inline` takes **one** snapshot per redirect rather than reading a
+field per add-on, so an install landing between two modules of the same redirect
+cannot show the second one a world the first did not see. And every inline
+invocation now enters and leaves a per-add-on counter under a mutex, which is
+what lets a removal wait for the invocations already inside the module rather
+than closing it under them.
+
+So the inherited rule fires — *touching the redirect path re-runs this
+measurement* — and it was run rather than argued away. By inspection the added
+cost is one atomic load plus two uncontended mutex operations per invocation,
+which is an argument for what the number should be and not a substitute for it.
+
+**Run in [M66.5](#re-measured-for-m665-2026-08-24)'s three-column shape**, on an
+image built from this milestone's own code, with the same `redirect` and `slow`
+fixtures at 2,000 rps for two minutes against the same 100k links and 5M click
+events. Three columns and not one because the mutex is per *invocation*: the
+middle column is where a regression would appear, and it is the column M66.5
+published a bar for.
+
+| | Core, no add-on | Well-behaved inline add-on | Deliberately hostile inline add-on |
+| --- | --- | --- | --- |
+| Generator p99 | **137.78µs** | **1.09ms** | **165.10ms** |
+| Generator median / mean | 83.94µs / 87.85µs | **521.26µs / 570.11µs** | 12.66ms / 24.83ms |
+| Server-side under 20ms | **100%** of 240,000 | **100%** of 240,001 | **99.778%** of 239,911 |
+| Requests failed | **0** | **0** | **0** |
+| Sustained rate | 2,000.00/s | 2,000.00/s | 1,997.80/s, 90 iterations dropped |
+| Mean add-on invocation, from its own histogram | — | **460µs** | no samples: every invocation was killed |
+| Invocations recorded | — | **239,963** | 0 |
+| Redirects that skipped the add-on | — | **38 — 0.016%** | 207,784 — 86.6% |
+| `linkctrl_addon_redirect_kills_total{step="call"}` | — | **zero, and the series was never created** | **32,127** |
+| `linkctrl_addon_redirect_kills_total{step="instantiate"}` | — | **zero, and the series was never created** | **zero, and the series was never created** |
+| Redirect **database** pool acquire waits | 0 | 0 | 0 |
+
+**The middle column is the one the rule was re-run for, and it did not move.**
+Read against M66.5's, taken the same day on the same host with the same fixture:
+
+| | M66.5 | M67 |
+| --- | --- | --- |
+| Generator p99 | 1.08ms | **1.09ms** |
+| Generator median / mean | 518.63µs / 558.23µs | **521.26µs / 570.11µs** |
+| Mean invocation | 451µs | **460µs** |
+| Server-side under 20ms | 100% | **100%** |
+| Redirects that skipped the add-on | 9 | **38** |
+
+Nine microseconds on a 451µs invocation is 2%, and it is reported rather than
+claimed as zero: this run cannot tell 2% of one invocation apart from the
+run-to-run variance the hostile column shows several percent of. What it can say
+is the bound — **the inherited bar is generator p99 under 20 ms and the number is
+1.09 ms**, eighteen times inside it, exactly where M66.5 left it. The skip count
+moved from nine to thirty-eight, which is 0.004% to 0.016% of a run whose sixteen
+instance slots have headroom for ~35,000 invocations a second against the 2,000
+offered; both figures are arrival jitter and neither is the budget binding.
+
+**Core is unmoved, which is the weaker of the two claims and the easier one.**
+An instance with no add-on installed reaches `HasInline`, loads the snapshot
+pointer, finds no inline entries and returns — the mutex is never taken, because
+there is no invocation to enter. 137.78µs at p99 and 100% of 240,000 under 20ms
+is where this measurement has been since
+[M50](#re-measured-for-m50-2026-08-07).
+
+**The hostile column is bracketed by M66.5's two takes on every figure**, which
+is what *no worse* looks like when the metric has a few percent of run-to-run
+variance: 165.10ms against 163.93ms and 169.93ms, 99.778% under 20ms against
+99.795% and 99.865%, 32,127 kills against 32,334 and 32,230, and 86.6% skipped
+against 86.5%. The mechanism is unchanged for that module — an add-on whose every
+invocation is killed has its instance closed rather than pooled, so it takes the
+same path it took before either milestone, and the counter under the mutex is
+entered and left exactly once per kill.
+
+**Thirty-three cached runs** now read 100% under 20ms for core. The two add-on
+columns stay outside that tally for the reason M66's and M66.5's did: the tally
+is what this document promises, and those runs are what the promise is scoped
+away from.
+
+#### What this run did **not** measure
+
+**A removal under load.** Every column here installs one module and leaves it
+installed for the whole window. What the counter costs when a `seal` is actually
+waiting on it — the case the mutex exists for — is covered by
+`internal/addon`'s tests and by the integration sequence, not by a run at 2,000
+rps. The reason it is not here is that a removal is a single act by an operator
+rather than a rate, so a load generator has nothing to say about it that one
+invocation does not.
+
+**An install landing mid-window.** The snapshot swap is one atomic store and the
+walk below it reads one pointer, so a redirect either sees the old set or the new
+one. That is a correctness property, asserted by test; whether the store costs a
+measurable stall at 2,000 rps is not asked here, and the arithmetic says it
+cannot — the store happens once per install.
 
 ## Reproducing it
 

@@ -111,6 +111,14 @@ var migrationsMentioningAddOns = []string{
 	// only adds columns* is exactly the sentence a migration that creates a table
 	// would also be able to claim.
 	"internal/store/migrations/04600_addon_mint_provenance.sql",
+	// M67's permission. **It creates nothing either** — one row in `permissions`
+	// and, on an instance that already has a principal, one row in
+	// `instance_grants` — so what an instance with no add-ons pays for it is a
+	// permission slug nobody holds but the account that administers the box.
+	// Named here rather than exempted by pattern for the reason above: *the
+	// migration only inserts a permission* is a sentence a migration creating an
+	// add-on's tables could equally claim about its first statement.
+	"internal/store/migrations/04700_addons_manage.sql",
 }
 
 func TestNoMigrationCreatesAnAddOnsOwnTables(t *testing.T) {
@@ -162,6 +170,15 @@ var httpSurfaceMentioningAddOns = []string{
 	// the second half of this test is what says the *prefix* still is not here.
 	"internal/httpx/redirect.go",
 	"internal/httpx/redirect_addon_test.go",
+	// The lifecycle surface and its tests (M67). **The second deliberate change
+	// this list has taken, and it is a larger one than M66's**: until now every
+	// file here served an add-on's *own* pages, and this one changes which add-ons
+	// exist. It is bounded the same way — two handlers, one multipart reader, one
+	// interface the router registers them through — and the bound is what the list
+	// is for: an add-on's lifecycle is allowed to exist in these files and not to
+	// spread into the link tree or the settings pages on the way to M68's manager.
+	"internal/httpx/api_addons.go",
+	"internal/httpx/api_addons_test.go",
 }
 
 // The HTTP surface knows about add-ons in the files M64 gave it and in no
@@ -225,14 +242,45 @@ func TestOnlyTheNamedHTTPFilesMentionAddOns(t *testing.T) {
 		}
 	}
 
+	// **M64's third claim, narrowed at M67 rather than deleted.**
+	//
+	// It read: the API surface knows nothing about add-ons at all. M64 added no
+	// operations and the sentence was exactly true, and the question it left open
+	// was whether a *third party's* surface — an add-on's own pages — is bound by
+	// *every UI feature has API support*. That question is still open and is still
+	// M69's.
+	//
+	// What M67 adds is not a third party's surface. It is the host's own lifecycle:
+	// two operations that install and remove a module, under `addons.manage`, which
+	// the inherited rule requires be in the document because M68's manager will
+	// drive them. So the absence becomes a bound with the same shape as the two
+	// above — the document may describe the operations named here, and an add-on's
+	// own routes still have no API surface at all, which is what the second half
+	// checks by asserting that `/addons/{addon}/` never appears as a path.
 	spec, err := os.ReadFile(filepath.Join(repoRoot(t), "api", "openapi.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lower := strings.ToLower(string(spec)); strings.Contains(lower, "addon") ||
-		strings.Contains(lower, "add-on") {
-		t.Error("api/openapi.yaml mentions add-ons; M64 deliberately adds no API " +
-			"surface — whether third-party surfaces are bound by *every UI feature " +
-			"has API support* is M69's question, with a real case in front of it")
+	for _, line := range strings.Split(string(spec), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "/") || !strings.HasSuffix(trimmed, ":") {
+			continue
+		}
+		path := strings.TrimSuffix(trimmed, ":")
+		if !strings.HasPrefix(path, "/addons") {
+			continue
+		}
+		if path == "/addons" || path == "/addons/{name}" {
+			continue
+		}
+		t.Errorf("api/openapi.yaml describes %q; the document carries the host's own "+
+			"lifecycle operations (M67) and no path an add-on serves — whether a "+
+			"third-party surface is bound by *every UI feature has API support* is "+
+			"M69's question, with a real case in front of it", path)
+	}
+	if !strings.Contains(string(spec), "\n  /addons:") {
+		t.Error("api/openapi.yaml does not describe POST /addons; M67's install and " +
+			"remove are in the document because M68's manager drives them, and this " +
+			"list has outlived the code")
 	}
 }

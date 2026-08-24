@@ -523,7 +523,7 @@ saves. See *Per instance, unless the limit is shared* below.
 | `LINKCTRL_API_RATE_PER_MIN` | `600` | Everything under `/api/v1`. Dashboard pages, static assets and the health endpoints are not counted. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses on the redirect path, and misses only. |
 | `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Submissions to a password-protected link, charged per address **and** per alias. |
-| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | Uploading a QR code's logo — the only thing this product accepts a file for, at three addresses: the API's two logo `PUT`s and the dashboard's upload form on the QR tab. **On top of the API limit, not instead of it** — an API upload spends a token from both buckets — and **one bucket across all three**, so alternating between the dashboard and the API does not double the budget. |
+| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | The two things this product accepts a file for: uploading a QR code's logo, and installing an add-on. **Four addresses, and one bucket across all four** — the API's two logo `PUT`s, the dashboard's upload form on the QR tab, and `POST /api/v1/addons` — so alternating between the dashboard and the API does not double the budget. **On top of the API limit, not instead of it**: an API upload spends a token from both. **The two bodies are not the same size, and they share the budget anyway.** A logo is capped at a megabyte and handed to an image decoder; an install is capped at 32 MiB and compiled. Sharing is deliberate rather than left over — the bucket exists for requests whose cost is set by their *content* rather than by their shape, which is what both of these are, and a second number would be a second thing to tune for an endpoint an instance uses a handful of times in its life. What it costs is stated: from one address, thirty installs and thirty logo uploads a minute are the same thirty. That is a collision only where the two callers share an address as the server sees it — see below — because installing needs `addons.manage` and uploading a logo needs `links.update`, and those are rarely the same person. Removing an add-on carries no body and is not charged. |
 
 Five properties are worth knowing before you tune them.
 
@@ -858,6 +858,78 @@ The directory name and the manifest's `name` must match. That is what lets a
 metric label exist for an add-on whose manifest will not parse, and what stops
 two directories claiming one identity — which would be two add-ons contending for
 one Postgres schema.
+
+A directory called `.staging` may appear in here. It is LinkCtrl's own — runtime
+install writes through it — and it is never read as an add-on. Anything left in it
+by an install or a removal that did not finish is deleted at the next start.
+
+### Installing without a restart
+
+Everything above describes the route that has always worked: put a directory in
+this one, start the instance, and the add-on loads. That route is unchanged.
+
+There is now a second one. `POST /api/v1/addons` uploads a module and its manifest
+and starts the add-on in a running instance; `DELETE /api/v1/addons/{name}`
+unloads one and takes its files back out. Both require `addons.manage`, which is
+held by the account that administers the instance and which **no API key can
+hold** — a key that could install an add-on would carry whatever that add-on's
+manifest declares, past every scope the key was issued with. Both are recorded in
+the instance-wide audit log.
+
+**The two routes are one lifecycle**, because both write to this directory. There
+is no second place an installed add-on lives, so what is installed has one answer
+whichever way it got there.
+
+**Which arrangement you want is a decision about the mount**, and both are
+supported:
+
+| Mount | You get | You give up |
+| --- | --- | --- |
+| `:ro` — the recommendation below | The process cannot rewrite the code it runs | Runtime install; the API answers `503` and says so |
+| writable | Install and remove without a restart | The process can rewrite the code it runs |
+
+Two things about the writable arrangement are worth knowing before you rely on it,
+and neither is a defect to be fixed later — both are properties of where you
+mounted the directory:
+
+- **An install reaches the replica that served the request.** On more than one
+  replica, put the directory on shared storage or keep installing by hand; there
+  is no coordination here and no attempt at one.
+- **A container filesystem that is not a volume loses it on the next deploy.** The
+  add-on is in the directory, and the directory is wherever you mounted it.
+
+**An install spends the upload rate limit**, which is the same bucket a QR code's
+logo spends: [`LINKCTRL_UPLOAD_RATE_PER_MIN`](#rate-limits),
+thirty a minute per address by default, charged on top of the API's own limit.
+That row says why one bucket covers two endpoints of very different sizes.
+
+**What an upload cannot install.** The body carries exactly two parts, `manifest`
+and `module`, at most 32 MiB together, and nothing is ever fetched from a URL. So
+an add-on whose manifest declares `migrations` ships `.sql` files that are not in
+the upload, and it is refused with a message saying so — install that one by
+placing its directory here and restarting. An add-on that owns a schema and
+creates its tables from its own code installs fine.
+
+**There is no upgrade-in-place.** Installing over a name that is already taken is
+refused; replacing an add-on is a removal and then an install. A name that
+*overlaps* one already here is refused for the same reason it is refused at boot —
+`oidc_x` cannot be installed beside `oidc`, because the two share a cookie prefix
+and a settings prefix. **Already here means already claimed, not already
+running**: a directory whose `addon.json` parses and names the directory it sits
+in has claimed that name, even if the add-on behind it was refused for a bad
+digest or an ABI this build does not serve. Installing the overlapping name would
+be allowed by a check that only looked at what was running, and the *next* start
+would then refuse both — which stops the instance if either is `required`. So the
+install check reads what the boot check reads, and refuses the same pairs.
+
+A directory the boot check ignores refuses nothing: an `addon.json` that will not
+parse, one naming some other directory, and anything that is not a directory are
+invisible to both. At boot both members of a claimed pair are refused; here the
+arrival is refused and what was already here — running or not — is left
+untouched.
+
+**Removing an add-on leaves its data.** The schema stays, and the removal's answer
+names it. Nothing here deletes it.
 
 ### The manifest
 
@@ -1250,6 +1322,15 @@ services:
     volumes:
       - /var/lib/linkctrl/addons:/addons:ro
 ```
+
+**`:ro` and runtime install are the two ends of one trade**, and dropping the `ro`
+is a deliberate act rather than a typo. Read-only means the only way code arrives
+in this directory is somebody with filesystem access putting it there; writable
+means the server itself can, on the word of whoever holds `addons.manage`. That
+permission is the instance principal's and reaches no API key, so the set of
+people who can is the set of people who administer the box either way — what
+changes is whether they need a shell. See [installing without a
+restart](#installing-without-a-restart).
 
 What a loaded module is handed is covered in [SECURITY.md](SECURITY.md).
 

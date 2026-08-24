@@ -82,7 +82,17 @@ type Deps struct {
 	// and which leaves whoever the principal already is holding what they hold,
 	// because the grants are rows rather than a running service.
 	Instance *instance.Service
-	Web      *Web
+	// AddonAdmin installs and removes add-ons at runtime (M67). Nil leaves both
+	// endpoints unregistered, which is the state of every instance that configured
+	// no add-ons directory — there is no host to install into, and mounting a route
+	// that answers 503 would be the unconditional cost m60.md promised nobody pays.
+	//
+	// An interface rather than the host, and it must be handed over through the
+	// helper in cmd/linkctrl that returns a nil *interface* for a nil host: a typed
+	// nil in this field is not nil, and the failure it produces is a route mounted
+	// on an instance with no add-ons rather than a panic anybody would notice.
+	AddonAdmin AddonLifecycle
+	Web        *Web
 	// Hosts is the verified custom-hostname set (M40). Nil leaves custom domains
 	// unrouted entirely — every Host header is answered exactly as it was before
 	// this milestone — which is what the CLI and the tests that predate it get.
@@ -493,6 +503,23 @@ func registerAppRoutes(d Deps, app *appMux) {
 		// distinguishes it and the permission it needs is the principal's.
 		app.Handle("GET "+APIPrefix+"/instance/audit",
 			RequireAuth(http.HandlerFunc(a.ListInstance)))
+	}
+
+	// The add-on lifecycle (M67). Registered apart from the maps above because the
+	// install carries the upload limiter for M50.5's reason — a body set by its
+	// content rather than by its shape, and `API_RATE_PER_MIN` is a number nobody
+	// chose for one. Both limits apply; the narrower one is `UPLOAD_RATE_PER_MIN`.
+	//
+	// The removal is not limited beyond the API's own bound: it accepts no body,
+	// reads nothing, and throttling it would only make it slower to take out a
+	// module somebody has decided they want gone.
+	if d.AddonAdmin != nil {
+		ad := &AddonAPI{Addons: d.AddonAdmin}
+		app.Handle("POST "+APIPrefix+"/addons",
+			RateLimit(d.Limits.Upload, "upload", d.Metrics, nil)(
+				RequireAuth(http.HandlerFunc(ad.Install))))
+		app.Handle("DELETE "+APIPrefix+"/addons/{name}",
+			RequireAuth(http.HandlerFunc(ad.Remove)))
 	}
 
 	if d.Instance != nil {

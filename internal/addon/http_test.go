@@ -1393,6 +1393,10 @@ var documentedNumberSites = []struct {
 			// startup is out of the occupancy.
 			"{n} instance slots at 11.05 ms of occupancy carry ~1,448 invocations a second",
 			"the same {n} slots carry ~35,000 a second",
+			// M67's re-run, reading the same budget to say why a skip count of
+			// thirty-eight is jitter rather than the budget starting to bind.
+			"of a run whose {n} instance slots have headroom for ~35,000 " +
+				"invocations a second",
 			"{n} in flight plus {idle} kept warm, each held to {mem}",
 		},
 		untied: []string{

@@ -71,6 +71,17 @@ import (
 // half of this milestone is the per-module performance the Add-on manager renders,
 // which is [M68](../../docs/build-notes/phase-details/m68.md)'s and is named in
 // M66's own file as such.
+//
+// **M67 falls under it as well, and this is the last milestone that will.** The
+// runtime lifecycle adds an API and no page — m67.md defers every surface to M68
+// — so what somebody could see is a `curl` against an instance that has an add-on
+// to install, which the demo does not have for the reason M64's paragraph gives.
+// It does add a table an installed add-on would appear in for the first time:
+// `audit_logs` carries `addon.installed` and `addon.removed`. Seeding one would
+// mean writing a record of an install that did not happen, naming a module that
+// is not there, which is fabricating evidence in the one log whose whole value is
+// that it is not fabricated. When M68 installs a module into the demo, that
+// record becomes real and the row becomes worth writing.
 
 // demoFeature is one thing the demo must show, and the query that proves it does.
 type demoFeature struct {

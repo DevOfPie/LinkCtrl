@@ -29,6 +29,61 @@ migrations run at boot.
 
 ### Added
 
+- **An add-on can be installed and removed while the instance is serving.**
+
+  Two operations under one new permission, `addons.manage`, held only by the
+  account that administers the instance and held by no API key at all — a key
+  that could install an add-on would carry whatever that add-on's own manifest
+  declares, which is a reach nothing about the key bounds.
+
+  **A module is uploaded, never fetched.** `POST /api/v1/addons` takes a
+  `multipart/form-data` body carrying the `.wasm` and the `addon.json` that
+  describes it, at most 32 MiB together. There is no field naming a URL for the
+  server to download from, and there will not be one. The manifest is parsed and
+  the module is checked against the manifest's digest **before anything is
+  written to disk**, so bytes that are not the bytes the manifest describes never
+  reach the directory this instance executes from. An install spends
+  `LINKCTRL_UPLOAD_RATE_PER_MIN` — thirty a minute per address, on top of the API
+  limit, and **the same bucket a QR code's logo upload spends**. Removal carries
+  no body and is not charged.
+
+  **The files go into the add-ons directory you already configured**, which is
+  the same directory an add-on placed by hand loads from, so there is one answer
+  to what is installed. Two things follow and are worth knowing before you rely
+  on this: an install reaches **the replica that served the request** and no
+  other, and a container filesystem that is not a volume loses it on the next
+  deploy. `LINKCTRL_ADDONS_DIR` mounted read-only — which is what
+  [configuration.md](docs/configuration.md) recommends, and still the right
+  choice for an instance whose add-ons are placed by hand — refuses an install
+  with a `503` that says so.
+
+  **Removal unloads without a restart.** `DELETE /api/v1/addons/{name}` takes the
+  add-on out of the running set, out of the directory, and then releases what it
+  held: its pooled instances, its compiled module and its database connections.
+  Invocations already inside the module finish; ones that have not finished in
+  five seconds are interrupted, and the answer says so. Because the directory is
+  gone before anything is unloaded, removing an add-on whose failure class is
+  `required` **cannot leave an instance that will not start**.
+
+  **The add-on's data stays.** An add-on that owned a Postgres schema leaves it
+  behind, and the removal's answer names the schema — nothing here deletes it.
+
+  Both acts are recorded in the **instance-wide** audit log, `addon.installed`
+  and `addon.removed`, each naming the module, its version and its digest, and
+  each readable at `/api/v1/instance/audit`.
+
+  **What an upload cannot install:** an add-on whose manifest declares `.sql`
+  migration files ships those files alongside its module, and they are not part
+  of the upload. Such an add-on is refused with a message saying so, and is
+  installed the way add-ons have always been installed — its directory placed in
+  `LINKCTRL_ADDONS_DIR`, and a restart. There is also no upgrade-in-place:
+  replacing an add-on is a removal and an install. And a name that overlaps one
+  the directory already claims is refused — `oidc_x` beside `oidc`, in either
+  order — **whether or not the other one is running**, because the two share a
+  cookie prefix and a settings prefix and neither would load at the next start.
+  The install check and the boot check read the same set, so an install cannot
+  arrange a start that refuses both.
+
 - **An add-on can run inside the redirect path, and the published redirect
   measurement is now scoped to core.**
 

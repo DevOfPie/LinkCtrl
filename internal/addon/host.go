@@ -117,6 +117,7 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
+	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
@@ -487,6 +488,12 @@ type Options struct {
 	// that function* are different facts and a module branches on them differently.
 	Sessions SessionMinter
 
+	// Audit is what records the two lifecycle acts (M67). Nil records nothing,
+	// which is a host built by a test; an instance passes the audit service, and
+	// installing code into a running server without a record of who did it is the
+	// one thing this surface must not be able to do quietly.
+	Audit audit.Recorder
+
 	// LoadTimeout is how long one add-on may take to load. Zero means
 	// [DefaultLoadTimeout], which is what an instance uses; a test sets a budget it
 	// can afford to spend watching a module that will not return.
@@ -638,6 +645,12 @@ type Loaded struct {
 	// setting name — see config.AddonSettings. Held as Secret whatever the
 	// manifest called the setting, so no value can print itself.
 	settings map[string]config.Secret
+	// live is how many invocations of this add-on are inside a guest call, and
+	// whether it is being removed. A pointer, because a Loaded is copied by value
+	// into every set and every caller of Addons and the count has to be one count.
+	// Nil on a Loaded a test built by hand, which addonLive's methods treat as an
+	// add-on nothing is removing — see set.go.
+	live *addonLive
 	// compiled is the module's compiled form, kept because a route gets an
 	// instance of its own per request (M64, D260) and compiling per request was
 	// ruled out by M60's measurement. It is owned by the runtime and closed with
@@ -685,13 +698,27 @@ func (l Loaded) Module() api.Module { return l.module }
 // whether add-ons happen to be enabled.
 type Host struct {
 	runtime wazero.Runtime
-	loaded  []Loaded
-	log     *slog.Logger
+	// set is what this host is running, as one immutable value swapped under an
+	// atomic pointer. It replaced three fields — loaded, inline and pools — that
+	// Open wrote once and every reader took as constants, because M67 made the
+	// installed set change while requests are in flight. set.go is the mechanism
+	// and the argument, including why it is not a lock.
+	set setPointer
+	// installMu serializes the writers: Install, Remove and Close. No reader takes
+	// it. It exists so that two installs cannot each derive a new set from the same
+	// old one and lose each other's add-on.
+	installMu sync.Mutex
+	log       *slog.Logger
 	// metrics is held rather than passed, because the refusal counter is written
 	// from an ABI call and not from Open. Nil-safe on every method, which is what
 	// lets a test open a host without a registry.
 	metrics *observability.Metrics
 
+	// dir is the absolute add-ons directory, held because runtime install and
+	// removal write into it (M67) and because the directory Open read has to be
+	// the one an install lands in — otherwise the operator's boot route and the
+	// API's would be two lifecycles that disagree about what is installed.
+	dir string
 	// db and dsn are Options.DB and Options.DSN, held because a schema is created
 	// per add-on inside the discovery loop and measured again long after it, from
 	// the maintenance job.
@@ -706,6 +733,9 @@ type Host struct {
 	// sessions is Options.Sessions: what answers session_mint. Nil is a host that
 	// cannot mint.
 	sessions SessionMinter
+	// auditor is Options.Audit: what records an install and a removal (M67). Nil
+	// records nothing, which is every unit test in this package and no instance.
+	auditor audit.Recorder
 
 	// states is what an ABI call is answered against, keyed by the calling
 	// module's name — see hostabi.go. Guarded because a host function is called
@@ -733,14 +763,10 @@ type Host struct {
 	// about where it applies than the two call sites do.
 	loadTimeout time.Duration
 
-	// The redirect limb (M66); redirect.go is where all of it is used.
+	// The redirect limb (M66); redirect.go is where all of it is used. Which
+	// add-ons are on it moved into `set` above at M67; what is left here is the
+	// two bounds, which no install changes.
 	//
-	// inline is the loaded add-ons holding `redirect.inline`, in load order,
-	// resolved once here rather than filtered per redirect. That is the same
-	// reason grants are resolved once: this slice is read on **every** redirect,
-	// where the inherited rule is a cached p99 under 20 ms, and `len(h.inline)`
-	// has to be the whole cost on an instance that installed none.
-	inline []Loaded
 	// inlineDeadline is Options.InlineDeadline with its default applied: how long
 	// a module's own code may hold a redirect. Instantiation is not in it — that is
 	// instantiateDeadline below, and F326 is what the two being one number cost.
@@ -749,12 +775,12 @@ type Host struct {
 	// how long this host will spend starting a module for a redirect-class
 	// invocation before serving the redirect without it.
 	instantiateDeadline time.Duration
-	// The instance pool (M66.5); pool.go is where all of it is used.
+	// The instance pool (M66.5); pool.go is where all of it is used. The map of
+	// pools moved into `set` above at M67, for the reason the inline slice did:
+	// an add-on installed at runtime brings a pool with it and one removed takes
+	// its pool away, and the redirect path must never see a set where the two
+	// disagree. Each addonPool still guards its own contents.
 	//
-	// pools is one idle set per add-on on the redirect path, built at Open and
-	// never written after, so reading it needs no lock — each addonPool guards its
-	// own contents.
-	pools map[string]*addonPool
 	// idleInstances is how many entries are held at rest across every pool, which
 	// is the term this milestone added to the guest-memory ceiling. Instance-wide
 	// rather than per add-on because what an operator sizes a host by is the memory
@@ -772,7 +798,14 @@ type Host struct {
 	// observe is the out-of-band queue, and it is nil unless something declared
 	// the grant — which is what makes the observe class cost an ordinary instance
 	// nothing at all: no channel, no goroutine.
-	observe chan RedirectEvent
+	//
+	// **Behind an atomic pointer since M67**, for the same reason the installed set
+	// is: an add-on installed at runtime may be the first observer this host has,
+	// so the channel is now written while [Host.Observe] is reading it from the
+	// click pipeline. A lock there would be paid on every recorded click; one
+	// atomic load is not, and the nil case — an instance where nothing observes —
+	// costs exactly what it did.
+	observe atomic.Pointer[observeQueue]
 	// observeStop cancels the workers' context, which is what ends an invocation in
 	// flight rather than waiting one out — see stopObserving.
 	observeStop context.CancelFunc
@@ -851,10 +884,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		instantiate = DefaultInstantiateDeadline
 	}
 	h := &Host{
-		log: log, metrics: opts.Metrics, db: opts.DB, dsn: opts.DSN,
+		log: log, metrics: opts.Metrics, dir: dir, db: opts.DB, dsn: opts.DSN,
 		settings:    settings,
 		overrideFor: overrides,
 		sessions:    opts.Sessions,
+		auditor:     opts.Audit,
 		slots:       make(chan struct{}, maxConcurrentRoutes),
 
 		loadTimeout:         timeout,
@@ -893,8 +927,20 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		return nil, err
 	}
 
+	// Accumulated locally and published once below, rather than appended to a
+	// field. Open is a writer of the set like Install is, and the set is a value:
+	// there is no half-built one to publish.
+	var started []Loaded
 	for _, e := range entries {
 		name := e.Name()
+		if isStaging(name) {
+			// The staging area runtime install writes through, and whatever a crash
+			// mid-install left in it. Not an add-on, not a warning: it is this host's
+			// own working directory inside the operator's, and lifecycle.go sweeps it
+			// below. Skipped before the non-directory branch so a leftover file there
+			// does not produce a line about an operator's README either.
+			continue
+		}
 		if !e.IsDir() {
 			// Ignored rather than refused. An operator's README or a stray
 			// checksum file in the directory they were told to put add-ons in is
@@ -954,7 +1000,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		h.metrics.SetAddonInfo(loaded.Manifest.Name, loaded.Manifest.Version,
 			loaded.Manifest.ABIVersion, string(loaded.FailureClass),
 			loaded.grants.String())
-		h.loaded = append(h.loaded, loaded)
+		started = append(started, loaded)
 		// The grants are named rather than counted. A count answers "did anything
 		// change" and nothing else, and what an operator reading a boot log needs to
 		// know about a module they installed is which capabilities it asked for —
@@ -981,17 +1027,13 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			slog.Uint64("guest_memory_bytes", uint64(loaded.MemorySize())))
 	}
 
-	// The redirect classes, resolved once now that everything that is going to
-	// load has (M66). Both are deliberately after the loop rather than inside it:
-	// what goes on the redirect path is a property of the whole set, and a slice
-	// appended to while modules were still being refused would carry an add-on
-	// that did not finish loading.
-	for _, l := range h.loaded {
-		if l.RunsInline() && l.compiled != nil {
-			h.inline = append(h.inline, l)
-		}
-	}
-	if len(h.inline) > 0 {
+	// The set, published once now that everything that is going to load has. The
+	// redirect classes and the pools are derived from it rather than accumulated
+	// beside it (M66, M66.5, and newAddonSet since M67): what goes on the redirect
+	// path is a property of the whole set, and a slice appended to while modules
+	// were still being refused would carry an add-on that did not finish loading.
+	set := h.store(newAddonSet(started, nil))
+	if len(set.inline) > 0 {
 		// Warn, because this is the line that tells an operator their published
 		// redirect latency is no longer this product's alone to answer for. It is
 		// the boundary the owner set, said out loud on the instance it applies to
@@ -1006,24 +1048,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			// is a module that hangs at startup, and that is the second number.
 			slog.String("instantiate_deadline", h.instantiateDeadline.String()))
 	}
-	// One idle set per add-on on either redirect class, built here and never
-	// written after, so the redirect path reads it without a lock (M66.5).
-	for _, l := range h.loaded {
-		if l.compiled == nil {
-			continue
-		}
-		for class, declared := range map[string]bool{
-			ClassInline: l.RunsInline(), ClassObserve: l.ObservesRedirects(),
-		} {
-			if !declared {
-				continue
-			}
-			if h.pools == nil {
-				h.pools = make(map[string]*addonPool, 2*len(h.loaded))
-			}
-			h.pools[poolKey(l.Manifest.Name, class)] = &addonPool{}
-		}
-	}
+	// The staging area, swept before anything can be installed into it. A crash
+	// between staging a module and renaming it into place leaves a directory
+	// nothing will ever claim, and an operator's add-ons directory is not a place
+	// to accumulate them — see lifecycle.go.
+	h.sweepStaging(dir)
 	h.startPoolSweep(ctx)
 	h.startObserving(ctx)
 	if observers := h.ObservingAddons(); len(observers) > 0 {
@@ -1047,7 +1076,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 
 	log.Info("add-on host started",
 		slog.String("dir", dir),
-		slog.Int("loaded", len(h.loaded)))
+		slog.Int("loaded", len(set.loaded)))
 	return h, nil
 }
 
@@ -1100,7 +1129,12 @@ type claimant struct {
 func claimants(dir string, entries []os.DirEntry, overrides func(string) map[string]string) []claimant {
 	out := make([]claimant, 0, len(entries))
 	for _, e := range entries {
-		if !e.IsDir() {
+		// isStaging for the same reason the load loop below skips it: this host's
+		// own working directory is not an operator's add-on. Stated rather than left
+		// to ReadManifest failing on it, because [Host.collidingNames] reads this
+		// function as the answer to *what claims a name* and that answer has to be
+		// the same one discovery gives.
+		if !e.IsDir() || isStaging(e.Name()) {
 			continue
 		}
 		m, err := ReadManifest(filepath.Join(dir, e.Name()))
@@ -1344,6 +1378,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	return Loaded{
 		Manifest: m, Dir: dir, Schema: schema, settings: values, FailureClass: class,
 		module: mod, grants: grants, storage: storage, compiled: compiled,
+		live: newAddonLive(),
 	}, nil
 }
 
@@ -1421,8 +1456,9 @@ func (h *Host) Addons() []Loaded {
 	if h == nil {
 		return nil
 	}
-	out := make([]Loaded, len(h.loaded))
-	copy(out, h.loaded)
+	loaded := h.current().loaded
+	out := make([]Loaded, len(loaded))
+	copy(out, loaded)
 	return out
 }
 
@@ -1431,7 +1467,7 @@ func (h *Host) Len() int {
 	if h == nil {
 		return 0
 	}
-	return len(h.loaded)
+	return len(h.current().loaded)
 }
 
 // Schemas is the Postgres schema every loaded add-on owns, in discovery order.
@@ -1444,7 +1480,7 @@ func (h *Host) Schemas() []string {
 		return nil
 	}
 	var out []string
-	for _, l := range h.loaded {
+	for _, l := range h.current().loaded {
 		if l.Schema != "" {
 			out = append(out, l.Schema)
 		}
@@ -1472,7 +1508,7 @@ func (h *Host) OrphanSchemas(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	live := make(map[string]bool, len(h.loaded))
+	live := make(map[string]bool, len(h.current().loaded))
 	for _, schema := range h.Schemas() {
 		live[schema] = true
 	}
@@ -1512,7 +1548,7 @@ func (h *Host) ObserveSchemaSizes(ctx context.Context) {
 	if h == nil || h.db == nil {
 		return
 	}
-	for _, l := range h.loaded {
+	for _, l := range h.current().loaded {
 		if l.Schema == "" {
 			continue
 		}
@@ -1537,7 +1573,15 @@ func (h *Host) ObserveSchemaSizes(ctx context.Context) {
 
 // Close shuts the runtime down, which closes every module in it.
 func (h *Host) Close(ctx context.Context) error {
-	if h == nil || h.runtime == nil {
+	if h == nil {
+		return nil
+	}
+	// Serialized with Install and Remove, which is new at M67: closing a host
+	// while an install is halfway through swapping the set would leave the
+	// instance it just started running in a runtime that is about to be closed.
+	h.installMu.Lock()
+	defer h.installMu.Unlock()
+	if h.runtime == nil {
 		return nil
 	}
 	// Before the runtime, so nothing can be executing a statement on a pool that is
@@ -1552,7 +1596,7 @@ func (h *Host) Close(ctx context.Context) error {
 	// one underneath an invocation still running would be the failure stopObserving
 	// exists to avoid.
 	h.stopPoolSweep(ctx)
-	for _, l := range h.loaded {
+	for _, l := range h.current().loaded {
 		l.storage.Close()
 	}
 	// Neutralized on the way out, like Route's: wazero's close error names the
@@ -1560,14 +1604,17 @@ func (h *Host) Close(ctx context.Context) error {
 	// than through the one Open wrapped.
 	err := neutralize(h.runtime.Close(ctx))
 	h.runtime = nil
-	h.loaded = nil
-	h.inline = nil
-	// h.pools is deliberately **not** nil'd. Every entry it held is closed by
-	// stopPoolSweep above, so what is left is a map of empty sets costing nothing —
-	// and the map is read on the redirect path, where nil'ing it unlocked would put
-	// a second field into the shape [F325](../../docs/build-notes/deferred-findings.md#open)
-	// is the row about: a hot-path read racing a teardown write. One is a filed
-	// finding; two would be a pattern this milestone chose to extend.
+	// One store rather than three field writes. The set is a value and the empty
+	// one is a value: a reader that loaded the pointer a moment ago goes on working
+	// from the set it has, and one that loads it now finds nothing installed. That
+	// is what [F325](../../docs/build-notes/deferred-findings.md#open) is a row
+	// about from the other side — a hot-path read racing a teardown write on
+	// `h.inline` and `h.pools` — and it is closed here as a consequence of M67
+	// needing the set to be swappable at all, rather than as this milestone's work.
+	// **The row is not closed by this**: what it names is `Host.Close` as a whole,
+	// including `h.runtime` and `h.loaded` above and the storage pools closed a few
+	// lines up, and a teardown discipline for those is still the fix it asks for.
+	h.store(emptyAddonSet)
 	h.mu.Lock()
 	h.states = nil
 	h.mu.Unlock()

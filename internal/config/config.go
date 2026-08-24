@@ -289,11 +289,16 @@ type AuthConfig struct {
 	//
 	// **A bucket of its own because an upload is not an API call.** Every other
 	// request under `/api/v1` carries a body this product caps at 256 KiB and
-	// parses as JSON; an upload carries up to `qr.MaxLogoUploadBytes` and is
-	// decoded, which is the one place a request's cost is set by its content
-	// rather than by its shape. `API_RATE_PER_MIN` defaults to 600, and 600
-	// megabyte uploads a minute is a bandwidth and decoder budget nobody chose
-	// by setting a number about JSON.
+	// parses as JSON; an upload carries a file, which is where a request's cost
+	// is set by its content rather than by its shape. `API_RATE_PER_MIN` defaults
+	// to 600, and 600 megabyte uploads a minute is a bandwidth and decoder budget
+	// nobody chose by setting a number about JSON.
+	//
+	// **Two endpoints charge it since M67**, and they are not the same size: a
+	// logo is `qr.MaxLogoUploadBytes` and is decoded, an add-on install is
+	// `addon.MaxUploadBytes` and is compiled. One bucket for both, because what
+	// the bucket is about is true of both and a second number would be a second
+	// thing to tune. See docs/configuration.md's row for what that costs.
 	//
 	// Thirty is what somebody restyling a poster does — upload, look, upload
 	// again — with room to spare. It charges the *address* like every other

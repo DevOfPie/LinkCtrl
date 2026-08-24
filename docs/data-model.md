@@ -6,14 +6,17 @@ pointed at since Phase 1. It existed as a reference in two files and nowhere
 else until 0.2.0.
 
 **Derived from the migrated schema, not from the migrations.** Every table,
-column count and foreign key below was read out of a database with **all 46**
+column count and foreign key below was read out of a database with **all 47**
 migrations applied, counted from `internal/store/migrations/` rather than
 recalled. It said *35* until 0.3.0 and was already one short when 0.2.0 shipped
 with 36; Phase 3 took it to 44, and it said *44* while the two rows Phase 4 added
 were already on this page — `addon_identity_links` from `04500` and
 `mfa_pending_logins` at ten columns from `04600`, neither of which a 44-migration
-schema has. The number is a fact about this file's own derivation, so it moves
-with the derivation and not with the tag.
+schema has. `04700` added `addons.manage` to `permissions` and creates no table.
+The number is a fact about this file's own derivation, so it moves with the
+derivation and not with the tag, and it is still hand-maintained —
+[F321](build-notes/deferred-findings.md#open) is the row about tying it to
+something.
 It describes what a running instance has rather than
 what the files appear to say. The distinction matters here: partitions are
 created by application code and never appear in sqlc-visible SQL, so a reader
@@ -150,7 +153,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `audit_logs` | 12 | Built, partitioned | 40 actions, enumerated by `audit.AllActions` and checked by two tests — one that the list is exhaustive, and one that the number every document states is the length of that list. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). Since M58 the same statement also rewrites `metadata`'s `"email"` key and the `"from"` array beside it, matched on the value because there is no key to match on. **One statement, not several**: two data-modifying CTEs writing one row leave Postgres to apply one and drop the other, which a record that is both the erased actor's and carries their address hits every time. |
+| `audit_logs` | 12 | Built, partitioned | 42 actions, enumerated by `audit.AllActions` and checked by two tests — one that the list is exhaustive, and one that the number every document states is the length of that list. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). Since M58 the same statement also rewrites `metadata`'s `"email"` key and the `"from"` array beside it, matched on the value because there is no key to match on. **One statement, not several**: two data-modifying CTEs writing one row leave Postgres to apply one and drop the other, which a record that is both the erased actor's and carries their address hits every time. |
 | `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). Deleted with their own reader's account, and **scrubbed** when somebody else's account is erased: the row telling an inviter that their invitation was accepted names the person who accepted it, in `data` and in `title` alike, and belongs to neither of the two sweeps that would otherwise reach it (M58, D176). |
 | `mail_outbox` | 11 | Built | Optional: an instance with no `SMTP_HOST` never queues. Bodies are blanked when a row finishes (F32). |
 | `webhooks` / `webhook_deliveries` | 10 / 11 | Built | Delivery is instance-wide and arrival-ordered, which is a recorded limitation (F90). |

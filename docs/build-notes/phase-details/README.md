@@ -52,7 +52,7 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 | [M65](m65.md) | The authentication hook: a session minted on an add-on's word | M61 · M62 · M64 | done |
 | [M66](m66.md) | Add-ons on the redirect path: two classes, a deadline, and a promise rescoped | M60 · M62 | done |
 | [M66.5](m66.5.md) | Instances are reused, so a visitor stops paying for a cold start | M66 · M60 *(ordering)* | done |
-| [M67](m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | not started |
+| [M67](m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | done |
 | [M68](m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | not started |
 | [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · M68 *(ordering)* | not started |
 | [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | not started |

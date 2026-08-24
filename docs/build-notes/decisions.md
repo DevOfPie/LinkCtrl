@@ -475,6 +475,9 @@ file. Append a row when you append an entry.
 | [M66, the histogram keeps what the deadline gave up](#2026-08-23--m66-the-histogram-keeps-what-the-deadline-gave-up) | D332: why `linkctrl_addon_redirect_duration_seconds` still times instantiation in the milestone that took instantiation out of the add-on's deadline — whose fault it is and what it cost the visitor are different facts, and they belong in different places |
 | [M66.5 added: pooling, because a well-behaved add-on cost 44.89ms](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms) | D333: D319 reversed on the measurement it was taken without — the third k6 column, why a module that does nothing costs 11ms and misses 38.6% of traffic, and where the new milestone sits. D334: what the plan review sent back — the reserved slot spent and Plan.md rewritten to say so, and the 20ms bar the milestone had been missing |
 | [M66.5, the reset is the host's, because a pooled instance keeps what the last visitor left](#2026-08-24--m665-the-reset-is-the-hosts-because-a-pooled-instance-keeps-what-the-last-visitor-left) | D335: how reuse is made safe — a memory image taken after package initialization and written back before the instance is handed on, why the guest is not asked to cooperate, what is evicted rather than reused, and the two bounds on what is held at rest. D336: the ceiling gains a second term, and the sweep that ties it does not gain a fourth word. D337: three figures and one citation the reviewer's read corrected, and the M66 test this diff relaxed on purpose |
+| [M67, an add-on arrives and leaves, and the directory is still the only store](#2026-08-24--m67-an-add-on-arrives-and-leaves-and-the-directory-is-still-the-only-store) | D338: why runtime install writes into `LINKCTRL_ADDONS_DIR` rather than into a table, what that costs a multi-replica deployment, and how atomicity is one `rename(2)` through a staging directory inside it. D339: the installed set becomes an atomic snapshot rather than three fields behind a lock, because the alternative puts a lock on every redirect. D340: the unload answer m67.md asked for — in-flight invocations complete, bounded, and the bound is what interrupts. D341: `addons.manage` is the instance principal's and is non-delegable in D18's widest form. D342: what an upload cannot install, and the two claims of M60 and M64 this milestone narrowed in writing. D343: an audit action is declared in `internal/audit` whatever package records it — the F18 split re-created and undone inside one milestone, and why the single-file parse stays single-file |
+| [M67, the caller's context stops deciding whether a removal finished](#2026-08-24--m67-the-callers-context-stops-deciding-whether-a-removal-finished) | D344: a lifecycle act completes on a context the caller cannot cancel — why `removeGrace` makes removal the one audit call site in this product that detaches, and what wazero does and does not do with a cancelled close. D345: an add-on install spends the QR logo's upload bucket rather than a fourth one, the argument against it, and the three documents that were made false by nobody writing any of this down |
+| [M67, an install reads what the directory claims, not what is running](#2026-08-24--m67-an-install-reads-what-the-directory-claims-not-what-is-running) | D346: the runtime name-collision check runs over the set boot decides from rather than over the running set — the sequence by which the install API could arrange a start that stops, why directory entries are the wrong wider set and the loaded set the wrong narrower one, what the union with the loaded set covers, and what an operator is now refused |
 
 ---
 
@@ -38148,3 +38151,506 @@ assertion is unchanged and only the wait is, and the marker never implied the
 metric even before this milestone, which is what makes it a fix rather than a
 concession.
 
+## 2026-08-24 — M67, an add-on arrives and leaves, and the directory is still the only store
+
+[M67](phase-details/m67.md). M60's lifecycle was a directory read at boot. This
+milestone makes arrival and departure runtime acts, which turns three things that
+were constants into things that change while requests are being served.
+
+### D338 — the add-ons directory is the only store, and atomicity is one rename
+
+**The decision:** an installed add-on lives in `LINKCTRL_ADDONS_DIR`, the same
+directory an operator writes into by hand, and nowhere else. There is no table of
+installed modules and no blob column.
+
+The alternative — a `bytea` in Postgres, boot reading from there — was considered
+and is the one that would have made an install reach every replica and survive a
+container without a volume. It was refused because it produces **two answers to
+what is installed**, and the first time they disagree the disagreement is either a
+module running that nothing lists or a row for a module that is not there. M60's
+boot route is not going away: m67.md requires it keeps working unchanged, and M63's
+orphan detection is *derived* from the difference between the schemas in the
+database and the modules in the directory, so a second store would need a third
+reconciliation nobody has designed.
+
+**What that costs is stated rather than absorbed**, in `docs/configuration.md` and
+`docs/SECURITY.md`:
+
+- An install reaches the replica that served the request and no other. On more
+  than one replica the boot-directory route is still the way to install, and the
+  API is for the single-container shape this product's own gate is built around.
+- A container filesystem that is not a volume loses an installed add-on on the
+  next deploy — which is the same property the mount already has and which an
+  operator can already see.
+
+Both are properties of *where the operator mounted the directory*. Neither is made
+better by a second store that then disagrees with the mount.
+
+**Atomicity is one `rename(2)`.** The pair is written into `.staging/<name>-*`
+**inside** the add-ons directory — inside, because rename does not cross
+filesystems and that directory is the one place guaranteed to be on the same one
+as itself — and then renamed into place as a unit. Before the rename nothing in
+the discovery set has changed; after it the whole file set is there, because a
+directory is what moved. Discovery skips `.staging` by name, so a crash between
+the two leaves something the next boot sweeps and never a half-written add-on.
+
+Removal is that backwards: the directory is renamed *out* of the discovery set
+first and deleted afterwards. That is the whole of m67.md's *a removed `required`
+add-on cannot brick the boot it was required for* — the file set is gone from
+discovery the instant the rename returns, whatever happens next, and
+`TestARemovedRequiredAddonCannotBrickTheNextBoot` drives it by breaking the module
+first, proving the boot really would have stopped, and then removing it.
+
+**Install refuses a name that already exists**, which is what keeps this to one
+rename: `rename(2)` onto a non-empty directory fails, so replacing would need a
+remove and an install with a window between them. m67.md puts upgrade-in-place out
+of scope for exactly that reason, and the refusal names the path — remove, then
+install. A directory the host did *not* load is refused too, rather than
+overwritten: it is an operator's, placed by hand or left by a module that would
+not start, and installing over it would destroy whatever they were about to debug.
+
+**M60's name-collision rule is applied to the runtime path, and it had to be.**
+Two add-ons whose names stand in a `name + "_"` prefix relation share a cookie
+namespace and a settings namespace — `oidc` reads and overwrites `oidc_x`'s
+session cookies — and `Open` refuses **both** members of the pair. An install that
+skipped the check would be a way to reach exactly the state that refusal exists to
+prevent, on a host nobody restarted, which would make a shipped claim false rather
+than merely leave a gap. So the check runs here too, over the one arriving name
+against the loaded set.
+
+**It refuses the arrival rather than unloading the pair**, and that is the one
+place the runtime path deliberately differs from boot. At boot neither add-on is
+running and there is no principled winner, which is why both go. Here one is
+already serving and the other is a request somebody just made, so taking down a
+running authentication provider because somebody uploaded a badly-named module
+would make this endpoint a denial of service against what is already installed.
+The operator is told which name it collides with.
+
+**A read-only mount refuses an install, and says so.** `docs/configuration.md`
+tells an operator to mount the directory `:ro`, and that advice is still right for
+an instance whose add-ons are placed by hand. The two arrangements are now named as
+two, in that document and in the conformance gate, which grew a fourth limb that
+boots writable rather than an edit to the third that boots read-only.
+
+### D339 — the installed set is an atomic snapshot, not three fields behind a lock
+
+`Host.loaded`, `Host.inline` and `Host.pools` were written once by `Open` and read
+as constants everywhere else. That premise is what let `HasInline` be a field read
+on the hot path of **every** redirect and the pool map be read without a lock.
+
+The obvious repair is an `RWMutex` over the three, and it is the wrong one: it puts
+a lock acquisition on every redirect served by an instance that has no add-ons at
+all, which is the cost m60.md promised nobody would pay. So the three became one
+immutable `addonSet` behind an `atomic.Pointer`. A reader loads the pointer once
+and works from a set that cannot change underneath it; a writer builds a whole new
+set and stores it. Reading costs one atomic load; writing costs a slice copy, on an
+operation an operator performs by hand.
+
+**The three had to move together** rather than becoming three atomics. A redirect
+resolves an add-on out of `inline` and then looks its pool up in `pools`, and an
+add-on present in one and absent from the other is a defect a per-field lock would
+still allow. One value makes it unrepresentable.
+
+Three consequences fell out and are named because they are behaviour changes:
+
+- The observe worker reads the observer set **per event** instead of capturing it
+  at start, or an add-on installed after boot would never be shown a redirect and
+  one removed would be shown every one.
+- `startPoolSweep` and `startObserving` are called again by `Install` and are
+  idempotent, because an instance that booted with no pooled add-on has no sweep
+  and one that booted with no observer has no queue. Idempotent rather than
+  per-add-on: a sweep per install would be a goroutine per add-on ever installed,
+  and a second observe worker would break the ordering promise M66 makes.
+- `Host.Close` now publishes the empty set instead of nil'ing three fields, which
+  closes the *read* half of [F325](deferred-findings.md#open) as a side effect of
+  needing the set swappable at all. **The row is not closed**: what it names is
+  `Host.Close`'s teardown discipline as a whole, including the runtime and the
+  storage pools, and that is still the fix it asks for.
+
+### D340 — in-flight invocations complete, the wait is bounded, and the bound is what interrupts
+
+m67.md assigns the unload semantics to this milestone and asks for the choice to be
+recorded. It is: **they complete.**
+
+Removal detaches the add-on from the set first, so nothing new can resolve it —
+that is the same swap D339 describes, and it is why the wait is finite rather than a
+race against arriving traffic. Then a counter (`addonLive`) is sealed and the
+invocations already inside a guest call are waited for, up to five seconds.
+
+Waiting is right because every one of those invocations is **already bounded by
+something else**: an inline one by `LINKCTRL_ADDON_INLINE_DEADLINE` and
+`LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, an observation by the same pair, a page
+request by the server's write timeout. Quiet is a state that arrives rather than
+one the code hopes for, and five seconds is comfortably past the sum of those
+bounds.
+
+Past the grace the modules are closed anyway, and that is safe rather than reckless:
+wazero documents `CompiledModule.Close` as safe to call with outstanding calls from
+instances made from it. The in-flight guest call then fails, and every caller on
+these paths already handles a failed invocation — a redirect is served without the
+add-on, a page answers the 502 a trapping module produces. The answer says
+`draining: true` when it happened. The alternative, waiting without a bound, makes
+one hung module able to hold a removal open forever, which is the state removal
+exists to escape.
+
+**A `sync.WaitGroup` is not this**, and the comment in `set.go` says why: `Add`
+from a reader racing `Wait` from the remover is the case its documentation rules
+out, and the failure mode is `Wait` returning early — which here means closing a
+module with a guest running in it.
+
+**What unload releases, and in which order**: the pooled instances (M66.5's
+`drainPool`, drained from the set being *replaced*, because the one just stored no
+longer has those pools), then the load-time instance, then the compiled module,
+then the storage pool, then the host state.
+
+**The leak bound is measured against the resident set, and two things about it are
+worth recording because both were found by sabotaging it rather than by reasoning
+about it.**
+
+- `runtime.MemStats.HeapAlloc` measures nothing here and was the first attempt.
+  wazero maps a compiled module outside the Go heap, so a host that never closed
+  one measured *smaller* after ten cycles than before — the assertion passed under
+  a sabotage that removed the exact line it exists to hold. It reads
+  `/proc/self/status`'s `VmRSS` instead, and skips where there is none.
+- Closing the **compiled module** turns out to be promptness rather than a leak
+  fix: forty cycles without `l.compiled.Close` moved the resident set by −208 KiB,
+  because wazero releases the mapping from a finalizer once nothing references it.
+  The line stays — waiting for a collection to release megabytes of mapped code is
+  a thing that happens eventually rather than a thing that happens — but the test
+  is honest in its own comment about not bounding it.
+
+What the test does catch is the leak that matters: removing `l.module.Close`
+reddens it immediately, because wazero refuses the next install of a module whose
+name is still instantiated. Ten cycles of a 1.8 MB module, resident growth under
+16 MiB, and the ratio is what means something — a host retaining one 8 MiB
+instance per cycle is most of a hundred megabytes up, one that merely fragments is
+a few.
+
+**The schema is left.** Removal creates an orphan, which is M63's answer and not an
+oversight, and the removal's own response names it so that M68's manager can offer
+the purge at the point of decision.
+
+### D341 — `addons.manage` is the principal's, and is non-delegable in D18's widest form
+
+The permission is an instance-principal scope in the D98 pattern, seeded by
+`04700_addons_manage.sql` on 03500's shape — inserted, granted to no role, and
+conferred on whoever already holds `instance.admin`.
+
+**Why not a role permission.** An add-on is code this server executes, installed
+once for the whole box, and no organization owns one. A role grant would be F15's
+shape with arbitrary code at the end of it: registration provisions every
+self-registered account the owner role of its own organization, so on
+`SIGNUP_MODE=open` "an owner may install an add-on" means "anybody with an email
+address may install an add-on".
+
+**Delegability — D18's second limb, and the widest instance of it the map holds.**
+Every other entry in `auth.NonDelegableScopes` describes a credential widening its
+reach inside this product's own vocabulary. This one leaves the vocabulary: a key
+that may install an add-on has acquired whatever that module can do — the ABI, the
+permissions the module's own manifest declares, the schema M63 gives it, and, with
+`session.mint`, the ability to decide who is signed in. No reasoning about the
+key's own scopes bounds it. The first limb does not apply: installing discloses
+nothing about an actor and touches no network data.
+
+**It is also not in `auth.InstanceGrantable`**, for a harder reason than
+`domains.write.instance` was not: a delegatee would never need the principal again,
+because the module they install can carry whatever reach they wanted.
+
+**The check sits in the service and the handler asks nothing about credentials**,
+which is the arrangement `InstanceAPI` already has. `Host.Install` and `Host.Remove`
+check and then call unexported halves; the split exists because an `*auth.Identity`
+carries its permissions in an unexported map with no constructor, so a unit test in
+`internal/addon` cannot mint an authority — the gate is asserted in
+`test/integration/addon_lifecycle_test.go`, from both sides and against a real
+principal.
+
+### D342 — what an upload cannot install, and the two shipped claims this narrowed
+
+**An add-on that ships `.sql` migration files cannot be installed by upload**, and
+is refused with `migrations_unsupported` rather than left to fail as a missing
+file. m67.md's install is *a `.wasm` + manifest pair*; a manifest may declare
+migration files the host applies into the add-on's schema (M63), and those files
+are neither of the two parts. An add-on that owns a schema and creates its tables
+from its own code installs here; one that ships DDL is installed by placing its
+directory and restarting. The refusal says which. This is a real bound on the
+surface and it is a deferred row rather than scope creep, because M69's OIDC add-on
+is the first thing likely to need the other shape.
+
+Two claims a shipped milestone made are narrowed here, deliberately and in
+writing, which is what `internal/addon/absence_test.go`'s own header requires:
+
+- **M64's "the API surface knows nothing about add-ons at all."** It was exactly
+  true and the question it left open — whether a *third party's* surface is bound
+  by *every UI feature has API support* — is still open and still M69's. What this
+  milestone adds is not a third party's surface; it is the host's own lifecycle,
+  which the inherited rule requires be in the document because M68's manager drives
+  it. The absence becomes a bound: the document may carry `/addons` and
+  `/addons/{name}`, and any other path under `/addons` fails the test.
+- **M60's "no route is mounted" for an instance with no host**, which was checked
+  over one nil field and is now checked over two. The second is the one that would
+  hurt: an upload endpoint mounted on every instance that installed nothing.
+
+`internal/httpx/api_addons.go` joins `httpSurfaceMentioningAddOns` and
+`04700_addons_manage.sql` joins `migrationsMentioningAddOns`, both as the
+deliberate additions those lists exist to require.
+
+**One thing the API deliberately does not have**, and it is worth a line because
+its absence is the design: there is no field naming a URL for the server to fetch a
+module from. It would be the cleanest request forgery this product could offer —
+an authenticated caller naming an address the server connects to, on a path whose
+whole job is to execute what comes back — and no validation helps, because the
+danger is the request rather than the response. The bytes cross in the body the
+caller already has to send.
+
+### D343 — an audit action is declared in `internal/audit`, whatever package records it
+
+**The decision:** `addon.installed` and `addon.removed` are
+`audit.ActionAddonInstalled` and `audit.ActionAddonRemoved`, declared beside every
+other action this product records and listed in `AllActions`. This milestone's
+first attempt declared them in `internal/addon/lifecycle.go`, next to the code
+that writes them, which is where they read most naturally and is the wrong place.
+
+Wrong for a reason `audit.go` already carries in a comment. [F18](deferred-findings.md)
+is the finding that two of the vocabulary's actions lived in `internal/dispute`,
+so anything counting the list from `internal/audit` was silently short by two —
+and *silently* is the whole of it: `TestAllActionsIsExhaustive` parses `audit.go`
+and only `audit.go`, so a constant declared elsewhere is not missing from
+`AllActions` as far as that test can tell. The count in `docs/SECURITY.md` was
+wrong twice off the back of it, at M32.5 and again at 0.2.0, and M45 moved the
+dispute constants and wrote *there is one list and AllActions can be complete*
+into the file. Declaring these two outside the package re-created that split
+exactly, in the milestone whose own bullet requires every lifecycle act be
+audited, and nothing would have gone red: the list would have read forty while
+the product made forty-two administrative changes.
+
+The single-file parse is not the defect and is not being widened. It is the
+reason the list is trustworthy at all — a check that reads one file cannot be
+fooled by a build tag or an unimported package — and its blind spot is by
+construction. What covers the blind spot is **where constants go**, so that is
+what is written down here rather than a bigger test.
+
+Moving them moved both documented counts, and the mechanism did the moving:
+`TestTheDocumentedActionCountIsTheOneAllActionsHolds` reddens on `docs/SECURITY.md`
+and `docs/data-model.md` together, so forty became forty-two in both or in
+neither. `docs/SECURITY.md`'s enumeration of the instance-wide surface gained the
+two acts beside it — an add-on is installed once for the whole box and belongs to
+no organization, which is why the records are `InstanceWide` and why that
+sentence was short by two until they were listed.
+
+**Sabotage.** Dropping `ActionAddonRemoved` from `AllActions` and re-running the
+pair reddens four separate assertions: the constant declared and unlisted, the
+41-against-42 length mismatch, both documented sentences no longer saying
+forty-one, and the sweep then finding two numbers in those documents tied to
+nothing. Restored by counter-edit.
+
+### The inherited redirect-path measurement, re-run rather than reasoned about
+
+Not a decision, and here because the first attempt at this milestone left it in
+neither state. *Touching the redirect path → re-run the k6 measurement* is one of
+the fourteen rules every Phase 4 milestone inherits, and this milestone touches
+it: `HasInline` became an atomic load, `Inline` takes one snapshot of the set per
+redirect, and each inline invocation enters and leaves a counter under a mutex so
+that a removal has something to wait on. The added cost is one atomic load and
+two uncontended mutex operations, which is a good argument for what the number
+ought to be and is not the number.
+
+It was run in [M66.5](../slo.md#re-measured-for-m665-2026-08-24)'s three-column
+shape rather than only on core, because the mutex is per *invocation* and the
+column where that would show is the well-behaved one. Generator p99 is **1.09ms**
+against M66.5's 1.08ms and the inherited bar of 20ms; the mean invocation is
+460µs against 451µs; core reads 137.78µs and 100% of 240,000 under 20ms; and the
+hostile column is bracketed by M66.5's two takes on every figure it reports. The
+record, with what it did not measure, is
+[docs/slo.md](../slo.md#re-measured-for-m67-2026-08-24).
+
+The 2% on the middle column is reported rather than rounded to nothing. It is
+smaller than this measurement's run-to-run variance and the honest statement is
+the bound, not the delta.
+
+
+## 2026-08-24 — M67, the caller's context stops deciding whether a removal finished
+
+Both entries here are M67's third attempt, and both are things its second
+reviewer refused to let stay undecided. The first is a defect; the second is a
+choice that was defensible and unwritten, which reads the same as one nobody made.
+
+### D344 — a lifecycle act completes on a context the caller cannot cancel
+
+**The decision:** `unload` detaches the context before it closes anything, and
+`record` writes the audit event on a detached context with a bound of its own.
+Both took the caller's request context.
+
+**Why this is M67's and not the house's habit: `removeGrace`.** Removal is the
+only write in this product that deliberately holds a request open for seconds —
+five of them — waiting for the guest calls already inside the module to finish.
+Everywhere else the gap between *the act happened* and *the record is written* is
+microseconds, and a caller who disconnects inside it has hit a window nothing can
+be designed against. Here the window is one this package chose the length of, so
+a client timing out inside it is ordinary rather than exotic.
+
+**What a cancelled context would cost, at the point it would cost it.** By the
+time execution reaches either line the add-on is out of the set and its files are
+renamed out of the directory. There is nothing left to retry and nobody left to
+retry it. A close that declined to run leaves the compiled module and its
+instances resident for the life of the process — exactly the leak
+[m67.md](phase-details/m67.md)'s bullet bounds — and a record that declined to be
+written leaves an act with no trace of it, against *every lifecycle act is
+audited*, for the removal an operator is most likely to go looking for later: the
+one that did not answer.
+
+The rest of the package already did this. `closeInstance` has detached since
+M66.5 and `cmd/linkctrl/main.go` states the rule outright at shutdown — *a
+runtime told to close on a cancelled context would refuse the close itself*. What
+was inconsistent was the two lines this milestone added.
+
+**The audit call site is a departure from the house pattern and is named as
+one.** No other `Record` call in this product detaches, and that is right
+everywhere else for the reason above: the pattern is safe wherever the record
+follows the act by microseconds. `removeGrace` is what makes this the one place
+it is not. Detached **with a bound** rather than merely detached —
+`recordTimeout`, five seconds, `context.WithTimeout(context.WithoutCancel(ctx),
+…)`, which is the shape every other detached call in this repository uses,
+because a detached context with no deadline is a write nothing can end.
+
+**Sabotage, both halves.**
+`TestRemovalAuditsAndReleasesWhenTheCallerHasHungUp` installs, warms the pool
+with one redirect, cancels the context and removes. Reverting the record's
+detach reddens it on *no addon.removed record was written*. Making `unload`
+return early on `ctx.Err()` reddens three separate assertions: the module still
+instantiated, one pooled instance surviving, and the ABI still answering in the
+removed add-on's name. Restored by counter-edit both times.
+`TestRepeatedInstallAndRemovalDoesNotGrowResidentMemory` cannot reach any of
+this — it removes on a live context, which is the path a caller who waits takes —
+and that is why a second test exists rather than an assertion added to that one.
+
+Making it assertable took one change to the fake: `recordingAuditor.Record` now
+honours the context. The real recorder is an insert through pgx, which refuses a
+cancelled context and writes nothing, so a fake that ignored cancellation would
+have recorded an event the product would have dropped and the test would have
+passed whatever `internal/addon` did.
+
+**What this is not, so a later reader does not over-read the test.** wazero
+v1.12 does not itself consult the context in `Module.Close` or
+`CompiledModule.Close`; it hands it to a `CloseNotifier` and a `CodeCloser`,
+neither of which fails on cancellation in this build. So the close half is a
+documented contract being honoured rather than a live leak being fixed, and the
+sabotage that reddens it is an early return rather than a revert. The audit half
+is not hypothetical: pgx refuses a cancelled context, and the record is lost.
+
+### D345 — an add-on install spends the same upload bucket as a QR code's logo
+
+**The decision:** `POST /api/v1/addons` carries `UPLOAD_RATE_PER_MIN` — thirty a
+minute per address, on top of the API limit — which is the bucket the three logo
+addresses were already sharing. It is a fourth address in one bucket, not a
+fourth bucket.
+
+It is written down because it was made silently. The bucket was attached in this
+milestone's first attempt and argued for in a comment at the route, and no
+document said an install spends it; the milestone's second reviewer asked for it
+to be decided in one direction or the other rather than left as the thing nobody
+had looked at.
+
+**Why sharing is right.** The bucket's own reason, in `internal/config`, is a
+request whose cost is set by its **content** rather than by its shape —
+`API_RATE_PER_MIN` is a number chosen about JSON bodies, and 600 megabyte uploads
+a minute is a bandwidth budget nobody picked. That reasoning is as true of a
+module about to be compiled as of an image about to be decoded, so the fourth
+address belongs in the bucket the first three are in.
+
+**The argument against, stated rather than skipped.** The bodies are not the same
+size. A logo is capped at a megabyte and holds under 18 MiB in flight; an install
+is capped at 32 MiB and is read whole into memory before anything is written.
+Thirty of the second a minute is a larger budget than thirty of the first, and
+what one address spends on installs it cannot then spend on logos.
+
+**Why that does not move the answer.** The limit is per address as the server
+sees it; installing needs `addons.manage` and uploading a logo needs
+`links.update`, which are rarely the same person; and an instance installs
+add-ons a handful of times in its life rather than a handful of times a minute.
+The collision needs one address doing both — one administrator — or a deployment
+behind a proxy with `TRUSTED_PROXIES` unset, and that deployment already shares
+every bucket in the product across every visitor, which the rate-limit section
+says at length. A second variable was the alternative and is declined on cost
+rather than on principle: it is a configuration surface, and therefore the
+owner's, for an endpoint whose realistic traffic is single digits a year. If the
+two ever need to differ, that is the change and it is a small one.
+
+**What was actually wrong was not the sharing.** Three documents said the logo
+was the only kind of file this product accepts — `docs/SECURITY.md`'s *Uploaded
+content* row, `docs/configuration.md`'s `UPLOAD_RATE_PER_MIN` row and
+`.env.example`'s comment beside the variable — and this milestone made all three
+false while touching none of them. That is the failing gate
+[workflow.md](workflow.md) names, not documentation-pass cleanup, and the
+`internal/config` comment claiming an upload is *the one place* a request's cost
+is set by its content went the same way. All four now say what is true, and
+`docs/usage.md` gained the clause that keeps the reader of the QR section from
+learning it later.
+
+
+## 2026-08-24 — M67, an install reads what the directory claims, not what is running
+
+M67's third attempt was rejected on one finding, and this is it. The entry exists
+because the fix widens what an operator can be refused, and a widening reached by
+fixing a bug is still a choice somebody has to be able to argue with later.
+
+### D346 — the runtime collision check reads the boot check's set
+
+**The decision:** `Host.collidingNames` runs the `name + "_"` prefix predicate
+over `claimants(h.dir, …)` — every directory whose `addon.json` parses and names
+the directory it sits in — unioned with the add-ons this process has loaded. It
+used to run over the loaded set alone.
+
+**The defect.** M60 refuses *both* members of a colliding pair at boot, and it
+decides the pair from directory entries: a directory that parsed and then failed
+to load still claims its name. Install compared against the running set, which
+that directory is not in. So `<addons>/oidc/` with a valid manifest and a wrong
+digest, `failure_class: degrade`, is refused at boot and absent from the set —
+and an operator installing `oidc_x` over the API was allowed to. At the next
+start `nameCollisions` refuses both, and if either is `required` the instance
+does not start. The comment at the check said it existed "or the API would be a
+way to reach the state that check exists to prevent"; the code did not reach it,
+so the comment was a claim rather than a description. An instance that will not
+start, reached through a shipped API by an operator doing nothing wrong, is as
+bad as this milestone's failures get.
+
+**Why the claimed set and not a wider or narrower one.** Three candidates:
+
+- *Directory entries.* Wrong, and wrong in the direction that hurts an operator:
+  a directory whose manifest will not parse, or which names somewhere else, has
+  claimed nothing. `claimants` says so in as many words, because a mis-installed
+  `oidc_x` refusing `oidc` tells an operator about a collision when what they
+  have is one typo. An install refused by an entry discovery ignores is a refusal
+  with no fix.
+- *The loaded set.* What was there, and what the finding is.
+- *`claimants`.* The set boot decides from. Install and boot then agree entry for
+  entry, including on every exclusion — a non-directory, an unparseable manifest,
+  a manifest naming some other directory, and this host's own staging area, which
+  `claimants` now skips by name rather than by relying on `ReadManifest` failing
+  on it.
+
+**The union with the loaded set is not redundant.** It covers the one claim a
+directory read cannot see: an add-on this process loaded whose directory was
+deleted underneath it. It is still serving and its cookie prefixes are still
+live, so it still owns its namespace, and refusing against it is what the check
+already did. Dropping it to make the two sets identical would have narrowed the
+check in a second place while fixing it in the first.
+
+**What it costs, stated.** An operator can now be refused an install by a
+directory that is not running — a broken add-on they left in place to debug. That
+is the right answer rather than a regrettable one: the pair genuinely cannot
+coexist, and the alternative is an install that succeeds and a start that fails.
+The refusal names what it collides with and says the directory *claims* the name,
+so the fix is the same rename or removal it would have been at boot. The
+`409` prose in `api/openapi.yaml` and the add-on section of
+`docs/configuration.md` both said *running*, and both now say *claimed*.
+
+**Still not unloading the pair.** The arrival is refused and what is already here
+is left untouched, which is where this deliberately differs from boot — argued at
+the call site, and unchanged by the widening except that "already serving"
+becomes "already serving, or an operator's own directory".
+
+Two tests hold it, both sabotaged before they were believed:
+`TestInstallingANameClaimedByADirectoryThatDidNotLoadIsRefused` is the
+parsed-but-unloaded case the rejection required, and
+`TestADirectoryDiscoveryIgnoresDoesNotRefuseAnInstall` is the mirror that stops
+the fix becoming the first candidate above.

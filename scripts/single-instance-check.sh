@@ -79,7 +79,21 @@
 #      `major.minor.patch` below the floor skips; `ci`, `dev`, a prerelease, a
 #      `git describe` tail and no series at all every one assert (D223).
 #
-# `make single-instance` builds the fixture and drives all three against a
+# ## The fourth limb: the add-on set changes while it serves (M67)
+#
+# The third limb boots with a module already there, which is M60's lifecycle: a
+# directory read once. M67 makes arrival and departure runtime acts, so the claim
+# *one container is a tested configuration* now has a moving version — install an
+# add-on into a serving instance, remove it, and everything above still answers —
+# and a gate that only covered the boot-time version would be covering the
+# smaller half. It boots a fourth time because the directory has to be writable
+# for it and read-only for the third, and both mounts are supported arrangements
+# rather than one being a compromise.
+#
+# It skips exactly when the third does and for the same two reasons: it needs the
+# same module, and it needs a host to install it into.
+#
+# `make single-instance` builds the fixture and drives all four against a
 # freshly built image, so the gate itself is unchanged.
 #
 # Usage: scripts/single-instance-check.sh [image] [path/to/module.wasm]
@@ -106,6 +120,8 @@ cleanup() {
   docker rm -f "$APP" "$PG" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
   [ -n "${ADDON_DIR:-}" ] && rm -rf "$ADDON_DIR"
+  [ -n "${LIFECYCLE_DIR:-}" ] && rm -rf "$LIFECYCLE_DIR"
+  [ -n "${PRINCIPAL_JAR:-}" ] && rm -f "$PRINCIPAL_JAR"
   return 0
 }
 trap cleanup EXIT
@@ -306,6 +322,14 @@ signin=$(curl -sS -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' -X POST "${
 case "$signin" in 200|303|302) ;; *) fail "signing in answered $signin" ;; esac
 dash=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' "${BASE}/dashboard")
 [ "$dash" = 200 ] || fail "the dashboard answered $dash to a signed-in session"
+# Kept, and this is the only place it can be taken. The add-on limb below signs
+# in as the instance principal, and by then this account has met twenty wrong
+# passwords from the rate-limiting step two below and is locked out — which is
+# the lockout working, not something to route around by weakening it. A session
+# is a row in Postgres and the database outlives every container this script
+# starts, so the credential taken here is still good four boots later.
+PRINCIPAL_JAR="${TMPDIR:-/tmp}/lc-principal-$$"
+cp "$jar" "$PRINCIPAL_JAR"
 rm -f "$jar"
 echo "dashboard: login form, session, dashboard"
 
@@ -367,7 +391,7 @@ if [ -n "$ADDON_SKIP" ]; then
   echo "the two limbs above ran; this one needs a module to load and had none."
   echo
   echo "== a single container remains a supported, tested configuration =="
-  echo "Postgres is the only thing it had to reach. The add-on limb did not run."
+  echo "Postgres is the only thing it had to reach. The two add-on limbs did not run."
   exit 0
 fi
 
@@ -464,7 +488,7 @@ if printf '%s' "$core" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
   echo "the two limbs above ran against it; there is no host here for a module to load into."
   echo
   echo "== a single container remains a supported, tested configuration =="
-  echo "Postgres is the only thing it had to reach. The add-on limb did not run."
+  echo "Postgres is the only thing it had to reach. The two add-on limbs did not run."
   exit 0
 fi
 
@@ -485,6 +509,89 @@ body=$(cat /tmp/lc-ready3.$$); rm -f /tmp/lc-ready3.$$
 [ "$ready" = 200 ] || fail "/readyz answered $ready with an add-on loaded: $body"
 echo "one container, one Postgres, one add-on: everything still answers"
 
+## ---- limb four: the add-on set changes while the container serves (M67) -----
+
+step "boot with a writable add-ons directory and nothing in it"
+# **Writable, and that is the difference from limb three rather than an
+# oversight.** docs/configuration.md tells an operator to mount this directory
+# read-only, and that advice is right for an instance whose add-ons are placed by
+# hand — which is what limb three just proved works. Runtime install is the other
+# arrangement: the process writes the code it runs, the operator accepts that in
+# exchange for not restarting, and the API refuses with an unavailable when the
+# mount is read-only. Both are supported and both are asserted, which is why this
+# is a fourth boot rather than an edit to the third.
+LIFECYCLE_DIR=$(mktemp -d -t lc-addons-rw-XXXXXX)
+chmod -R a+rwX "$LIFECYCLE_DIR"
+start_app -e LINKCTRL_BASE_URL="http://localhost:8080" \
+  -e LINKCTRL_CACHE_ENABLED=false \
+  -e LINKCTRL_ADDONS_DIR=/addons \
+  -v "$LIFECYCLE_DIR:/addons"
+wait_serving
+
+scrape=$(curl -fsS "${METRICS}/metrics")
+echo "$scrape" | grep -q '^linkctrl_addon_loads_total{' \
+  && fail "the instance loaded an add-on from an empty directory"
+echo "one container, one Postgres, no add-on: the set starts empty"
+
+step "install an add-on over the API, as the account that claimed the instance"
+# The scope is `addons.manage`, which is the instance principal's and which no
+# API key can hold — so this uses the session, not ${KEY}. That refusal is
+# asserted in the Go suite; here the point is that the supported credential works
+# on one container with nothing but Postgres behind it.
+me=$(curl -sS -b "$PRINCIPAL_JAR" -o /dev/null -w '%{http_code}' "${BASE}/api/v1/me")
+[ "$me" = 200 ] || fail "the principal's session did not survive the restarts: /me answered $me"
+
+cat > "${TMPDIR:-/tmp}/lc-addon-$$.json" <<JSON
+{
+  "schema_version": 1,
+  "name": "runtime",
+  "version": "1.0.0",
+  "abi_version": 1,
+  "module": "runtime.wasm",
+  "sha256": "$DIGEST",
+  "failure_class": "degrade"
+}
+JSON
+installed=$(curl -sS -b "$PRINCIPAL_JAR" -X POST "${BASE}/api/v1/addons" \
+  -F "manifest=@${TMPDIR:-/tmp}/lc-addon-$$.json;type=application/json" \
+  -F "module=@${ADDON_DIR}/minimal/minimal.wasm;type=application/wasm")
+rm -f "${TMPDIR:-/tmp}/lc-addon-$$.json"
+echo "$installed" | grep -q '"name":"runtime"' \
+  || fail "the install did not answer with the add-on it installed: $installed"
+
+scrape=$(curl -fsS "${METRICS}/metrics")
+echo "$scrape" | grep -q '^linkctrl_addon_loads_total{addon="runtime",outcome="loaded"} 1$' \
+  || fail "the installed add-on is not running: $(echo "$scrape" | grep '^linkctrl_addon_' || echo none)"
+echo "installed: runtime v1.0.0, running in a container nobody restarted"
+
+step "and the product is unchanged, with a module installed at runtime"
+loc=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "${BASE}/conform")
+[ "${loc% *}" = 302 ] || fail "a redirect answered ${loc} after a runtime install"
+[ "$(code GET "${BASE}/api/v1/links" -H "Authorization: Bearer ${KEY}")" = 200 ] \
+  || fail "the API did not answer after a runtime install"
+
+step "remove it, and the instance keeps serving"
+removed=$(curl -sS -b "$PRINCIPAL_JAR" -X DELETE "${BASE}/api/v1/addons/runtime")
+echo "$removed" | grep -q '"name":"runtime"' \
+  || fail "the removal did not answer with what it removed: $removed"
+
+scrape=$(curl -fsS "${METRICS}/metrics")
+echo "$scrape" | grep -q '^linkctrl_addon_info{.*addon="runtime"' \
+  && fail "a removed add-on still publishes an identity: $(echo "$scrape" | grep '^linkctrl_addon_info')"
+[ -e "${LIFECYCLE_DIR}/runtime" ] \
+  && fail "a removed add-on's directory is still in the add-ons directory"
+
+loc=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "${BASE}/conform")
+[ "${loc% *}" = 302 ] || fail "a redirect answered ${loc} after a runtime removal"
+[ "$(code GET "${BASE}/login")" = 200 ] || fail "the login page did not render after a removal"
+[ "$(code GET "${BASE}/api/v1/links" -H "Authorization: Bearer ${KEY}")" = 200 ] \
+  || fail "the API did not answer after a runtime removal"
+ready=$(curl -sS -o /tmp/lc-ready4.$$ -w '%{http_code}' "${BASE}/readyz")
+body=$(cat /tmp/lc-ready4.$$); rm -f /tmp/lc-ready4.$$
+[ "$ready" = 200 ] || fail "/readyz answered $ready after a runtime removal: $body"
+echo "one container, one Postgres: an add-on arrived and left, and everything still answers"
+
 echo
 echo "== a single container remains a supported, tested configuration =="
-echo "Postgres is the only thing it had to reach, with a WASM module in the process."
+echo "Postgres is the only thing it had to reach, with a WASM module in the process"
+echo "and with the set of modules changing while it served."

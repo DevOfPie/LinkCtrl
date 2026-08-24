@@ -53,10 +53,15 @@ type Limiters struct {
 	// **The API limit is not this limit, and the difference is what a request
 	// costs rather than how many there are.** Everything else under `/api/v1` is
 	// a JSON body this product caps at 256 KiB and decodes with the standard
-	// library's parser; an upload is up to `qr.MaxLogoUploadBytes` of somebody
-	// else's bytes handed to an image decoder. `API_RATE_PER_MIN`'s 600 was
-	// chosen about the first kind, and inheriting it for the second would be a
-	// number nobody set for what it would then bound.
+	// library's parser; an upload is megabytes of somebody else's bytes handed to
+	// a decoder or a compiler, bounded by whichever endpoint took them.
+	// `API_RATE_PER_MIN`'s 600 was chosen about the first kind, and inheriting it
+	// for the second would be a number nobody set for what it would then bound.
+	//
+	// **One bucket for every endpoint that takes a file**, whatever the file is
+	// and however much larger one of them may be than another: what the bucket is
+	// about is true of all of them, and a second number would be a second thing
+	// to tune. D345 is where that is argued and what it costs is stated.
 	//
 	// Shared through Redis like Login, because a per-replica budget on a
 	// four-replica instance is four times the limit an operator configured, and

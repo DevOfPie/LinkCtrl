@@ -264,7 +264,7 @@ func (p *addonPool) expired(ttl time.Duration, now time.Time) []*poolEntry {
 // one to need an instance.
 func (h *Host) acquireInstance(ctx context.Context, l *Loaded, class string) (*poolEntry, error) {
 	name := l.Manifest.Name
-	if p := h.pools[poolKey(name, class)]; p != nil {
+	if p := h.current().pools[poolKey(name, class)]; p != nil {
 		if e := p.take(); e != nil {
 			h.idleInstances.Add(-1)
 			return e, nil
@@ -356,7 +356,11 @@ func (h *Host) releaseInstance(ctx context.Context, e *poolEntry, clean bool) {
 		h.closeInstance(ctx, e)
 		return
 	}
-	p := h.pools[poolKey(e.addon, e.class)]
+	// From the set as it is *now*, not from the one the invocation started under.
+	// An add-on removed while this instance was in flight has no pool here any
+	// more, and the nil branch below is what makes the entry close instead of
+	// being returned to a set nothing will ever drain again (M67).
+	p := h.current().pools[poolKey(e.addon, e.class)]
 	if p == nil {
 		h.idleInstances.Add(-1)
 		h.closeInstance(ctx, e)
@@ -373,14 +377,17 @@ func (h *Host) closeInstance(ctx context.Context, e *poolEntry) {
 
 // drainPool closes every idle instance of one add-on.
 //
-// **M67 consumes this.** Removing an add-on has to end the instances made from
-// its module, and a pool is a cache whose invalidation is where the defect would
-// live: without this, an uninstalled add-on's wasm would keep running on the
-// redirect path until the entries aged out. The seam is written here and named in
-// m67.md rather than left for whoever builds removal to discover.
-func (h *Host) drainPool(ctx context.Context, addon string) {
+// **M67 consumes this**, and the seam turned out to be exactly the right shape:
+// removing an add-on has to end the instances made from its module, and a pool is
+// a cache whose invalidation is where the defect would live — without this, an
+// uninstalled add-on's wasm would keep running on the redirect path until the
+// entries aged out. What removal adds is the map to drain *from*, which is the
+// set being replaced rather than the current one: by the time this is called the
+// new set no longer has the add-on's pools in it, so reading them off the host
+// would find nothing and close nothing.
+func (h *Host) drainPool(ctx context.Context, addon string, pools map[string]*addonPool) {
 	for _, class := range []string{ClassInline, ClassObserve} {
-		p := h.pools[poolKey(addon, class)]
+		p := pools[poolKey(addon, class)]
 		if p == nil {
 			continue
 		}
@@ -392,8 +399,18 @@ func (h *Host) drainPool(ctx context.Context, addon string) {
 }
 
 // startPoolSweep runs the idle sweep, and does nothing on a host with no pools.
+//
+// **Called again by Install** (M67), because a host that booted with no pooled
+// add-on has no sweep and an add-on installed into it brings the first pool. It
+// is idempotent on the sweep already running, which is what `h.poolStop != nil`
+// answers: the alternative — starting one per install — would leave a goroutine
+// per add-on ever installed, closing entries a sibling sweep already closed.
+// Called under installMu, which is what makes reading poolStop safe.
 func (h *Host) startPoolSweep(ctx context.Context) {
-	if len(h.pools) == 0 || h.poolTTL <= 0 {
+	if h.poolStop != nil || h.poolTTL <= 0 {
+		return
+	}
+	if len(h.current().pools) == 0 {
 		return
 	}
 	// Detached from Open's context and made cancellable again, for the two reasons
@@ -426,7 +443,7 @@ func (h *Host) startPoolSweep(ctx context.Context) {
 // sweepPools closes the entries nothing has wanted for a TTL.
 func (h *Host) sweepPools(ctx context.Context) {
 	now := time.Now()
-	for _, p := range h.pools {
+	for _, p := range h.current().pools {
 		for _, e := range p.expired(h.poolTTL, now) {
 			h.idleInstances.Add(-1)
 			h.closeInstance(ctx, e)
@@ -445,7 +462,7 @@ func (h *Host) stopPoolSweep(ctx context.Context) {
 		h.poolStop = nil
 	}
 	h.poolWG.Wait()
-	for _, p := range h.pools {
+	for _, p := range h.current().pools {
 		for _, e := range p.drain() {
 			h.idleInstances.Add(-1)
 			h.closeInstance(ctx, e)

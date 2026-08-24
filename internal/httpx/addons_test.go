@@ -522,9 +522,17 @@ func TestAnAddonRouteIsNotOnTheLinkHost(t *testing.T) {
 
 // With no add-on host, no route exists at all — m60.md's "no route is mounted",
 // still true for every operator who installs nothing.
+//
+// **Two fields since M67**, and the second is the one that would hurt: the
+// lifecycle API is an upload endpoint, and mounting it on an instance whose
+// operator never turned add-ons on would be a body-reading route paid for by
+// everybody who installs nothing. Both are nil'd here because both come from the
+// same host, and the assertion is over the whole registered set rather than over
+// either field's own routes.
 func TestNoAddonRouteWithoutAHost(t *testing.T) {
 	d := maximalDeps()
 	d.Web.Addons = nil
+	d.AddonAdmin = nil
 	app := newAppMux()
 	registerAppRoutes(d, app)
 	for _, p := range app.patterns {

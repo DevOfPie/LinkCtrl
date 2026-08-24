@@ -325,6 +325,10 @@ func run(cfg config.Config, _ io.Writer) error {
 		Metrics: metrics,
 		DB:      pools.App,
 		DSN:     cfg.DB.URL.Reveal(),
+		// M67. Installing code into a running server without a record of who did it
+		// is the one thing that surface must not be able to do quietly, so the host
+		// is handed the same auditor every other write in this program uses.
+		Audit: auditSvc,
 		// M65. The host decides nothing about who may sign in: it decodes an
 		// assertion, refuses what it knows better than the module does, and hands the
 		// rest to the same service the sign-in form uses.
@@ -1049,8 +1053,11 @@ func run(cfg config.Config, _ io.Writer) error {
 		MFA:      mfaSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
-		Metrics:  metrics,
-		Limits:   limits,
+		// The lifecycle API (M67), through the helper for the reason the router's
+		// add-on field takes one.
+		AddonAdmin: addonAdmin(addons),
+		Metrics:    metrics,
+		Limits:     limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
@@ -1265,6 +1272,20 @@ func mfaIssuer(cfg config.Config) string {
 // that installed nothing, and the only thing that would notice is a test reading
 // the mount list.
 func addonRouter(h *addon.Host) httpx.AddonRouter {
+	if h == nil {
+		return nil
+	}
+	return h
+}
+
+// addonAdmin is the same closure of the same trap for M67's lifecycle surface.
+//
+// The consequence differs and is worse than the router's. A typed nil here mounts
+// `POST /api/v1/addons` on every instance that installed nothing — an upload
+// endpoint, on an instance whose operator never turned add-ons on, answering the
+// unavailable that addon.ErrNoAddonsDir carries rather than the 404 that says the
+// capability is not here. Two lines, at the one site where it is possible.
+func addonAdmin(h *addon.Host) httpx.AddonLifecycle {
 	if h == nil {
 		return nil
 	}

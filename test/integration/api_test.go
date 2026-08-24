@@ -4,6 +4,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -176,23 +178,39 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
+	// The add-on host (M67). An empty directory and no database handed to it: what
+	// the contract test replays is the *lifecycle* — a module uploaded, verified,
+	// started and removed — and an add-on that owns a schema needs a DSN this
+	// fixture does not have a spare one of. Without a host the two operations are
+	// unregistered and the contract test reports them as spec operations nothing
+	// exercises, which is the same reason every service above is wired.
+	addonHost, err := addon.Open(context.Background(), addon.Options{
+		Dir:   t.TempDir(),
+		Audit: audit.NewService(pool),
+	})
+	if err != nil {
+		t.Fatalf("open an add-on host: %v", err)
+	}
+	t.Cleanup(func() { _ = addonHost.Close(context.Background()) })
+
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
-		Config:   cfg,
-		Health:   &httpx.Health{DB: pool},
-		Auth:     authSvc,
-		Keys:     keySvc,
-		Links:    linkSvc,
-		Stats:    analytics.NewReader(pool),
-		Audit:    audit.NewService(pool),
-		Notify:   notify.NewService(pool),
-		Invites:  inviteSvc,
-		Team:     teamSvc,
-		Signup:   signupSvc,
-		Recovery: recoverySvc,
-		Accounts: accountSvc,
-		MFA:      mfaSvc,
-		Disputes: disputeSvc,
-		Instance: instanceSvc,
+		Config:     cfg,
+		Health:     &httpx.Health{DB: pool},
+		Auth:       authSvc,
+		Keys:       keySvc,
+		Links:      linkSvc,
+		Stats:      analytics.NewReader(pool),
+		Audit:      audit.NewService(pool),
+		Notify:     notify.NewService(pool),
+		Invites:    inviteSvc,
+		Team:       teamSvc,
+		Signup:     signupSvc,
+		Recovery:   recoverySvc,
+		Accounts:   accountSvc,
+		MFA:        mfaSvc,
+		Disputes:   disputeSvc,
+		Instance:   instanceSvc,
+		AddonAdmin: addonHost,
 	}))
 	t.Cleanup(srv.Close)
 

@@ -526,9 +526,10 @@ code.
 
 #### A logo on a code
 
-**The one thing in this product that accepts a file**, and it is `PUT` with a
-`multipart/form-data` body. It takes `links.update`, like every other change to
-how a code is drawn, and an API key that holds it may use it. The QR tab on a
+**One of the two things in this product that accept a file** — the other is
+installing an add-on — and it is `PUT` with a `multipart/form-data` body. It
+takes `links.update`, like every other change to how a code is drawn, and an
+API key that holds it may use it. The QR tab on a
 link's page does the same thing from a browser.
 
 Two addresses, one operation — the same relationship `qr.png` and
@@ -582,7 +583,8 @@ header bound until now, and an image over it was a `422`.)*
 
 **Uploads have their own rate limit** (`UPLOAD_RATE_PER_MIN`, thirty a minute by
 default) on top of the API's, so a `429` here can arrive while everything else
-is still answering.
+is still answering. It is one bucket for every address that accepts a file,
+which now includes installing an add-on.
 
 **A logo changes the picture in two ways, and one of them is `level`.** The
 image covers a centred square three tenths of the code's width — 9% of its area —
@@ -786,13 +788,17 @@ orgs.create
 ```
 
 `apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`, `webhooks.write`,
-`automation.write`, `audit.read.instance`, `destinations.decide` and
-`instance.admin` are never grantable to a key — a key that can mint keys makes revoking a leaked one
+`automation.write`, `audit.read.instance`, `destinations.decide`,
+`instance.admin` and `addons.manage`
+are never grantable to a key — a key that can mint keys makes revoking a leaked one
 meaningless, an irreversible action should need an interactive sign-in, the audit
 log ties a network prefix to a named person, a key that could allow a blocked
 destination could then point links at it, a webhook or an automation rule keeps
-running after the credential that registered it is revoked, and a key that could
-appoint a reviewer would widen its reach by manufacturing somebody else's.
+running after the credential that registered it is revoked, a key that could
+appoint a reviewer would widen its reach by manufacturing somebody else's, and a
+key that could install an add-on would carry whatever that add-on's own manifest
+declares — including deciding who is signed in — past every scope the key was
+issued with.
 
 `destinations.review` **is** grantable, and the pair is the point: reading the
 dispute queue discloses who filed a dispute and a defanged host, escalating
