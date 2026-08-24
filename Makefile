@@ -300,8 +300,19 @@ browse: ## Open the pinned browser CLI on the test instance; ARGS="..." runs any
 		$(PLAYWRIGHT_CLI) open --config=$(AGENT_BROWSER)/cli-config.json http://127.0.0.1:8081/login; \
 	fi
 
+# **`make up` does not rebuild the app image.** A browser check driving a change
+# you have not rebuilt for runs against the previous image and passes for the
+# wrong reason, which is the same trap workflow.md names before a phase PR and is
+# easier to fall into here, mid-milestone, where nobody is thinking about images.
+# Rebuild first:
+#   docker compose -p linkctrl-test --env-file .env.test up -d --build --wait app
+# The `--env-file` is not optional — without it compose resolves a different
+# project's variables, the app service does not come up, and this target then
+# reports the instance is not answering rather than anything about the image.
+# `make rebuild` instead if the schema moved too. This target deliberately does not do it
+# for you: a rebuild is a minute and this is meant to be runnable in a loop.
 .PHONY: verify-ui
-verify-ui: ## Run the kept browser spec against the running test instance (needs Node and make up)
+verify-ui: ## Run the kept browser spec against the running test instance (needs Node, make up, and a rebuilt image)
 	@command -v node >/dev/null 2>&1 || { \
 		echo "node is not on PATH. See $(AGENT_BROWSER)/README.md, and Plan.md D25 for why it is allowed to be needed."; \
 		exit 1; \
