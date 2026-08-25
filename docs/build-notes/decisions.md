@@ -479,6 +479,7 @@ file. Append a row when you append an entry.
 | [M67, the caller's context stops deciding whether a removal finished](#2026-08-24--m67-the-callers-context-stops-deciding-whether-a-removal-finished) | D344: a lifecycle act completes on a context the caller cannot cancel — why `removeGrace` makes removal the one audit call site in this product that detaches, and what wazero does and does not do with a cancelled close. D345: an add-on install spends the QR logo's upload bucket rather than a fourth one, the argument against it, and the three documents that were made false by nobody writing any of this down |
 | [M67, an install reads what the directory claims, not what is running](#2026-08-24--m67-an-install-reads-what-the-directory-claims-not-what-is-running) | D346: the runtime name-collision check runs over the set boot decides from rather than over the running set — the sequence by which the install API could arrange a start that stops, why directory entries are the wrong wider set and the loaded set the wrong narrower one, what the union with the loaded set covers, and what an operator is now refused |
 | [M68, an operator meets the add-on host, and one page is where](#2026-08-25--m68-an-operator-meets-the-add-on-host-and-one-page-is-where) | D347: a declared setting has two sources and the environment wins — the update-check precedent it follows, why a pinned setting is refused rather than overridden, why the values are host-side rather than in the add-on's own schema, and what a save does and does not reach. D348: the manager is at `/instance/addons` because `/addons/` belongs to add-ons, and the orphan path is unclaimable by grammar rather than by a reserved list. D349: a purge is the schema drop and nothing else — what survives it, why an installed add-on's data is a conflict, and why a typo is a 404. **D349 said three survivors and D360 corrects it to four**, `addon_settings` being the fourth; the entry stands as written because this log is append-only, and this row summarises the pair rather than the older half. D350: D265's deferred answer taken — the demo runs a first-party sample built into the image, what the coverage row can honestly assert, and what a read-only mount costs it. D351: one script for one count, and why nothing else on the page needs one. D352: per-module latency is read back off the registry rather than counted twice |
+| [M69's subject does not exist, and who builds it](#2026-08-25--m69s-subject-does-not-exist-and-who-builds-it) | D362: the OIDC add-on is built now, outside the phase loop, by the actor that built the foundation — why §4 stopped the run, the two declined alternatives, the conflict of interest named rather than mitigated, and owed-work #4's MIT licence delegated as an act rather than as a choice |
 | [M68, three answers the rejection needed](#2026-08-25--m68-three-answers-the-rejection-needed) | D353: a menu item is drawn from the wiring as well as from the permission — the nav entry that 404s on every instance without an add-ons directory, the two fixes declined, and the general rule it settles. D354: a stored secret's secrecy is a column rather than a manifest's claim, why it changes the rendered type and not only the value, and why a refusal was the wrong shape. D355: a save drains the add-on's instance pool, because M66.5's kept instances made *on its next invocation* false for up to a pool TTL for the module that caches a value at start-up |
 | [M68, the ABI policy decides its own case, and the drain reaches the busy instance](#2026-08-25--m68-the-abi-policy-decides-its-own-case-and-the-drain-reaches-the-busy-instance) | D356: M61's self-repair clause spent — `config_get` gains a source, the table row that decides it, why it is additive and why the patch moves to 0.1.3. D357: the drain reaches an instance that is **in flight**, which corrects [D355](#d355--a-save-drains-the-add-ons-instance-pool): emptying the idle set reaches the resting half, and an add-on under traffic has its instances out. D358: the demo's coverage row asserts the module *ran*, because `addon_pageviews.views` is a fact no seeder can write |
 | [M68, what a name inherits, and the harness that had never run](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) | D359: a stored secret's withholding bounds the page and not the module, why hiding it from `config_get` was declined, and what the documents now say instead. D360: `addon_settings` is the fourth thing a purge leaves, counted at the point of decision rather than deleted, and F332 is the half that is behaviour. D361: the test instance runs the sample add-on so the browser harness executes at all, and the two costs of that — the core SLO column, and `lctl` on the host. Plus the inherited redirect-path measurement, re-run |
@@ -39160,3 +39161,51 @@ It was run in [M66.5](../slo.md#re-measured-for-m665-2026-08-24)'s three-column
 shape, on an image built from this attempt's own tree. The record is
 [docs/slo.md](../slo.md#re-measured-for-m68-2026-08-25), with what it did not
 measure.
+
+## 2026-08-25 — M69's subject does not exist, and who builds it
+
+### D362 — the add-on is built now, outside the loop, by the actor that built the foundation
+
+[Step 1](phase-loop.md#1-validate) stopped the run on M69. `DevOfPie/LinkCtrl-OIDC`
+is public, holds a one-line `README.md`, and reports `license: NONE` — so both
+of M69's preconditions fail at once: owed-work #4's MIT licence, and the add-on
+whose release every host-side bullet is written against. [§4](phase-loop.md#4-repeat-or-stop)'s
+first row fired properly: M69.9 covers everything numerically below it and M70
+depends on all, so nothing un-`done` was independent of the question.
+
+**Owner: build it, under the process m69.md already sets for it** — *the same
+gates, no phase loop*. So it is CI green, sabotage-verified tests, a changelog
+and a checksummed release, in that repository, and **no milestones, no
+`.current-task.md`, no phase-details file**. This entry exists because the
+*scheduling* is new even though the process is not: the plan said the add-on was
+not this repository's to milestone and left who builds it unstated, and an
+unstated actor is how a precondition sits still for a week.
+
+Two alternatives were declined. Leaving it to the owner buys an acceptance test
+written by somebody with no stake in the foundation being right — which is worth
+more than convenience, and is the real cost of this answer, stated here rather
+than in a footnote. Cutting M69 from the phase would ship the foundation without
+the thing it was designed for ever having been attempted, turning *if the OIDC
+add-on cannot be built, the foundation is wrong* into a claim nobody checked
+before tagging.
+
+**The conflict of interest is named rather than mitigated.** The same actor now
+writes the foundation and the test of it, and a gap the foundation has is a gap
+that actor is least likely to notice from inside. What guards it is that M69's
+host-side half is still a phase-loop milestone with its own reviewer, and that
+[M69.9](phase-details/m69.9.md) reads the whole range afterwards. Neither is the
+same as an independent implementer, and saying so is the point of this
+paragraph.
+
+**Owed-work #4 is discharged in the same breath**, also owner-answered: the MIT
+`LICENSE` is added by this account, which has push and not admin on that
+repository. The licence choice was already recorded, so adding it executes a
+decision rather than taking one — the plan had called it the owner's one-file
+act, and the act is delegated, not the choice.
+
+**What comes back here.** ABI gaps the add-on's build surfaces are ordinary
+findings under [workflow.md](workflow.md) — in-spec fixes in the milestone that
+owns the seam, or deferred rows — and an ABI change it forces before 1.0 is a
+minor bump under M61's policy. That is m69.md's own bullet and this entry does
+not widen it: work in the other repository does not become work here by having
+been discovered there.
