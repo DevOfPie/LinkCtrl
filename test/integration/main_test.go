@@ -115,7 +115,16 @@ func ensureTemplate() error {
 }
 
 // newDB returns an isolated database cloned from the template.
-func newDB(t *testing.T) *pgxpool.Pool { return newTracedDB(t, nil) }
+func newDB(t *testing.T) *pgxpool.Pool { pool, _ := newTracedDB(t, nil); return pool }
+
+// newDBWithDSN is newDB and the connection string beside it.
+//
+// The string is what an add-on's *own* confined role connects with — `addon.Open`
+// takes a `DSN` as well as a pool, and without it a module declaring
+// `storage.own_schema` loads with no schema created (internal/addon/host.go's
+// openStorage). Only a fixture that installs such a module needs it, which is why
+// this is a second constructor rather than a second return value on newDB.
+func newDBWithDSN(t *testing.T) (*pgxpool.Pool, string) { return newTracedDB(t, nil) }
 
 // newTracedDB is newDB with a query tracer attached, for the tests that assert
 // how many queries a thing costs rather than what it answers.
@@ -124,7 +133,7 @@ func newDB(t *testing.T) *pgxpool.Pool { return newTracedDB(t, nil) }
 // because the claim being tested is about the round trips that actually reach
 // Postgres. A counter around a Go method would still pass if the method below it
 // quietly issued two.
-func newTracedDB(t *testing.T, tracer pgx.QueryTracer) *pgxpool.Pool {
+func newTracedDB(t *testing.T, tracer pgx.QueryTracer) (*pgxpool.Pool, string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -140,7 +149,8 @@ func newTracedDB(t *testing.T, tracer pgx.QueryTracer) *pgxpool.Pool {
 		t.Fatalf("clone template: %v", err)
 	}
 
-	cfg, err := pgxpool.ParseConfig(dsnFor(name))
+	dsn := dsnFor(name)
+	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		t.Fatalf("parse test DSN: %v", err)
 	}
@@ -161,7 +171,7 @@ func newTracedDB(t *testing.T, tracer pgx.QueryTracer) *pgxpool.Pool {
 			fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", name))
 	})
 
-	return pool
+	return pool, dsn
 }
 
 // newCookieJar returns a cookie jar so a test client keeps its session across

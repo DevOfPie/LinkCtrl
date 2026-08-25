@@ -571,8 +571,16 @@ $(ADDON_FIXTURE_DIR)/%.wasm: $$(wildcard $(ADDON_FIXTURE_SRC)/$$*/*.go) $(ADDON_
 #
 # Recipes carrying this are prefixed with @, so the assembled DSN — password
 # included — does not end up in terminal scrollback or a CI log.
+#
+# **`LINKCTRL_ADDONS_DIR` is emptied for the same reason the DSN is overridden.**
+# The instance file names a path *inside the container* — `/addons`, which is
+# where the image puts the sample add-on — and `config.Load` refuses a directory
+# it cannot stat, so sourcing the file unedited makes every one of these targets
+# exit on a configuration error rather than run. lctl has no add-on host and wants
+# none: it migrates, seeds and mints keys, and not one of those reads a module.
 DEV_ENV = set -a; . "./$(ENV_FILE)"; set +a; \
-	LINKCTRL_APP_ENV=development LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)"
+	LINKCTRL_APP_ENV=development LINKCTRL_ADDONS_DIR= \
+	LINKCTRL_DATABASE_URL="$(DEV_DATABASE_URL)"
 
 .PHONY: migrate-up
 migrate-up: require-db-password require-stack ## Apply all migrations

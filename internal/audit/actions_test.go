@@ -114,6 +114,8 @@ var countedActions = map[int][]string{
 	40: {"Forty", "forty", "40"},
 	41: {"Forty-one", "forty-one", "41"},
 	42: {"Forty-two", "forty-two", "42"},
+	43: {"Forty-three", "forty-three", "43"},
+	44: {"Forty-four", "forty-four", "44"},
 }
 
 // anchoredCount is one sentence that states the size of the audit vocabulary,

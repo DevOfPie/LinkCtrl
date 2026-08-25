@@ -33,8 +33,11 @@ func maximalDeps() Deps {
 	// exist to break.
 	d.Web.Addons = nopAddonRouter{}
 	// The second interface field, for the same reason and with the same
-	// consequence if it is forgotten (M67).
+	// consequence if it is forgotten (M67). Since M68 it also gates the Add-on
+	// manager's pages, which is why the same value is set on Web: one interface,
+	// two surfaces, and a nil on either takes its half out of both guards below.
 	d.AddonAdmin = nopAddonLifecycle{}
+	d.Web.AddonAdmin = nopAddonLifecycle{}
 	return d
 }
 

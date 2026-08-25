@@ -45,7 +45,20 @@ VALUES (@id, @user_id, @addon, @issuer, @subject)
 ON CONFLICT (addon, issuer, subject) DO NOTHING
 RETURNING id, user_id, addon, issuer, subject, created_at, last_used_at;
 
--- Reading and removing a link have no statement here, deliberately. M65 builds
--- the table, the flow that writes it and the refusals that read it; a management
--- surface is M68's, and a query kept alive by nothing but sqlc's generator is a
--- query nobody has ever run against this schema.
+-- name: CountAddonIdentityLinks :one
+-- How many account mappings were written under one add-on's name.
+--
+-- M68's, and it exists for the confirmation rather than for a management surface.
+-- A purge is `DROP SCHEMA … CASCADE` and deletes no row here, so the links stay
+-- and are inherited by name — the whole of F330's shape — and the confirmation is
+-- the point of decision where an operator can still act on that. Naming them
+-- without a number would be a warning nobody could size; this is the number.
+--
+-- Keyed on the add-on's name because the table is: `addon` is the manifest name,
+-- not a foreign key to anything, which is exactly why the inheritance exists.
+SELECT count(*) FROM addon_identity_links WHERE addon = @addon;
+
+-- Reading and *removing* a link still have no statement here, deliberately. M65
+-- builds the table, the flow that writes it and the refusals that read it; a
+-- management surface is nobody's yet, and a query kept alive by nothing but
+-- sqlc's generator is a query nobody has ever run against this schema.

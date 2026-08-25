@@ -557,7 +557,8 @@ func (c *redirectQueries) seen() (int, []string) {
 // added a join to it.
 func TestBlockingCostsNoQueryOnTheRedirectPath(t *testing.T) {
 	counter := &redirectQueries{}
-	f := newBotsOn(t, newTracedDB(t, counter), false)
+	pool, _ := newTracedDB(t, counter)
+	f := newBotsOn(t, pool, false)
 	f.claim()
 
 	id := f.createLink("noio", "https://example.com/noio")

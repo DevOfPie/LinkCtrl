@@ -64,7 +64,8 @@ func (c *notificationQueries) count() int {
 // and shows nothing, and rendering alone would pass on a bell that costs two.
 func TestTheBellCostsNoExtraQuery(t *testing.T) {
 	counter := &notificationQueries{}
-	f := newWebOn(t, newTracedDB(t, counter))
+	pool, _ := newTracedDB(t, counter)
+	f := newWebOn(t, pool)
 	f.claim()
 
 	var userID uuid.UUID

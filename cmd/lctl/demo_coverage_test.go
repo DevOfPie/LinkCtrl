@@ -72,7 +72,7 @@ import (
 // which is [M68](../../docs/build-notes/phase-details/m68.md)'s and is named in
 // M66's own file as such.
 //
-// **M67 falls under it as well, and this is the last milestone that will.** The
+// **M67 falls under it as well, and this was the last milestone that did.** The
 // runtime lifecycle adds an API and no page — m67.md defers every surface to M68
 // — so what somebody could see is a `curl` against an instance that has an add-on
 // to install, which the demo does not have for the reason M64's paragraph gives.
@@ -80,8 +80,30 @@ import (
 // `audit_logs` carries `addon.installed` and `addon.removed`. Seeding one would
 // mean writing a record of an install that did not happen, naming a module that
 // is not there, which is fabricating evidence in the one log whose whole value is
-// that it is not fabricated. When M68 installs a module into the demo, that
-// record becomes real and the row becomes worth writing.
+// that it is not fabricated.
+//
+// **M68 ends the narrowing, and it ends it the way the four paragraphs above said
+// it would.** The demo instance now runs an add-on: `pageviews` is built into the
+// image and `.env.demo` points `LINKCTRL_ADDONS_DIR` at it, which is exactly the
+// decision D265 said belonged here — a wasm module in the image, not a row
+// somebody wrote.
+//
+// So there **is** a row that says the module ran, and it is not one anybody could
+// write by hand: `addon_pageviews` is created by the host at load and `views`
+// inside it by the module's own package initialization. Asserting that table is
+// therefore an assertion about the add-on rather than about the seeder, and it is
+// the first row in this list whose subject is code executing rather than data
+// existing. `loadTheDemosAddon` runs the module against the coverage database the
+// way the demo instance runs it, so `make test-integration` notices the demo's
+// add-on stopping rather than nobody noticing until somebody opens the page.
+//
+// The install's audit record is still absent, and for the original reason: the
+// demo's copy arrives with the image rather than through the API, so no install
+// happened and nothing should say one did.
+//
+// The two remaining zeros — `addon_identity_links` and `session.minted_by_addon` —
+// stay absent for M65's own reason and not for this one: the sample add-on holds no
+// `session.mint`, so a link would still be a sign-in that did not happen.
 
 // demoFeature is one thing the demo must show, and the query that proves it does.
 type demoFeature struct {
@@ -1279,6 +1301,53 @@ func demoCoverage() []demoFeature {
 				"and agreed to: it makes the same outbound request, once a day, " +
 				"that docs/SECURITY.md's egress row now counts",
 		},
+		{
+			// The Add-on manager (M68) — the module, not the rows beside it.
+			//
+			// **Nothing the seeder writes can prove this one**, which is why the query
+			// is about a table `lctl` never touches. `addon_pageviews` is created by
+			// the host at load (M63's EnsureAddonSchema) and `views` inside it by the
+			// module's own package initialization through `storage_exec`, so the table
+			// existing means the manifest parsed, the digest matched, the declared
+			// grants were honoured, wazero compiled and instantiated the module, and
+			// its first host call reached Postgres. `loadTheDemosAddon` is what runs
+			// the module against this database, the way the demo instance runs it.
+			//
+			// The row it replaces counted `addon_settings` and asserted nothing about
+			// any of that: the seeder writes those three rows whether or not there is
+			// an add-on host in the world, so a demo whose module had stopped loading
+			// — a bad digest, a permission the host refused, a build that silently
+			// produced a non-reactor — passed it with an empty manager page.
+			//
+			// Bounded above as well as below, because two `views` tables would mean two
+			// schemas answering to one add-on name.
+			Milestone: "M68", Feature: "An add-on that is really loaded and running",
+			Query: `SELECT count(*) FROM pg_tables
+			        WHERE schemaname = 'addon_pageviews' AND tablename = 'views'`,
+			Min: 1, Max: 1,
+			Shows: "the Add-on manager over a module that is really there: a " +
+				"declaration class, held permissions, a schema with a size and " +
+				"per-module redirect figures, instead of an empty table and an " +
+				"upload form",
+		},
+		{
+			// And the half of the same page that *is* a row: what an operator
+			// configured, which is what the detail page's Settings section renders.
+			// Three of the sample add-on's four declared settings are set; the fourth
+			// is a secret, left unset on purpose so the page shows the state a secret
+			// field has before anybody types one.
+			//
+			// Bounded above as well as below, and the bound is the point: a fourth row
+			// would mean somebody seeded the secret, and a demo instance carrying a
+			// credential-shaped value in a table is exactly what an evaluator should
+			// not find.
+			Milestone: "M68", Feature: "An add-on with settings an operator chose",
+			Query: `SELECT count(*) FROM addon_settings WHERE addon = 'pageviews'`,
+			Min:   3, Max: 3,
+			Shows: "the Add-on manager's detail page with three declared settings " +
+				"carrying values somebody picked, and a secret that is not set, " +
+				"which is the state that field has to render",
+		},
 	}
 }
 
@@ -1293,6 +1362,10 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 	ctx := context.Background()
 	pool := newDemoDB(t)
 	cfg := demoTestConfig()
+
+	// The demo instance runs an add-on host; this database is otherwise a demo
+	// without one, and the M68 row is about what the host leaves behind.
+	loadTheDemosAddon(t, pool)
 
 	owner := claimDemoInstance(t, pool, cfg)
 
@@ -1395,6 +1468,9 @@ func TestTheSecondWorkspaceFillsWhenTheOwnerHasPinnedADefault(t *testing.T) {
 	ctx := context.Background()
 	pool := newDemoDB(t)
 	cfg := demoTestConfig()
+	// This test runs the whole coverage list too, and one row of it is about a
+	// schema the add-on host creates rather than about anything the seeder writes.
+	loadTheDemosAddon(t, pool)
 	owner := claimDemoInstance(t, pool, cfg)
 
 	runDemoSeed(t, ctx, pool, cfg, owner.Email)

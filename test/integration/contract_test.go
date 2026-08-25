@@ -30,6 +30,8 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/api"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 )
 
@@ -1298,8 +1300,111 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.uploadParts("POST", p+"/addons", map[string][]byte{
 		"manifest": manifest, "module": module,
 	}, http.StatusConflict, true)
+	// The manager's reads and its two writes (M68), against the module that is
+	// installed right now. Every one of them is replayed against the document, which
+	// is what the inherited *every UI feature has API support* rule buys here: the
+	// page drives exactly these.
+	c.do("GET", p+"/addons", nil, http.StatusOK)
+	detail := c.do("GET", p+"/addons/contract", nil, http.StatusOK)
+	if got := field(t, detail, "declaration"); got != "none" {
+		t.Errorf("the fixture's declaration class is %q; it holds no redirect grant", got)
+	}
+	c.do("GET", p+"/addons/nosuch", nil, http.StatusNotFound)
+	// The empty save: a write through the same transaction and the same audit
+	// record, carrying nothing. It runs first so that the save below has something
+	// to differ from.
+	c.do("PUT", p+"/addons/contract/settings", map[string]any{
+		"values": map[string]string{},
+	}, http.StatusOK)
+	// And a save that actually stores something, one value per declared type. Both,
+	// because the empty one validates `AddonSetting` against `[]`, which is a schema
+	// exercised in name only.
+	saved := c.do("PUT", p+"/addons/contract/settings", map[string]any{
+		"values": map[string]string{
+			"endpoint": "https://contract.example/token", "client_secret": "s3cret",
+			"mode": "slow", "verbose": "true",
+		},
+	}, http.StatusOK)
+	// The one field this response must not carry. It is asserted here rather than
+	// left to internal/addon's tests because the *document* says a secret's value is
+	// never in an answer, and a contract test that replayed the operation without
+	// looking would agree with a server that had started echoing it.
+	if bytes.Contains(saved, []byte("s3cret")) {
+		t.Error("the settings response echoed a stored secret back")
+	}
+	// And a key it does not declare is refused rather than ignored, for the reason
+	// an unknown multipart part is.
+	c.do("PUT", p+"/addons/contract/settings", map[string]any{
+		"values": map[string]string{"nosuch": "x"},
+	}, http.StatusUnprocessableEntity)
+	c.do("PUT", p+"/addons/nosuch/settings", map[string]any{
+		"values": map[string]string{},
+	}, http.StatusNotFound)
+
+	// The orphan list while the add-on is installed: empty, and that is an answer
+	// worth replaying, because an empty array and an absent field are different
+	// documents.
+	if n := len(orphanRows(t, c.do("GET", p+"/addons/"+httpx.AddonOrphanPath, nil,
+		http.StatusOK))); n != 0 {
+		t.Errorf("the orphan list has %d rows while the only add-on is installed", n)
+	}
+	// Purging the data of an add-on that is installed is a conflict, and purging a
+	// name that owns nothing is a 404 rather than a success nobody could tell from
+	// one.
+	c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/contract", nil, http.StatusConflict)
+	c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/nosuch", nil, http.StatusNotFound)
+
 	c.do("DELETE", p+"/addons/contract", nil, http.StatusOK)
 	c.do("DELETE", p+"/addons/contract", nil, http.StatusNotFound)
+
+	// **And now the orphan replays that need something to have been left behind.**
+	// A removal deliberately keeps the schema, so this is the only point in the run
+	// where `AddonOrphan` is a row rather than an empty array and where
+	// `purgeAddonData` has a name it can answer `200` for. Running them before the
+	// removal — which is where they used to be — validated two new schemas and a
+	// success status against nothing at all.
+	left := orphanRows(t, c.do("GET", p+"/addons/"+httpx.AddonOrphanPath, nil,
+		http.StatusOK))
+	if len(left) != 1 || left[0].Name != contractAddonName {
+		t.Fatalf("after the removal the orphan list is %+v; the removed add-on owned a schema", left)
+	}
+	// **The count of what the purge will not take.** Four settings were saved above
+	// and the removal deleted none of them — they are keyed on the add-on's *name*,
+	// so whatever is installed under it next reads them. This is the number the
+	// manager's confirmation puts in front of whoever presses the button.
+	if left[0].StoredSettings != 4 {
+		t.Errorf("the orphan reports %d stored settings; four were saved and a removal "+
+			"deletes none of them", left[0].StoredSettings)
+	}
+	purged := c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/contract", nil, http.StatusOK)
+	// The purge does not take them either, which is the claim four documents make
+	// and the reason the confirmation says *four things*.
+	if got := orphanRow(t, purged).StoredSettings; got != 4 {
+		t.Errorf("the purge answered with %d stored settings left; it drops the schema "+
+			"and nothing else", got)
+	}
+	// Gone, and the second purge is the 404 a typo gets rather than a success.
+	if n := len(orphanRows(t, c.do("GET", p+"/addons/"+httpx.AddonOrphanPath, nil,
+		http.StatusOK))); n != 0 {
+		t.Errorf("the purge left %d orphan rows", n)
+	}
+	c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/contract", nil, http.StatusNotFound)
+
+	// **`ManagedAddon.performance` is the one new schema no operation here can
+	// produce, and it is validated against the document rather than left unchecked.**
+	// It is present only for a module that has actually run on the redirect path,
+	// which needs a `Redirect` handler, a link, and a metrics registry shared
+	// between the two — none of which this fixture has, because it is built for the
+	// API surface and the redirect path is `newRedirect`'s. Wiring one in to make a
+	// field appear would be a second server in the fixture every other replay then
+	// runs against.
+	//
+	// So the object comes out of the **producer** rather than out of a struct
+	// literal here: a registry, three observations and two kills, read back through
+	// the same `AddonPerformance()` the manager calls. A literal would assert that
+	// the schema matches whatever this file typed; this asserts that it matches what
+	// the code emits, which is what the replay would have bought.
+	c.validateSchema("ManagedAddon", "performance", addonPerformanceSample())
 
 	// --- reputation feeds ---------------------------------------------------
 	// One operation, and the fixture has no feed configured — which is the
@@ -1870,9 +1975,112 @@ func (c *contract) yamlSpecEndpoint() {
 	c.hit["getOpenAPIYAML"] = true
 }
 
+// contractOrphan is one row of an orphan listing, read back as a client would.
+//
+// Declared here rather than reusing addon.Orphan, because what these replays check
+// is the *document*: a field renamed in Go and in the spec together would still
+// round-trip through the producing type and would be a broken client.
+type contractOrphan struct {
+	Name           string `json:"name"`
+	Schema         string `json:"schema"`
+	StoredSettings int64  `json:"stored_settings"`
+	IdentityLinks  int64  `json:"identity_links"`
+}
+
+// orphanRows reads an orphan listing, in the order the server returned it.
+//
+// A helper rather than `field`, because what these replays assert is how many rows
+// there are and which — the two things an empty array cannot tell you apart from a
+// full one, and the whole reason the listing moved after the removal.
+func orphanRows(t *testing.T, raw []byte) []contractOrphan {
+	t.Helper()
+	var body struct {
+		Orphans []contractOrphan `json:"orphans"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("orphan listing is not the documented shape: %v", err)
+	}
+	return body.Orphans
+}
+
+// orphanRow reads the single orphan a purge answers with.
+func orphanRow(t *testing.T, raw []byte) contractOrphan {
+	t.Helper()
+	var o contractOrphan
+	if err := json.Unmarshal(raw, &o); err != nil {
+		t.Fatalf("purge answer is not the documented shape: %v", err)
+	}
+	return o
+}
+
+// validateSchema checks one document against a property's schema inside a named
+// component.
+//
+// For the one new schema no operation in this replay can produce. It is the same
+// validator every response above goes through — `openapi3.Schema.VisitJSON` is
+// what the response validator calls — reached directly because there is no
+// response to attach it to. A property rather than a component because that is how
+// the document declares this one: `performance` is written inline in
+// `ManagedAddon`, so this walks to it rather than making the document change shape
+// to suit a test.
+func (c *contract) validateSchema(component, property string, v any) {
+	c.t.Helper()
+	ref, ok := c.doc.Components.Schemas[component]
+	if !ok {
+		c.t.Fatalf("the document has no %s schema", component)
+	}
+	prop, ok := ref.Value.Properties[property]
+	if !ok {
+		c.t.Fatalf("%s declares no %s property", component, property)
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		c.t.Fatalf("marshal a %s.%s: %v", component, property, err)
+	}
+	var doc any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		c.t.Fatalf("re-read a %s.%s: %v", component, property, err)
+	}
+	if err := prop.Value.VisitJSON(doc); err != nil {
+		c.t.Errorf("%s.%s does not satisfy its own schema: %v\n  %s",
+			component, property, err, raw)
+	}
+}
+
+// addonPerformanceSample is what the manager reads for a module that has run
+// inline three times and been killed twice.
+//
+// Through the real metrics rather than as a literal, so the `p99_seconds` and
+// `sum_seconds` fields the wire carries are filled in by the function that fills
+// them in production. Two classes are deliberately not exercised: `observe` has
+// the same shape, and the schema is per-entry.
+func addonPerformanceSample() observability.AddonPerformance {
+	m := observability.NewMetrics()
+	for _, d := range []time.Duration{time.Millisecond, 2 * time.Millisecond, 3 * time.Millisecond} {
+		m.ObserveAddonRedirect("contract", "inline", d)
+	}
+	m.ObserveAddonRedirectKill("contract", "instantiate")
+	m.ObserveAddonRedirectKill("contract", "call")
+	return m.AddonPerformance()["contract"]
+}
+
 // contractAddonManifest describes a module honestly, which is what makes the
 // mismatched-module replay above a refusal about the *bytes* rather than about
 // anything else in the file.
+//
+// # It declares storage and it declares settings, and neither is decoration
+//
+// A schema is what makes the orphan replays possible at all: a removal leaves the
+// schema standing, so without `storage.own_schema` there is nothing for
+// `GET /addons/orphaned-data` to list and no name `purgeAddonData` could answer
+// `200` for — both schemas would only ever be validated against an empty array and
+// a pair of refusals. The settings are the same argument one document along:
+// `AddonSetting` is only reachable when a manifest declares one, and a fixture
+// declaring none validated the schema against `[]`.
+//
+// The four types are all four the host renders, because the spec's `type` is an
+// enum and one value exercised is not the enum exercised. The `select` carries no
+// default deliberately — that is the state the manager draws an empty option for.
 func contractAddonManifest(t *testing.T, name string, module []byte) []byte {
 	t.Helper()
 	sum := sha256.Sum256(module)
@@ -1884,6 +2092,13 @@ func contractAddonManifest(t *testing.T, name string, module []byte) []byte {
 		"module":         name + ".wasm",
 		"sha256":         hex.EncodeToString(sum[:]),
 		"failure_class":  "degrade",
+		"permissions":    []string{"storage.own_schema"},
+		"settings": []map[string]any{
+			{"name": "endpoint", "type": "text", "default": "https://example.test"},
+			{"name": "client_secret", "type": "secret"},
+			{"name": "mode", "type": "select", "options": []string{"fast", "slow"}},
+			{"name": "verbose", "type": "toggle", "default": "false"},
+		},
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -1891,3 +2106,7 @@ func contractAddonManifest(t *testing.T, name string, module []byte) []byte {
 	}
 	return b
 }
+
+// contractAddonName is the one add-on this test installs. Named so api_test.go's
+// role cleanup and this file cannot come to disagree about it.
+const contractAddonName = "contract"

@@ -50,6 +50,16 @@ type Querier interface {
 	// pre-seeded nothing, and is kept for completeness — `EnableUserMFA` stamps the
 	// enrolling step, so in practice the column is never NULL while a secret exists.
 	AcceptMFAStep(ctx context.Context, arg AcceptMFAStepParams) (int64, error)
+	// Every stored value for one add-on, whatever its manifest currently declares.
+	//
+	// Scoping to the declaration is the *caller's*, not this statement's, and the
+	// split is deliberate: `config_get` answers only for a declared setting (D263)
+	// and the manager renders only declared settings, so filtering here as well would
+	// put the same rule in two places and would silently delete the value an operator
+	// typed for a setting an add-on temporarily stopped declaring. What comes back is
+	// the whole of what is stored; what is used is decided against the manifest in
+	// hand.
+	AddonSettingValues(ctx context.Context, addon string) ([]AddonSettingValuesRow, error)
 	// Record the answer given at the first administrative sign-in after an upgrade
 	// (D164).
 	//
@@ -327,6 +337,26 @@ type Querier interface {
 	// not succeed twice even without the lock above; zero rows rolls the
 	// transaction back.
 	ConsumePendingRegistration(ctx context.Context, id uuid.UUID) (int64, error)
+	// How many account mappings were written under one add-on's name.
+	//
+	// M68's, and it exists for the confirmation rather than for a management surface.
+	// A purge is `DROP SCHEMA … CASCADE` and deletes no row here, so the links stay
+	// and are inherited by name — the whole of F330's shape — and the confirmation is
+	// the point of decision where an operator can still act on that. Naming them
+	// without a number would be a warning nobody could size; this is the number.
+	//
+	// Keyed on the add-on's name because the table is: `addon` is the manifest name,
+	// not a foreign key to anything, which is exactly why the inheritance exists.
+	CountAddonIdentityLinks(ctx context.Context, addon string) (int64, error)
+	// How many stored values there are for one add-on's name.
+	//
+	// For the orphan purge's confirmation, which is the point of decision the M68
+	// manager puts every leftover at. The row is keyed on the *name* (04800, and
+	// 04500 before it), so what this counts is what whatever is installed under that
+	// name next inherits — and a purge deletes none of it. Counted rather than
+	// described, for the reason the schema's size is measured rather than cached:
+	// a sentence about data an operator cannot see is worth less than a number.
+	CountAddonSettings(ctx context.Context, addon string) (int64, error)
 	CountAutomationRules(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	CountCampaigns(ctx context.Context, workspaceID uuid.UUID) (int64, error)
 	CountClickEvents(ctx context.Context, workspaceID uuid.UUID) (int64, error)
@@ -747,6 +777,13 @@ type Querier interface {
 	// The counts come back so the caller can log what went, and so a test can assert
 	// the statement reached each table rather than assert it did not error.
 	DeleteAccountDependents(ctx context.Context, accountID uuid.UUID) (DeleteAccountDependentsRow, error)
+	// Clear one declared setting, so the add-on falls back to its manifest default.
+	//
+	// Emptying a field in the manager means *unset*, not *the empty string*: the
+	// environment route reads a set-and-empty variable as unset (config.AddonSettings)
+	// and a stored empty string that behaved differently would make the same value
+	// mean two things depending on which route an operator used.
+	DeleteAddonSetting(ctx context.Context, arg DeleteAddonSettingParams) error
 	DeleteAutomationRule(ctx context.Context, arg DeleteAutomationRuleParams) (int64, error)
 	// Removes one host from the low-confidence runtime list.
 	//
@@ -2992,6 +3029,21 @@ type Querier interface {
 	RollupLinkDaily(ctx context.Context, arg RollupLinkDailyParams) error
 	RollupWorkspaceDaily(ctx context.Context, arg RollupWorkspaceDailyParams) error
 	RotateWebhookSecret(ctx context.Context, arg RotateWebhookSecretParams) error
+	// Write one declared setting's value.
+	//
+	// The manager saves a form as a sequence of these inside one transaction, so a
+	// half-applied form is not a state the next `config_get` can read. `updated_at`
+	// is restamped on every save including one that changes nothing, because the
+	// question an operator asks of this column is *when was this last touched* rather
+	// than *when did it last differ*.
+	//
+	// `secret` is written from the type the manifest declares *now*, which is what
+	// makes the column say what the value being written is rather than what some
+	// earlier manifest called it. Overwriting a stored secret with a non-secret value
+	// therefore clears the flag — and that is the deliberate act the column's own
+	// comment describes: somebody typed a new value in, so nothing of the credential
+	// is left to withhold.
+	SaveAddonSetting(ctx context.Context, arg SaveAddonSettingParams) error
 	// Both switches at once, because they are one setting with two halves and the
 	// CHECK in 01800 refuses the combination that writing them separately would pass
 	// through on the way. That applies row by row, so a propagation that touched one

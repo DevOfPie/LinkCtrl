@@ -20,6 +20,14 @@ type AddonIdentityLink struct {
 	LastUsedAt *time.Time
 }
 
+type AddonSetting struct {
+	Addon     string
+	Name      string
+	Value     string
+	Secret    bool
+	UpdatedAt time.Time
+}
+
 type AnalyticsSalt struct {
 	ValidOn   time.Time
 	Salt      []byte

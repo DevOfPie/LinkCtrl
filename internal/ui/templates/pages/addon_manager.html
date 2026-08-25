@@ -1,0 +1,178 @@
+{{/* One add-on's detail page (M68) — Option C, behind each row of the list.
+
+     Named addon_manager.html because pages/addon.html is already taken: that
+     one is M64's frame around an *add-on's own* output, and this is the host's
+     page about the add-on. Two pages, two subjects, and the names say which.
+
+     Sections, in the order the owner's confirmed frame names them:
+     performance, settings, declared permissions, data. */}}
+{{define "content"}}
+<div class="mb-6">
+  <a href="/instance/addons" class="text-sm font-medium text-accent-ink hover:underline">&larr; Add-ons</a>
+  <div class="mt-2 flex flex-wrap items-center gap-3">
+    <h1 class="text-xl font-semibold tracking-tight">{{.Row.Name}}</h1>
+    <span class="text-sm text-muted">v{{.Row.Version}}</span>
+    <span class="{{addonBadge .Row.Declaration}}">{{.Row.Declaration}}</span>
+    <span class="{{addonBadge .Row.Failure}}">{{.Row.Failure}}</span>
+  </div>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+{{/* ---- performance ------------------------------------------------------ */}}
+
+<section class="mb-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-ink">Performance on the redirect path</h2>
+  <p class="mt-1 text-sm text-muted">This module's own latency, separate from the redirect around it. Cumulative since this process started &mdash; not a live rate &mdash; and the p99 is an estimate read off the same buckets a Prometheus dashboard reads.</p>
+  {{if .Row.Observed}}
+  {{if .Classes}}
+  <div class="mt-4 overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th scope="col" class="py-2 pr-4 font-medium">Class</th>
+          <th scope="col" class="py-2 pr-4 text-right font-medium">Invocations</th>
+          <th scope="col" class="py-2 pr-4 text-right font-medium">Mean</th>
+          <th scope="col" class="py-2 text-right font-medium">p99</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Classes}}
+        <tr class="border-b border-line last:border-0">
+          <th scope="row" class="py-2 pr-4 text-left font-medium text-ink">{{.Class}}</th>
+          <td class="py-2 pr-4 text-right tabular-nums text-muted">{{.Count}}</td>
+          <td class="py-2 pr-4 text-right tabular-nums text-muted">{{.Mean}}</td>
+          <td class="py-2 text-right tabular-nums text-ink">{{.P99}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+  {{/* Kills are redirect-path figures like the table above, so they are inside
+       the same gate. Rendered unconditionally they read "0" for a module that
+       has never been on that path at all, which is the one thing m68.md says
+       this page must not do. */}}
+  <dl class="mt-4 grid gap-4 sm:grid-cols-2">
+    <div class="rounded-md border border-line px-3 py-2">
+      <dt class="text-xs uppercase tracking-wide text-subtle">Killed at call</dt>
+      <dd class="mt-1 text-sm text-ink">{{.KillsCall}}<span class="ml-2 text-xs text-muted">the add-on held a redirect past its deadline</span></dd>
+    </div>
+    <div class="rounded-md border border-line px-3 py-2">
+      <dt class="text-xs uppercase tracking-wide text-subtle">Killed at instantiate</dt>
+      <dd class="mt-1 text-sm text-ink">{{.KillsInstantiate}}<span class="ml-2 text-xs text-muted">this host could not start the module in time &mdash; a slow machine, not a slow add-on</span></dd>
+    </div>
+  </dl>
+  {{else}}
+  <p class="mt-4 text-sm text-subtle">This add-on holds no redirect grant, or has not run on the redirect path since this process started. There are no figures to show, which is not the same as zero.</p>
+  {{end}}
+</section>
+
+{{/* ---- settings --------------------------------------------------------- */}}
+
+{{if .Settings}}
+<section class="mb-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-ink">Settings</h2>
+  <p class="mt-1 text-sm text-muted">What this add-on's manifest declares. Saved values are stored by this instance and read by the module on its next invocation.</p>
+  <form method="post" action="/instance/addons/{{.Row.Name}}/settings" class="mt-4 grid gap-5">
+    {{range .Settings}}
+    <div>
+      <label for="setting-{{.Name}}" class="block text-sm font-medium text-ink">{{.Name}}</label>
+      {{if not .Editable}}
+      {{/* Answered by the deployment's environment. A sentence in place of the
+           control, on the reasoning the first-run update-check prompt uses:
+           an instance must not appear to be asking a question it has already
+           had answered for it. The value is deliberately not shown — it may be
+           a credential, and there is nothing here that could change it. */}}
+      <p class="mt-1 text-sm text-muted">Set by <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.EnvVar}}</code> in this deployment's environment, which is where it can be changed. Unset that variable and restart to configure it here instead.</p>
+      {{else if .IsToggle}}
+      {{/* Named in a hidden input because an unticked checkbox sends nothing at
+           all, and "off" must not arrive looking like "the form did not carry
+           this setting". */}}
+      <input type="hidden" name="toggle" value="{{.Name}}">
+      <label class="mt-1 flex items-center gap-2 text-sm text-ink">
+        <input id="setting-{{.Name}}" type="checkbox" name="setting_{{.Name}}" value="true" {{if .On}}checked{{end}}
+               class="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent">
+        <span class="text-muted">on</span>
+      </label>
+      {{else if .IsSelect}}
+      <input type="hidden" name="field" value="{{.Name}}">
+      {{/* The empty option is not decoration. A `select` with no empty option
+           always posts something, so a setting that has never been chosen would
+           arrive as whichever option happened to be first — and one that had been
+           chosen could never be put back. Blank means *unset* on this form for
+           every type, and this is the only control that needs an element to say
+           it with. */}}
+      {{$current := .Value}}
+      <select id="setting-{{.Name}}" name="setting_{{.Name}}"
+              class="mt-1 block w-full rounded-md border border-line-strong bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none">
+        <option value="" {{if not $current}}selected{{end}}>Not set</option>
+        {{range .Options}}<option value="{{.}}" {{if eq . $current}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      {{else if .IsSecret}}
+      {{/* A stored secret is never rendered back into the form, whatever it is
+           worth to whoever is looking at the page. The placeholder is the whole
+           of what this control says about one: that there is a value, or that
+           there is not. */}}
+      <input type="hidden" name="secret" value="{{.Name}}">
+      <input id="setting-{{.Name}}" name="setting_{{.Name}}" type="password" autocomplete="off" maxlength="{{$.SettingMaxLength}}"
+             placeholder="{{if .Configured}}set — type a new value to replace it{{else}}not set{{end}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{if .Configured}}
+      <label class="mt-1 flex items-center gap-2 text-xs text-muted">
+        <input type="checkbox" name="clear_{{.Name}}" value="1"
+               class="h-3.5 w-3.5 rounded border-line-strong text-danger-ink focus:ring-danger-line">
+        <span>Clear this secret. The add-on then reads nothing for it.</span>
+      </label>
+      {{end}}
+      <p class="mt-1 text-xs text-subtle">Leaving this blank keeps whatever is stored.</p>
+      {{else}}
+      <input type="hidden" name="field" value="{{.Name}}">
+      {{/* `maxlength` counts UTF-16 code units and the server's bound is bytes,
+           so this is a rough stop against a runaway paste rather than the rule.
+           web_addons.go's SettingMaxLength says so, and carries the figure from
+           the constant the save is actually refused on. */}}
+      <input id="setting-{{.Name}}" name="setting_{{.Name}}" type="text" value="{{.Value}}" maxlength="{{$.SettingMaxLength}}"
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      {{if .Default}}<p class="mt-1 text-xs text-subtle">Empty means unset, and the add-on then reads its declared default of <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Default}}</code>.</p>{{else}}<p class="mt-1 text-xs text-subtle">Empty means unset.</p>{{end}}
+      {{end}}
+      {{template "field_error" (index $.FieldErrors .Name)}}
+    </div>
+    {{end}}
+    <div>
+      <button type="submit" class="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Save settings</button>
+    </div>
+  </form>
+</section>
+{{end}}
+
+{{/* ---- declared permissions --------------------------------------------- */}}
+
+<section class="mb-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-ink">Permissions this add-on declared</h2>
+  <p class="mt-1 text-sm text-muted">The whole of what it may do. A call to anything it did not declare is refused by the host, whatever the module was written to attempt. A struck-through entry is one this build grants to nobody — the add-on declared it and does not hold it.</p>
+  {{if .Row.Permissions}}
+  <ul class="mt-3 flex flex-wrap gap-2">
+    {{$withheld := .Row.Withheld}}{{range .Row.Permissions}}<li><code class="rounded px-2 py-1 text-xs {{if index $withheld .}}bg-warn-soft text-warn-ink line-through{{else}}bg-sunken text-ink{{end}}">{{.}}</code></li>{{end}}
+  </ul>
+  {{else}}
+  <p class="mt-3 text-sm text-subtle">None. This module can log and read the clock, and nothing else.</p>
+  {{end}}
+</section>
+
+{{/* ---- data and removal -------------------------------------------------- */}}
+
+<section class="rounded-lg border border-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-ink">Data</h2>
+  {{if .Row.Schema}}
+  <p class="mt-1 text-sm text-muted">This add-on owns the Postgres schema <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Row.Schema}}</code>, holding {{.Row.SchemaSize}} right now. Removing the add-on leaves it standing; the removal asks whether to delete it.</p>
+  {{else}}
+  <p class="mt-1 text-sm text-muted">This add-on stores nothing of its own. Removing it leaves nothing behind in the database.</p>
+  {{end}}
+  <form method="post" action="/instance/addons/remove-selected" class="mt-4">
+    <input type="hidden" name="name" value="{{.Row.Name}}">
+    <button type="submit" class="cursor-pointer rounded-md border border-danger-line px-4 py-2 text-sm font-medium text-danger-ink hover:bg-danger-soft">Remove add-on&hellip;</button>
+  </form>
+</section>
+{{end}}

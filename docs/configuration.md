@@ -885,7 +885,7 @@ supported:
 
 | Mount | You get | You give up |
 | --- | --- | --- |
-| `:ro` — the recommendation below | The process cannot rewrite the code it runs | Runtime install; the API answers `503` and says so |
+| `:ro` — the recommendation below | The process cannot rewrite the code it runs | Runtime install; the API answers `503` and says so, and the Add-on manager's install and remove are refused with the same reason on the page |
 | writable | Install and remove without a restart | The process can rewrite the code it runs |
 
 Two things about the writable arrangement are worth knowing before you rely on it,
@@ -1145,8 +1145,12 @@ subject to an account on this instance is written only while the person it belon
 to is signed in, in their own browser, and never on an add-on's say-so; there is
 no matching on the email address an assertion carries, which is the classic
 account-takeover shape and is absent by design. There is no screen for reviewing
-or removing a connection yet — that belongs with the Add-on manager — so today the
-table is `addon_identity_links` and removal is a `DELETE`.
+or removing a connection — the Add-on manager administers *add-ons* rather than the
+identities they vouch for — so today the table is `addon_identity_links` and
+removal is a `DELETE`. What the manager does say about them is what survives a
+purge: the confirmation counts the mappings a `DROP SCHEMA` leaves standing,
+because they are keyed on the add-on's **name** and whatever is installed under it
+next inherits them.
 
 **A provider that offers only `response_mode=form_post` cannot be used.** An
 add-on's callback has to arrive as a GET redirect carrying `code` in the query,
@@ -1157,8 +1161,30 @@ method, with no exemptions — so the callback never reaches the module.
 
 ### Configuring an add-on
 
-An add-on's declared settings are read from this instance's environment, one
-variable per setting:
+**Two routes, and the dashboard is the ordinary one.** Since 0.4.0 an add-on's
+declared settings are edited on its page in the Add-on manager —
+`/instance/addons/<name>`, behind `addons.manage` — where the host draws the
+input each declared type asks for and saves the value into a table of its own. A
+secret is never shown again after it is saved; the field says whether one is set,
+and clearing it is a deliberate act rather than an empty box. The row records what
+the value was written as, so a *replacement* add-on installed under the same name
+cannot get its predecessor's credential drawn back into the form, or returned by
+the API, by re-declaring the setting as plain text. **That bounds the page and not
+the module.** Settings are keyed on the add-on's name, so the replacement's own
+code still reads the value through `config_get` — the same inheritance the
+external-identity mappings have, and the reason
+[SECURITY.md](SECURITY.md) says installing a module under a name somebody else's
+module used is not a safe thing to do casually.
+
+The environment route below is the other one, and it still exists for the
+deployment that wants a setting pinned outside the product: a value in your
+environment is what the add-on reads, and the manager renders a sentence naming
+the variable instead of a field it could not honour. **The environment wins**, and
+a save aimed at such a setting is refused with a message saying which variable to
+edit rather than accepted and ignored — the same answer the first-run update-check
+prompt gives when `LINKCTRL_UPDATE_CHECK` has already settled it.
+
+One variable per setting:
 
 ```
 LINKCTRL_ADDON_<NAME>_<SETTING>
@@ -1187,9 +1213,26 @@ cannot print themselves into a log, a panic or a config dump, whatever the
 manifest called the setting. The boot log says how many settings an add-on has
 configured and never which or what.
 
-Editing these from the dashboard is the Add-on manager's job and it is not built
-yet, so this environment is the whole of it. Nothing reads a setting from the
-database, which means changing one takes a restart.
+**Changing a variable here takes a restart. Changing a value in the manager does
+not** — the add-on reads it on its next invocation, and one already running reads
+what it read. Both routes are resolved once when the add-on loads, which is why
+the environment needs the restart: nothing re-reads it per call, because
+`config_get` is on a request's path.
+
+**Where the manager's values are kept, and what that is not.** A host table,
+`addon_settings`, keyed on the add-on's name — never the add-on's own schema,
+because the add-on's database role can write that schema and a `secret` kept
+there would be a credential the module could rewrite and then read back as though
+you had chosen it. It is **not encrypted**, exactly as the environment variable it
+mirrors is not: the key would live beside the database in the same environment.
+What protects it is that nothing echoes it back and that reading the table needs
+the database. And because the key is the add-on's *name*, a different module
+installed under a name you have used before inherits the values you typed for the
+last one — the same inheritance its external-identity links have, and the reason
+the manager counts them on the purge confirmation. **Nothing in LinkCtrl deletes
+them**: saving settings is refused for a name that is not installed, so a removed
+add-on's values are unreachable from the pages and the API alike, and
+`DELETE FROM addon_settings WHERE addon = '<name>'` is the way to be rid of them.
 
 ### The pages an add-on serves
 

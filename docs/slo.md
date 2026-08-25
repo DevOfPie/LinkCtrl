@@ -1581,6 +1581,113 @@ one. That is a correctness property, asserted by test; whether the store costs a
 measurable stall at 2,000 rps is not asked here, and the arithmetic says it
 cannot — the store happens once per install.
 
+### Re-measured for M68 (2026-08-25)
+
+[M68](build-notes/phase-details/m68.md) is the Add-on manager, which is a page
+rather than a redirect — and three of its changes land on the redirect path all
+the same. `acquireInstance` takes the pool mutex through `generation()` on every
+cold acquire, so a settings save that drains the pool cannot lose the race with a
+request already inside it. `releaseInstance` gains a branch that destroys a stale
+entry instead of returning it. And `config_get` reads its map through
+`settingValues.get` — an atomic pointer load — because a save has to reach an
+instance the host already built.
+
+So the inherited rule fires, and it was run rather than argued away. By
+inspection the added cost is one uncontended mutex acquisition per cold acquire
+and one atomic load per `config_get`, which is an argument for what the number
+should be and not a substitute for it. **The fifth attempt at this milestone is
+where it was actually run**; the four before it neither ran it nor argued it, and
+that is recorded rather than tidied away.
+
+**Run in [M66.5](#re-measured-for-m665-2026-08-24)'s three-column shape**, on an
+image built from this milestone's own code, with the same `redirect` and `slow`
+fixtures at 2,000 rps for two minutes against the same 100k links and 5M click
+events.
+
+| | Core, no add-on | Well-behaved inline add-on | Deliberately hostile inline add-on |
+| --- | --- | --- | --- |
+| Generator p99 | **137.54µs** | **1.05ms** | **157.52ms** |
+| Generator median / mean | 84.64µs / 88.19µs | **519.97µs / 561.31µs** | 12.59ms / 24.36ms |
+| Server-side under 20ms | **100%** of 240,001 | **100%** of 240,001 | **99.920%** of 239,961 |
+| Requests failed | **0** | **0** | **0** |
+| Sustained rate | 2,000.00/s | 1,999.99/s | 1,998.22/s, 41 iterations dropped |
+| Mean add-on invocation, from its own histogram | — | **454µs** | no samples: every invocation was killed |
+| Invocations recorded | — | **240,000** | 0 |
+| Redirects that skipped the add-on | — | **zero, and the series was never created** | 207,637 — 86.5% |
+| `linkctrl_addon_redirect_kills_total{step="call"}` | — | **zero, and the series was never created** | **32,324** |
+| `linkctrl_addon_redirect_kills_total{step="instantiate"}` | — | **zero, and the series was never created** | **zero, and the series was never created** |
+| Redirect **database** pool acquire waits | 0 | 0 | 0 |
+
+**The middle column is the one the rule was re-run for, and it did not move.**
+Read against the two runs before it, taken on the same host with the same
+fixture:
+
+| | M66.5 | M67 | M68 |
+| --- | --- | --- | --- |
+| Generator p99 | 1.08ms | 1.09ms | **1.05ms** |
+| Generator median / mean | 518.63µs / 558.23µs | 521.26µs / 570.11µs | **519.97µs / 561.31µs** |
+| Mean invocation | 451µs | 460µs | **454µs** |
+| Server-side under 20ms | 100% | 100% | **100%** |
+| Redirects that skipped the add-on | 9 | 38 | **0** |
+
+Every figure sits inside the two before it or a shade under them, which is what
+*no measurable cost* looks like when the run-to-run variance is a few percent:
+454µs against 451µs and 460µs, 1.05ms against 1.08ms and 1.09ms. **The inherited
+bar is generator p99 under 20 ms and the number is 1.05 ms**, nineteen times
+inside it. The skip count is zero for the first time across the three — the
+`addon_inline` rate-limit series was never created, so nothing was refused a slot
+rather than a small number being — and that is arrival jitter landing well rather
+than a mechanism changing; nine, thirty-eight and zero out of 240,000 are the
+same answer.
+
+**Core is unmoved, and this run is the cheapest of the three claims.** An
+instance with no add-on installed never reaches a pool and never calls
+`config_get`: `HasInline` loads its snapshot pointer, finds nothing, and returns.
+137.54µs at p99 and 100% of 240,001 under 20 ms is where this measurement has
+been since [M50](#re-measured-for-m50-2026-08-07), and it is 0.24µs off M67's
+137.78µs.
+
+**The hostile column is no worse, and one figure fell outside its predecessors'
+bracket in the direction that is not a regression.** 157.52 ms at p99 against
+M66.5's 163.93 ms and 169.93 ms and M67's 165.10 ms — about 4% under the lowest
+of the three — with the server-side histogram reading **99.920%** under 20 ms
+against 99.778%, 99.795% and 99.865%, which is also the best of the four. Every
+figure that describes the *mechanism* rather than the box is where it has always
+been: 32,324 kills against 32,127, 32,230 and 32,334; 207,637 skips against
+207,599 and 207,784; 86.5% against 86.5% and 86.6%; zero failed requests. So the
+reading is that this column has several percent of run-to-run variance, which
+its own entries have said twice, and that nothing in M68 touches the path a
+module whose every invocation is killed takes — such a module's instance is
+closed rather than pooled, so `releaseInstance`'s new branch and the pool
+generation are never reached for it.
+
+**Thirty-four cached runs** now read 100% under 20ms for core. The two add-on
+columns stay outside that tally for the reason M66's, M66.5's and M67's did: the
+tally is what this document promises, and those runs are what the promise is
+scoped away from.
+
+#### What this run did **not** measure
+
+**A settings save under load.** The mutex `acquireInstance` now takes exists so
+that a save draining the pool cannot leave a stale instance behind, and no column
+here saves anything while the generator is running. What that costs is covered by
+`internal/addon`'s tests and by the integration sequence, for the reason M67 gave
+about a removal: a save is a single act an operator performs by hand rather than
+a rate, and a load generator has nothing to say about one that an invocation does
+not.
+
+**`config_get` from inside a redirect.** The `redirect` fixture probes the host
+functions an inline invocation is refused, and `config_get` is not among the
+calls it makes on the inline path — so the atomic load this milestone put behind
+that answer is measured by inspection and by unit test, not by this run. It is
+one `atomic.Pointer.Load` and a map lookup against a map that is never mutated,
+on a path that already does both.
+
+**An instance holding more than one add-on**, which M66.5 also did not measure
+and which M68 makes easier to arrive at, because the manager is where somebody
+installs a second one. The pool is per add-on and per class; the contention
+between two is still nothing this page has a number for.
+
 ## Reproducing it
 
 ```sh
@@ -1709,18 +1816,32 @@ them before believing the latency: a cached measurement with database reads in i
 is not a cached measurement, and a starved pool is the difference between "the
 query was slow" and "the request never got a connection".
 
-### Reproducing the M66 and M66.5 add-on runs
+### Reproducing the M66, M66.5, M67 and M68 add-on runs
 
-The core column is `make load` on an ordinary instance and needs no recipe. The
-add-on columns need a module inside the container, and there is deliberately no
-compose mount for one: an add-ons directory is an operator's own path and
+**The core column is not `make load` on the instance as it stands, and since M68
+it needs a step.** `scripts/instance.sh` sets `LINKCTRL_ADDONS_DIR=/addons` on the
+test instance now — so that the Add-on manager mounts and the kept browser specs
+run rather than skip — and an instance running the `pageviews` sample is not *core
+with no add-on*. Take the line out of `.env.test`, recreate the app container, run
+`make load`, and put the line back afterwards. It is the same shape the add-on
+columns below use, in the other direction.
+
+The add-on columns need a module inside the container, and there is deliberately
+no compose mount for one: an add-ons directory is an operator's own path and
 `docs/configuration.md` is where that is described, so the measurement builds a
 throwaway image rather than adding a developer convenience that would then be
 part of the product.
 
+**The throwaway image copies to `/slo-addons`, not to `/addons`, and that is not
+cosmetic.** Every image has carried `/addons/pageviews` since M68, and `COPY` into
+an existing directory *merges* rather than replaces — so copying to `/addons`
+leaves the sample loaded beside the fixture and measures two modules while
+claiming one. It was caught by reading the boot log, which names every module it
+loaded; read it before believing a column.
+
 ```sh
 make addon-fixtures                        # builds internal/addon/testdata/build/slow.wasm
-mkdir -p /tmp/addons/slow
+rm -rf /tmp/addons && mkdir -p /tmp/addons/slow
 cp internal/addon/testdata/build/slow.wasm /tmp/addons/slow/
 cat > /tmp/addons/slow/addon.json <<EOF
 {"schema_version":1,"name":"slow","version":"1.0.0","abi_version":1,
@@ -1728,17 +1849,19 @@ cat > /tmp/addons/slow/addon.json <<EOF
  "failure_class":"degrade","permissions":["redirect.inline"]}
 EOF
 printf 'FROM linkctrl:test
-COPY addons /addons
+COPY addons /slo-addons
 ' > /tmp/Dockerfile.slow
 docker build -t linkctrl:test-slowaddon -f /tmp/Dockerfile.slow /tmp
 ```
 
 Then point the instance at it, run, and put it back. Both lines go in
-`.env.test`, which is untracked and per-instance:
+`.env.test`, which is untracked and per-instance, and the `ADDONS_DIR` line
+replaces the one that is already there:
 
 ```sh
-printf '\nLINKCTRL_ADDONS_DIR=/addons\nLINKCTRL_TAG=test-slowaddon\n' >> .env.test
+printf '\nLINKCTRL_ADDONS_DIR=/slo-addons\nLINKCTRL_TAG=test-slowaddon\n' >> .env.test
 docker compose -p linkctrl-test --env-file .env.test up -d --force-recreate --wait app
+docker logs linkctrl-test-app-1 | grep 'add-on loaded'   # exactly one, and it is the fixture
 make load                                  # exits 99: the threshold is crossed, which is the result
 grep addon_redirect /tmp/lc-before.txt /tmp/lc-after.txt
 ```
@@ -1754,9 +1877,11 @@ this product's to keep under it. Read the two counters before and after, as the
 script already does for the server histogram — they are cumulative since boot,
 and the figures in the table above are deltas across the measured window.
 
-Undo it by removing the two lines and recreating the container. The image is a
-throwaway; `docker image rm linkctrl:test-slowaddon` when the run is done, or the
-next `make rebuild` will be building against a tag nothing points at.
+Undo it by putting `LINKCTRL_ADDONS_DIR=/addons` back, removing the `LINKCTRL_TAG`
+line, and recreating the container — or the browser specs skip on their next run.
+The image is a throwaway; `docker image rm linkctrl:test-slowaddon` when the run
+is done, or the next `make rebuild` will be building against a tag nothing points
+at.
 
 **The well-behaved column is the same recipe with a different fixture**, and it
 is the one M66.5 is measured by. Substitute `redirect` for `slow` throughout —

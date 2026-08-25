@@ -124,15 +124,26 @@ func TestMigrationsProduceExpectedSchema(t *testing.T) {
 	// with no row here mints nothing, and there is no statement in the product
 	// that resolves one by email address instead.
 	//
+	// Forty-five since M68, and the new one is `addon_settings`: what an operator
+	// configured an add-on with, from the Add-on manager. Host-side rather than in
+	// the add-on's own schema, because the add-on's database role can write that
+	// schema and a `secret` kept there would be a credential the module could
+	// rewrite and then read back as though somebody had chosen it. It is also the
+	// second table in this list keyed on an add-on's *name* rather than on an id,
+	// which is a property worth noticing beside `addon_identity_links` — there is
+	// no publisher and nothing signed, so the directory name is the only stable
+	// identifier an add-on has.
+	//
 	// Each is live and typed rather than dormant jsonb, because the feature that
 	// reads it arrived in the same commit. The number moves and the sentence says
 	// why, rather than the count silently growing whenever somebody adds a table.
-	if tables != 44 {
-		t.Errorf("got %d tables, want 44 (all 20 Plan.md entities, plus mail_outbox, "+
+	if tables != 45 {
+		t.Errorf("got %d tables, want 45 (all 20 Plan.md entities, plus mail_outbox, "+
 			"invitations, pending_registrations, blocked_destinations, "+
 			"destination_disputes, link_click_budget, instance_grants, "+
 			"password_resets, mfa_recovery_codes, mfa_pending_logins, "+
-			"api_key_org_revocations, instance_settings and addon_identity_links)", tables)
+			"api_key_org_revocations, instance_settings, addon_identity_links "+
+			"and addon_settings)", tables)
 	}
 
 	// The UTC guarantee the partition scheme depends on.

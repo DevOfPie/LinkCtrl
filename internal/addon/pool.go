@@ -179,6 +179,17 @@ type poolEntry struct {
 	// idleAt is when this entry was last returned to the pool, read only by the
 	// sweep.
 	idleAt time.Time
+	// gen is the pool generation this instance was made in, and it is what makes a
+	// drain reach an instance that was **in flight** when the drain happened.
+	//
+	// Draining empties the idle set, which by construction does not contain the
+	// entry an invocation is holding. Without this, [Host.releaseInstance] would
+	// return that entry to the pool a moment later and the instance a drain existed
+	// to destroy would go on serving — for up to [DefaultPoolTTL], carrying whatever
+	// its package initialization read. That is the exact case
+	// [Host.SaveSettings]'s drain is for, so the drain has to survive the gap
+	// between take and put rather than only the moment it runs.
+	gen uint64
 }
 
 // addonPool is one add-on's idle instances.
@@ -190,6 +201,19 @@ type poolEntry struct {
 type addonPool struct {
 	mu   sync.Mutex
 	idle []*poolEntry
+	// gen counts drains. An entry made under an older one is not returned to the
+	// idle set — see [poolEntry.gen].
+	gen uint64
+}
+
+// generation is what a new entry is stamped with.
+func (p *addonPool) generation() uint64 {
+	if p == nil {
+		return 0
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.gen
 }
 
 // take removes the most recently returned entry, or nil.
@@ -208,12 +232,19 @@ func (p *addonPool) take() *poolEntry {
 	return e
 }
 
-// put returns an entry to the idle set.
-func (p *addonPool) put(e *poolEntry) {
+// put returns an entry to the idle set, and reports whether it took it.
+//
+// It refuses an entry made before the last drain. The caller closes what is
+// refused, which is the same thing it does with an entry the pool is full for.
+func (p *addonPool) put(e *poolEntry) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if e.gen != p.gen {
+		return false
+	}
 	e.idleAt = time.Now()
 	p.idle = append(p.idle, e)
+	return true
 }
 
 // drain removes and returns every idle entry, which is what closing a host and
@@ -223,6 +254,11 @@ func (p *addonPool) drain() []*poolEntry {
 	defer p.mu.Unlock()
 	out := p.idle
 	p.idle = nil
+	// Every instance now in flight was made under the old number and will not be
+	// taken back. Without this the drain reaches only what happens to be resting at
+	// the moment it runs, which is the half of the set that matters least: an
+	// add-on under traffic has its instances *out*.
+	p.gen++
 	return out
 }
 
@@ -311,7 +347,12 @@ func (h *Host) acquireInstance(ctx context.Context, l *Loaded, class string) (*p
 	// itself, which resets nothing and looks exactly like a reset that works.
 	image := make([]byte, len(live))
 	copy(image, live)
-	return &poolEntry{mod: mod, addon: name, class: class, name: inst, image: image}, nil
+	// Stamped from the pool as it is now. A drain between here and the release that
+	// follows makes this entry stale, which is what closes it instead of pooling it.
+	return &poolEntry{
+		mod: mod, addon: name, class: class, name: inst, image: image,
+		gen: h.current().pools[poolKey(name, class)].generation(),
+	}, nil
 }
 
 // poolKey names one add-on's idle set for one class.
@@ -366,7 +407,12 @@ func (h *Host) releaseInstance(ctx context.Context, e *poolEntry, clean bool) {
 		h.closeInstance(ctx, e)
 		return
 	}
-	p.put(e)
+	if !p.put(e) {
+		// Drained while this invocation was in flight. The entry is destroyed for the
+		// reason the drain destroyed the resting ones — see [poolEntry.gen].
+		h.idleInstances.Add(-1)
+		h.closeInstance(ctx, e)
+	}
 }
 
 // closeInstance destroys one entry and forgets its state.

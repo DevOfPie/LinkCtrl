@@ -55,6 +55,14 @@ func owner() *identityStub {
 			"destinations.review": true,
 			"destinations.decide": true,
 			"instance.admin":      true,
+			// The Add-on manager's entry (M68), and it is here for the same reason
+			// the queue's three are: `addons.manage` is held by no role at all and
+			// belongs to the account that claimed the instance, which is this
+			// fixture's owner. Holding it is **not** enough to draw the entry —
+			// the shell's `AddonManager` says whether this instance has an add-on
+			// host, and only the two add-on pages below set it — so the sweep
+			// renders the entry exactly where following it would work.
+			"addons.manage": true,
 			// Held by the owner role and by nothing else (D16), which is what
 			// draws the organization form on the workspaces page.
 			"orgs.create": true,
@@ -882,6 +890,70 @@ func pageData(t *testing.T) map[string]any {
 			"Addon": "probe",
 			"Body":  "<script>alert(1)</script>\nA second line, because the body is text.",
 		},
+		// The Add-on manager's list (M68), in its ordinary state: two modules,
+		// one on the redirect path with figures and one that is not, and an
+		// orphaned schema to purge. The hostile strings are deliberate — an
+		// add-on's name, version and permissions all come out of a manifest
+		// somebody uploaded, and this page is the second surface after the
+		// review queue that renders attacker-influenced text.
+		"addons": map[string]any{
+			"Title": "Add-ons", "Nav": "addons", "Identity": owner(),
+			"HasOrganization": true, "AddonManager": true,
+			"MaxUpload": "32 MiB", "RemoveGrace": "5s",
+			"Rows": []map[string]any{
+				{
+					"Name": "clickstats", "Version": "0.4.0",
+					"Declaration": "redirect-observe", "Failure": "degrade",
+					"Permissions": []string{"redirect.observe", "storage.own_schema"},
+					"Withheld":    map[string]bool{},
+					"P99":         "812µs", "Kills": "2", "Observed": true,
+					"Schema": "addon_clickstats", "SchemaSize": "2.4 MiB",
+					"Settings": "1 of 3 set", "Required": false,
+				},
+				{
+					"Name": "oidc<script>", "Version": "1.2.1</td>",
+					"Declaration": "none", "Failure": "required",
+					"Permissions": []string{"session.mint", "routes.own_prefix"},
+					// One declared and not held, so the struck-through branch renders.
+					"Withheld": map[string]bool{"routes.own_prefix": true},
+					"P99":      "—", "Kills": "—", "Observed": false,
+					"Schema": "", "SchemaSize": "", "Settings": "",
+					"Required": true,
+				},
+			},
+			"Orphans": []map[string]any{
+				{"Name": "legacy_geo", "Schema": "addon_legacy_geo",
+					"Size": "2.4 MiB", "LargeObjects": int64(0),
+					"IdentityLinks": int64(0)},
+			},
+			"Selecting": false, "Confirming": nil, "PurgingOrphan": nil,
+			"Notice": "", "Error": "",
+		},
+		// One add-on's detail page, with all four setting types at once: a text
+		// with a default, a select, a toggle that is on, and a secret that is
+		// configured — which is the state that must render a placeholder and
+		// never a value. The fifth entry is environment-answered, which draws a
+		// sentence in place of a control.
+		"addon_manager": map[string]any{
+			"Title": "clickstats", "Nav": "addons", "Identity": owner(),
+			"HasOrganization": true, "AddonManager": true,
+			"Row": map[string]any{
+				"Name": "clickstats", "Version": "0.4.0",
+				"Declaration": "redirect-observe", "Failure": "degrade",
+				"Permissions": []string{"redirect.observe", "storage.own_schema"},
+				"Withheld":    map[string]bool{},
+				"P99":         "812µs", "Kills": "2", "Observed": true,
+				"Schema": "addon_clickstats", "SchemaSize": "2.4 MiB",
+			},
+			"Classes": []map[string]any{
+				{"Class": "observe", "Count": uint64(9412), "P99": "812µs", "Mean": "451µs"},
+			},
+			"KillsInstantiate": uint64(0), "KillsCall": uint64(2),
+			"Settings":         addonSettingViews(),
+			"SettingMaxLength": 8192,
+			"FieldErrors":      map[string]string{},
+			"Notice":           "", "Error": "",
+		},
 		"account": map[string]any{
 			"Title": "Account", "Nav": "account", "Identity": owner(),
 			"FieldErrors": map[string]string{},
@@ -1669,5 +1741,50 @@ func TestForgotDoesNotPromiseMailItCannotSend(t *testing.T) {
 	if strings.Contains(none, promise) {
 		t.Error("the page promises a link by mail directly above the card saying " +
 			"it cannot send one")
+	}
+}
+
+// addonSettingStub is one declared setting as the manager's detail template
+// reads it.
+//
+// A local stub rather than addon.SettingView, for the reason identityStub above
+// is not auth.Identity: this package must not depend on the packages that use
+// it, and internal/addon would drag a WebAssembly runtime into every run of
+// these tests. The template calls methods rather than comparing a named string
+// type against a constant, so a map fixture would take every else-branch and
+// prove nothing — which is why this is a type with the same method set rather
+// than more map literals.
+type addonSettingStub struct {
+	Name       string
+	Kind       string
+	Options    []string
+	Default    string
+	Value      string
+	Configured bool
+	EnvVar     string
+}
+
+func (s addonSettingStub) Editable() bool { return s.EnvVar == "" }
+func (s addonSettingStub) IsText() bool   { return s.Kind == "text" }
+func (s addonSettingStub) IsSecret() bool { return s.Kind == "secret" }
+func (s addonSettingStub) IsSelect() bool { return s.Kind == "select" }
+func (s addonSettingStub) IsToggle() bool { return s.Kind == "toggle" }
+func (s addonSettingStub) On() bool       { return s.IsToggle() && s.Value == "true" }
+
+// addonSettingViews is the manager detail page's settings fixture: all four
+// declared types at once, plus one the environment answers.
+func addonSettingViews() []addonSettingStub {
+	return []addonSettingStub{
+		{Name: "endpoint", Kind: "text", Default: "https://example.test",
+			Value: "https://idp.example/<script>", Configured: true},
+		{Name: "scope", Kind: "select",
+			Options: []string{"openid", "openid email"}, Default: "openid",
+			Value: "openid"},
+		{Name: "pkce", Kind: "toggle", Default: "true", Value: "true", Configured: true},
+		// Configured, so the page must draw "set" and the clear box and must not
+		// draw a value — there is none on this type to draw.
+		{Name: "client_secret", Kind: "secret", Configured: true},
+		{Name: "issuer", Kind: "text", Configured: true,
+			EnvVar: "LINKCTRL_ADDON_CLICKSTATS_ISSUER"},
 	}
 }

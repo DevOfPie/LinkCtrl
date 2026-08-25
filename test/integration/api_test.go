@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,6 +30,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/notify"
 	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 	"github.com/DevOfPie/LinkCtrl/internal/signup"
+	"github.com/DevOfPie/LinkCtrl/internal/store"
 	"github.com/DevOfPie/LinkCtrl/internal/team"
 )
 
@@ -46,7 +48,7 @@ type apiFixture struct {
 
 func newAPI(t *testing.T) *apiFixture {
 	t.Helper()
-	pool := newDB(t)
+	pool, dsn := newDBWithDSN(t)
 
 	cfg := config.Config{
 		AppEnv:        config.Development,
@@ -178,20 +180,50 @@ func newAPI(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 
-	// The add-on host (M67). An empty directory and no database handed to it: what
-	// the contract test replays is the *lifecycle* — a module uploaded, verified,
-	// started and removed — and an add-on that owns a schema needs a DSN this
-	// fixture does not have a spare one of. Without a host the two operations are
-	// unregistered and the contract test reports them as spec operations nothing
-	// exercises, which is the same reason every service above is wired.
+	// The add-on host (M67, and M68's manager). An empty directory, **the fixture's
+	// own database**, and **its DSN**, and each of the three is load-bearing for a
+	// different replay.
+	//
+	// The pool is what M68 first forced: the manager's settings write lands in
+	// `addon_settings`, a host table in this database rather than anything the
+	// add-on owns, and without a pool that write answers `503` and the spec's `200`
+	// describes nothing.
+	//
+	// The DSN is what an add-on that owns a *schema* connects with as its own
+	// confined role, and it is here so the contract fixture can install one. Without
+	// it `openStorage` logs and returns nil, no schema is created, a removal leaves
+	// nothing behind, and `GET /addons/orphaned-data` can only ever answer `[]` —
+	// so `AddonOrphan` and the `200` on `purgeAddonData` would both be validated
+	// against a document nothing produces. That is the whole reason the fixture's
+	// module declares storage.
+	//
+	// Without a host at all the operations are unregistered and the contract test
+	// reports them as spec operations nothing exercises, which is the same reason
+	// every service above is wired.
 	addonHost, err := addon.Open(context.Background(), addon.Options{
 		Dir:   t.TempDir(),
+		DB:    pool,
+		DSN:   dsn,
 		Audit: audit.NewService(pool),
 	})
 	if err != nil {
 		t.Fatalf("open an add-on host: %v", err)
 	}
 	t.Cleanup(func() { _ = addonHost.Close(context.Background()) })
+	// The database goes with the fixture; the login role does not, because a role is
+	// a cluster object and this one outlives the database it owned a schema in. Best
+	// effort and after the pool is closed — a `DROP ROLE` that fails leaves a role
+	// whose password the next `EnsureAddonSchema` resets anyway, so the tidying is
+	// worth doing and not worth failing a test over.
+	t.Cleanup(func() {
+		cleanup, err := pgxpool.New(context.Background(), dsnFor("postgres"))
+		if err != nil {
+			return
+		}
+		defer cleanup.Close()
+		_, _ = cleanup.Exec(context.Background(),
+			fmt.Sprintf("DROP ROLE IF EXISTS %s", store.AddonSchema(contractAddonName)))
+	})
 
 	srv := httptest.NewServer(httpx.NewRouter(httpx.Deps{
 		Config:     cfg,

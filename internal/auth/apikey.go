@@ -233,9 +233,17 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 //
 // There is no delegable half to split out, which is what makes this different
 // from `destinations.review`/`destinations.decide` and from `webhooks.read`/
-// `webhooks.write`. Listing what is installed is M68's, under the same scope, and
-// the same argument does not reach it — but it is not this milestone's to decide
-// and it is not in this map yet because the operation does not exist.
+// `webhooks.write`. M68's manager reads are the nearest thing to one — listing
+// what is installed, what each module cost the redirect path, what data is
+// orphaned — and the escalation argument above genuinely does not reach them.
+// They are non-delegable all the same, because this map's unit is the **scope**
+// and they are under `addons.manage` itself: splitting them out would mean
+// minting a second permission, which is a change to the vocabulary rather than a
+// change to this map, and nothing has asked for one. It would also be an odd
+// thing to buy. What such a key would read is an inventory of the code this box
+// executes, which is the reason `/metrics` is on an unpublished listener
+// (docs/SECURITY.md) — so the delegable half would be the half this product
+// already declines to publish.
 var NonDelegableScopes = map[string]struct{}{
 	PermAPIKeysRead:        {},
 	PermAPIKeysWrite:       {},

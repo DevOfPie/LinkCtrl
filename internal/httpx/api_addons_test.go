@@ -42,6 +42,15 @@ type recordingLifecycle struct {
 	removed string
 	out     addon.Installed
 	err     error
+
+	// The manager half (M68): what the double will answer, and what it was asked.
+	listed   []addon.Managed
+	orphans  []addon.Orphan
+	settings []addon.SettingView
+	detailed string
+	savedTo  string
+	saved    map[string]string
+	purged   []string
 }
 
 func (r *recordingLifecycle) Install(
@@ -230,4 +239,75 @@ func TestTheLifecycleRefusalsReachTheCaller(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The manager half of the interface (M68), on both doubles.
+//
+// Empty answers rather than fixtures: these tests are about the upload boundary,
+// and what the manager's endpoints return is asserted in web_addons_test.go and
+// against a real host in test/integration. What these methods buy is that both
+// doubles satisfy the one interface the router holds, which is what keeps the
+// upload tests from needing a second wiring.
+
+func (nopAddonLifecycle) List(context.Context, *auth.Identity) ([]addon.Managed, error) {
+	return nil, nil
+}
+
+func (nopAddonLifecycle) Detail(context.Context, *auth.Identity, string) (addon.Managed, error) {
+	return addon.Managed{}, domain.ErrNotFound
+}
+
+func (nopAddonLifecycle) SaveSettings(
+	context.Context, *auth.Identity, string, map[string]string,
+) ([]addon.SettingView, error) {
+	return nil, domain.ErrNotFound
+}
+
+func (nopAddonLifecycle) Orphans(context.Context, *auth.Identity) ([]addon.Orphan, error) {
+	return nil, nil
+}
+
+func (nopAddonLifecycle) PurgeData(
+	context.Context, *auth.Identity, string,
+) (addon.Orphan, error) {
+	return addon.Orphan{}, domain.ErrNotFound
+}
+
+func (r *recordingLifecycle) List(context.Context, *auth.Identity) ([]addon.Managed, error) {
+	return r.listed, r.err
+}
+
+func (r *recordingLifecycle) Detail(
+	_ context.Context, _ *auth.Identity, name string,
+) (addon.Managed, error) {
+	r.detailed = name
+	for _, m := range r.listed {
+		if m.Name == name {
+			return m, nil
+		}
+	}
+	return addon.Managed{}, domain.ErrNotFound
+}
+
+func (r *recordingLifecycle) SaveSettings(
+	_ context.Context, _ *auth.Identity, name string, values map[string]string,
+) ([]addon.SettingView, error) {
+	r.savedTo, r.saved = name, values
+	return r.settings, r.err
+}
+
+func (r *recordingLifecycle) Orphans(context.Context, *auth.Identity) ([]addon.Orphan, error) {
+	return r.orphans, r.err
+}
+
+func (r *recordingLifecycle) PurgeData(
+	_ context.Context, _ *auth.Identity, name string,
+) (addon.Orphan, error) {
+	r.purged = append(r.purged, name)
+	for _, o := range r.orphans {
+		if o.Name == name {
+			return o, r.err
+		}
+	}
+	return addon.Orphan{Name: name}, r.err
 }

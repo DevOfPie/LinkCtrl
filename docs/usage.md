@@ -2146,3 +2146,144 @@ Creating, editing and removing a rule are audit events. So is every firing, as
 `automation.fired` — and that record's actor is the *rule*, not a person, which is
 what makes an automated archive answerable afterwards. `linkctrl_automation_firings_total`
 counts firings by trigger and outcome.
+
+## Add-ons
+
+An add-on is a WebAssembly module this instance executes: it can observe or alter
+redirects, serve pages under its own prefix, own tables of its own, and — with the
+right grant in its manifest — decide who is signed in. What it may do is exactly
+what its manifest declares, and the host refuses everything else.
+
+**The Add-on manager is at `/instance/addons`**, in the menu under your address.
+It is behind `addons.manage`, which belongs to the account that administers the
+instance and to no API key at all, so most people will not see the entry.
+
+### The list
+
+One row per installed add-on:
+
+| Column | What it says |
+| --- | --- |
+| Name, Version | As the manifest declares them. The name is also the add-on's URL prefix and its database schema. |
+| Class | How it relates to the redirect path: `none`, `redirect-observe` (it sees redirects after the visitor has been answered) or `redirect-inline` (it runs inside the redirect, on the visitor's own latency). |
+| Failure | `required` means a future start stops if this add-on will not load; `degrade` means the instance carries on without it. This is the class the instance **applies**, which is not always the one the manifest asked for. |
+| Permissions | What the add-on's manifest *declares*, which is the whole of what it may attempt. A permission this build publishes and grants to nobody is shown **struck through**: declared and not held. So the column is never shorter than the manifest, and what is withheld is visible rather than absent. |
+| p99, Kills | What this module cost the redirect path. A dash means it has not run there. |
+
+### The performance figures, and what they are not
+
+`p99` is this module's own latency, separate from the redirect around it, and
+`Kills` is how many invocations the host stopped waiting for. They are here so
+that *which add-on is slowing my redirects* is answerable without a Prometheus.
+
+Two things to know before you act on them. They are **cumulative since this
+instance last started**, not a rate over the last hour: an add-on that was slow
+this morning still reads slow. And a module that has never run on the redirect
+path shows a dash rather than a zero, because *no observations* and *fast* are
+different facts. The detail page splits the kills into the two that have different
+owners — one at `call` is the add-on holding a redirect past its deadline, and one
+at `instantiate` is this instance failing to start the module in time, which is
+hardware rather than the publisher.
+
+### Installing one
+
+Upload the module and the `addon.json` that describes it. The host checks the
+module against the manifest's digest before it writes anything, and the add-on is
+running when the page comes back — no restart.
+
+**An add-on runs with whatever its manifest declares.** Read the permissions
+before you install one: `session.mint` means it decides who is signed in, and
+`storage.own_schema` means it owns tables in your database.
+
+Two shapes cannot be installed here and the page says so: an add-on that ships
+`.sql` migration files (those files are not part of the upload — place its
+directory in `LINKCTRL_ADDONS_DIR` and restart), and any add-on at all on an
+instance whose add-ons directory is read-only.
+
+Both arrive the same way, and it is not the API's `503`. A refusal from this page
+redirects back to it and the page states the reason — *this instance cannot write
+to its add-ons directory, so nothing was changed* — so that reloading does not
+re-post the upload. `503` is what [the API](../api/openapi.yaml) answers for the
+read-only case, and the [configuration reference](configuration.md#add-ons) is
+where that is scoped.
+
+### Removing one, and what it leaves
+
+Press **Remove…** and each row's chevron becomes a checkbox. Tick as many as you
+like and press the button again; one confirmation covers all of them.
+
+That confirmation asks a second question per add-on: **also delete its data?** The
+box starts unticked, every time, because several irreversible decisions taken in
+one breath is exactly where a mis-tick lands. Leave it unticked and the add-on's
+schema stays, listed on this page as orphaned data. It also states what removing a
+`required`-class add-on costs before you do it.
+
+### Orphaned data
+
+Every `addon_*` schema with no installed add-on, with its size as it is right now
+and the add-on it belonged to. Purging one is `DROP SCHEMA … CASCADE` and there is
+no undo and no backup taken.
+
+**It drops the schema and nothing else**, which the confirmation repeats — four
+things survive it:
+
+- the `addon_<name>` database **login role** stays, so re-installing under that
+  name works as it did;
+- any **large objects** that role owns live outside every schema and survive — the
+  page tells you how many there are, and it is zero for every add-on that behaves;
+- any **external-identity links** written under that name stay, and the page tells
+  you how many. They are keyed on the add-on's *name*, so an add-on installed
+  under that name later inherits those account mappings and can sign those people
+  in;
+- any **settings you saved** for that name stay too, and the page tells you how
+  many. Same key, same inheritance — an add-on installed under the name later
+  reads them, **a stored secret included** — and this is the one nothing here
+  deletes: saving settings is refused for a name that is not installed, so once
+  the add-on is gone its values are reachable only from a `psql` prompt.
+
+The last two are the ones you are least likely to have predicted, which is why the
+page counts them instead of describing them.
+
+[operations.md](operations.md#removing-an-add-on-leaves-its-schema) has the
+statements for the cases the page deliberately does not cover.
+
+### Settings
+
+An add-on's manifest can declare settings, each with a type, and its detail page
+renders the matching input: a text box, a password field, a dropdown or a switch.
+Saving them takes effect on the add-on's **next** invocation; one already running
+finishes with what it had.
+
+**A secret is never shown again.** The field says whether one is set, and clearing
+it is its own checkbox rather than an empty box — otherwise saving a neighbouring
+field would wipe it. That holds against the value's own record and not against the
+manifest in front of you: replacing an add-on is a removal and an install, and a
+replacement declaring the same setting as plain text still cannot get what its
+predecessor stored drawn back into this form. Type a new value, or clear it.
+**What it does not stop is the replacement module reading it.** Settings are kept
+under the add-on's *name*, so whatever you install under a name you have used
+before is configured with what you typed for the last one, secret included. Clear
+what should not carry over before you install the successor, or take the row out
+by hand — [operations.md](operations.md) has the statement.
+
+**Every other field is blank for *unset*.** A text box, a dropdown's *Not set*
+entry and a switch all mean the same thing when they carry nothing: the row is
+deleted and the add-on reads whatever its manifest declares as the default. The
+secret is the one exception, and the checkbox above is why.
+
+**A setting your deployment's environment answers is not editable here.** If
+`LINKCTRL_ADDON_<NAME>_<SETTING>` is set, that is what the add-on reads, and the
+page names the variable instead of offering a control that could not change
+anything. Unset it and restart to configure the setting from this page instead.
+
+### What it records
+
+Installing, removing, saving settings and purging data are all **instance-wide**
+audit events, readable at `/api/v1/instance/audit`: `addon.installed`,
+`addon.removed`, `addon.settings_saved` and `addon.data_purged`. The settings
+record names *which* settings the save wrote and never their values — the form
+carries every editable field, so what it lists is what that save touched rather
+than what differed. The purge record
+carries how many bytes went. Nothing can measure the schema afterwards, so the
+audit log is where that number keeps: the API's own response and the server log
+carry it too, at the moment of the purge and no longer.

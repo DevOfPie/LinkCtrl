@@ -122,7 +122,7 @@ func TestAnAddonsOutputIsTextAndNeverMarkup(t *testing.T) {
 		{
 			name: "external reference",
 			body: `<script src="https://evil.test/x.js"></script>`,
-			// Not a bare "<script": the layout ships two script tags of its own,
+			// Not a bare "<script": the layout ships three script tags of its own,
 			// and a test that could not tell them from the add-on's would be
 			// asserting that the dashboard has no JavaScript.
 			absent:  []string{`<script src="https://evil.test`, `src="https://evil.test/x.js"`},
@@ -523,20 +523,27 @@ func TestAnAddonRouteIsNotOnTheLinkHost(t *testing.T) {
 // With no add-on host, no route exists at all — m60.md's "no route is mounted",
 // still true for every operator who installs nothing.
 //
-// **Two fields since M67**, and the second is the one that would hurt: the
-// lifecycle API is an upload endpoint, and mounting it on an instance whose
+// **Three fields since M68**, and the one that would hurt most is still M67's:
+// the lifecycle API is an upload endpoint, and mounting it on an instance whose
 // operator never turned add-ons on would be a body-reading route paid for by
-// everybody who installs nothing. Both are nil'd here because both come from the
-// same host, and the assertion is over the whole registered set rather than over
-// either field's own routes.
+// everybody who installs nothing. All three are nil'd here because all three come
+// from the same host, and the assertion is over the whole registered set rather
+// than over any field's own routes.
+//
+// **What it matches widened with them.** `addon.RoutePrefix` is `/addons/`, and
+// M68's manager sits at `/instance/addons` — which does not contain it, so a
+// sweep for the prefix alone would have said nothing about five new routes. It
+// looks for both, and the second string is [AddonManagerPath] rather than a
+// literal, so a manager that moves cannot move out of this test's sight.
 func TestNoAddonRouteWithoutAHost(t *testing.T) {
 	d := maximalDeps()
 	d.Web.Addons = nil
+	d.Web.AddonAdmin = nil
 	d.AddonAdmin = nil
 	app := newAppMux()
 	registerAppRoutes(d, app)
 	for _, p := range app.patterns {
-		if strings.Contains(p, addon.RoutePrefix) {
+		if strings.Contains(p, addon.RoutePrefix) || strings.Contains(p, AddonManagerPath) {
 			t.Errorf("an instance with no add-on host registered %q", p)
 		}
 	}

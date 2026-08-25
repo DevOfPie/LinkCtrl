@@ -87,6 +87,36 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -ldflags "${ldflags}" -o /out/linkctrl ./cmd/linkctrl; \
     go build -trimpath -ldflags "${ldflags}" -o /out/lctl     ./cmd/lctl
 
+# The sample add-on (M68), built into every image and turned on by nobody.
+#
+# `LINKCTRL_ADDONS_DIR` is what decides whether an instance has an add-on host at
+# all, and it is unset everywhere but the demo — so what these three megabytes buy
+# an operator who runs no add-ons is a directory they never look at, and what they
+# buy the demo is a manager page with something on it. D265 deferred this decision
+# to M68 in those terms; examples/addons/README.md is where it is argued.
+#
+# The digest is computed here and substituted into the manifest, because the
+# manifest has to describe the bytes this build produced: the host hashes the
+# module against `sha256` before it loads anything, so a fixed digest checked into
+# the repository would refuse the add-on the first time the toolchain changed a
+# byte. That refusal is the mechanism working, which is why it is not worked
+# around with a manifest field the host ignores.
+#
+# GOOS/GOARCH are wasip1/wasm regardless of TARGETARCH: a WebAssembly module is
+# architecture-independent, which is the reason this product's extension point is
+# wasm rather than a plugin format.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -eux; \
+    mkdir -p /out/addons/pageviews; \
+    CGO_ENABLED=0 GOOS=wasip1 GOARCH=wasm go build -trimpath -buildmode=c-shared \
+      -o /out/addons/pageviews/pageviews.wasm ./examples/addons/pageviews; \
+    digest="$(sha256sum /out/addons/pageviews/pageviews.wasm | cut -d' ' -f1)"; \
+    sed "s/@SHA256@/${digest}/" examples/addons/pageviews/addon.json.in \
+      > /out/addons/pageviews/addon.json; \
+    grep -q "@SHA256@" /out/addons/pageviews/addon.json && \
+      { echo "the manifest placeholder was not substituted" >&2; exit 1; } || true
+
 # ─── Stage 3: runtime ────────────────────────────────────────────────────────
 # distroless/static: no shell, no package manager, no curl. That is why the
 # compose healthcheck invokes the binary's own `healthcheck` subcommand rather
@@ -95,6 +125,9 @@ FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
 COPY --from=build /out/linkctrl /linkctrl
 COPY --from=build /out/lctl     /lctl
+# The sample add-on. Present in every image, loaded only where
+# LINKCTRL_ADDONS_DIR points at it — see examples/addons/README.md.
+COPY --from=build /out/addons   /addons
 
 USER nonroot:nonroot
 WORKDIR /

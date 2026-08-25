@@ -47,29 +47,40 @@ import (
 const (
 	VersionMajor = 0
 	VersionMinor = 1
-	VersionPatch = 2
+	VersionPatch = 3
 )
 
 // Version is the SemVer string the ABI publishes, and what the abi_version host
 // function hands a module that asks. Asserted against the three integers above
 // by test, because two spellings of one number is how they come to differ.
 //
-// The patch moved at M65 and again at M66, and which component moved is the whole
-// of what docs/addon-abi.md's table decides. Adding a function is **additive**,
-// and while the major is zero the *minor* is the breaking axis — so additive is
-// the patch, and [Generation] does not move. `redirect_decision_read` and
-// `redirect_answer_write` are therefore importable by a module built against
+// The patch moved at M65, at M66 and again at M68, and which component moved is
+// the whole of what docs/addon-abi.md's table decides. Adding a function is
+// **additive**, and while the major is zero the *minor* is the breaking axis — so
+// additive is the patch, and [Generation] does not move. `redirect_decision_read`
+// and `redirect_answer_write` are therefore importable by a module built against
 // 0.1.1 that is rebuilt against 0.1.2, and invisible to one that is not; the one
 // failure mode is the documented patch case, a module built against 0.1.2 loaded
 // on a 0.1.1 host, where the import does not resolve and instantiation fails
 // naming the function.
+//
+// **M68 moved it without adding a function**, which is the first time that has
+// happened and is why the policy gained a row for it. `config_get` answered from
+// the manifest default and the environment; it now answers from a value an
+// operator saved in the Add-on manager as well. Nothing narrowed, no parameter
+// moved and no status changed for a case that already had one, so the table's
+// *adding a source an answer may come from* row applies and it is additive —
+// docs/addon-abi.md's "An answer that gains a source" is the reasoning and fixes
+// the part a publisher actually needs, which is when the answer is re-read. This
+// patch is invisible in the way the two above are not: nothing new is importable,
+// so a module built against 0.1.3 loads on a 0.1.2 host unchanged.
 //
 // **Making `redirect_event_read` live moved nothing**, and that is the policy
 // working rather than an omission: implementing a function this ABI already
 // declared is not a change to the contract, which docs/addon-abi.md states in as
 // many words and is the whole reason the declared-but-refused pattern costs no
 // version at all.
-const Version = "0.1.2"
+const Version = "0.1.3"
 
 // Generation is the integer axis a breaking change moves along, and it is what a
 // manifest's abi_version field names.

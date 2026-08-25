@@ -223,6 +223,60 @@ func TestDrainingAnAddonsPoolClosesItsInstances(t *testing.T) {
 	}
 }
 
+// A drain reaches the instance that is **in flight**, which is the half of the
+// set the drain exists for.
+//
+// The idle set does not contain the entry an invocation is holding — that is what
+// *in flight* means — so emptying the slice reaches only what happens to be
+// resting. Under any traffic worth pooling for, the instances are out. Without a
+// generation on the entry, `releaseInstance` would hand that instance straight
+// back to the pool a moment later and the module a drain was meant to destroy
+// would go on serving for up to [DefaultPoolTTL].
+//
+// This is not theoretical bookkeeping: [Host.SaveSettings] drains so that a module
+// which read a setting during its package initialization is rebuilt, and the page
+// tells the operator the change takes effect on the add-on's next invocation. A
+// drain that misses the busy instances makes that sentence false exactly when
+// there is traffic.
+//
+// Driven through acquire and release rather than through a concurrent redirect,
+// because the state being asserted is *an entry exists and is not in the idle set*
+// and a racing goroutine would assert it only sometimes.
+func TestDrainingReachesAnInstanceThatIsInFlight(t *testing.T) {
+	h, _, _ := redirectHost(t, PermissionRedirectInline, "config.read")
+	set := h.current()
+	if len(set.inline) != 1 {
+		t.Fatalf("the fixture host loaded %d inline add-ons, want 1", len(set.inline))
+	}
+	e, err := h.acquireInstance(t.Context(), &set.inline[0], ClassInline)
+	if err != nil {
+		t.Fatalf("acquire an instance: %v", err)
+	}
+	if idle := h.idleInstanceCount(); idle != 0 {
+		t.Fatalf("an instance in flight is counted as %d idle", idle)
+	}
+
+	h.drainPool(t.Context(), "redirect", h.current().pools)
+	h.releaseInstance(t.Context(), e, true)
+
+	if idle := h.idleInstanceCount(); idle != 0 {
+		t.Errorf("an instance made before the drain was returned to the pool: %d idle", idle)
+	}
+	for key, p := range h.current().pools {
+		if left := p.drain(); len(left) != 0 {
+			t.Errorf("the %q pool holds %d instances the drain should have ended", key, len(left))
+		}
+	}
+
+	// And the pool still works: the next invocation makes an instance and keeps it.
+	if got := h.Inline(t.Context(), decisionFor("veto", "https://example.test/")); !got.Vetoed {
+		t.Fatal("the add-on stopped answering after its pool was drained")
+	}
+	if idle := h.idleInstanceCount(); idle != 1 {
+		t.Errorf("the redirect after the drain left %d instances in the pool, want 1", idle)
+	}
+}
+
 // Closing a host closes what the pool holds, which is the other half of the same
 // obligation: an instance is a module, and a runtime closed out from under one is
 // how this package's shutdown defects have looked.

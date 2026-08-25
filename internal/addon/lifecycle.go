@@ -523,7 +523,7 @@ func checkUpload(req InstallRequest) (Manifest, error) {
 	// sentence rather than by a load failure naming a path.
 	if len(m.Migrations) > 0 {
 		return Manifest{}, domain.ValidationErrors{{
-			Field: "manifest", Code: "migrations_unsupported",
+			Field: "manifest", Code: CodeMigrationsUnsupported,
 			Message: "this add-on declares migration files, and an upload carries only " +
 				"the module and its manifest; install it by placing its directory in " +
 				"LINKCTRL_ADDONS_DIR and restarting",
@@ -531,6 +531,16 @@ func checkUpload(req InstallRequest) (Manifest, error) {
 	}
 	return m, nil
 }
+
+// CodeMigrationsUnsupported is the field-error code an add-on shipping `.sql`
+// files is refused with.
+//
+// Exported because the dashboard has to tell this refusal apart from every other
+// [domain.ValidationErrors] the install returns: they all map to `invalid`, and
+// the sentence the page words for `invalid` names a digest, which for this case
+// is both wrong and unactionable. The API always carried the message; the form
+// carried a code, so the code is what had to become nameable.
+const CodeMigrationsUnsupported = "migrations_unsupported"
 
 // stage writes the pair into a fresh directory inside the staging area and
 // returns its path.

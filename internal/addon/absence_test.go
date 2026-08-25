@@ -119,6 +119,15 @@ var migrationsMentioningAddOns = []string{
 	// migration only inserts a permission* is a sentence a migration creating an
 	// add-on's tables could equally claim about its first statement.
 	"internal/store/migrations/04700_addons_manage.sql",
+	// M68's settings table, and it is the first migration here that creates one an
+	// instance with no add-ons carries empty. What that costs is one table of three
+	// text columns with no rows in it, and what it buys is the alternative refused:
+	// the Add-on manager saves a declared setting somewhere, and the only other
+	// candidate was the add-on's *own* schema — which the add-on's role can write,
+	// so a `secret` kept there would be a credential the module could rewrite and
+	// then read back as though an operator had chosen it. Host-side is the whole
+	// point of the table, and the file says so at length.
+	"internal/store/migrations/04800_addon_settings.sql",
 }
 
 func TestNoMigrationCreatesAnAddOnsOwnTables(t *testing.T) {
@@ -179,6 +188,39 @@ var httpSurfaceMentioningAddOns = []string{
 	// spread into the link tree or the settings pages on the way to M68's manager.
 	"internal/httpx/api_addons.go",
 	"internal/httpx/api_addons_test.go",
+	// The Add-on manager (M68), which is the third and largest deliberate change
+	// this list has taken — and the last one the phase plans. Until M67 the
+	// question was whether the HTTP surface may *change* which add-ons exist; this
+	// one is whether the dashboard may have a page about them, and the answer is
+	// one page, one detail page, one nav entry and the files that draw them.
+	//
+	// The bound is still what the list is for, and it is worth stating what it
+	// excludes now that it admits a dashboard page: nothing in the link tree, the
+	// analytics reader, the account page or the workspace surfaces knows add-ons
+	// exist, and the manager reaches the rest of the dashboard through exactly two
+	// shared things — a badge helper beside `statusBadge`, and one entry in the
+	// identity menu, both named below.
+	"internal/httpx/api_addon_manager.go",
+	"internal/httpx/web_addons.go",
+	"internal/httpx/web_addons_test.go",
+	"internal/ui/templates/pages/addons.html",
+	"internal/ui/templates/pages/addon_manager.html",
+	// The badge classes for the two class columns, beside statusBadge — the one
+	// Go file Tailwind scans for utility strings, so a badge cannot be built
+	// anywhere else without the stylesheet losing it.
+	"internal/ui/funcs.go",
+	// The identity menu's entry, and the script tag that puts a count in the
+	// removal button. Both are one line in a file about the whole shell, which is
+	// the smallest form this page's nav integration could take.
+	"internal/ui/templates/partials/nav.html",
+	"internal/ui/templates/layout.html",
+	"internal/ui/header_test.go",
+	// The manager's two pages asserted as *renders* rather than as templates,
+	// which is one file and not a widening: what it reads is what the purge
+	// confirmation says in both of its states, and that is checkable only against
+	// a rendered page — a scan of the template passes on a sentence drawn inside a
+	// branch that a zero count never enters.
+	"internal/ui/addons_test.go",
 }
 
 // The HTTP surface knows about add-ons in the files M64 gave it and in no
@@ -257,6 +299,15 @@ func TestOnlyTheNamedHTTPFilesMentionAddOns(t *testing.T) {
 	// above — the document may describe the operations named here, and an add-on's
 	// own routes still have no API surface at all, which is what the second half
 	// checks by asserting that `/addons/{addon}/` never appears as a path.
+	//
+	// **M68 adds three more of the host's own, and the bound is unchanged in kind.**
+	// The manager reads what is installed, writes an add-on's declared settings and
+	// drops an orphaned schema, all under the same scope, and the inherited rule
+	// requires each in the document because a page drives it. What none of them is
+	// is a path an add-on serves: every one of these is answered by this product's
+	// code, about an add-on, and the allowed set below is exhaustive precisely so
+	// that the day something answers *from* a module the list cannot absorb it
+	// quietly.
 	spec, err := os.ReadFile(filepath.Join(repoRoot(t), "api", "openapi.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -270,7 +321,10 @@ func TestOnlyTheNamedHTTPFilesMentionAddOns(t *testing.T) {
 		if !strings.HasPrefix(path, "/addons") {
 			continue
 		}
-		if path == "/addons" || path == "/addons/{name}" {
+		if slices.Contains([]string{
+			"/addons", "/addons/{name}", "/addons/{name}/settings",
+			"/addons/orphaned-data", "/addons/orphaned-data/{name}",
+		}, path) {
 			continue
 		}
 		t.Errorf("api/openapi.yaml describes %q; the document carries the host's own "+

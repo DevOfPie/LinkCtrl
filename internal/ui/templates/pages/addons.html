@@ -1,0 +1,237 @@
+{{/* The Add-on manager's list page (M68).
+
+     The owner chose this shape from drawn wireframes on 2026-08-18 and amended
+     it twice in the same review: Option A's flat table as the list, Option C's
+     detail pages behind each row, removal as select-mode rather than per-row.
+     internal/httpx/web_addons.go carries the argument; this file is the frame.
+
+     Three states of one page, and exactly one of them draws at a time:
+
+       · the list, with a chevron at the end of each row
+       · select mode, with a checkbox in that same cell
+       · a confirmation — for a removal or for an orphan purge
+
+     The confirmations are page states rather than <dialog> elements because
+     every destructive act in this product works with scripting off, and the
+     one irreversible operation here must not be the only one that needs
+     JavaScript. */}}
+{{define "content"}}
+<div class="mb-6">
+  <h1 class="text-xl font-semibold tracking-tight">Add-ons</h1>
+  <p class="mt-1 text-sm text-muted">What this instance runs, what each module costs the redirect path, and the data left behind by modules that are gone. Installing and removing take effect immediately &mdash; no restart.</p>
+</div>
+
+{{template "flash_ok" .Notice}}
+{{template "flash_error" .Error}}
+
+{{if .Confirming}}{{template "addon_confirm_removal" .}}
+{{else if .PurgingOrphan}}{{template "addon_confirm_purge" .}}
+{{else}}{{template "addon_list" .}}{{end}}
+{{end}}
+
+{{/* ---- the list ------------------------------------------------------- */}}
+
+{{define "addon_list"}}
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <h2 class="text-sm font-medium text-ink">Installed</h2>
+  <div class="flex items-center gap-2">
+    {{if .Selecting}}
+    {{/* The same button, relabelled — the owner's amendment. The count is
+         added by static/js/addon-select.js when scripting is on; with it off
+         the label stands as written and the confirmation says how many. */}}
+    <button type="submit" form="addon-remove" data-addon-remove-button
+            class="cursor-pointer rounded-md bg-danger px-3 py-2 text-sm font-medium text-on-accent hover:bg-danger-hover">Remove selected</button>
+    <a href="/instance/addons" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">Cancel</a>
+    {{else}}
+    <a href="#addon-install" class="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Install add-on</a>
+    {{if .Rows}}<a href="/instance/addons?select=1" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">Remove&hellip;</a>{{end}}
+    {{end}}
+  </div>
+</div>
+
+{{if .Selecting}}<p class="mb-3 text-sm text-muted">Select the add-ons to remove. You will be asked to confirm, and to say whether each one's data goes with it.</p>{{end}}
+
+<form method="post" action="/instance/addons/remove-selected" id="addon-remove">
+<div class="overflow-x-auto rounded-lg border border-line bg-raised">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+        <th scope="col" class="px-4 py-3 font-medium">Name</th>
+        <th scope="col" class="px-4 py-3 font-medium">Version</th>
+        <th scope="col" class="px-4 py-3 font-medium">Class</th>
+        <th scope="col" class="px-4 py-3 font-medium">Failure</th>
+        <th scope="col" class="px-4 py-3 font-medium">Permissions</th>
+        <th scope="col" class="px-4 py-3 text-right font-medium">p99</th>
+        <th scope="col" class="px-4 py-3 text-right font-medium">Kills</th>
+        {{/* One header for the trailing cell in both states, named for what the
+             cell does rather than for what it currently is. */}}
+        <th scope="col" class="w-12 px-4 py-3 text-right font-medium"><span class="sr-only">Select or open</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="border-b border-line last:border-0">
+        <th scope="row" class="px-4 py-3 text-left font-medium text-ink">
+          <a href="/instance/addons/{{.Name}}" class="hover:underline">{{.Name}}</a>
+          {{if .Settings}}<span class="ml-2 text-xs font-normal text-subtle">{{.Settings}}</span>{{end}}
+        </th>
+        <td class="px-4 py-3 text-muted">{{.Version}}</td>
+        <td class="px-4 py-3"><span class="{{addonBadge .Declaration}}">{{.Declaration}}</span></td>
+        <td class="px-4 py-3"><span class="{{addonBadge .Failure}}">{{.Failure}}</span></td>
+        <td class="px-4 py-3">
+          {{if .Permissions}}
+          <span class="flex flex-wrap gap-1">
+            {{$withheld := .Withheld}}{{range .Permissions}}<code class="rounded px-1 py-0.5 text-xs {{if index $withheld .}}bg-warn-soft text-warn-ink line-through{{else}}bg-sunken text-muted{{end}}" {{if index $withheld .}}title="declared and not held: this build grants no such permission"{{end}}>{{.}}</code>{{end}}
+          </span>
+          {{else}}<span class="text-subtle">none</span>{{end}}
+        </td>
+        <td class="px-4 py-3 text-right tabular-nums {{if .Observed}}text-ink{{else}}text-subtle{{end}}">{{.P99}}</td>
+        <td class="px-4 py-3 text-right tabular-nums {{if .Observed}}text-ink{{else}}text-subtle{{end}}">{{.Kills}}</td>
+        {{template "addon_row_end" dict "Name" .Name "Selecting" $.Selecting}}
+      </tr>
+      {{else}}
+      <tr><td colspan="8" class="px-4 py-8 text-center text-muted">No add-ons are installed. Nothing below the install form is running third-party code.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+</form>
+
+{{/* ---- orphaned data --------------------------------------------------- */}}
+
+{{if .Orphans}}
+<div class="mt-6 rounded-lg border border-warn-line bg-warn-soft p-6">
+  <h2 class="text-sm font-medium text-warn-ink">Orphaned data</h2>
+  <p class="mt-1 text-sm text-warn-ink">A schema whose add-on is not installed. Removing an add-on never deletes its data, so this is where what it left is named &mdash; and where it can be dropped, at the point you are looking at its size.</p>
+  <ul class="mt-4 space-y-2">
+    {{range .Orphans}}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn-line bg-raised px-3 py-2">
+      <span class="min-w-0">
+        <code class="text-sm text-ink">{{.Schema}}</code>
+        <span class="ml-2 text-sm text-muted">{{.Size}}</span>
+        <span class="ml-2 text-xs text-subtle">left by the add-on <code>{{.Name}}</code></span>
+        {{if .LargeObjects}}<span class="mt-1 block text-xs text-warn-ink">{{.LargeObjects}} large object(s) belong to this add-on's role and live outside the schema. A purge does not delete them.</span>{{end}}
+      </span>
+      <form method="post" action="/instance/addons/purge-data">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <button type="submit" class="cursor-pointer rounded-md border border-danger-line px-3 py-1.5 text-sm font-medium text-danger-ink hover:bg-danger-soft">Purge&hellip;</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+
+{{/* ---- install --------------------------------------------------------- */}}
+
+<div id="addon-install" class="mt-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Install an add-on</h2>
+  <p class="mb-4 text-sm text-muted">Upload the manifest and the module it describes. The module is hashed against the manifest's <code class="rounded bg-sunken px-1 py-0.5 text-xs">sha256</code> before anything is written, and it runs on this replica the moment it loads. At most {{.MaxUpload}} for both parts together.</p>
+  <form method="post" action="/instance/addons" enctype="multipart/form-data" class="grid gap-4 sm:grid-cols-2">
+    <div>
+      <label for="addon-manifest" class="block text-sm font-medium text-ink">Manifest <span class="text-subtle">(addon.json)</span></label>
+      <input id="addon-manifest" name="manifest" type="file" accept="application/json,.json" required
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink">
+    </div>
+    <div>
+      <label for="addon-module" class="block text-sm font-medium text-ink">Module <span class="text-subtle">(.wasm)</span></label>
+      <input id="addon-module" name="module" type="file" accept=".wasm,application/wasm" required
+             class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-sunken file:px-2 file:py-1 file:text-sm file:text-ink">
+    </div>
+    <div class="sm:col-span-2">
+      <button type="submit" class="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Install</button>
+      <span class="ml-3 text-xs text-subtle">An add-on runs with whatever its manifest declares. Install one you trust.</span>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{/* The trailing cell, rendered once for both states.
+
+     This is m68.md's "same column template in both states, so the table does
+     not shift". It is one define rather than two branches in the row, so the
+     padding, the width and the alignment are written down once and cannot
+     drift; the browser harness measures the column in both states and the
+     shared template is what makes that measurement pass. */}}
+{{define "addon_row_end"}}
+<td class="w-12 px-4 py-3 text-right">
+  {{- if .Selecting -}}
+  <input type="checkbox" name="name" value="{{.Name}}" form="addon-remove"
+         aria-label="Select {{.Name}} for removal" data-addon-select
+         class="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent">
+  {{- else -}}
+  <a href="/instance/addons/{{.Name}}" class="inline-flex h-4 w-4 items-center justify-center text-subtle hover:text-ink" aria-label="Open {{.Name}}">
+    <svg viewBox="0 0 24 24" class="h-4 w-4 fill-current" aria-hidden="true"><path d="M9.3 6.3a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4l4.3-4.3-4.3-4.3a1 1 0 0 1 0-1.4Z"/></svg>
+  </a>
+  {{- end -}}
+</td>
+{{end}}
+
+{{/* ---- the removal confirmation ---------------------------------------- */}}
+
+{{/* One confirmation for one or many, with a purge choice per module.
+
+     Every box is unticked. That is the owner's amendment and m68.md's second
+     risk in one line: the one-dialog-for-many shape means several irreversible
+     decisions taken in one breath, and a default-on box is where a mis-tick
+     lands. A module with no schema of its own offers no box at all. */}}
+{{define "addon_confirm_removal"}}
+<form method="post" action="/instance/addons/remove-selected" class="rounded-lg border border-danger-line bg-raised p-6">
+  <input type="hidden" name="confirm" value="1">
+  <h2 class="text-base font-semibold text-ink">Remove {{len .Confirming}} add-on{{if ne (len .Confirming) 1}}s{{end}}?</h2>
+  <p class="mt-1 text-sm text-muted">Each module is unloaded and its files are taken out of the add-ons directory. Invocations already inside a module are given {{.RemoveGrace}} to finish and are interrupted after that.</p>
+  <ul class="mt-4 space-y-4">
+    {{range .Confirming}}
+    <li class="rounded-md border border-line px-4 py-3">
+      <input type="hidden" name="name" value="{{.Name}}">
+      <p class="text-sm font-medium text-ink">{{.Name}} <span class="font-normal text-muted">v{{.Version}}</span></p>
+      {{if .Consequence}}<p class="mt-1 text-sm text-danger-ink">{{.Consequence}}</p>{{end}}
+      {{if .HasData}}
+      <label class="mt-2 flex items-start gap-2 text-sm text-ink">
+        <input type="checkbox" name="purge_{{.Name}}" value="1"
+               class="mt-0.5 h-4 w-4 rounded border-line-strong text-danger-ink focus:ring-danger-line">
+        <span>Also delete <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Schema}}</code> <span class="text-muted">({{.Size}})</span>. This cannot be undone. Leave it unticked and the data stays, listed on this page as orphaned.</span>
+      </label>
+      {{else}}
+      <p class="mt-1 text-xs text-subtle">This add-on stores nothing of its own, so there is no data to delete.</p>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  <div class="mt-5 flex items-center gap-3">
+    <a href="/instance/addons" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Cancel</a>
+    <button type="submit" class="cursor-pointer rounded-md bg-danger px-4 py-2 text-sm font-medium text-on-accent hover:bg-danger-hover">Remove {{len .Confirming}} add-on{{if ne (len .Confirming) 1}}s{{end}}</button>
+  </div>
+</form>
+{{end}}
+
+{{/* ---- the orphan purge confirmation ----------------------------------- */}}
+
+{{define "addon_confirm_purge"}}
+{{with .PurgingOrphan}}
+<form method="post" action="/instance/addons/purge-data" class="rounded-lg border border-danger-line bg-raised p-6">
+  <input type="hidden" name="confirm" value="1">
+  <input type="hidden" name="name" value="{{.Name}}">
+  <h2 class="text-base font-semibold text-ink">Drop <code>{{.Schema}}</code>?</h2>
+  <p class="mt-1 text-sm text-muted">This deletes {{.Size}} of data belonging to the add-on <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Name}}</code>, which is not installed. Every table, index and sequence in the schema goes with it. There is no undo and no backup taken here.</p>
+  {{/* The four things a purge leaves standing, all four stated whatever their
+       count. docs/SECURITY.md and docs/usage.md both say this confirmation names
+       all four, and the last two are the ones an operator is least likely to
+       predict: the identity mappings and the saved settings are both keyed on the
+       add-on's *name*, so whatever is installed under this name next inherits
+       them, and nothing in this product deletes either. A sentence drawn only
+       when a number is non-zero would leave the commonest case saying two. */}}
+  <p class="mt-3 text-sm text-ink">Four things are <strong>not</strong> deleted:</p>
+  <ul class="mt-1 space-y-1 text-sm text-muted">
+    <li>the database login role <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Schema}}</code>, so re-installing an add-on under this name works as it did;</li>
+    <li>{{if .LargeObjects}}<span class="text-warn-ink">{{.LargeObjects}} large object(s)</span> owned by that role — they live outside every schema{{else}}large objects owned by that role, of which this one owns none{{end}};</li>
+    <li>{{if .IdentityLinks}}<span class="text-warn-ink">{{.IdentityLinks}} external-identity link(s)</span> written under the name <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Name}}</code>. An add-on installed under that name later inherits those account mappings and can sign those people in.{{else}}external-identity links written under the name <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Name}}</code>, of which there are none.{{end}}</li>
+    <li>{{if .StoredSettings}}<span class="text-warn-ink">{{.StoredSettings}} saved setting(s)</span> written under the name <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Name}}</code>, which may include a secret. An add-on installed under that name later reads them, and nothing on this page or in the API deletes one.{{else}}saved settings written under the name <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Name}}</code>, of which there are none.{{end}}</li>
+  </ul>
+  <div class="mt-5 flex items-center gap-3">
+    <a href="/instance/addons" class="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-ink hover:bg-sunken">Cancel</a>
+    <button type="submit" class="cursor-pointer rounded-md bg-danger px-4 py-2 text-sm font-medium text-on-accent hover:bg-danger-hover">Delete this data</button>
+  </div>
+</form>
+{{end}}
+{{end}}

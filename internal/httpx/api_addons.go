@@ -15,13 +15,17 @@ import (
 // This file is M67's HTTP surface: install an add-on, remove an add-on, and
 // nothing else.
 //
-// # Two operations, and the ones that are missing are missing on purpose
+// # Two operations, and the rest of the surface is next door
 //
-// There is no list here, no detail page, no settings write and no purge. Every
-// one of those is [M68]'s manager, under this same scope, and the split is the
+// The list, the detail read, the settings write and the purge are M68's manager
+// and live in api_addon_manager.go, under this same scope. The split is the
 // plan's: an upload surface and the page that drives it are two reviewable units,
 // and this is the one whose risk is that a request body becomes code the server
 // runs. A reviewer reading this file should be able to hold all of it at once.
+//
+// [AddonManager] is the interface the router actually holds, and it embeds the
+// one below — one object implements both, and the two names say which half a
+// handler is using.
 //
 // # Multipart, because one of the parts is a binary
 //
@@ -53,9 +57,11 @@ type AddonLifecycle interface {
 	Remove(ctx context.Context, actor *auth.Identity, name string) (addon.Installed, error)
 }
 
-// AddonAPI is the lifecycle surface.
+// AddonAPI is the lifecycle surface, plus the manager reads and writes M68 added.
+// One struct because one object implements both halves and a second would mean
+// two places to wire the same host.
 type AddonAPI struct {
-	Addons AddonLifecycle
+	Addons AddonManager
 }
 
 // Install accepts a module and its manifest, verifies them, and starts the

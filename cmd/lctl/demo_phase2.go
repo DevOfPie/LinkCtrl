@@ -498,6 +498,9 @@ func (s *demoSeeder) run(ctx context.Context, primary []demoLink, ids map[int]uu
 	if err := s.seedUpdateCheck(ctx); err != nil {
 		return err
 	}
+	if err := s.seedAddonSettings(ctx); err != nil {
+		return err
+	}
 	return s.readSomeNotifications(ctx)
 }
 
@@ -2174,6 +2177,74 @@ func (s *demoSeeder) seedUpdateCheck(ctx context.Context) error {
 	fmt.Fprintln(os.Stderr, "update check: on, answered by the demo's operator")
 	return nil
 }
+
+// seedAddonSettings configures the sample add-on the demo image ships (M68).
+//
+// **What the demo instance runs is not seeded here and cannot be.** An add-on is
+// files in a directory: `pageviews` is built into the image at
+// `/addons/pageviews` and `.env.demo` sets `LINKCTRL_ADDONS_DIR`, which is what
+// D265 deferred to this milestone and examples/addons/README.md argues. So the
+// Add-on manager's list, its class badges and its schema size are real on the
+// demo without this function existing.
+//
+// What this adds is the half that *is* a row, and it is the half an empty demo
+// gets wrong in the other direction: a detail page whose Settings section shows
+// four declared settings and no configured value looks like a feature nobody
+// finished. Three of the four are set here — a text, a toggle and a select — and
+// the secret is deliberately left unset, because "not set" is the state a secret
+// field has to render correctly and the demo is where somebody looks at it.
+//
+// Written straight into `addon_settings` rather than through
+// [addon.Host.SaveSettings], and that is a deliberate exception to *the seeder
+// calls what the product calls*: this process has no add-on host — `lctl` runs on
+// the operator's machine, against the demo's database, with no wasm runtime and
+// no add-ons directory — so the service call would refuse for want of a loaded
+// module. What the statement writes is exactly what that call writes.
+//
+// **The names and the values below are held against the manifest this repository
+// ships**, by TestTheDemosAddonSettingsAreTheOnesItsManifestDeclares, which reads
+// `examples/addons/pageviews/addon.json.in` and checks each name against a
+// declared setting, each value against its declared type, and the secret against
+// being absent. A row for a setting the manifest does not declare is one the
+// manager never renders and `config_get` never answers, so it would seed a demo
+// that looks half-finished in exactly the way this function exists to prevent —
+// and the coverage test counts rows, which cannot see it.
+//
+// Idempotent, like everything else the seeder does: `make demo-update` runs it on
+// every milestone boundary.
+func (s *demoSeeder) seedAddonSettings(ctx context.Context) error {
+	for _, setting := range demoAddonSettings {
+		if _, err := s.pool.Exec(ctx, `
+			INSERT INTO addon_settings (addon, name, value)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (addon, name) DO UPDATE SET value = excluded.value, updated_at = now()`,
+			demoAddonName, setting.Name, setting.Value); err != nil {
+			return fmt.Errorf("configure the demo's %s add-on: %w", demoAddonName, err)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "add-on: %s configured, three of four settings set\n", demoAddonName)
+	return nil
+}
+
+// demoAddonSettings is what the demo configures the sample add-on with.
+//
+// A package-level value rather than a literal inside the loop, so the test that
+// holds it against the shipped manifest has something to read. The fourth
+// declared setting — the secret — is deliberately absent: *not set* is the state a
+// secret field has to render correctly, and the demo is where somebody looks at
+// it.
+var demoAddonSettings = []struct{ Name, Value string }{
+	// Shorter than the manifest's default of 30, so the page shows a value
+	// somebody chose rather than one that reads as untouched.
+	{"retention_days", "14"},
+	{"count_bots", "false"},
+	{"grouping", "week"},
+}
+
+// demoAddonName is the sample add-on the image ships and the demo loads. Named
+// once, because the seeder writes rows keyed on it and the coverage test counts
+// them.
+const demoAddonName = "pageviews"
 
 // seedDeletedAccount joins somebody, has them leave, and erases them (M52).
 //

@@ -401,8 +401,9 @@ func TestConfiguredSettingsReachAModuleAndOutrankItsDefaults(t *testing.T) {
 				"config.Secret precisely so that they cannot", value)
 		}
 	}
-	if v, ok := loaded.settings["client_id"]; !ok || v.Reveal() != "configured-id" {
-		t.Errorf("the configured value did not reach the add-on: %v", loaded.settings)
+	if v, ok := loaded.settings.get("client_id"); !ok || v.Reveal() != "configured-id" {
+		t.Errorf("the configured value did not reach the add-on: %d values configured",
+			loaded.settings.len())
 	}
 	if got := config.AddonSettingVar("pages", "client_id"); got != "LINKCTRL_ADDON_PAGES_CLIENT_ID" {
 		t.Errorf("the variable an operator sets is %q", got)

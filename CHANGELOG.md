@@ -29,6 +29,102 @@ migrations run at boot.
 
 ### Added
 
+- **The Add-on manager: one page for what this instance runs.**
+
+  `/instance/addons`, in the identity menu, behind `addons.manage` — so on an
+  instance that runs no add-ons, and for every account but the one that
+  administers the box, it is not there at all.
+
+  **The list is what is installed**, with each module's name, version,
+  declaration class (`none`, `redirect-observe`, `redirect-inline`), failure
+  class and the permissions its manifest *declares* — every one of them, with any
+  this host grants to nobody struck through, because a permission that is
+  declarable and not held is a thing to see rather than a thing to omit.
+
+  **Per-module performance is on the page as numbers**, not as a link to
+  `/metrics`: each module's own p99 on the redirect path and how many of its
+  invocations the host stopped waiting for. That is the answer to *which add-on
+  is slowing my redirects* on an instance that scrapes nothing. Two things about
+  the figures are stated on the page and worth repeating here: they are
+  cumulative since the process started rather than a rate over a window, and a
+  module that has never run on the redirect path shows a dash rather than a
+  zero — no observations and *fast* are different facts.
+
+  **Install and remove are driven from the page**, through the same API and the
+  same permission, with nothing private behind it. Removal is select-mode: press
+  *Remove…*, each row's chevron becomes a checkbox in the same column, and one
+  confirmation covers however many were ticked. That confirmation carries a
+  purge choice per module — **unticked**, always — and states what removing a
+  `required`-class module costs before it is removed.
+
+  **A detail page behind each row** carries the module's own latency broken down
+  by class, its declared settings, the permissions it declared — struck through
+  where this host withholds one — and the schema it owns with the size that schema
+  is *right now*.
+
+  **An add-on's declared settings are configurable from that page.** A manifest
+  declares settings with a type each — text, secret, select, toggle — and the
+  host renders the matching input, saves the value into a table of its own, and
+  hands it to the module through `config_get` on its next invocation — including to
+  an instance the host had already built, so a module that reads its settings at
+  start-up sees the new value without a restart. A secret is never shown again
+  after it is saved: the field says *set* or *not set*, and clearing one is its
+  own deliberate act. **That withholding is against the form and the API, and it
+  holds against the stored value's own record** rather than against the manifest in
+  front of you — so a *replacement* add-on installed under the same name cannot get
+  its predecessor's credential rendered back into a page by re-declaring the setting
+  as plain text. It is **not** a bound on the credential: settings are keyed on the
+  add-on's name, so that replacement still reads the value through `config_get`,
+  the same way it inherits the identity mappings written under the name. Removing
+  an add-on deletes neither, and neither does a purge. **A setting the deployment's own
+  environment answers is not editable here** — `LINKCTRL_ADDON_<NAME>_<SETTING>`
+  wins, and the page names the variable to edit instead of offering a control
+  whose write nothing would read. Every save is in the instance-wide audit log as
+  `addon.settings_saved`, naming which settings the save wrote and never their
+  values.
+
+  The add-on ABI moves to **0.1.3** for it. `config_get` gains a source and
+  changes nothing else — no parameter, no status, and the environment still
+  outranks everything — which is a shape
+  [the deprecation policy](docs/addon-abi.md#an-answer-that-gains-a-source) did
+  not have a row for until this release and now calls additive. Generation `1` is
+  unmoved and nothing new is importable, so an add-on built against `0.1.2` needs
+  no rebuild. What the policy fixes alongside it is the part a publisher needs:
+  a setting is read afresh for each invocation and is stable within one.
+
+  **Orphaned data is named, and the page is where the offer meets the act.**
+  Removing an add-on never deletes its data, so every `addon_*` schema with no
+  installed module is listed with its size and the add-on it belonged to, each
+  offering its own purge behind a confirmation. A purge is `DROP SCHEMA …
+  CASCADE` and it is audited as `addon.data_purged` carrying how much went — after
+  the drop there is nothing left to measure, so the audit row is where that figure
+  keeps. The API's purge response and the server log carry it at the time — and a
+  size the catalogue could not measure is left out of the audit row rather than
+  written as `0`, which is what an empty schema honestly measures. Four things
+  deliberately survive a purge and the confirmation says so: the `addon_<name>`
+  database login role, so re-installing under that name works as it did; any large
+  objects that role owns, which live outside every schema; any external-identity
+  links written under that name; and any settings saved under it. The confirmation
+  counts the last two, because both are keyed on the *name*, so whatever is
+  installed under it next inherits the account mappings **and** the configured
+  values — a stored secret included. Nothing in this release deletes the settings
+  of an add-on that is no longer installed: a settings write is refused for a name
+  that is not loaded, so `psql` is the route.
+
+  **Everything on the page has an API**, under the same `addons.manage`, beside
+  the install and remove below: `GET /api/v1/addons` lists what is installed with
+  each module's class, declared permissions and redirect-path figures, `GET
+  /api/v1/addons/{name}` is one module's detail, `PUT
+  /api/v1/addons/{name}/settings` saves its declared settings, `GET
+  /api/v1/addons/orphaned-data` lists the schemas no installed module owns, and
+  `DELETE /api/v1/addons/orphaned-data/{name}` purges one — answering `200` with
+  the row that went, because after the drop there is nothing left to measure.
+
+  **The demo instance runs one.** A first-party `redirect-observe` sample,
+  `pageviews`, is built into every image and switched on only where
+  `LINKCTRL_ADDONS_DIR` points at it — so the manager has something real to show
+  and nobody else pays for it. Its source is in `examples/addons/`.
+
 - **An add-on can be installed and removed while the instance is serving.**
 
   Two operations under one new permission, `addons.manage`, held only by the
@@ -74,9 +170,10 @@ migrations run at boot.
 
   **What an upload cannot install:** an add-on whose manifest declares `.sql`
   migration files ships those files alongside its module, and they are not part
-  of the upload. Such an add-on is refused with a message saying so, and is
-  installed the way add-ons have always been installed — its directory placed in
-  `LINKCTRL_ADDONS_DIR`, and a restart. There is also no upgrade-in-place:
+  of the upload. Such an add-on is refused with a message saying so — on the API
+  and, since 0.4.0, in the Add-on manager's own words rather than as a general
+  *the manifest did not check out* — and is installed the way add-ons have always
+  been installed: its directory placed in `LINKCTRL_ADDONS_DIR`, and a restart. There is also no upgrade-in-place:
   replacing an add-on is a removal and an install. And a name that overlaps one
   the directory already claims is refused — `oidc_x` beside `oidc`, in either
   order — **whether or not the other one is running**, because the two share a

@@ -397,6 +397,25 @@ const (
 	ActionAddonRemoved   = "addon.removed"
 )
 
+// The Add-on manager's two writes (M68), declared here for the reason the
+// lifecycle pair above is.
+//
+// `addon.settings_saved` records that somebody wrote what an add-on is
+// configured with, naming the settings the save wrote and never their values: one
+// of them may be a `secret`, and the ones that are not are still a deployment's
+// own credentials as often as not. **Wrote rather than changed** — the form
+// carries every editable field on every submission, which is the same reading
+// `updated_at` takes on the row itself (internal/store/query/addonsettings.sql). `addon.data_purged` records the schema drop the manager's
+// orphan list offers — the only act in this product that deletes an add-on's data,
+// and the one an operator will most want to find afterwards.
+//
+// Instance-wide like the lifecycle pair, and for the same reason: an add-on
+// belongs to the box rather than to a tenant.
+const (
+	ActionAddonSettingsSaved = "addon.settings_saved"
+	ActionAddonDataPurged    = "addon.data_purged"
+)
+
 // Event is one thing that happened.
 //
 // The actor is not a field: it is taken from the *auth.Identity passed to
@@ -1067,5 +1086,7 @@ func AllActions() []string {
 		ActionSessionMintedByAddon,
 		ActionAddonInstalled,
 		ActionAddonRemoved,
+		ActionAddonSettingsSaved,
+		ActionAddonDataPurged,
 	}
 }

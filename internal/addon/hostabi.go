@@ -186,7 +186,7 @@ var hostFuncs = map[string]hostFunc{
 			// counted in the refusals metric.
 			return int32(abi.StatusDenied)
 		}
-		if v, configured := st.values[key]; configured {
+		if v, configured := st.values.get(key); configured {
 			// What an operator set, which outranks the manifest's default for the
 			// reason every other value in this product does: the declaration is the
 			// publisher's answer and the environment is the operator's.
@@ -1199,7 +1199,14 @@ type hostState struct {
 	// config_get answers with when there is one. Held as config.Secret for every
 	// setting rather than only the ones a manifest called secret, so that no
 	// path out of this struct can print a configured value.
-	values map[string]config.Secret
+	//
+	// A pointer to a holder rather than the map itself, because M68 made this
+	// state mutable for the first time: the Add-on manager saves a value and the
+	// add-on must read it on its next invocation, while [hostState.forRequest]
+	// has already copied this struct into every instance the pool is holding.
+	// One holder behind every copy is what makes the save reach them, and
+	// [settingValues] is where the memory ordering lives.
+	values *settingValues
 	// grants is what this add-on holds, resolved once at load. Read on every call
 	// through the ABI and never rebuilt — see Grants, where the reason it has to be
 	// a lookup rather than a walk of the manifest is the redirect path's budget.
@@ -1399,7 +1406,7 @@ func (s *hostState) marshalFailed(function string, err error) int32 {
 }
 
 func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
-	values map[string]config.Secret, log *slog.Logger,
+	values *settingValues, log *slog.Logger,
 	minter SessionMinter, mfaSatisfied bool) *hostState {
 	// Open has wrapped this already and wrapping is idempotent; it is repeated here
 	// because a state built directly — which is what a test does — must be as safe as
@@ -1428,7 +1435,7 @@ func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
 // registerState makes an add-on's state reachable from a host function before the
 // module that will call one exists. Returns the deregistration.
 func (h *Host) registerState(m Manifest, grants Grants, storage *store.AddonDB,
-	values map[string]config.Secret) func() {
+	values *settingValues) func() {
 	// The two M65 facts are read here rather than passed in, because both are
 	// properties of the host and of this add-on's name and neither changes for the
 	// life of the load — the same reason grants are resolved once.

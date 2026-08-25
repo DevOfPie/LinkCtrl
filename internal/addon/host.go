@@ -642,9 +642,12 @@ type Loaded struct {
 	grants  Grants
 	storage *store.AddonDB
 	// settings is what an operator configured for this add-on, by declared
-	// setting name — see config.AddonSettings. Held as Secret whatever the
-	// manifest called the setting, so no value can print itself.
-	settings map[string]config.Secret
+	// setting name — the stored answers from `addon_settings` with the
+	// environment's on top (D347). Held as Secret whatever the manifest called
+	// the setting, so no value can print itself, and behind one holder shared with
+	// this add-on's hostState so a save from the Add-on manager reaches the
+	// instances already built.
+	settings *settingValues
 	// live is how many invocations of this add-on are inside a guest call, and
 	// whether it is being removed. A pointer, because a Loaded is copied by value
 	// into every set and every caller of Addons and the count has to be one count.
@@ -1021,7 +1024,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			// count and never a name-value pair: a setting may be a secret, and the
 			// values are held as config.Secret exactly so that a line like this one
 			// cannot become the leak.
-			slog.Int("configured_settings", len(loaded.settings)),
+			slog.Int("configured_settings", loaded.settings.len()),
 			slog.String("schema", loaded.Schema),
 			slog.Int("migrations", len(loaded.Manifest.Migrations)),
 			slog.Uint64("guest_memory_bytes", uint64(loaded.MemorySize())))
@@ -1326,7 +1329,7 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	// environment per call. Declared settings only — an environment variable for a
 	// setting no manifest declares is not read, which is the same scoping
 	// config_get itself applies (D263).
-	values := h.settings(m.Name, settingNames(m))
+	values := newSettingValues(h.resolveSettings(ctx, m))
 
 	// Registered before instantiation, and this is not tidiness. Package
 	// initialization runs *during* InstantiateModule — that is what makes a
@@ -1634,4 +1637,4 @@ func settingNames(m Manifest) []string {
 // ConfiguredSettings is how many of this add-on's declared settings an operator
 // has given a value. It is what M68's manager reads to draw "set" beside a
 // secret it must never echo.
-func (l Loaded) ConfiguredSettings() int { return len(l.settings) }
+func (l Loaded) ConfiguredSettings() int { return l.settings.len() }

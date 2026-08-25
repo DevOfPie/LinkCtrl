@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "name": "pageviews",
+  "version": "0.1.0",
+  "abi_version": 1,
+  "module": "pageviews.wasm",
+  "sha256": "@SHA256@",
+  "failure_class": "degrade",
+  "permissions": [
+    "redirect.observe",
+    "storage.own_schema",
+    "config.read"
+  ],
+  "settings": [
+    {
+      "name": "retention_days",
+      "type": "text",
+      "default": "30"
+    },
+    {
+      "name": "count_bots",
+      "type": "toggle",
+      "default": "false"
+    },
+    {
+      "name": "grouping",
+      "type": "select",
+      "options": ["day", "week"],
+      "default": "day"
+    },
+    {
+      "name": "export_token",
+      "type": "secret"
+    }
+  ]
+}

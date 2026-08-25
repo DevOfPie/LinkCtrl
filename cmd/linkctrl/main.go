@@ -1053,8 +1053,8 @@ func run(cfg config.Config, _ io.Writer) error {
 		MFA:      mfaSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
-		// The lifecycle API (M67), through the helper for the reason the router's
-		// add-on field takes one.
+		// The lifecycle API (M67) and the manager's own endpoints (M68), through the
+		// helper for the reason the router's add-on field takes one.
 		AddonAdmin: addonAdmin(addons),
 		Metrics:    metrics,
 		Limits:     limits,
@@ -1070,6 +1070,10 @@ func run(cfg config.Config, _ io.Writer) error {
 			// every instance that configured no add-ons at all, which is exactly
 			// the cost m60.md promised nobody would pay.
 			Addons: addonRouter(addons),
+			// The Add-on manager (M68), through the same helper the API field uses
+			// and for the same reason. One interface for both surfaces, so the page
+			// and the API cannot be wired to different halves of the host.
+			AddonAdmin: addonAdmin(addons),
 		},
 	})
 
@@ -1278,14 +1282,15 @@ func addonRouter(h *addon.Host) httpx.AddonRouter {
 	return h
 }
 
-// addonAdmin is the same closure of the same trap for M67's lifecycle surface.
+// addonAdmin is the same closure of the same trap for the add-on administrative
+// surface — M67's lifecycle and M68's manager, which are one interface.
 //
 // The consequence differs and is worse than the router's. A typed nil here mounts
 // `POST /api/v1/addons` on every instance that installed nothing — an upload
 // endpoint, on an instance whose operator never turned add-ons on, answering the
 // unavailable that addon.ErrNoAddonsDir carries rather than the 404 that says the
 // capability is not here. Two lines, at the one site where it is possible.
-func addonAdmin(h *addon.Host) httpx.AddonLifecycle {
+func addonAdmin(h *addon.Host) httpx.AddonManager {
 	if h == nil {
 		return nil
 	}

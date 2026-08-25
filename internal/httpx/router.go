@@ -82,16 +82,18 @@ type Deps struct {
 	// and which leaves whoever the principal already is holding what they hold,
 	// because the grants are rows rather than a running service.
 	Instance *instance.Service
-	// AddonAdmin installs and removes add-ons at runtime (M67). Nil leaves both
-	// endpoints unregistered, which is the state of every instance that configured
-	// no add-ons directory — there is no host to install into, and mounting a route
-	// that answers 503 would be the unconditional cost m60.md promised nobody pays.
+	// AddonAdmin is the whole add-on administrative surface: install and remove
+	// (M67), and the manager's reads, settings write and purge (M68). Nil leaves
+	// every one of those endpoints unregistered, which is the state of every
+	// instance that configured no add-ons directory — there is no host to install
+	// into, and mounting a route that answers 503 would be the unconditional cost
+	// m60.md promised nobody pays.
 	//
 	// An interface rather than the host, and it must be handed over through the
 	// helper in cmd/linkctrl that returns a nil *interface* for a nil host: a typed
 	// nil in this field is not nil, and the failure it produces is a route mounted
 	// on an instance with no add-ons rather than a panic anybody would notice.
-	AddonAdmin AddonLifecycle
+	AddonAdmin AddonManager
 	Web        *Web
 	// Hosts is the verified custom-hostname set (M40). Nil leaves custom domains
 	// unrouted entirely — every Host header is answered exactly as it was before
@@ -520,6 +522,31 @@ func registerAppRoutes(d Deps, app *appMux) {
 				RequireAuth(http.HandlerFunc(ad.Install))))
 		app.Handle("DELETE "+APIPrefix+"/addons/{name}",
 			RequireAuth(http.HandlerFunc(ad.Remove)))
+		// M68's manager reads, and the two writes behind it. Unlimited beyond the
+		// API's own bound for the reason the removal is: they carry no body worth
+		// throttling, and the one that does — a settings form — is a handful of
+		// short strings behind a scope no API key can hold.
+		//
+		// The orphan pair is registered before `{name}`, which decides nothing at
+		// runtime — Go's mux prefers the more specific pattern whatever the order —
+		// and reads correctly, because `orphaned-data` is not a name any add-on can
+		// take. See api_addon_manager.go.
+		//
+		// Spelled as a literal rather than through [AddonOrphanPath], because
+		// TestOpenAPICoversEveryRoute reads these patterns out of this file's source
+		// and a concatenated constant is invisible to it — which is worse than one
+		// duplicated word, since what would go unchecked is whether the spec
+		// documents the endpoint at all. TestOrphanPathIsSpelledOnceInTheRouter ties
+		// the literal to the constant, so the duplication cannot drift.
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/addons":                         ad.List,
+			"GET " + APIPrefix + "/addons/orphaned-data":           ad.Orphans,
+			"DELETE " + APIPrefix + "/addons/orphaned-data/{name}": ad.Purge,
+			"GET " + APIPrefix + "/addons/{name}":                  ad.Detail,
+			"PUT " + APIPrefix + "/addons/{name}/settings":         ad.SaveSettings,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
 	}
 
 	if d.Instance != nil {
@@ -795,6 +822,39 @@ func registerAppRoutes(d Deps, app *appMux) {
 				web.tooManyRequests, web.addonRouteExists)
 			app.Handle(AddonPagePattern, addonGuard(http.HandlerFunc(web.AddonPage)))
 			app.Handle(AddonBarePattern, addonGuard(http.HandlerFunc(web.AddonPage)))
+		}
+
+		// The Add-on manager (M68), under `/instance/` rather than under `/addons/`
+		// — which is an installed add-on's own prefix and could not carry a detail
+		// page. web_addons.go argues the choice.
+		//
+		// Registered on the same condition the API surface is, and separately from
+		// the add-on *pages* above: an instance can have a host and no manager only
+		// if somebody wired one and not the other.
+		//
+		// **The nav entry is gated on this same field**, carried onto the shell as
+		// `AddonManager` (internal/httpx/web.go) and read beside `addons.manage` by
+		// partials/nav.html. It needs both, and the reason is that they are not the
+		// same condition: `addons.manage` is conferred on the instance principal
+		// unconditionally, so a menu item gated on the permission alone was drawn on
+		// every instance that configured no add-ons directory — where these routes
+		// do not exist and the entry led to a 404.
+		if web.AddonAdmin != nil {
+			for pattern, fn := range map[string]http.HandlerFunc{
+				"GET " + AddonManagerPath:                             web.AddonsPage,
+				"GET " + AddonManagerPath + "/{name}":                 web.AddonDetailPage,
+				"POST " + AddonManagerPath + "/" + AddonRemoveSegment: web.AddonRemove,
+				"POST " + AddonManagerPath + "/" + AddonPurgeSegment:  web.AddonPurge,
+				"POST " + AddonManagerPath + "/{name}/settings":       web.AddonSettingsSubmit,
+			} {
+				app.Handle(pattern, signedIn(fn))
+			}
+			// The install carries the upload limiter for the reason the API's does:
+			// a body whose cost is set by its content, sharing one bucket across
+			// every address that takes a file (D-numbered at M50.5).
+			app.Handle("POST "+AddonManagerPath,
+				RateLimit(d.Limits.Upload, "upload", d.Metrics, web.tooManyRequests)(
+					signedIn(web.AddonInstall)))
 		}
 
 		// Everything else redirects anonymous visitors to the login form,

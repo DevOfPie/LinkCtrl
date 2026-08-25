@@ -119,6 +119,7 @@ mood. Work through the table; the first row that matches decides.
 | Adding a status for a case that previously answered `ErrInternal` | additive |
 | **Implementing a function that was declared and refused** | additive. This is the one that would otherwise cost a generation per limb, and it is deliberately additive: a module that already handles `ErrNotAvailable` keeps working, and one that does not was already broken |
 | Widening what a function accepts | additive |
+| **Adding a source an answer may come from** — with the parameters, the statuses and the meaning of every existing source unchanged | additive, and the [subsection below](#an-answer-that-gains-a-source) is what fixes when the answer is re-read |
 | Loosening a status into a success | additive |
 | Changing a doc comment, this page's prose, or an error's wording | neither — no version moves |
 
@@ -186,6 +187,42 @@ announced in [../CHANGELOG.md](../CHANGELOG.md) under `Changed` even though no
 version moves, and a publisher who compiled against a refusal recompiles when it
 stops being one. A module that branches on `ErrNotAvailable` and recompiles is
 unaffected, which is the whole reason the pattern is worth its cost.
+
+### An answer that gains a source
+
+M68 raised this one and the table above did not have it: `config_get` answered
+from the manifest's default and the environment, and now answers from a value an
+operator saved in the Add-on manager as well. No parameter moved, no status
+changed for a case that already had one, and every source that already existed
+still means what it meant — the environment still outranks everything, which is
+what [configuration.md](configuration.md) tells an operator.
+
+**The rule: adding a source an answer may come from is additive, and what has to
+be written down with it is when the answer is re-read.** A module cannot tell one
+source from another — it asked for a key and got a string — so widening the set is
+invisible to it in the way an added record field is. What a module *can* tell is
+that the answer changed under it, and that is the part a publisher needs fixed.
+
+For `config_get` it is fixed in the function's own documentation and repeated
+here because it is the general shape: **a value is read afresh for each call, so
+a setting an operator saves reaches the module without a restart.** What is
+promised is freshness, not a snapshot: the host loads the current values at each
+`config_get`, so two calls inside one invocation that straddle a save can differ.
+That is a window of microseconds against an operator's keystroke and no shipped
+behaviour rests on it — it is written down rather than rounded to *stable within
+an invocation*, which an earlier draft of this section claimed and the host does
+not implement. A module that needs two settings to agree should read them into
+its own variables at the top of the call. Going
+the other way — narrowing to *fixed for the life of the process*, which is what a
+module caching a value at package initialization is relying on — would be
+**breaking** under *narrowing what a function will do with what it accepts*, and
+the host is written so that it does not happen by accident: saving drains the
+add-on's instance pool, so the next invocation starts a module that reads the new
+value at its own initialization.
+
+The version consequence is the ordinary one and not a carve-out: additive, so
+while the major is zero it is the **patch**. Nothing here is invisible to an older
+module and nothing fails to import, so a publisher who does nothing is unaffected.
 
 ### A permission added before the ABI was published
 
@@ -812,7 +849,7 @@ can verify, and the second is a CSRF carve-out on a route anything holding
 
 <!-- BEGIN GENERATED: the function table -->
 
-The ABI is **0.1.2**, generation **1**, and this host loads generation 1 or newer.
+The ABI is **0.1.3**, generation **1**, and this host loads generation 1 or newer.
 
 | Function | Since | Requires | Status | What it is |
 | --- | --- | --- | --- | --- |
@@ -820,7 +857,7 @@ The ABI is **0.1.2**, generation **1**, and this host loads generation 1 or newe
 | `log`<br>`sdk.Log(level string, message string)` | 0.1.0 | — | **live** | Log writes one line to the host's logger, attributed to this add-on. It is the only way out: a module's stdout and stderr are discarded, because routing them into an operator's log is a capability and the host grants none it was not asked for. The host adds the add-on's name; a message that repeats it is noise. An unknown level is ErrInvalid rather than a silent default, so a typo does not become a line nobody greps for. The message is neutralized before it is written and bounded at 4 KiB, and the rule is stated as what survives rather than as what is caught: a graphic character reaches the line as itself, in any script, and everything else becomes its escape — a newline, a control character, an ANSI escape, every format and bidirectional control, every unassigned or private-use code point, and the 268 graphic code points this host treats as invisible: the 267 graphic members of Unicode's derived Default_Ignorable_Code_Point, which the host computes rather than reads because Go ships only the residue property the derivation subtracts from, plus U+2800 BRAILLE PATTERN BLANK, the one blank that is not whitespace. One class is deleted rather than escaped, and it is the only one: every variation selector is removed from the message. So a heart written as U+2764 U+FE0F arrives as U+2764 and is still a heart, an emoji that carries no selector is untouched, and a selector hung off a letter, a space, an ideograph or a block element takes nothing with it when it goes. There is no exemption and no base list: a selector after a character the reader's renderer does not vary is invisible, and no property tells the host which those are. That set is a published property and not the set of characters that render as nothing, because Unicode publishes no such property: eight combining marks it annotates as not visibly rendered — U+2D7F, U+17D2, U+10A3F, U+1107F, U+11A47, U+11A99, U+11F42 and U+16FE4 — reach the line as themselves, as do seventeen space characters and the prepended concatenation marks named below. What bounds that residue is that this log is write-only to you: Log declares no out-parameter, no function in this ABI hands log content back, your module gets no preopened file and its stdout and stderr are discarded, and your storage is a schema this log does not live in. So a character that survives is one an operator can still see; it is not a channel you can read back. A code point Unicode adds after the host was built is escaped rather than let through. One graphic character does not reach the line as itself: a backslash is doubled, so that the two characters \ and n cannot be mistaken for an escaped newline, and a module cannot spell the host's own truncation mark. The named exceptions run the other way: Unicode's prepended concatenation marks — the Arabic, Syriac and Kaithi signs that scope the digits after them — are left alone, read from Unicode's property rather than from a list, so a host built against a newer revision carries the marks it added. Nothing is refused for any of it, and a message that needed none arrives as it was written, backslashes aside. |
 | `random_bytes`<br>`sdk.RandomBytes(count int32)` | 0.1.1 | — | **live** | RandomBytes draws bytes from the operating system's entropy source, through the host. It is what a nonce, a `state` parameter or a PKCE verifier is built from. A count outside 1..4096 is ErrInvalid rather than a clamped answer, because a caller that asked for the wrong number of bytes wanted a different number and not a shorter one. Nothing about this function is a permission: every module already reaches the same source through crypto/rand, which the host wires to the same reader, so gating it would buy an operator nothing and cost every manifest a line. |
 | `time_now`<br>`sdk.TimeNow()` | 0.1.1 | — | **live** | TimeNow is the host's wall clock, which is this machine's. It is what an expiry is compared against and what a record's timestamp is stamped from. UTC and RFC 3339, so there is one spelling to parse and no zone to guess. Ungated for the reason random_bytes is: a module already reads the same clock through time.Now, and this is the same value with a documented shape. |
-| `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it, and ErrNotFound only when it declared none. An operator sets a value with LINKCTRL_ADDON_<NAME>_<SETTING> and it outranks the manifest's default; editing them in the Add-on manager is M68's, and until that lands the environment is the only way to set one. |
+| `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it, and ErrNotFound only when it declared none. An operator sets a value in the Add-on manager, which stores it host-side, or with LINKCTRL_ADDON_<NAME>_<SETTING>; either outranks the manifest's default, and the environment outranks the stored value. A value saved in the manager is what this function answers on the add-on's next invocation, and one already inside a call reads what it read. |
 | `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed — ErrDenied, which is distinguishable from ErrInvalid so that a module can tell confinement from its own mistake. One statement per call: the host parses through the extended protocol, so a payload carrying two is refused. The read is a read at the server, in a READ ONLY transaction, so this function cannot be used to write. Arguments are a JSON array of strings, numbers, booleans and nulls; pass JSON as a string and cast it. Rows come back as a JSON array of objects keyed by column name, and a result with two columns of one name is refused rather than collapsed. |
 | `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep — the add-on ships them in its own `migrations/` directory and names each with its digest in the manifest, and the host applies them at load inside the same schema this function writes to. Everything StorageQuery says about the boundary, the single statement and the arguments applies here too; what differs is that the transaction is not read-only. |
 | `http_request_read`<br>`sdk.HTTPRequestRead()` | 0.1.0 | `routes.own_prefix` | **live** | HTTPRequestRead reads the request that reached one of this add-on's routes. It answers ErrNotFound outside a request, which is what a module calling it from package initialization gets — an instance is made per request and its initialization runs before the request is attached, so this is the ordinary answer during init rather than an edge case. Read twice in one request it answers the same record twice: the host holds it, the guest does not consume it. |

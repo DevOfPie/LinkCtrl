@@ -142,6 +142,16 @@ const AddonMaxResultBytes = 1 << 20
 // that reaches it.
 func AddonSchema(name string) string { return AddonSchemaPrefix + name }
 
+// ValidAddonName reports whether a string is a name an add-on could have.
+//
+// The grammar itself, exposed because two things outside this package rest on it
+// rather than merely on [checkAddonName] refusing at the last moment. The Add-on
+// manager's orphan endpoints live on a path segment that has to be unclaimable by
+// any add-on, and *unclaimable* is a property of this expression — a hyphen is not
+// in it — rather than of a reserved list somebody keeps. A test asserts the
+// segment against this rather than against a comment saying so.
+func ValidAddonName(name string) bool { return addonNameRe.MatchString(name) }
+
 // checkAddonName refuses a name that must not become an identifier.
 func checkAddonName(name string) error {
 	if !addonNameRe.MatchString(name) {
@@ -1526,4 +1536,67 @@ func AddonSchemaSuffix(schema string) string {
 		return ""
 	}
 	return name
+}
+
+// PurgeAddonSchema drops one add-on's schema and everything in it.
+//
+// M68's one destructive mechanism, and the only statement in this product that
+// deletes an add-on's data. Two callers reach it and they are the same act on two
+// surfaces — the Add-on manager's orphan list and
+// `DELETE /api/v1/addons/orphaned-data/{name}` behind it, both through
+// [addon.Host.PurgeData] and both under `addons.manage`. What it is never reached
+// by is a *removal*: that deliberately leaves the schema standing (M63, and
+// lifecycle.go's Remove), so a purge is always a second, explicit act taken
+// against something an operator can already see the size of. An operator with a
+// `psql` prompt has a third route and this function is not it —
+// docs/operations.md carries the three statements and says why all three.
+//
+// # What it drops, and what it deliberately leaves
+//
+// `DROP SCHEMA … CASCADE`, which is every relation, sequence, function, view and
+// type the add-on created inside it. Four things survive and each is named
+// because a purge that quietly left them would be worse than one that says so:
+//
+//   - **The login role.** `addon_<name>` keeps existing, with its password, its
+//     membership and its grants. Dropping it is a `DROP ROLE`, which fails while
+//     the role owns anything anywhere — a large object, a temp relation — and
+//     which would make this operation's success depend on state
+//     [AddonConfinementViolations] exists to police. The role owns nothing an
+//     add-on can reach without its schema, and re-installing the same add-on
+//     re-uses it, which is what [EnsureAddonSchema]'s existence check is for.
+//   - **Large objects the role owns.** They live outside every schema by
+//     construction, which is exactly why [AddonLargeObjects] counts them
+//     separately. A well-behaved add-on owns none; one that owns any is refused
+//     at load, so a purge is not the tool that cleans up after it.
+//   - **`addon_identity_links` rows written under this name.** They are the
+//     host's, not the add-on's, and they are the subject of F330 rather than of
+//     this function.
+//   - **`addon_settings` rows written under this name.** The host's as well
+//     (04800), keyed on the name for the reason the mappings are, and inherited by
+//     whatever is installed under the name next — including a stored `secret`.
+//     **Nothing in this product deletes one**, which is F332; the manager counts
+//     them at the point of decision the way it counts the mappings.
+//
+// # Refusing to purge a schema something still owns
+//
+// The caller establishes that the schema is an *orphan*; this refuses to run
+// against a name that resolves to a loaded add-on only in the sense that it
+// cannot — it takes a name and drops that name's schema, and the manager is what
+// decides which names are offered. The safety that is here is the one that can be
+// stated in a statement: [checkAddonName] runs first, so the identifier
+// interpolated below is `addon_` plus a validated name and cannot be anything
+// else. Nothing about a schema name is caller-supplied text.
+func PurgeAddonSchema(ctx context.Context, admin *pgxpool.Pool, name string) error {
+	if err := checkAddonName(name); err != nil {
+		return err
+	}
+	schema := AddonSchema(name)
+	// The application role is a member of the add-on's role (EnsureAddonSchema
+	// grants it), which is what makes it able to drop a schema the add-on's role
+	// owns. Without that membership this is `must be owner of schema`, and the
+	// error says so rather than being wrapped into something vaguer.
+	if _, err := admin.Exec(ctx, fmt.Sprintf(`DROP SCHEMA IF EXISTS %s CASCADE`, schema)); err != nil {
+		return fmt.Errorf("purge schema %s: %w", schema, err)
+	}
+	return nil
 }

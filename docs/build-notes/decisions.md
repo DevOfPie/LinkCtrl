@@ -478,6 +478,10 @@ file. Append a row when you append an entry.
 | [M67, an add-on arrives and leaves, and the directory is still the only store](#2026-08-24--m67-an-add-on-arrives-and-leaves-and-the-directory-is-still-the-only-store) | D338: why runtime install writes into `LINKCTRL_ADDONS_DIR` rather than into a table, what that costs a multi-replica deployment, and how atomicity is one `rename(2)` through a staging directory inside it. D339: the installed set becomes an atomic snapshot rather than three fields behind a lock, because the alternative puts a lock on every redirect. D340: the unload answer m67.md asked for — in-flight invocations complete, bounded, and the bound is what interrupts. D341: `addons.manage` is the instance principal's and is non-delegable in D18's widest form. D342: what an upload cannot install, and the two claims of M60 and M64 this milestone narrowed in writing. D343: an audit action is declared in `internal/audit` whatever package records it — the F18 split re-created and undone inside one milestone, and why the single-file parse stays single-file |
 | [M67, the caller's context stops deciding whether a removal finished](#2026-08-24--m67-the-callers-context-stops-deciding-whether-a-removal-finished) | D344: a lifecycle act completes on a context the caller cannot cancel — why `removeGrace` makes removal the one audit call site in this product that detaches, and what wazero does and does not do with a cancelled close. D345: an add-on install spends the QR logo's upload bucket rather than a fourth one, the argument against it, and the three documents that were made false by nobody writing any of this down |
 | [M67, an install reads what the directory claims, not what is running](#2026-08-24--m67-an-install-reads-what-the-directory-claims-not-what-is-running) | D346: the runtime name-collision check runs over the set boot decides from rather than over the running set — the sequence by which the install API could arrange a start that stops, why directory entries are the wrong wider set and the loaded set the wrong narrower one, what the union with the loaded set covers, and what an operator is now refused |
+| [M68, an operator meets the add-on host, and one page is where](#2026-08-25--m68-an-operator-meets-the-add-on-host-and-one-page-is-where) | D347: a declared setting has two sources and the environment wins — the update-check precedent it follows, why a pinned setting is refused rather than overridden, why the values are host-side rather than in the add-on's own schema, and what a save does and does not reach. D348: the manager is at `/instance/addons` because `/addons/` belongs to add-ons, and the orphan path is unclaimable by grammar rather than by a reserved list. D349: a purge is the schema drop and nothing else — what survives it, why an installed add-on's data is a conflict, and why a typo is a 404. **D349 said three survivors and D360 corrects it to four**, `addon_settings` being the fourth; the entry stands as written because this log is append-only, and this row summarises the pair rather than the older half. D350: D265's deferred answer taken — the demo runs a first-party sample built into the image, what the coverage row can honestly assert, and what a read-only mount costs it. D351: one script for one count, and why nothing else on the page needs one. D352: per-module latency is read back off the registry rather than counted twice |
+| [M68, three answers the rejection needed](#2026-08-25--m68-three-answers-the-rejection-needed) | D353: a menu item is drawn from the wiring as well as from the permission — the nav entry that 404s on every instance without an add-ons directory, the two fixes declined, and the general rule it settles. D354: a stored secret's secrecy is a column rather than a manifest's claim, why it changes the rendered type and not only the value, and why a refusal was the wrong shape. D355: a save drains the add-on's instance pool, because M66.5's kept instances made *on its next invocation* false for up to a pool TTL for the module that caches a value at start-up |
+| [M68, the ABI policy decides its own case, and the drain reaches the busy instance](#2026-08-25--m68-the-abi-policy-decides-its-own-case-and-the-drain-reaches-the-busy-instance) | D356: M61's self-repair clause spent — `config_get` gains a source, the table row that decides it, why it is additive and why the patch moves to 0.1.3. D357: the drain reaches an instance that is **in flight**, which corrects [D355](#d355--a-save-drains-the-add-ons-instance-pool): emptying the idle set reaches the resting half, and an add-on under traffic has its instances out. D358: the demo's coverage row asserts the module *ran*, because `addon_pageviews.views` is a fact no seeder can write |
+| [M68, what a name inherits, and the harness that had never run](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) | D359: a stored secret's withholding bounds the page and not the module, why hiding it from `config_get` was declined, and what the documents now say instead. D360: `addon_settings` is the fourth thing a purge leaves, counted at the point of decision rather than deleted, and F332 is the half that is behaviour. D361: the test instance runs the sample add-on so the browser harness executes at all, and the two costs of that — the core SLO column, and `lctl` on the host. Plus the inherited redirect-path measurement, re-run |
 
 ---
 
@@ -38654,3 +38658,505 @@ Two tests hold it, both sabotaged before they were believed:
 parsed-but-unloaded case the rejection required, and
 `TestADirectoryDiscoveryIgnoresDoesNotRefuseAnInstall` is the mirror that stops
 the fix becoming the first candidate above.
+
+## 2026-08-25 — M68, an operator meets the add-on host, and one page is where
+
+**D347–D352.** The Add-on manager: what is installed, what each module costs the
+redirect path, what it is configured with, and the data left behind by modules
+that are gone. The owner chose its layout from drawn wireframes on 2026-08-18 and
+amended it twice in the same review; `phase-4-candidates.md` carries the frames
+and this entry carries the six answers building against them needed.
+
+### D347 — an add-on's settings have two sources, and the environment wins
+
+D263 gave a declared setting one source: `LINKCTRL_ADDON_<NAME>_<SETTING>`, read
+at load. The manager's detail page saves what an operator types, so there is now a
+second — `addon_settings`, host-side — and something has to decide which the
+module reads.
+
+**The environment wins, and the page renders a sentence in place of the control.**
+
+This is not a new rule. It is the one this product already applies to the only
+other value with these two sources: `LINKCTRL_UPDATE_CHECK=false` makes the
+first-run prompt say so instead of drawing a checkbox, because *an air-gapped
+instance must not appear to be asking a question it has already had answered for
+it* (D149). A setting pinned in a deployment's environment is the same shape — the
+answer is given, the page cannot change it, and a field whose write nothing would
+read is worse than no field. So a save to such a setting is **refused** with a
+`422` naming the variable to edit, rather than accepted and ignored.
+
+**The reverse order loses in the direction that matters.** If the stored value
+won, an operator could override their deployment's own configuration from a web
+page — a `required`-class authentication add-on's credentials included — and the
+variable would sit in the compose file describing something no longer true.
+
+**This one was taken on the owner's behalf** rather than put to them, under
+workflow.md's standing rule about deciding when the loop would otherwise stall,
+and it is recorded here on the day it was used because that rule requires it. What
+makes it a smaller decision than it looks is that it is an application of D149
+rather than a new stance; if the owner wants the other order, the change is the
+order of two loops in `mergeSettings` and the field's `Editable` predicate.
+
+**Where the values live is the other half.** A host table, never the add-on's own
+schema: the add-on's role can write that schema, so a `secret` kept there would be
+a credential the module could rewrite and then read back as though an operator had
+chosen it. `04800_addon_settings.sql` is where the argument sits beside the DDL,
+and it also states what is *not* done — the column is not encrypted, exactly as
+the environment variable it mirrors is not, because the key would live beside the
+database in the same environment and the result would be a longer sentence about
+the same exposure.
+
+**A save reaches instances that already exist.** Values are still resolved once at
+load, because `config_get` is on a request's path (D263), so the map lives behind
+one atomic pointer that every copy of a hostState and every pooled instance shares
+— a save swaps the map and the read stays a pointer load and a lookup. What that
+does *not* buy is stated rather than left to be found: a module already inside a
+guest call reads what it read, and there is no quiesce.
+
+**Owner-confirmed 2026-08-25**, put to them at [step 3.4](phase-loop.md#3-land)
+because a worker deciding on the owner's behalf is the case workflow.md's
+standing rule is written for, not a case it excuses. Two alternatives were
+declined: the table winning, which breaks D149's pattern and stops an instance
+being reproducible from its own deployment files; and an explicit *stop using
+the environment value* act, which buys away the dead control at the cost of a
+third state per setting and brings the reproducibility problem back for any key
+somebody clears.
+
+**The owner attached a requirement to the confirmation**: the setting is locked
+*and the reader is told why*, in as many words — *lock or otherwise notify the
+user that the setting is being set by the environment*. The page already does
+it and it is now a requirement rather than a nicety: no control at all, and in
+its place a sentence naming the variable and saying where it can be changed
+(`internal/ui/templates/pages/addon_manager.html`, the `{{if not .Editable}}`
+limb). The value itself is deliberately not shown — it may be a credential, and
+nothing on this page could change it. A future edit that keeps the lock and
+drops the sentence would satisfy the mechanism and not the decision.
+
+
+### D348 — the manager is at `/instance/addons`, not at `/addons`
+
+`/addons/` is an installed add-on's own prefix (M64) and `/addons/{addon}` is a
+route, so a manager at `/addons` could have a list and no detail page:
+`/addons/oidc` is that add-on's page, not the host's page about it. Resolving the
+overlap by precedence was available and was refused for the reason D263 refused it
+twice already in this subsystem — a concatenation offers nothing to resolve it
+with, so the ambiguity is made not to exist.
+
+`/instance/` is where the one other thing belonging to the box already sits
+(`POST /instance/update-check`), it is already in `internal/alias/reserved.txt`,
+and what this page administers is the machine rather than a workspace.
+
+**The API's orphan endpoints take the same treatment, by a different mechanism.**
+`GET /api/v1/addons/{name}` and `GET /api/v1/addons/orphaned-data` are two patterns
+under one prefix, and the second is unclaimable rather than merely unclaimed: an
+add-on's name matches `^[a-z][a-z0-9_]{1,30}$` and a hyphen is not in it. That is a
+property of the grammar, not a reserved list somebody maintains, and
+`TestOrphanPathCannotBeAnAddonName` asserts the segment against the validator.
+
+### D349 — a purge drops the schema, and says what it leaves
+
+`DROP SCHEMA … CASCADE`, and that is the whole mechanism. Three things survive and
+each is named in the confirmation, in the API document and in the audit record,
+because a purge that quietly left them would be worse than one that says so:
+
+- **the `addon_<name>` login role**, with its password. Dropping it is a
+  `DROP ROLE`, which fails while the role owns anything anywhere — a large object,
+  a temp relation — so this operation's success would depend on exactly the state
+  `AddonConfinementViolations` exists to police. Keeping it is also what makes
+  re-installing under the same name work as it did.
+- **large objects the role owns**, which live outside every schema by construction
+  and are why `AddonLargeObjects` is a separate gauge. Zero for every add-on that
+  behaves; one that owns any is refused at its next load.
+- **`addon_identity_links` rows written under this name**, which are the host's
+  rather than the add-on's and are [F330](deferred-findings.md)'s subject.
+
+**And it refuses to purge an installed add-on's data**, with a conflict rather than
+a not-found: the schema exists, it is the state that is wrong. Dropping one out
+from under a running module has no upside over removing the add-on first, and a
+`DELETE` is an address a client can type.
+
+**A name that owns nothing is a 404 rather than a silent success.**
+`DROP SCHEMA IF EXISTS` would answer *done* for a typo, and an operator who
+mistyped would be told their data was deleted.
+
+### D350 — the demo runs a real add-on, which is D265's deferred answer
+
+D265 recorded that showing an add-on on the demo means *building a wasm module,
+shipping it into the demo image and pointing `LINKCTRL_ADDONS_DIR` at it* — a
+decision about what the demo is, deferred to this milestone. Taken as described.
+
+`examples/addons/pageviews` is a first-party `redirect-observe` sample: it counts
+redirects out of band into the schema the host gives it, holds three permissions
+it actually uses, and declares one setting of each of the four types. The image's
+build stage compiles it, computes its digest and substitutes it into the manifest
+— a digest checked into the repository would refuse the add-on the first time the
+toolchain changed a byte, and that refusal is the mechanism working.
+
+**Every image carries it and only the demo turns it on.** `LINKCTRL_ADDONS_DIR` is
+what decides whether an instance has an add-on host at all, so an operator who
+runs no add-ons pays three megabytes of image for a directory they never look at,
+and the demo is not a special build.
+
+**The demo's copy cannot be uninstalled through the page, and that is correct.**
+The container's filesystem is read-only, so install and removal answer `503`
+saying so — the documented behaviour of a `:ro` add-ons mount, and the right
+posture for an instance strangers can sign into.
+
+**What the coverage test asserts is the settings, not the add-on.** An add-on is
+files, so there is no row saying one is loaded and inventing one would be the
+fabrication `demoCoverage`'s own header refuses. Three of the sample's four
+settings are seeded and the secret is deliberately left unset, because *not set*
+is the state a secret field has to render and the demo is where somebody looks at
+it. The row is bounded above as well as below: a fourth would mean somebody seeded
+a credential-shaped value into a demo database.
+
+### D351 — the count in the removal button is script, and nothing else on the page is
+
+The owner's confirmed wireframe reads *Remove selected (n)*, and `n` changes
+without a request. Everything else the manager does works with scripting off:
+select mode is a page state, and both confirmations are pages rather than
+`<dialog>` elements — the one irreversible operation here must not be the only one
+in the product that needs a feature the rest does not.
+
+So `static/js/addon-select.js` is a second hand-written script beside
+`qr-size.js`, served from the same directory under `script-src 'self'`, with no
+Node, no CDN, no build step and no `unsafe-` waiver. It reads the button's own
+words off the DOM rather than repeating them, and with the file blocked the label
+stands as the template wrote it and the confirmation says how many. The browser
+spec asserts the enhanced form, because that is the one the wireframe drew.
+
+### D352 — per-module performance is read off the registry, not kept twice
+
+m68.md requires per-module p99 and kill counts **as values on the page**, which is
+the checkable form of the owner's *attribution without Prometheus*. The
+alternative was a second set of counters beside the Prometheus ones, and it was
+refused for the reason a second store of anything is: the page and the scrape
+would be two answers to one question, and the first time they disagreed the
+disagreement would be the thing to debug.
+
+So the page gathers the registry and interpolates the quantile the way
+`histogram_quantile` does — reproduced rather than approximated differently, so
+the figure on the page and the figure on a dashboard agree. Three consequences are
+stated rather than discovered: it costs one `Gather()` per render, on an
+authenticated page with a 250 ms budget and never on the redirect path; the number
+is **cumulative since this process started** rather than a rate, because there is
+no series here to take a rate of; and a class with no observations is **absent**
+rather than zero, which is what makes m68.md's *modules holding no redirect grant
+show no redirect figures rather than zeros* expressible at all.
+## 2026-08-25 — M68, three answers the rejection needed
+
+**D353–D355.** M68's first attempt was rejected on eleven findings. Eight were
+edits — a comment corrected, a refusal worded, a path renamed under a rule
+[D348](#d348--the-manager-is-at-instanceaddons-not-at-addons) already stated.
+Three were choices, and they are here because each decides something a later
+reader could otherwise reasonably do differently.
+
+### D353 — a menu item is drawn from the wiring, not from the permission
+
+`addons.manage` is the instance principal's and is conferred unconditionally
+([D341](#d341--addonsmanage-is-the-principals-and-is-non-delegable-in-d18s-widest-form)).
+The manager's routes are registered only where `LINKCTRL_ADDONS_DIR` is set, which
+is the demo and nothing else. Gated on the permission alone, the nav entry was
+drawn on every instance that runs no add-ons and led to a 404 on all of them — and
+the router's own comment said it could not, while the browser spec documented the
+404 as the expected state without drawing the consequence.
+
+Three fixes were available. Registering the routes unconditionally and having them
+explain themselves would make `/instance/addons` answer on an instance with no
+host, which contradicts m60.md's *no route is mounted* in the direction that
+matters — an operator who installed nothing would find a page about add-ons.
+Conferring `addons.manage` only where a host exists would make an authorization
+grant depend on a directory, which is the wrong axis: what a person may do must
+not change because a volume was unmounted. What is built is the third: **the shell
+carries `AddonManager`, set from the same field the router registers from, and the
+template reads it beside the permission.**
+
+The rule it settles is general, and it is the one the dispute queue's reviewer
+section already followed without saying so: *a permission says what a person may
+do; a field says what this process can serve. A menu item needs both.* Asserted in
+both directions, because a gate that draws nothing anywhere passes half of it —
+`TestTheAddOnEntryNeedsAHostAndNotOnlyThePermission` in internal/ui, and the
+browser spec now asserts the absence in exactly the state that used to 404.
+
+### D354 — a stored secret's secrecy is a property of the column
+
+m68.md states the promise absolutely: *Secrets get the `Secret` treatment and are
+never echoed back into the form.* It rested on the manifest currently installed —
+the render withheld a value when the loaded manifest declared the setting a
+`secret` — and
+[M67](#2026-08-24--m67-an-add-on-arrives-and-leaves-and-the-directory-is-still-the-only-store)
+is what makes that reachable rather than theoretical: remove-then-install is the
+**documented** way to replace an add-on, so a successor declaring the same setting
+name as `text` had its predecessor's credential rendered into the form and
+returned by the API.
+
+Nothing is escalated by it — reaching either costs `addons.manage`, and the
+principal could always read the table — so a refusal would have been the wrong
+shape. What is built is a `secret` boolean on `addon_settings`, written from the
+manifest in hand at save time and read in the **withholding** direction only: true
+withholds whatever the manifest now says, and a manifest declaring a secret
+withholds whatever the column says.
+
+It changes the rendered *type* and not only the value, and that is load-bearing. A
+withheld value in a text box is a blank text box, blank in a text box means
+*unset*, and the next save would delete a credential nobody asked to remove. As a
+secret the same blank means *keep what is stored*. A value stops being a
+credential when somebody clears it or types over it, which is a deliberate act
+rather than a side effect — the same standard the clear-checkbox already sets.
+
+The alternative — refusing to load a replacement that re-types a stored setting —
+was declined for the reason the paragraph above gives: it would make an add-on's
+load depend on rows an operator typed years earlier, and the failure would arrive
+at boot with a `required`-class module behind it.
+
+### D355 — a save drains the add-on's instance pool
+
+The page says *the add-on reads the new values on its next invocation*, and
+`docs/usage.md`, `docs/configuration.md` and `docs/addon-abi.md` repeat it.
+[D347](#d347--an-add-ons-settings-have-two-sources-and-the-environment-wins)'s
+holder makes it true for a module that calls `config_get` per invocation: the map
+sits behind one atomic pointer and a save swaps it, so an instance built an hour
+ago reads the new value the moment it asks.
+
+It is not true for a module that read the value **once**. Package initialization
+runs during instantiation, and M66.5 made the redirect path keep instances rather
+than destroy them, so a module that cached a setting at start-up went on using the
+old one until its pool entry aged out — `DefaultPoolTTL`, one minute. Caching a
+configured value at start-up is what a well-written add-on does; the sentence was
+wrong for the ordinary case rather than for a pathological one.
+
+So `SaveSettings` drains that add-on's pools, the way `Remove` does and for the
+same reason: a pool is a cache, and a cache with no invalidation is where the
+defect lives. It costs the next redirect one instantiation, bounded by
+`LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, on an act an operator performs by hand. The
+routed and page paths need nothing — they instantiate per request already.
+
+The alternative was to weaken the sentence to *on its next load*, and it was
+declined because the sentence is the product's answer to *why is nothing
+happening*: an operator who saves a value and sees no change has no next step that
+does not involve a restart, which is the thing this whole page exists to avoid.
+
+`TestASavedSettingReachesAnInstanceTheHostAlreadyBuilt` drives it on a live host —
+one inline invocation to fill the pool, a save, a second invocation — and reads
+back both what the guest cached and what it reads now. Without the drain it
+reports `cached=30 live=7`, which is the defect stated in one line.
+
+## 2026-08-25 — M68, the ABI policy decides its own case, and the drain reaches the busy instance
+
+**D356–D358.** M68's second attempt was rejected on ten findings. Seven were
+edits — four documents saying *held* where the page renders *declared*, four
+saying `503` where the page redirects, three claims that one record was the only
+one, an endpoint list the CHANGELOG owed. Three were choices.
+
+### D356 — an answer that gains a source is additive, and M61's promise is what made this a defect
+
+[M61](phase-details/m61.md) shipped a deprecation policy that declared itself
+self-repairing: *if it cannot decide a real case that arises in this phase, that
+is a policy defect to fix in this phase*, and `docs/addon-abi.md` repeats it —
+*it is fixed here in the same change that raised it*. M68 raised one.
+
+`config_get` is live and generation 1. It answered from the manifest's default
+and from `LINKCTRL_ADDON_<NAME>_<SETTING>`; it now answers from a value an
+operator saved in the manager as well, and a running host swaps that value under
+the instance. Walking the table decided nothing: nothing narrows, no parameter
+moves, no status changes for a case that already had one, and *changing a doc
+comment* is the row the diff's edit lands on while the behaviour is what moved.
+The classification went unrecorded and `abi.Version` stayed at `0.1.2`.
+
+**The case is additive**, and the table now has a row saying so: *adding a source
+an answer may come from*, with the parameters, the statuses and the meaning of
+every existing source unchanged. A module cannot tell one source from another — it
+asked for a key and got a string — so widening the set is invisible to it in the
+way an added record field is.
+
+What a module *can* tell is that the answer changed under it, and that is what the
+subsection fixes rather than leaving to be discovered: **a value is read afresh for
+each invocation and is stable within one.** Going the other way — narrowing to
+*fixed for the life of the process* — is breaking under *narrowing what a function
+will do with what it accepts*, which is the row that already existed.
+
+So the patch moves and the generation does not: `0.1.3`, on the same arithmetic
+M65 and M66 used. It is the first patch here that adds nothing importable, so
+unlike those two it cannot fail a load — a module built against `0.1.3` runs on a
+`0.1.2` host. The alternative considered was *no version moves at all*, on the
+observation that this ABI has never appeared in a release. It was declined
+because the two existing carve-outs earn their exemption from a **published**
+promise being absent for one named thing — a signature nothing implements, a cost
+nothing has offered — and generalising that to *anything may change while the
+subsystem is unreleased* would empty the table for the whole phase. The policy is
+worth more than the one patch bump it costs.
+
+### D357 — the drain reaches an instance that is in flight
+
+[D355](#d355--a-save-drains-the-add-ons-instance-pool) is right about why the
+drain exists and wrong about what it reached. `p.drain()` empties the idle set,
+and the entry an invocation is holding is by definition not in it: `releaseInstance`
+put it back a moment later, so a module that cached a setting at package
+initialization went on serving the old value for up to `DefaultPoolTTL` — the exact
+case the drain was added for. Worse, it is the case that fails **under traffic**,
+because an add-on with traffic has its instances out.
+
+So a pool carries a generation, `drain()` increments it, and an entry is stamped
+with the generation it was made in. `put` refuses an entry from an older one and
+the caller closes it, which is what it already does with an entry the pool is full
+for. Nothing new is allocated and no lock is added — the counter lives under the
+mutex `put` and `drain` already take.
+
+The alternative was to weaken the sentence to name the bound: *within a minute*.
+Declined for the reason D355 declined *on its next load* — the page exists so that
+an operator who saved a value has a next step, and *wait a minute and try again*
+is not one.
+
+It repairs `Remove` for free, and that matters more than the settings case it was
+written for: an uninstalled add-on's in-flight instance was returned to a pool
+nothing would ever drain again, and only the `p == nil` branch — the pool being
+gone from the *new* set — was stopping it from being reused.
+`TestDrainingReachesAnInstanceThatIsInFlight` drives acquire, drain, release
+rather than a racing redirect, because the state being asserted is *an entry
+exists and is not resting*.
+
+### D358 — the demo's coverage row asserts that the module ran
+
+[D350](#2026-08-25--m68-an-operator-meets-the-add-on-host-and-one-page-is-where)
+concluded that no honest `demoFeature` row could assert the demo's add-on, because
+an add-on is files rather than rows and seeding an audit record of an install that
+did not happen would be fabricating evidence. The first half stands. The
+conclusion did not: the row it settled for counted `addon_settings`, which `lctl
+demo` writes unconditionally with no add-on host in the process, so it passed on a
+demo whose module had stopped loading and whose manager page was an empty table.
+
+**There is a row nobody can write by hand.** `addon_pageviews` is created by the
+host at load through M63's `EnsureAddonSchema`, and `views` inside it by the
+module's own package initialization through `storage_exec`. Asserting that table
+asserts that the manifest parsed, the digest matched, the declared grants were
+honoured, wazero compiled and instantiated the module, and the guest's first host
+call reached Postgres. It is the first row in that list whose subject is code
+executing rather than data existing.
+
+Making it checkable meant giving the coverage test an add-on host:
+`loadTheDemosAddon` builds `examples/addons/pageviews` with the Dockerfile's own
+command, substitutes the digest the way the image's build stage does, and opens a
+real host over the test database. The build is cached across the two tests that
+need it and costs a few seconds.
+
+What this replaces was a backstop that could not have worked. The coverage file
+named `make verify-ui`, which targets the test instance — where `LINKCTRL_ADDONS_DIR`
+is unset, so both add-on specs skip. Nothing in any automated gate would have
+noticed the demo's add-on stopping. `make test-integration` notices it now.
+
+
+## 2026-08-25 — M68, what a name inherits, and the harness that had never run
+
+**D359–D361.** M68's fourth attempt was rejected on six findings. Two were the
+gates in the milestone's own inheritance table not having fired at all — the
+redirect-path measurement, and the browser harness the bullet names by hand.
+Three were choices, and they are here. The rest were edits.
+
+### D359 — the secret's bound is on the page, not on the module
+
+[D354](#d354--a-stored-secrets-secrecy-is-a-property-of-the-column) built a
+`secret` column on `addon_settings` and said it is *"read in the withholding
+direction only: true withholds whatever the manifest now says"*. Read without a
+scope that is a claim about the credential. It is not one, and two documents
+repeated it as though it were: `CHANGELOG.md` said a replacement add-on
+*"cannot read back its predecessor's credential by re-declaring the setting as
+plain text"*, and `docs/SECURITY.md` stated the same as a bound on the value
+rather than on the form — two lines after saying, correctly, that *"the value
+leaves the database only for `config_get`"*.
+
+`mergeSettings` returns the stored row's value for any **declared** name and
+never consults `row.Secret`; that map is what feeds `config_get`. So the column
+withholds from `settingViews` — the form and the API — and a successor installed
+under the same name, re-declaring `client_secret` as `text`, reads the credential
+from inside the module.
+
+**The documents are what changed, and withholding it at the ABI was declined on
+the merits rather than on cost.** Doing that would make the page say *set* while
+the module reads nothing: a misconfiguration with no surface naming it, arriving
+at whatever the add-on does next rather than at the operator who could act on it.
+That is the failure mode D354 already declined the refuse-to-load alternative
+over, one step quieter. And nothing is escalated either way — reaching the value
+costs `addons.manage`, which is non-delegable, and the principal installing a
+module under a used name can read the table.
+
+So the bound is stated as what it is. A **person** cannot read the value off a
+page they can reach; the **code they chose to install** can. `docs/SECURITY.md`
+now says so in those terms and names it as the second by-name inheritance on that
+page, beside the identity mappings.
+
+### D360 — a purge leaves four things, and the fourth is counted rather than deleted
+
+`addon_settings` is keyed on the add-on's **name** (04800), the way
+`addon_identity_links` is (04500). A removal deletes no row from it,
+`PurgeAddonSchema` is `DROP SCHEMA … CASCADE` and nothing else, and
+`Host.SaveSettings` refuses a name that is not loaded — so a removed add-on's
+saved values are unreachable and undeletable from every surface this product has,
+and are inherited by whatever is installed under the name next. The migration's
+own comment knew this. The **point of decision** did not: the purge confirmation
+said *"Three things are not deleted"* over a tree that left four, and
+`docs/SECURITY.md` asserted that the confirmation says all three *"because a
+delete that quietly leaves things is worse than one that does not"* — which is
+the right principle stating the wrong count.
+
+`Orphan.StoredSettings` counts the rows, beside the identity links and for the
+same reason, and the confirmation, the API row, the server log and the audit
+metadata all carry it. Four documents say a purge deletes none of them and name
+the `DELETE` that does, which is `docs/operations.md`'s by-hand block and now has
+a fourth statement in it.
+
+**Deleting them was not taken, and it is [F332](deferred-findings.md).** It is a
+choice about *when*, with a real cost on every branch: on removal loses what an
+operator typed for an add-on they are about to re-install, which is the case
+04800 keeps the rows for; on purge makes one act mean two things; and a delete of
+its own is a second destructive control on a page that already has one. That is
+scheduling, and scheduling is the owner's — the same disposition
+[F330](deferred-findings.md) got for the identical shape one milestone ago.
+
+### D361 — the test instance runs the sample add-on, so the harness runs at all
+
+m68.md names the browser harness as what asserts *"same column template in both
+states, so the table does not shift"*, and no Go test can make that assertion: it
+is a laid-out column's geometry in two states, and a matched pair of hard-coded
+widths would pass every template scan in this repository. The spec was written
+and had **never executed**. `LINKCTRL_ADDONS_DIR` was unset on the test instance,
+so the manager's routes were not mounted, so both add-on specs skipped on a 404 —
+and a spec that skips is the same string as a pass.
+
+Three ways out were available: a spec that hosts its own instance, a fixture
+add-on the harness installs through the API, or configuring the test instance.
+The third is taken, because the image already carries the sample add-on at
+`/addons` and the demo already runs it from there: one line in
+`scripts/instance.sh` puts the test instance in the same configuration the demo
+has been in since this milestone started, and both specs then pass rather than
+skip. The container is read-only, so installing and removing are refused there as
+they are on the demo — which costs these specs nothing, because what they drive
+is the list, select-mode and the two confirmations, none of which writes.
+
+Two costs, both stated rather than discovered.
+
+**The core SLO column needs the line gone.** `docs/slo.md` measures *core, no
+add-on* on an ordinary instance, and an instance running an observe-class module
+is not one. Taking the line out and recreating the container is the same shape
+the add-on columns already use, in the other direction, and it is written into
+`scripts/instance.sh` beside the line and into `docs/slo.md` beside the recipe.
+
+**And `lctl` runs on the host, where `/addons` does not exist.** `config.Load`
+refuses a directory it cannot stat, so sourcing the instance file unedited made
+`make seed`, `make migrate-up` and every other host-side target exit on a
+configuration error. `DEV_ENV` empties the variable, for the reason it already
+overrides the DSN: the value in that file describes the container, and lctl has
+no add-on host and wants none.
+
+### The inherited redirect-path measurement, re-run for the fifth attempt
+
+Not a decision, and here because the rejection was right that it had not been
+run. *Touching the redirect path → re-run the k6 measurement* is one of the
+fourteen rules Phase 4 inherits, and M68 touches it: `acquireInstance` takes the
+pool mutex through `generation()` on every cold acquire, `releaseInstance` gains
+a branch, and `config_get`'s map read became an atomic pointer load through
+`settingValues.get`. Every one of those is on the inline path.
+
+It was run in [M66.5](../slo.md#re-measured-for-m665-2026-08-24)'s three-column
+shape, on an image built from this attempt's own tree. The record is
+[docs/slo.md](../slo.md#re-measured-for-m68-2026-08-25), with what it did not
+measure.

@@ -81,6 +81,11 @@ type Web struct {
 	// all — and it leaves the `/addons/` pattern unregistered, which is what keeps
 	// m60.md's "no route is mounted" true for every operator who installs none.
 	Addons AddonRouter
+	// AddonAdmin backs the Add-on manager (M68) — the same interface the JSON API
+	// holds, so the page and the API cannot diverge. Nil leaves the manager's
+	// pages unregistered and its nav entry undrawn, which is the state of every
+	// instance that configured no add-ons directory.
+	AddonAdmin AddonManager
 }
 
 // shell is what the layout template needs on every page.
@@ -123,6 +128,18 @@ type shell struct {
 	// render — the same trade the unread badge makes — because a switcher that
 	// only appears after a page refresh is worse than the query.
 	Workspaces []auth.Workspace
+	// AddonManager is whether this instance has an add-on host at all, which is
+	// what [Web.AddonAdmin] being non-nil says. The nav entry is drawn from it
+	// **and** from `addons.manage`, and it needs both: the permission is conferred
+	// on the instance principal unconditionally (internal/auth/instance.go), while
+	// the manager's routes are registered only where an add-ons directory is
+	// configured — so a permission check alone drew a menu item that 404s on every
+	// instance that runs no add-ons, which is nearly all of them.
+	//
+	// A field rather than a second permission, because what it reports is how the
+	// process was wired rather than what the reader may do. Same shape the dispute
+	// queue's reviewer section uses for [Web.Instance].
+	AddonManager bool
 	// HasOrganization is false for an account that belongs to nothing, which
 	// D36 made a state a signed-in person can legitimately be in. The header
 	// draws its destinations from it: every one of them leads somewhere that
@@ -161,6 +178,7 @@ func (h *Web) shell(r *http.Request, title, nav string) shell {
 		Identity:        IdentityFrom(r.Context()),
 		Theme:           themeFrom(r),
 		Path:            switchTarget(r.URL.Path),
+		AddonManager:    h.AddonAdmin != nil,
 		HasOrganization: IdentityFrom(r.Context()).HasOrganization(),
 	}
 	// One notification query per page render, served by the partial index the

@@ -508,6 +508,34 @@ func statusBadge(status any) string {
 	}
 }
 
+// addonBadge maps an add-on's declaration class or failure class to its badge
+// classes (M68).
+//
+// One function for both columns rather than two, because the vocabularies are
+// disjoint — `none`/`redirect-observe`/`redirect-inline` against
+// `required`/`degrade` — and a second function would be a second place for the
+// shared base string to drift. The strings live in Go for the reason
+// [statusBadge]'s do, and input.css already names this file as a Tailwind
+// @source.
+//
+// The colour carries the same judgement the columns exist to convey: an add-on on
+// the redirect path costs a visitor latency, so `redirect-inline` is the warning
+// tone and `redirect-observe` the neutral-but-noticed one; a `required` add-on can
+// stop this instance from starting, so it is the danger tone. Nothing here is
+// decoration — an operator scanning the list is looking for exactly these two.
+func addonBadge(class any) string {
+	base := "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset "
+	switch fmt.Sprint(class) {
+	case "redirect-inline", "required":
+		return base + "bg-warn-soft text-warn-ink ring-warn-line"
+	case "redirect-observe":
+		return base + "bg-accent-soft text-accent-ink ring-accent-line"
+	default:
+		// `none` and `degrade`, which are the ordinary cases and read as such.
+		return base + "bg-sunken text-muted ring-line-strong"
+	}
+}
+
 // dict builds a map for passing several values to a partial, since a template
 // invocation takes exactly one argument.
 func dict(pairs ...any) (map[string]any, error) {
@@ -539,6 +567,7 @@ func (r *Renderer) funcs() template.FuncMap {
 		"dayShort":    dayShort,
 		"truncate":    truncate,
 		"statusBadge": statusBadge,
+		"addonBadge":  addonBadge,
 		"dict":        dict,
 		"add":         add,
 		"mul":         mul,

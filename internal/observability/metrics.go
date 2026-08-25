@@ -2,6 +2,7 @@ package observability
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -877,4 +878,261 @@ func (m *Metrics) SetAddonLargeObjects(addon string, n int64) {
 		return
 	}
 	m.addonLargeObjects.WithLabelValues(addon).Set(float64(n))
+}
+
+// --- add-on performance, read back --------------------------------------------
+
+// AddonRedirectStats is what one add-on cost the redirect path, per class.
+//
+// The Add-on manager (M68) renders these on the page itself rather than linking to
+// `/metrics`, which is the checkable form of the owner's "attribution without
+// Prometheus": an operator asking *which add-on is slowing my redirects* gets an
+// answer from the product they are already looking at, on an instance that scrapes
+// nothing.
+type AddonRedirectStats struct {
+	// Class is `inline` or `observe` — addon.ClassInline and ClassObserve, spelled
+	// there rather than here.
+	Class string `json:"class"`
+	// Count is how many invocations are behind the estimate. Rendered beside it,
+	// because a p99 over four observations is a number with no meaning and the page
+	// must not present one as though it had.
+	Count uint64 `json:"count"`
+	// P99 is the estimate read off the histogram's buckets.
+	//
+	// A Duration in Go and **seconds in JSON**, which is why the two fields below
+	// exist rather than a tag on this one: a Duration marshals as a nanosecond
+	// integer, and the series this is read from is `_seconds`. A client comparing
+	// this answer against a scrape should not have to divide.
+	P99 time.Duration `json:"-"`
+	// Sum is the total time observed, so a mean is available without a second
+	// gather.
+	Sum time.Duration `json:"-"`
+
+	// P99Seconds and SumSeconds are the two above as the wire carries them, filled
+	// in beside them so that nothing has to convert at the call site and the two
+	// cannot come to disagree.
+	P99Seconds float64 `json:"p99_seconds"`
+	SumSeconds float64 `json:"sum_seconds"`
+}
+
+// AddonKills is how many invocations of one add-on the host stopped waiting for,
+// split by the step whose bound they overran (F326's split — the two are different
+// faults with different owners).
+type AddonKills struct {
+	Instantiate uint64 `json:"instantiate"`
+	Call        uint64 `json:"call"`
+}
+
+// Total is what the manager's list column shows: one number, because the list has
+// one column and the split belongs on the detail page.
+func (k AddonKills) Total() uint64 { return k.Instantiate + k.Call }
+
+// AddonPerformance is one add-on's redirect-path record.
+type AddonPerformance struct {
+	// Classes is one entry per class this add-on has actually been observed in,
+	// ordered inline-then-observe. **A class with no observations is absent rather
+	// than zero**, which is what makes m68.md's "modules holding no redirect grant
+	// show no redirect figures rather than zeros" expressible: an add-on that never
+	// ran on the redirect path has an empty slice, and the page draws a dash.
+	Classes []AddonRedirectStats `json:"classes,omitempty"`
+	Kills   AddonKills           `json:"kills"`
+}
+
+// Observed reports whether this add-on has any redirect-path record at all.
+func (p AddonPerformance) Observed() bool {
+	return len(p.Classes) > 0 || p.Kills.Total() > 0
+}
+
+// AddonPerformance reads the two per-module series M66 publishes and returns them
+// by add-on name.
+//
+// # Why this reads the registry instead of keeping its own numbers
+//
+// The alternative is a second set of counters written beside the Prometheus ones,
+// and it was rejected for the reason a second store of anything is: the page and
+// the scrape would be two answers to one question, and the first time they
+// disagreed the disagreement would be the thing an operator had to debug. What is
+// published *is* the record; this asks it.
+//
+// The cost is a `Gather()` per page render — every collector in the registry,
+// including the Go runtime's — which is a few hundred microseconds and is on an
+// authenticated dashboard page with a 250 ms budget, not on the redirect path. The
+// manager is the only caller.
+//
+// # The p99 is the same estimate `histogram_quantile` makes, and it is an estimate
+//
+// A Prometheus histogram keeps bucket counts, not observations, so the quantile is
+// interpolated linearly inside whichever bucket the rank falls in — the same
+// arithmetic PromQL does, reproduced here rather than approximated differently, so
+// the number on the page and the number on a dashboard agree. Two consequences are
+// stated rather than left to be discovered: an estimate inside the last finite
+// bucket cannot exceed that bucket's boundary, and one whose rank lands in `+Inf`
+// saturates at that boundary, because there is no upper bound to interpolate
+// towards.
+//
+// **A saturated estimate is not marked as one.** It is returned as an ordinary
+// Duration and `shortDuration` prints it as an ordinary figure, so a p99 in the
+// `+Inf` bucket reads as exactly the last boundary — 1s, `redirectBuckets` — and
+// understates whatever it actually was. What keeps that far away in a shipped
+// configuration is the deadlines rather than this function: a successful
+// invocation of either class spends at most `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`
+// plus `LINKCTRL_ADDON_INLINE_DEADLINE` under a bound, 525 ms together by default,
+// and a killed one is not observed here at all. An operator who raises either past
+// a second reaches the last bucket outright, and F331 carries what the page should
+// say when they do.
+//
+// **Bounded is not the same as all of it**, and the difference is stated rather
+// than rounded away: the observed window closes after the instance is released,
+// and releasing one copies the guest's linear memory back over itself — up to
+// `maxGuestMemoryPages`, on this host's own CPU, under no deadline at all. It is
+// microseconds in practice and it is a memcpy rather than guest execution, so
+// nothing about an add-on's own code can stretch it; but a machine under enough
+// pressure to make it matter is a machine where the two deadlines above are not
+// the whole story either. The claim this comment makes is therefore about the
+// deadlines and not about the histogram's window, which is wider than they are.
+//
+// It is also **cumulative since this process started**, not a rate over a window:
+// there is no time series here to take a rate of. An add-on that was slow an hour
+// ago and is fine now still reads slow, and the manager says as much beside the
+// figure rather than implying a live reading.
+func (m *Metrics) AddonPerformance() map[string]AddonPerformance {
+	if m == nil {
+		return nil
+	}
+	families, err := m.registry.Gather()
+	if err != nil && families == nil {
+		// A partial gather still carries what it managed to collect, and a page that
+		// refused to render because one collector failed would be the wrong trade —
+		// the same reasoning the shell's badge query uses.
+		return nil
+	}
+	out := map[string]AddonPerformance{}
+	for _, f := range families {
+		switch f.GetName() {
+		case "linkctrl_addon_redirect_duration_seconds":
+			for _, metric := range f.GetMetric() {
+				name, class := labelOf(metric.GetLabel(), "addon"), labelOf(metric.GetLabel(), "class")
+				h := metric.GetHistogram()
+				if name == "" || h == nil || h.GetSampleCount() == 0 {
+					continue
+				}
+				p := out[name]
+				p99 := bucketQuantile(h.GetSampleCount(), h.GetBucket(), 0.99)
+				p.Classes = append(p.Classes, AddonRedirectStats{
+					Class:      class,
+					Count:      h.GetSampleCount(),
+					P99:        seconds(p99),
+					Sum:        seconds(h.GetSampleSum()),
+					P99Seconds: p99,
+					SumSeconds: h.GetSampleSum(),
+				})
+				out[name] = p
+			}
+		case "linkctrl_addon_redirect_kills_total":
+			for _, metric := range f.GetMetric() {
+				name, step := labelOf(metric.GetLabel(), "addon"), labelOf(metric.GetLabel(), "step")
+				n := uint64(metric.GetCounter().GetValue())
+				if name == "" || n == 0 {
+					continue
+				}
+				p := out[name]
+				switch step {
+				case "instantiate":
+					p.Kills.Instantiate += n
+				case "call":
+					p.Kills.Call += n
+				}
+				out[name] = p
+			}
+		}
+	}
+	// Ordered so a page does not reorder its own rows between renders. `inline`
+	// before `observe`, which is the order they cost a visitor in.
+	for name, p := range out {
+		slices.SortFunc(p.Classes, func(a, b AddonRedirectStats) int {
+			return strings.Compare(classRank(a.Class), classRank(b.Class))
+		})
+		out[name] = p
+	}
+	return out
+}
+
+// classRank puts inline first and observe second, whatever they are called.
+func classRank(class string) string {
+	if class == "inline" {
+		return "0" + class
+	}
+	return "1" + class
+}
+
+// labelOf reads one label off a gathered metric.
+//
+// Generic over the label pair rather than taking `[]*dto.LabelPair`, and the
+// three functions below take the same shape for the same reason: naming a
+// `client_model` type in a signature makes it a **direct** module dependency,
+// and two guards in this repository assert that the direct set did not grow for
+// a milestone that had no reason to grow it (M49's and M53's). The package is
+// already in the graph — client_golang requires it — so what is avoided is a
+// go.mod line claiming this milestone added a module, not a download. The
+// constraint is what `Gather` actually hands back, so it is not a loosening.
+func labelOf[L interface {
+	GetName() string
+	GetValue() string
+}](labels []L, name string) string {
+	for _, l := range labels {
+		if l.GetName() == name {
+			return l.GetValue()
+		}
+	}
+	return ""
+}
+
+// seconds turns a float of seconds into a Duration without going through a string.
+func seconds(f float64) time.Duration {
+	if f <= 0 {
+		return 0
+	}
+	return time.Duration(f * float64(time.Second))
+}
+
+// bucketQuantile is `histogram_quantile` over one gathered histogram.
+//
+// Prometheus's own algorithm, and deliberately not a simplification of it: find
+// the bucket the rank falls in, then interpolate linearly between that bucket's
+// lower and upper boundaries by how far into the bucket's own count the rank
+// sits. The three edge cases it inherits are the three that matter here — a rank
+// in the first bucket interpolates from zero rather than from negative infinity, a
+// rank in `+Inf` returns the last finite boundary, and an empty histogram returns
+// zero.
+//
+// Takes the count and the buckets rather than the histogram, on [labelOf]'s
+// reasoning about the dependency set.
+func bucketQuantile[B interface {
+	GetCumulativeCount() uint64
+	GetUpperBound() float64
+}](total uint64, buckets []B, q float64) float64 {
+	if total == 0 {
+		return 0
+	}
+	rank := q * float64(total)
+
+	var prevCount uint64
+	var prevBound float64
+	for _, b := range buckets {
+		if float64(b.GetCumulativeCount()) >= rank {
+			upper := b.GetUpperBound()
+			inBucket := b.GetCumulativeCount() - prevCount
+			if inBucket == 0 {
+				return upper
+			}
+			return prevBound + (upper-prevBound)*((rank-float64(prevCount))/float64(inBucket))
+		}
+		prevCount, prevBound = b.GetCumulativeCount(), b.GetUpperBound()
+	}
+	// The rank is in the +Inf bucket: everything finite is below it and there is no
+	// upper bound to interpolate towards. The last finite boundary is the most this
+	// data supports saying, and it is returned unmarked — the caller cannot tell
+	// this answer from an estimate that genuinely landed there. See the saturation
+	// paragraph on AddonPerformance, and F331.
+	return prevBound
 }
