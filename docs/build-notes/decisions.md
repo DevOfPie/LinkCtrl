@@ -479,7 +479,7 @@ file. Append a row when you append an entry.
 | [M67, the caller's context stops deciding whether a removal finished](#2026-08-24--m67-the-callers-context-stops-deciding-whether-a-removal-finished) | D344: a lifecycle act completes on a context the caller cannot cancel — why `removeGrace` makes removal the one audit call site in this product that detaches, and what wazero does and does not do with a cancelled close. D345: an add-on install spends the QR logo's upload bucket rather than a fourth one, the argument against it, and the three documents that were made false by nobody writing any of this down |
 | [M67, an install reads what the directory claims, not what is running](#2026-08-24--m67-an-install-reads-what-the-directory-claims-not-what-is-running) | D346: the runtime name-collision check runs over the set boot decides from rather than over the running set — the sequence by which the install API could arrange a start that stops, why directory entries are the wrong wider set and the loaded set the wrong narrower one, what the union with the loaded set covers, and what an operator is now refused |
 | [M68, an operator meets the add-on host, and one page is where](#2026-08-25--m68-an-operator-meets-the-add-on-host-and-one-page-is-where) | D347: a declared setting has two sources and the environment wins — the update-check precedent it follows, why a pinned setting is refused rather than overridden, why the values are host-side rather than in the add-on's own schema, and what a save does and does not reach. D348: the manager is at `/instance/addons` because `/addons/` belongs to add-ons, and the orphan path is unclaimable by grammar rather than by a reserved list. D349: a purge is the schema drop and nothing else — what survives it, why an installed add-on's data is a conflict, and why a typo is a 404. **D349 said three survivors and D360 corrects it to four**, `addon_settings` being the fourth; the entry stands as written because this log is append-only, and this row summarises the pair rather than the older half. D350: D265's deferred answer taken — the demo runs a first-party sample built into the image, what the coverage row can honestly assert, and what a read-only mount costs it. D351: one script for one count, and why nothing else on the page needs one. D352: per-module latency is read back off the registry rather than counted twice |
-| [M69's subject does not exist, and who builds it](#2026-08-25--m69s-subject-does-not-exist-and-who-builds-it) | D362: the OIDC add-on is built now, outside the phase loop, by the actor that built the foundation — why §4 stopped the run, the two declined alternatives, the conflict of interest named rather than mitigated, and owed-work #4's MIT licence delegated as an act rather than as a choice |
+| [M69's subject does not exist, and who builds it](#2026-08-25--m69s-subject-does-not-exist-and-who-builds-it) | D362: the OIDC add-on is built now, outside the phase loop, by the actor that built the foundation — why §4 stopped the run, the two declined alternatives, the conflict of interest named rather than mitigated, and owed-work #4's MIT licence delegated as an act rather than as a choice. D363: M69's *tagged release* bullet amended to *immutable version*, because the SDK has never been tagged and the first tag carrying it is the one M70 cuts after this milestone |
 | [M68, three answers the rejection needed](#2026-08-25--m68-three-answers-the-rejection-needed) | D353: a menu item is drawn from the wiring as well as from the permission — the nav entry that 404s on every instance without an add-ons directory, the two fixes declined, and the general rule it settles. D354: a stored secret's secrecy is a column rather than a manifest's claim, why it changes the rendered type and not only the value, and why a refusal was the wrong shape. D355: a save drains the add-on's instance pool, because M66.5's kept instances made *on its next invocation* false for up to a pool TTL for the module that caches a value at start-up |
 | [M68, the ABI policy decides its own case, and the drain reaches the busy instance](#2026-08-25--m68-the-abi-policy-decides-its-own-case-and-the-drain-reaches-the-busy-instance) | D356: M61's self-repair clause spent — `config_get` gains a source, the table row that decides it, why it is additive and why the patch moves to 0.1.3. D357: the drain reaches an instance that is **in flight**, which corrects [D355](#d355--a-save-drains-the-add-ons-instance-pool): emptying the idle set reaches the resting half, and an add-on under traffic has its instances out. D358: the demo's coverage row asserts the module *ran*, because `addon_pageviews.views` is a fact no seeder can write |
 | [M68, what a name inherits, and the harness that had never run](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) | D359: a stored secret's withholding bounds the page and not the module, why hiding it from `config_get` was declined, and what the documents now say instead. D360: `addon_settings` is the fourth thing a purge leaves, counted at the point of decision rather than deleted, and F332 is the half that is behaviour. D361: the test instance runs the sample add-on so the browser harness executes at all, and the two costs of that — the core SLO column, and `lctl` on the host. Plus the inherited redirect-path measurement, re-run |
@@ -39209,3 +39209,43 @@ owns the seam, or deferred rows — and an ABI change it forces before 1.0 is a
 minor bump under M61's policy. That is m69.md's own bullet and this entry does
 not widen it: work in the other repository does not become work here by having
 been discovered there.
+
+### D363 — M69's *tagged release* bullet, amended to *immutable version*
+
+Found at [step 1](phase-loop.md#1-validate) while writing the add-on's `go.mod`.
+
+**The bullet as it stood** (`m69.md`): *"**The add-on consumes only the published
+SDK** at a tagged release — verified by its go.mod naming the SDK module at a
+version, no replace directive, no fork."*
+
+**As amended:** *"**The add-on consumes only the published SDK** at an
+**immutable, publicly resolvable version** — verified by its go.mod naming the
+module at one, with no replace directive and no fork."* — with the reason, the
+cost and M70's obligation stated in the bullet.
+
+**The tree fact:** `git ls-tree v0.3.0 sdk/` returns nothing. The SDK first
+appears at `0f87297`, M61's commit, inside this phase. The next tag is `v0.4.0`,
+which [M70](phase-details/m70.md) cuts — after this milestone and after
+[M69.9](phase-details/m69.9.md). So the bullet as written could not be satisfied
+in the order the plan itself sets.
+
+**Prompted rather than corrected**, because *tagged* is an assertion and not a
+fact: what an add-on author is shown is part of what the exercise is for.
+
+**Owner: the pseudo-version, and M70 bumps it.** A Go pseudo-version —
+`v0.3.1-0.<date>-<sha>` — is immutable, publicly resolvable, needs no replace
+directive and no fork, so it satisfies everything the bullet is *for*. What it
+does not satisfy is the word itself, and that cost is real and is paid: for one
+phase the worked example shows a third-party author a dependency line nobody
+would tell them to type. `m70.md` now carries the bump as a step of the close.
+
+Two alternatives were declined with their costs. Cutting a `v0.4.0-rc.1` now
+would fire `release.yml`, whose trigger is `tags: ["v*.*.*"]` — a full release
+build, images, archives and provenance, off an unmerged branch — and
+`release-check` refuses while `[Unreleased]` is non-empty, which mid-phase it
+must be; excluding pre-releases needs a workflow edit this loop cannot commit and
+would have to propose. Making `sdk/` its own Go module is the honest long-term
+shape for a contract another repository compiles against — it would stop the ABI
+being versioned by the product's release cadence — and it is a scope change
+touching the generator, the consumer test, CI, `releasing.md` and M61's own
+entries, which wants its own milestone rather than a corner of this one.
