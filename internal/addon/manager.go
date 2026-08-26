@@ -94,10 +94,18 @@ type Managed struct {
 	// difference rather than assuming it away, because the last time they diverged
 	// it was for a whole phase.
 	Declared []string `json:"declared_permissions"`
-	// Performance is what this module cost the redirect path, cumulative since this
-	// process started. Absent — `Observed()` false — for a module that has never run
-	// there, which the page draws as a dash rather than as zeros and which the API
-	// omits rather than answering with an object full of them.
+	// Performance is what this module cost, cumulative since this process started:
+	// its invocations on the redirect path, and — since M68.5 — its outbound
+	// requests, which are a different path with a different bound and sit beside
+	// the redirect figures rather than inside them.
+	//
+	// Absent — `IsZero()`, which is `Observed()` false on **both** halves — for a
+	// module with no record of either kind. The page draws a dash for whichever
+	// half a module has no record of, and the API omits the whole object rather
+	// than answering with one full of zeros. The two predicates ask different
+	// questions and M68.5 is where they stopped coinciding: a module that has only
+	// ever fetched has never run on the redirect path, so its row still draws a
+	// dash there while its JSON carries the object.
 	//
 	// **It is in the JSON as well as on the page**, and that is the inherited *every
 	// UI feature has API support* rule read as it is written: the figures are the

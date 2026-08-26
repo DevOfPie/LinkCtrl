@@ -460,8 +460,38 @@ var ResponseMediaTypes = []string{"text/plain", "application/json"}
 // Unwrap survives, so errors.Is on ErrNoRoute, ErrBusy and the rest still decides
 // what it decided.
 func (h *Host) Route(ctx context.Context, name string, in RequestIn) (Response, error) {
+	// The route deadline (M68.5), and this is the whole of where it is applied: one
+	// timeout around the invocation, so instantiating the module, running it and
+	// every host function it calls — including the one that reaches the network —
+	// share one budget. The runtime is built WithCloseOnContextDone, so a module
+	// still running when it elapses is closed underneath rather than waited for.
+	//
+	// Nested inside whatever the caller brought, which on the application path is
+	// LINKCTRL_HTTP_REQUEST_TIMEOUT's own context deadline: WithTimeout takes the
+	// earlier of the two, so this fires first only because internal/config refuses
+	// a route deadline that is not shorter. That is the point of it — see
+	// [DefaultRouteDeadline] for what the host does with the margin.
+	//
+	// Outside the slot wait deliberately: a request that spends the deadline
+	// queueing for one of [maxConcurrentRoutes] and is then refused ErrBusy is the
+	// right answer, and starting the clock inside would make a saturated host
+	// answer more slowly rather than sooner.
+	ctx, cancel := context.WithTimeout(ctx, h.deadlineForRoute())
+	defer cancel()
 	resp, err := h.route(ctx, name, in)
 	return resp, neutralize(err)
+}
+
+// deadlineForRoute is [Host.routeDeadline] with the zero value defaulted, because
+// a Host a test built as a literal has never been through Open.
+//
+// Nil-safe for the reason [Host.routed] is: an instance with no add-ons directory
+// has no host at all, and Route is called on it.
+func (h *Host) deadlineForRoute() time.Duration {
+	if h == nil {
+		return DefaultRouteDeadline
+	}
+	return routeDeadlineFrom(h.routeDeadline)
 }
 
 func (h *Host) route(ctx context.Context, name string, in RequestIn) (Response, error) {

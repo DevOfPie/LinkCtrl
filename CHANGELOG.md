@@ -29,6 +29,117 @@ migrations run at boot.
 
 ### Added
 
+- **An add-on can reach outward, and only where the operator pointed it.**
+
+  Until now nothing an add-on could import touched the network, which meant the
+  kind of add-on this host was built to run — one that signs people in through an
+  identity provider — could not be written at all. It can now, through one new
+  host function and one new permission, `network.fetch`.
+
+  **The manifest declares a need and never a destination.** An add-on marks one of
+  its settings as carrying origins; the operator fills that in. A manifest naming
+  a host anywhere — a default value, a list of options, a URL inside a permission
+  token — is refused at load. So an add-on's author cannot widen its own reach, and
+  the only person who decides where this server connects is the person running it.
+  The permission vocabulary is nine tokens as a result.
+
+  One thing to know when you *upgrade* one: a new version cannot name a
+  destination, but it can mark a setting you already filled in as one that names an
+  origin — a `homepage` you typed into v1 becoming an origin v2 dials. Installing a
+  version costs `addons.manage` either way, so nothing is escalated, but
+  `docs/SECURITY.md` says to read an add-on's origin settings alongside its
+  permissions whenever an upgrade adds `network.fetch`.
+
+  **Absent configuration it reaches nothing.** An add-on holding the permission
+  with no origin named answers `unconfigured` to every call and opens no socket.
+  That is the ordinary state of one that has just been installed, and it is stated
+  rather than papered over: an add-on that talks outward does not work until it is
+  configured.
+
+  **What the host enforces is not negotiable by either party.** https only; `GET`
+  or a form-encoded `POST`; **no request header the add-on chose**, so a
+  credential or a `Host` override cannot be put on the wire; no response header
+  back but the content type; every address the name resolves to checked at the
+  moment of dialling; no redirect followed off the origin it started on; a response
+  size cap **on the headers as well as the body**, the second fixed at 64 KiB
+  because no provider needs it raised and Go's own default is forty times the body
+  cap; a request timeout; and no connection kept alive between invocations.
+
+  **The address check is an allowlist, and it is worth knowing which way round it
+  is.** An address is dialled only if it falls in globally-routable unicast space,
+  and everything else is refused — loopback, link-local (the cloud metadata service
+  above all), unique-local and the private ranges among them, but also any range
+  nobody has thought about, however the name got there and whatever it answered
+  last time. Written the other way round it would have been a list of everywhere
+  that is not the public internet, which is not a list anybody holds in their head.
+  The cost is real and it is deliberate: this will eventually refuse an origin that
+  was perfectly legitimate — IPv6 space allocated after this release is the case to
+  expect — and the symptom is an add-on reporting that a name will not resolve. So
+  every refusal writes one log line naming the address and the rule that refused
+  it. **If an origin you named is not reachable, grep for `address_rule=`.**
+
+  **Where you watch this is the counter, not the log.** An add-on nobody has
+  configured, one pointed at an origin you did not name, and one calling from an
+  invocation that may not fetch are all things a module produces as fast as it
+  likes on a page anybody can reach — so those three write at `debug` and
+  `linkctrl_addon_fetch_total{addon,outcome}` is what carries them, beside the
+  Add-on manager's own breakdown of the same words. The cost is stated: an
+  operator watching only the log sees nothing when an add-on is inert. An address
+  refusal keeps its warning, because `address_rule=` names something no counter
+  can.
+
+  **Nothing on the redirect path may fetch.** Both redirect classes are refused,
+  whatever the manifest declared: an inline module holds a visitor's request open
+  against a deadline in milliseconds and an observing one has no caller whose
+  budget a network round trip could be spent against. A fetch is callable from an
+  add-on's own page handler and from nowhere else.
+
+  **A page an add-on serves has a bound of its own.** `LINKCTRL_ADDON_ROUTE_DEADLINE`,
+  ten seconds by default, covers loading the module, running its handler and every
+  host call inside it. Before it, a route was bounded only by
+  `LINKCTRL_HTTP_REQUEST_TIMEOUT` — the same fifteen seconds every request gets —
+  which kills the module and this server's ability to answer at the same instant,
+  and which an operator may have set to zero. Ten leaves five seconds to turn a
+  killed module into a page you can read and a counter you can alert on. Until it
+  elapses, a module that will not return holds one of the sixteen instance slots
+  for as long as the visitor waits, and those slots are shared with the redirect
+  path.
+
+  **Two nesting rules are now enforced at start-up**, so a bound that cannot fire
+  is refused rather than shipped: `LINKCTRL_ADDON_ROUTE_DEADLINE` must be under
+  `LINKCTRL_HTTP_REQUEST_TIMEOUT`, and `LINKCTRL_ADDON_FETCH_TIMEOUT` must not
+  exceed the route deadline. If you have raised either, raise the one above it too
+  or the instance will tell you which line to change.
+
+  **This is the one upgrade break in this release, and it is narrow.** If you run
+  add-ons — `LINKCTRL_ADDONS_DIR` is set — **and** you have set
+  `LINKCTRL_HTTP_REQUEST_TIMEOUT` to `10s` or less, this instance will not start
+  until `LINKCTRL_ADDON_ROUTE_DEADLINE` comes down below it. Both values were
+  accepted before, because the route deadline did not exist; the pair is refused
+  now because a route deadline at or over the request timeout never fires, and a
+  bound that cannot fire is worse than no bound. The remedy is to lower
+  `LINKCTRL_ADDON_ROUTE_DEADLINE`, not to raise a request timeout you set for a
+  reason. An instance with `LINKCTRL_ADDONS_DIR` unset is not held to the rule and
+  starts exactly as it did.
+
+  **You can see it happening.** `linkctrl_addon_fetch_total{addon,outcome}` counts
+  every attempt and every refusal by add-on, with a closed eleven-word vocabulary
+  the add-on itself branches on, and `linkctrl_addon_fetch_duration_seconds{addon}`
+  times the ones this instance actually attempted — a refusal it decided itself is
+  counted and not timed, so a blocked address does not show up as latency. The Add-on manager renders both beside
+  the redirect figures, with what each refusal means for you rather than for the
+  add-on's author.
+
+  New variables: `LINKCTRL_ADDON_ROUTE_DEADLINE`, `LINKCTRL_ADDON_FETCH_TIMEOUT`,
+  `LINKCTRL_ADDON_FETCH_MAX_BYTES`. **`fetch` and `route` join the reserved add-on
+  names** for the reason `pool` did: those three variables live in the same
+  `LINKCTRL_ADDON_<NAME>_<X>` namespace as an add-on's own settings, so an add-on
+  in a directory called `fetch` or `route` would make one variable mean two
+  things. Such an add-on stops loading when you upgrade, with the reason and the
+  reserved list on stderr; rename the directory. `docs/SECURITY.md` carries the
+  disclosure — this is the sixth connection that leaves this product and the first
+  whose destination somebody outside this project chose.
+
 - **The Add-on manager: one page for what this instance runs.**
 
   `/instance/addons`, in the identity menu, behind `addons.manage` — so on an
@@ -792,7 +903,7 @@ migrations run at boot.
   four places including the SDK's own Go `Deprecated:` markers, and what counts as
   breaking is a table rather than a judgement call.
 
-  **Fifteen functions work; the rest are declared and refuse.** Logging, reading the
+  **Sixteen functions work; the rest are declared and refuse.** Logging, reading the
   add-on's own declared settings, asking the host its ABI version, the two storage
   calls, and — since the add-on pages entry above — reading the request, writing
   the response and asking who is signed in are live, as are the clock, the random

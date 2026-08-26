@@ -171,6 +171,18 @@ type SettingView struct {
 	// UpdatedAt is when the stored value was last written, and is nil for every
 	// other source.
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	// Origin is whether this setting names where the add-on may make outbound
+	// requests (M68.5), and the page renders it differently for one reason: filling
+	// it in **authorizes a server-side request from this instance** to whatever is
+	// typed in it. m68.5.md's second risk is exactly that — *they name an origin and
+	// thereby authorize a server-side request to it; if the page does not make that
+	// consequence plain, the setting reads like a URL field*.
+	//
+	// It rides on the view rather than being derived from the name, because the
+	// declaration is the manifest's and the page must not be guessing which of an
+	// add-on's fields is the dangerous one.
+	Origin bool `json:"origin,omitempty"`
 }
 
 // Editable reports whether the manager may write this setting. False for one the
@@ -195,6 +207,10 @@ func (v SettingView) IsSelect() bool { return v.Type == SettingSelect }
 
 // IsToggle reports whether this setting is a boolean. See [SettingView.IsText].
 func (v SettingView) IsToggle() bool { return v.Type == SettingToggle }
+
+// IsOrigin reports whether this setting names where the add-on may reach. See
+// [SettingView.IsText] for why these are methods.
+func (v SettingView) IsOrigin() bool { return v.Origin }
 
 // On is whether a toggle's box is ticked. False for every other type, so the
 // template never has to ask twice.
@@ -288,6 +304,11 @@ func (h *Host) settingViews(ctx context.Context, l Loaded) []SettingView {
 		v := SettingView{
 			Name: s.Name, Type: s.Type, Options: slices.Clone(s.Options),
 			Default: s.Default, Source: SourceUnset,
+			// Read off the manifest in hand, unlike Type below: what an origin setting
+			// is worth saying about is what the add-on *now* declares, and a stored
+			// value written under an older manifest that did not mark it names no
+			// origin the host will dial anyway.
+			Origin: s.Origin,
 		}
 		switch row, hasStored := stored[s.Name]; {
 		case env[s.Name] != "":

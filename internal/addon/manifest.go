@@ -79,6 +79,25 @@ type Setting struct {
 	Type    SettingType `json:"type"`
 	Options []string    `json:"options,omitempty"`
 	Default string      `json:"default,omitempty"`
+
+	// Origin marks a setting whose value is the origins this add-on may make
+	// outbound requests to (M68.5), and it is the whole of how a destination
+	// reaches the host: an origin the host will dial comes from a setting marked
+	// here and filled in by the operator, and from nowhere else.
+	//
+	// **A flag rather than a fifth [SettingType]**, because what changes is the
+	// meaning and not the input: the operator types text into the same box M68
+	// already draws, and a new type would be a shape the manager has to learn to
+	// render for no gain. What the flag costs is stated in [Setting.validate] —
+	// such a setting is `text`, carries no default and carries no options — and
+	// each of those is what keeps *the manifest declares a need, never a
+	// destination* true. A default would be a host the add-on's author chose; an
+	// option list would be several.
+	//
+	// The value an operator writes is one or more origins separated by spaces, so
+	// an issuer whose token endpoint lives on a second name is two origins in one
+	// field rather than a second field the add-on had to have anticipated.
+	Origin bool `json:"origin,omitempty"`
 }
 
 // MigrationsDir is the directory inside an add-on's own directory that holds its
@@ -503,8 +522,11 @@ func (m Manifest) Validate() error {
 		// the same answer the reserved *setting* names get: an add-on named `inline`
 		// or `instantiate` with a setting called `deadline` would read one of the
 		// instance-wide redirect bounds, and no lookup could tell which was meant.
-		// `pool` joined them at M66.5 and covers two variables at once, which is why
-		// both of them keep their second half to one word — see config's own comment.
+		// The list has grown twice since: `pool` at M66.5, and `fetch` and `route` at
+		// M68.5 — `fetch` covering two variables at once, which is why every entry
+		// keeps its second half to one word. See config's own comment, and
+		// TestEveryReservedNameIsRefusedAsAnAddonName, which walks the list rather
+		// than restating it here a fourth time.
 		add("name %q is reserved: this product reads a variable of its own from the "+
 			"%s namespace under that name, and a setting of yours would be read from "+
 			"the same variable. The reserved names are %s", m.Name,
@@ -653,6 +675,7 @@ func (m Manifest) Validate() error {
 	}
 
 	seenSetting := make(map[string]bool, len(m.Settings))
+	origins := 0
 	for _, s := range m.Settings {
 		switch {
 		case !nameRe.MatchString(s.Name):
@@ -672,6 +695,31 @@ func (m Manifest) Validate() error {
 		}
 		seenSetting[s.Name] = true
 		errs = append(errs, s.validate()...)
+		if s.Origin {
+			origins++
+		}
+	}
+
+	// The egress half of the coherence rule, and it is one-directional for exactly
+	// the reason the migrations/storage rule above is.
+	//
+	// **This direction is refused**: a field naming where an add-on may reach,
+	// declared by an add-on that may not reach anywhere, is an operator filling in
+	// an origin and believing they configured something while every call is refused
+	// for a reason the page does not show them.
+	//
+	// **The other direction is not**, and that is deliberate rather than an
+	// omission. An add-on holding the grant with no origin field never fetches
+	// anything — which is not a broken state but the *ordinary* one this design
+	// produces, the `unconfigured` outcome with nothing to fill in. It is worth a
+	// line in the boot log, which is where it gets one, and refusing it would make
+	// validation ask whether a declared capability is *useful* rather than whether
+	// it is coherent.
+	if origins > 0 && !seenPerm[abi.PermissionNetworkFetch] {
+		add("settings: %d setting(s) are marked `origin` and %q is not declared; a "+
+			"field naming where this add-on may reach is meaningless without the "+
+			"permission that lets it reach anywhere at all", origins,
+			abi.PermissionNetworkFetch)
 	}
 
 	return errors.Join(errs...)
@@ -685,6 +733,30 @@ func (s Setting) validate() []error {
 	noOptions := func() {
 		if len(s.Options) > 0 {
 			add("settings %q: type %q takes no options", s.Name, s.Type)
+		}
+	}
+
+	if s.Origin {
+		// Each of these is what makes the *manifest declares a need, never a
+		// destination* claim structural rather than a promise. A default would be a
+		// host the publisher chose and the operator inherited; options would be a
+		// list of them; a secret or a toggle is not a field an origin fits in, and a
+		// select is the manifest naming the choices. What is left is an empty text
+		// box only the operator can fill.
+		if s.Type != SettingText {
+			add("settings %q: a setting marked `origin` is type %q — it is what an "+
+				"operator types an origin into, and no other input carries one",
+				s.Name, SettingText)
+		}
+		if s.Default != "" {
+			add("settings %q: a setting marked `origin` may not carry a default; a "+
+				"default origin is a destination the add-on's author chose, and this "+
+				"host dials only what the operator named", s.Name)
+		}
+		if len(s.Options) > 0 {
+			add("settings %q: a setting marked `origin` takes no options; a list of "+
+				"origins in a manifest is the allowlist this design refuses to have",
+				s.Name)
 		}
 	}
 
@@ -729,4 +801,12 @@ func (s Setting) validate() []error {
 			s.Name, s.Type, SettingText, SettingSecret, SettingSelect, SettingToggle)
 	}
 	return errs
+}
+
+// hasOriginSetting reports whether this manifest declares anywhere for an
+// operator to name an origin (M68.5). An add-on holding `network.fetch` without
+// one is coherent and inert, which the boot log says rather than validation
+// refusing.
+func (m Manifest) hasOriginSetting() bool {
+	return slices.ContainsFunc(m.Settings, func(s Setting) bool { return s.Origin })
 }

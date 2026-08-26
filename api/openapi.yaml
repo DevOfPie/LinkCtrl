@@ -8120,11 +8120,16 @@ components:
         performance:
           type: object
           additionalProperties: false
-          required: [kills]
+          required: [kills, fetch]
           description: >
-            What this module cost the redirect path, cumulative since this process
-            started. **Absent entirely** for a module that has never run there,
-            which is what lets a client tell *no observations* from *fast*.
+            What this module cost, cumulative since this process started: its
+            invocations on the redirect path, and its **outbound** requests, which
+            are a different path and sit beside the redirect figures rather than
+            inside them. **Absent entirely** for a module with no record of either
+            kind, which is what lets a client tell *no observations* from *fast*.
+            A module that has only ever fetched is here with an empty `classes`:
+            it has made no redirect-path observation, and that is the same
+            statement one level down.
           properties:
             classes:
               type: array
@@ -8169,6 +8174,79 @@ components:
               properties:
                 instantiate: { type: integer, format: int64 }
                 call: { type: integer, format: int64 }
+            fetch:
+              type: object
+              additionalProperties: false
+              required: [count, refused, p99_seconds, sum_seconds]
+              description: >
+                What this module's **outbound** requests cost, cumulative since
+                this process started. A different path from the redirect figures
+                beside it and a different scale: a redirect invocation is priced
+                against a deadline this product sets, and an outbound request is
+                priced against a server somebody else runs.
+
+
+                Present with zeroes for a module that has never made one, unlike
+                `classes` above — the object here is fixed rather than absent,
+                because `count` and `refused` together already say *nothing has
+                happened* without a client having to tell a missing object from a
+                slow one.
+              properties:
+                count:
+                  type: integer
+                  format: int64
+                  description: >
+                    Requests this host attempted, which is the population the
+                    estimate below is over. A refusal this host decided itself —
+                    an unnamed origin, an address the policy will not dial — is in
+                    `outcomes` and deliberately not here.
+                refused:
+                  type: integer
+                  format: int64
+                  description: Every outcome but `ok`, added up.
+                p99_seconds:
+                  type: number
+                  description: >
+                    The same estimate the redirect figures use, over the same
+                    buckets `/metrics` publishes.
+                sum_seconds:
+                  type: number
+                  description: Total time observed, so a mean needs no second call.
+                outcomes:
+                  type: array
+                  description: >
+                    Each outcome this add-on has actually produced, most frequent
+                    first and alphabetical inside a tie. An outcome that has never
+                    happened is absent rather than zero.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [outcome, count]
+                    properties:
+                      outcome:
+                        type: string
+                        enum:
+                          - ok
+                          - unconfigured
+                          - origin_refused
+                          - class_refused
+                          - invalid_request
+                          - dns_failed
+                          - address_refused
+                          - redirect_refused
+                          - too_large
+                          - timeout
+                          - connect_failed
+                        description: >
+                          A closed vocabulary, and the same words the add-on
+                          itself branches on and `/metrics` labels
+                          `linkctrl_addon_fetch_total` with. `unconfigured` means
+                          no origin has been named for this add-on, so it reaches
+                          nothing; `origin_refused` means it asked for one nobody
+                          named.
+                      count:
+                        type: integer
+                        format: int64
 
     AddonSetting:
       type: object
@@ -8219,6 +8297,21 @@ components:
           type: string
           format: date-time
           description: When the stored value was last written. Absent for any other source.
+        origin:
+          type: boolean
+          description: >
+            Whether this setting names the **origins** the add-on may make
+            outbound requests to. Present and `true` only for such a setting;
+            absent otherwise.
+
+            It is not a formatting hint. The manifest declares that the add-on
+            needs egress and can never declare a destination — a setting marked
+            this way carries no `default` and no `options`, and a manifest naming
+            a host anywhere is refused at load — so this field is the only place a
+            destination enters, and writing one authorizes a **server-side
+            request from this instance** to it. The value is one origin or several
+            separated by spaces: scheme, host and port, and no path. Empty means
+            the add-on reaches nothing at all.
 
     AddonOrphan:
       type: object

@@ -987,14 +987,14 @@ description of an add-on.
 | `module` | The `.wasm` file, as a **bare filename** inside this directory. A separator or a `..` is refused rather than cleaned. |
 | `sha256` | The digest of that file, 64 lowercase hex characters — what `sha256sum` prints. Verified before the module is compiled; a mismatch means it is never parsed, let alone run. |
 | `failure_class` | `required` or `degrade`. No default. |
-| `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the seven below. |
+| `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the nine below. |
 | `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. The names are the add-on's; the cookies a browser holds are not — LinkCtrl carries the whole set inside one cookie of its own, described [below](#the-pages-an-add-on-serves). An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is what stops an add-on being denied its own by whichever installed first; it does not on its own stop `oidc` declaring `oidc_x`, so the other half of the rule is at load — two installed add-ons whose names stand in a `name + "_"` prefix relation are **both refused**, counted as `name_collision`, and the boot log names the pair. Rename one directory and its manifest. |
 | `migrations` | Optional, and **required in practice for any add-on that declares `storage.own_schema`** — the host applies only what this list names. Each entry is a `file` inside the `migrations/` directory beside the manifest and the `sha256` of its bytes, verified before a schema exists. A file listed but absent, present but unlisted, or whose digest disagrees each refuse the add-on. Filenames follow goose's convention. Declaring migrations without `storage.own_schema` is refused. **This row was missing until 2026-08-20**, so a publisher following this page shipped no `migrations` key and their DDL never ran, while the sentence above told them the field they needed was illegal (F285's review, M64.9) |
 | `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
 
 #### The permissions an add-on may declare
 
-Eight, and the list is closed: adding one is a change to LinkCtrl, not something a
+Nine, and the list is closed: adding one is a change to LinkCtrl, not something a
 manifest can do. [addon-abi.md](addon-abi.md) says which function each one gates
 and generates the same table from the host's own definition.
 
@@ -1008,13 +1008,14 @@ and generates the same table from the host's own definition.
 | `redirect.observe` | Watch redirects **out of band**. Your module is called once per recorded redirect, after the visitor has been answered and after the click is durable, so nothing it does can delay or fail a redirect — and nothing it does can affect one. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form |
 | `redirect.inline` | Run **inside** the redirect path itself, after this instance has decided where the visitor goes and before anything is written. You see the decision and may let it stand or veto it; a veto refuses the visitor with the same page a blocked bot gets. Your latency is added to theirs, and it is yours — see [the redirect classes](#the-redirect-classes) |
 | `redirect.rewrite_query` | Alter the **query string** of the destination an inline module was handed, and nothing else about it. A token of its own on top of `redirect.inline`, because declaring *run on the redirect path* is not declaring *and edit where the visitor goes*. Useless without it |
+| `network.fetch` | Make outbound requests **from this server**, to origins **you** named and to no others. The manifest declares the need and never a destination: an add-on holding this and pointed at nothing reaches nothing. What you name goes in a setting the add-on declared as carrying origins, and naming one authorizes a server-side request to it — see [When an add-on reaches outward](#when-an-add-on-reaches-outward) |
 
 Four functions cost nothing and need no declaration: asking the host its ABI
 version, writing a line to your log, drawing random bytes, and reading the clock.
 The last two are ungated because a module reads the same two sources through
 `crypto/rand` and `time.Now` anyway — gating them would refuse an add-on the
 documented spelling of something it can still have. Everything else costs one of
-the eight.
+the nine.
 
 **A refused call is `ErrDenied`, and it is refused before the host says whether it
 implements the function at all** — so an add-on that declared nothing cannot use
@@ -1024,7 +1025,11 @@ the availability status to find out what this build can do.
 
 **One list, and nothing outside it.** An add-on imports a fixed set of functions
 from the host and has no other route into this instance: no socket, no file, no
-database connection, no environment. [addon-abi.md](addon-abi.md) is that list, the
+database connection, no environment. One of them makes an outbound request,
+which is not an exception to that sentence — the module opens nothing
+itself, and what the host will dial for it is bounded by the permission it
+declared and by an origin **you** named; see
+[When an add-on reaches outward](#when-an-add-on-reaches-outward). [addon-abi.md](addon-abi.md) is that list, the
 version it is published under and the promise attached to it — and it is generated
 from the same definition the host registers, so it cannot describe a function the
 host does not serve.
@@ -1091,6 +1096,94 @@ nobody is **not** a refusal: the add-on loads without it, and the boot log says 
 
 A file that is not a directory is ignored with a warning, so a `README` you left
 in there is not an outage.
+
+### When an add-on reaches outward
+
+An add-on holding `network.fetch` may ask this instance to make an HTTPS request
+on its behalf. **It reaches nothing until you say where.**
+
+The manifest declares the *need* and never the destination: an add-on marks one of
+its settings as carrying origins, and a manifest that names a host anywhere — a
+default, a list of options, a URL in a permission token — is refused at load. So
+the publisher cannot widen the add-on's reach and a new version of it cannot
+quietly reach somewhere the old one did not. You are the only one who can.
+
+Fill the field in on the Add-on manager's page for that add-on, or from the
+environment like any other setting:
+
+```
+LINKCTRL_ADDON_<NAME>_<SETTING>="https://idp.example.com"
+```
+
+One origin, or several separated by spaces — scheme, host and port, and no path.
+Several is ordinary rather than exceptional: some identity providers serve
+discovery, the token endpoint and the signing keys from three different hostnames,
+and the add-on's own documentation should tell you which. A value that is not an
+origin authorizes nothing and is logged as such; it does not take the good entries
+in the same field with it.
+
+**What you are authorizing** is this server connecting to that origin, with a
+request body the add-on composed, and handing the response back to code you did
+not write. That is why the field says so on the page rather than reading like a
+URL box. `docs/SECURITY.md`'s *Add-on egress* is the full statement, including
+what an add-on holding this **and** `storage.own_schema` can do.
+
+**What the host enforces regardless of you or the publisher:** https only; `GET`
+or a form-encoded `POST`; no request header the add-on chose; every address the
+name resolves to checked at the moment of dialling against an allowlist of
+globally-routable unicast space, so loopback, link-local, the cloud metadata
+service, unique-local, the private ranges and anything outside that space are
+refused however the name got there — if an origin you named will not resolve for
+an add-on, grep this instance's log for `address_rule=`, which says which rule
+refused it; no redirect followed off the origin it started on; a response
+size cap; and a request timeout. A fetch is callable from an add-on's own page and
+from nowhere else — **both redirect classes are refused**, so nothing here can
+reach the redirect path.
+
+Three variables bound it, and their defaults are in
+[`.env.example`](../.env.example):
+
+| Variable | Default | Bounds |
+| --- | --- | --- |
+| `LINKCTRL_ADDON_ROUTE_DEADLINE` | `10s` | One request to an add-on's own page, whole — including any fetches inside it |
+| `LINKCTRL_ADDON_FETCH_TIMEOUT` | `3s` | One outbound request, connect through the last byte |
+| `LINKCTRL_ADDON_FETCH_MAX_BYTES` | `262144` | The largest response body carried back; over it is refused whole rather than truncated |
+
+**All three are refused at zero, and the first two also have to nest.** An
+instance whose bounds do not hold does not start.
+`LINKCTRL_ADDON_ROUTE_DEADLINE` must be under `LINKCTRL_HTTP_REQUEST_TIMEOUT`
+(`15s`), which already cancels the same request context and starts first — a route
+deadline at or over it never fires. That one rule applies **only when `ADDONS_DIR`
+is set**: an instance running no add-ons is not refused over a route deadline it
+never uses and its operator never chose. `LINKCTRL_ADDON_FETCH_TIMEOUT` must not
+exceed the route deadline, because a fetch happens inside a route invocation and
+cannot outlast it; that one applies always, because it takes a value you wrote to
+break it. Raising one therefore means raising the one above it — or lowering the
+one below it, which is the remedy to reach for if you deliberately run a short
+`LINKCTRL_HTTP_REQUEST_TIMEOUT`: at `10s` or under — the rule refuses a route deadline that is not *strictly* under the request timeout, so 10s against the 10s default is refused too, an instance that runs add-ons
+will not start until `LINKCTRL_ADDON_ROUTE_DEADLINE` comes down with it. The
+exception is
+`LINKCTRL_HTTP_REQUEST_TIMEOUT=0`, which disables that middleware outright: the
+route deadline is then the only bound an add-on's page has, and nothing constrains
+it from above. `LINKCTRL_ADDON_FETCH_MAX_BYTES=0` is refused rather than read as
+*no cap*: there is no way to ask for one, because the response body is held in
+memory to cross the add-on boundary and an unbounded body from a server this
+product does not run is an unbounded heap. **The response headers are bounded by
+the same argument and are not a knob**: 64 KiB, fixed, which is eight times what
+an ordinary server will emit and far more than any discovery document or token
+response carries. Go's own default is 10 MiB — forty times the body cap — and no
+legitimate provider needs it raised, so there is nothing here to turn. A response
+whose headers exceed it is `connect_failed`, because the exchange failed below
+the response; `too_large` stays what it says, which is that the body was over the
+cap.
+
+**What it is doing is visible without reading logs.**
+`linkctrl_addon_fetch_total{addon,outcome}` counts every attempt and every
+refusal, `linkctrl_addon_fetch_duration_seconds{addon}` times the ones this
+instance actually attempted — a refusal it decided itself is counted and not
+timed — and the Add-on manager renders both beside the redirect
+figures — `unconfigured` there means you have not named an origin yet, and
+`origin_refused` means the add-on asked for one you did not name.
 
 ### When an add-on signs people in
 

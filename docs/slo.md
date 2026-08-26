@@ -1688,6 +1688,80 @@ and which M68 makes easier to arrive at, because the manager is where somebody
 installs a second one. The pool is per add-on and per class; the contention
 between two is still nothing this page has a number for.
 
+### Not re-measured for M68.5 (2026-08-26), and this is where that is said
+
+[M68.5](build-notes/phase-details/m68.5.md) gives an add-on an outbound request —
+the first door in this product through which a server-side request reaches an
+address somebody else chose. The inherited rule about touching the redirect path
+is discharged **in writing** rather than by a run, because of what the milestone
+decided rather than in spite of it.
+
+**Egress is refused on the redirect path, in both classes.** A fetch is callable
+from a route handler and from nowhere else. The inline class holds a visitor's
+request open against `LINKCTRL_ADDON_INLINE_DEADLINE` — 25 ms by default, a number
+in single-digit milliseconds of add-on code against a network round trip in tens —
+so a fetch there could only ever produce a killed invocation and a redirect served
+without the module. The observe class runs after the response with no caller whose
+budget a round trip could be spent against, so it has no bound to be checked
+against; it is refused rather than given one of its own.
+
+**Two refusals, not one, and the difference matters to whoever re-reads this.**
+An observing invocation reaches the host function and is refused inside it, with
+the `class_refused` outcome and the counter that goes with it. An *inline* one
+never reaches it: `network_fetch` is outside the redirect-safe subset, so M66's
+dispatch gate refuses the call itself, the guest gets `ErrDenied`, and nothing is
+counted — which is the redirect path's own rule about what it will spend on
+telemetry, unchanged by this milestone. Two tests, because one cannot see both:
+`TestOnlyARouteInvocationMayFetch` drives `hostState.doFetch` directly and asserts
+the outcome for five states — the load-time instance, both redirect classes, and
+both pooled ones — and it is *below* the gate, so
+`TestNeitherRedirectClassMayFetchAndTheGuestIsToldSo` drives a real module from
+the guest side, above the gate, and asserts each class gets its own refusal.
+
+**So *this cannot touch the redirect path* is a claim rather than an inference**,
+which is why it is written here where somebody looking for the M68.5 run would go.
+What the milestone changed on that path is one boolean field on the per-invocation
+state, set false by `forRedirect` and by `forPool`, read once inside a host
+function the redirect classes may not call — and for the inline class it is not
+even read, because the call never gets that far. There is no allocation, no lock and no
+map lookup added to an inline invocation.
+
+The bound that *was* built is the **route** deadline,
+`LINKCTRL_ADDON_ROUTE_DEADLINE`, ten seconds by default. It is not on this
+document's subject: a page an add-on draws is on the dashboard's 250 ms budget and
+was never on the redirect promise. It is a bound *inside*
+`LINKCTRL_HTTP_REQUEST_TIMEOUT`, which already cancels the same request context at
+fifteen seconds and starts first — the milestone's first attempt set this to
+fifteen as well and it therefore never fired, which is why the instance now
+refuses a route deadline that is not shorter. What the five-second margin buys is a
+host still able to answer when it kills a guest; what the bound buys outright is an
+instance slot back from a module that will not return, including on a deployment
+that has set the request timeout to zero.
+
+**Those sixteen slots are shared with the redirect path, and this milestone makes
+holding one ordinary rather than pathological.** An inline redirect invocation
+takes a slot *without waiting* — none free and the add-on is skipped, the redirect
+served without it, `linkctrl_rate_limited_total{limit="addon_inline"}`
+incremented. That is M66's designed degradation and it is unchanged. What changed
+is how long a route invocation holds one: a route handler used to be compute-bound
+and give its slot back in milliseconds, and one that fetches holds it for a network
+round trip, up to the ten seconds above. So sixteen concurrent sign-in round trips
+on an add-on's pages are sixteen slots held for seconds, and inline redirect
+add-ons are skipped for the duration — every redirect still served, and served
+*faster*, without the module's contribution.
+
+The number to watch for it is that throttle counter against
+`linkctrl_addon_fetch_duration_seconds`, and the lever is deployment rather than
+configuration: `LINKCTRL_ADDON_ROUTE_DEADLINE` bounds the worst case but not the
+ordinary one, and sixteen is fixed in the build. This is stated here rather than
+left to be discovered because the section exists to discharge the redirect-path
+rule, and *nothing on this path fetches* is true while *nothing on this path is
+affected* is not.
+
+If a later milestone admits a fetch onto the redirect path, this section is where
+the argument for it goes and the run in M66.5's three-column shape is what has to
+come with it.
+
 ## Reproducing it
 
 ```sh

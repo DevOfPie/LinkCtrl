@@ -75,6 +75,31 @@ type event struct {
 // redirect whatever this holds.
 var remembered string
 
+// fetchProbe is one outbound request, asked for from wherever this module happens
+// to be running, and it exists because the two redirect classes are refused it in
+// **two different places** and only a guest can say which one it met.
+//
+// An inline invocation never reaches the function at all: `network_fetch` is
+// outside the redirect-safe subset, so dispatch refuses it and the SDK returns
+// ErrDenied — reported here as a status word, the same as every other refusal
+// above. An observing invocation does reach it and is refused by the class, which
+// arrives as a FetchResponse whose outcome is `class_refused`. Reporting the
+// status when there is one and the outcome when there is not is what makes the
+// difference visible to the host-side test rather than flattened by it.
+func fetchProbe() string {
+	raw, err := sdk.NetworkFetch([]byte(`{"url":"https://idp.example.test/.well-known/openid-configuration"}`))
+	if err != nil {
+		return status(err)
+	}
+	var out struct {
+		Outcome string `json:"outcome"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "parse:" + errText(err)
+	}
+	return "outcome:" + out.Outcome
+}
+
 func report(check, outcome string) { _ = sdk.Log(sdk.LevelInfo, "redirect: "+check+"="+outcome) }
 
 func errText(err error) string {
@@ -154,6 +179,10 @@ func inline() int32 {
 	report("inline_http_request", status(err))
 	_, err = sdk.RedirectEventRead()
 	report("inline_event_read", status(err))
+	// The one that leaves this machine (M68.5). Refused here by the *placement*
+	// like the rest, and refused by dispatch rather than by the fetch machinery —
+	// which is why it reports a status and not an outcome.
+	report("inline_network_fetch", fetchProbe())
 	// And the other half: what an inline invocation *may* call still works, so
 	// the refusals above are about the subset rather than about a broken instance.
 	if _, err := sdk.HostABIVersion(); err != nil {
@@ -230,6 +259,13 @@ func observe() int32 {
 	// fault — rather than the ErrDenied the same call gets inline.
 	_, err = sdk.StorageQuery("select 1", nil)
 	report("observe_storage_query", status(err))
+	// Egress, from the class that reaches the function and is refused inside it:
+	// an observing invocation has no caller whose budget a round trip could be
+	// spent against, so the answer is a record saying `class_refused` rather than
+	// the ErrDenied the same call gets inline. **Denied** when this manifest did
+	// not declare the permission, because the grant is checked first — the same
+	// grant-before-placement order the decision read above reports.
+	report("observe_network_fetch", fetchProbe())
 	return 0
 }
 

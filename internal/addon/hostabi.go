@@ -525,6 +525,115 @@ var hostFuncs = map[string]hostFunc{
 		st.answer = &answer
 		return 0
 	},
+
+	// The one function that leaves this machine (M68.5).
+	//
+	// Every refusal below is a *record* rather than a negative status, which is a
+	// deliberate departure from the rest of this file — abi.FetchOutcomes says why,
+	// and the short version is that five statuses cannot tell a timeout from a size
+	// cap from a refused address, and a guest branches on those three differently.
+	// What is left for the negative statuses is what they mean everywhere else
+	// here: the guest's own fault, and the host's.
+	"network_fetch": func(ctx context.Context, st *hostState, mod api.Module, stack []uint64) int32 {
+		raw, ok := readBytes(mod, stack[0], stack[1])
+		if !ok {
+			return int32(abi.StatusInvalid)
+		}
+		var req fetchRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return int32(abi.StatusInvalid)
+		}
+		out := st.doFetch(ctx, req)
+		encoded, err := json.Marshal(out)
+		if err != nil {
+			return st.marshalFailed("network_fetch", err)
+		}
+		return writeOut(mod, stack[2], stack[3], encoded)
+	},
+}
+
+// doFetch is the host half of `network_fetch`: the class gate, the origin policy,
+// the counters, and the fetch itself.
+//
+// Separated from the map entry above because it is the part with behaviour in it,
+// and because the metric has to be written on every path — a refusal an operator
+// cannot see on a counter is a refusal they debug by reading logs.
+func (s *hostState) doFetch(ctx context.Context, req fetchRequest) fetchResponse {
+	name := s.manifest.Name
+	if !s.mayFetch {
+		// Whatever the manifest declared. m68.5.md's answer for the redirect path,
+		// and it is the default rather than a measurement's conclusion: M66's inline
+		// deadline is a number in single-digit milliseconds and a network round trip
+		// is tens, so a fetch there could only ever be a killed invocation. The
+		// observe class is refused beside it because it has no caller whose budget
+		// the round trip would be spent against.
+		//
+		// **Reached by the observing class and by the load-time instance, and not by
+		// the inline one**, which dispatch refuses above with StatusDenied because
+		// `network_fetch` is outside abi.InlineSafe. So this counter is what an
+		// operator sees for those two, and the inline refusal is counted nowhere at
+		// all. TestNeitherRedirectClassMayFetchAndTheGuestIsToldSo drives both from
+		// a guest, above the gate, which is the only place the difference is visible.
+		//
+		// Debug rather than Warn, under the rule [hostState.refusedFetch] states: the
+		// counter carries this and the manager page renders it, so the level buys
+		// nothing an operator does not already have, and the observing class runs off
+		// the same visitor traffic the inline one does — a module looping there would
+		// otherwise decide how much an instance logs. The counter is not subject to
+		// that, being one series however often it moves.
+		s.hostLog.Debug("an add-on tried to reach outward from an invocation that may "+
+			"not: only a route handler may fetch",
+			slog.String("addon", name))
+		s.metrics.ObserveAddonFetch(name, "class_refused", 0)
+		return fetchResponse{Outcome: "class_refused"}
+	}
+	if s.fetcher == nil {
+		// A host built without one, which in this product is a test and never an
+		// instance. Answered as a wire failure rather than as StatusNotAvailable,
+		// because the function *is* implemented and what is missing is a client.
+		s.metrics.ObserveAddonFetch(name, "connect_failed", 0)
+		return fetchResponse{Outcome: "connect_failed"}
+	}
+
+	set := s.originsFor()
+	started := time.Now()
+	out := s.fetcher.fetch(ctx, name, req, set)
+	elapsed := time.Since(started)
+
+	if out.Outcome == "unconfigured" || out.Outcome == "origin_refused" {
+		// Parsed a second time only to name it in the log, and only on the path that
+		// has already been refused: the fetch itself never sees this URL again.
+		if u, why := checkFetchRequest(req); why == "" {
+			s.refusedFetch(out.Outcome, u, set)
+		}
+	}
+	// The duration is observed only for a fetch this host actually attempted, and
+	// the line is *who decided*: an outcome the host reached on its own is a
+	// decision and is counted, and an outcome the world handed back is a request
+	// and is timed. A decision costs microseconds of JSON and comparison, and
+	// putting it in the histogram would drag an add-on's p99 towards a latency
+	// nobody waited for — the same argument the redirect histogram makes about a
+	// killed invocation being absent rather than zero.
+	//
+	// `address_refused` is on the decision side and was not until the third attempt
+	// at this milestone, which is the one that mattered most: it is this
+	// milestone's headline refusal, the Control hook that raises it runs before
+	// connect(2), and it was inflating the very p99 the paragraph above says it is
+	// protecting. It costs the DNS lookup that preceded it, and that is the right
+	// trade — a lookup's latency filed as a request's is a number about a request
+	// this host refused to make.
+	//
+	// `dns_failed` stays timed, and it is the near miss that shows the rule is
+	// about who decided rather than about how far the packet got: a name that will
+	// not resolve is the world answering slowly, usually at a resolver timeout,
+	// and an operator wants to see that.
+	dialled := elapsed
+	switch out.Outcome {
+	case "unconfigured", "origin_refused", "invalid_request", "class_refused", "address_refused":
+		dialled = 0
+	}
+	s.metrics.ObserveAddonFetch(name, out.Outcome, dialled)
+	return out
 }
 
 // readStatement reads the (sql, args) pair both storage functions begin with.
@@ -1288,6 +1397,28 @@ type hostState struct {
 	// above all — whatever this add-on's manifest declared.
 	inline bool
 
+	// The egress limb (M68.5); fetch.go is where all of it is used.
+	//
+	// fetcher is the host's outbound client, one per host and nil for a host built
+	// without one — which is a test, and which answers `connect_failed` rather
+	// than pretending the function is not implemented.
+	fetcher *fetcher
+	// mayFetch is whether *this invocation* may reach outward, and it is a
+	// property of the class rather than of the manifest — the same shape `inline`
+	// has above. True only inside a route invocation: an inline module
+	// is holding a visitor's redirect open against a deadline in milliseconds, an
+	// observing one has no caller whose budget a network round trip could be spent
+	// against, and the instance made at load has no request to be acting on behalf
+	// of. False is therefore the default and every other constructor leaves it
+	// there.
+	//
+	// It is what refuses the **observing** class and the load-time instance, and
+	// what an operator sees for them is the `class_refused` outcome. For the inline
+	// class it is belt and braces: `inline` above already refuses `network_fetch`
+	// at dispatch, because the function is outside abi.InlineSafe, so that class
+	// never reaches doFetch and gets StatusDenied rather than a record.
+	mayFetch bool
+
 	// metrics is the host's registry, held so that a refusal decided *inside* a
 	// host function rather than by dispatch reaches the same counter dispatch
 	// writes. There is one such refusal — the query rewrite's second grant — and
@@ -1317,6 +1448,14 @@ func (s *hostState) forRedirect(decision *RedirectDecision, event *RedirectEvent
 	out.decision = decision
 	out.encodedDecision = nil
 	out.answer = nil
+	// Neither redirect class reaches outward, whatever the manifest declared. See
+	// [hostState.mayFetch]. Nothing traps either way, and the two classes are told
+	// so in two different places: an observing invocation reaches doFetch and gets
+	// the `class_refused` outcome, while an inline one is refused by dispatch above
+	// — `network_fetch` is outside abi.InlineSafe — and gets StatusDenied instead.
+	// This line is what refuses the observing class, and it is defence in depth for
+	// the inline one.
+	out.mayFetch = false
 	out.event = event
 	out.encodedEvent = nil
 	out.inline = decision != nil
@@ -1380,6 +1519,11 @@ func (s *hostState) forRequest(req *Request, sess SessionContext, in RequestIn) 
 	out.encoded = nil
 	out.response = nil
 	out.minted = nil
+	// The only invocation that may reach outward (M68.5). Set here rather than
+	// checked at the call, so that the class is a property of the state a host
+	// function is answered against — which is what makes `forRedirect` refusing it
+	// structural rather than a condition somebody has to remember to write.
+	out.mayFetch = true
 	return &out
 }
 
@@ -1446,6 +1590,10 @@ func (h *Host) registerState(m Manifest, grants Grants, storage *store.AddonDB,
 	// constructor would add an argument to every test that builds a state by hand
 	// and buy nothing.
 	st.metrics = h.metrics
+	// Set here for the reason metrics is: one client per host, nil-safe at the
+	// call, and threading it through the constructor would add an argument to every
+	// test that builds a state by hand.
+	st.fetcher = h.fetcher
 	h.mu.Lock()
 	if h.states == nil {
 		h.states = make(map[string]*hostState)
@@ -1549,6 +1697,11 @@ func (h *Host) dispatch(f abi.Function, impl hostFunc) api.GoModuleFunc {
 			// no template — **whatever this add-on's manifest declared**. Denied
 			// rather than NotFound, because the capability exists and this is not
 			// where it may be used.
+			//
+			// **`network_fetch` is one of them** (M68.5), which is why an inline
+			// module's egress refusal is this status and not the `class_refused`
+			// record the observing class gets. Two refusals for one rule, and the
+			// place they are told apart is abi.InlineSafe.
 			//
 			// After the grant check, so a module that declared neither the
 			// permission nor a redirect class cannot tell the two refusals apart,

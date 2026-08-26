@@ -53,6 +53,8 @@ type Metrics struct {
 	addonLargeObjects *prometheus.GaugeVec
 	addonRedirect     *prometheus.HistogramVec
 	addonRedirectKill *prometheus.CounterVec
+	addonFetch        *prometheus.HistogramVec
+	addonFetchTotal   *prometheus.CounterVec
 }
 
 // redirectBuckets straddle the 20ms cached-redirect target, densely below it
@@ -65,6 +67,17 @@ type Metrics struct {
 // names, so "fraction under target" is a single ratio of bucket counts.
 var redirectBuckets = []float64{
 	0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.02, 0.05, 0.1, 0.25, 1,
+}
+
+// fetchBuckets cover an outbound request an add-on made (M68.5), which is a
+// different scale from anything else here: the floor is a TLS handshake to a
+// server somebody else runs and the ceiling is LINKCTRL_ADDON_FETCH_TIMEOUT,
+// three seconds by default. Exponential from 5ms so that the fast case — a warm
+// identity provider on the same continent — is resolved rather than collapsed
+// into one bucket, and the last finite boundary is above the default timeout so
+// that a p99 read off it is not saturating at a bound the host imposed.
+var fetchBuckets = []float64{
+	0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 3, 5, 10,
 }
 
 // httpBuckets cover the API and dashboard budgets (150ms and 250ms) rather
@@ -381,6 +394,48 @@ func NewMetrics() *Metrics {
 				"add-on and step (instantiate, call). The redirect completed without " +
 				"them.",
 		}, []string{"addon", "step"}),
+
+		// What an add-on's outbound requests cost, and what happened to them
+		// (M68.5). Two series rather than one because they answer two questions an
+		// operator asks separately: *how slow is the provider this add-on talks to*
+		// is a distribution, and *is anything being refused* is a count — and the
+		// second is the one that matters most, because every refusal here is either
+		// a misconfiguration an operator can fix or an add-on reaching somewhere it
+		// was not pointed.
+		//
+		// **Only a fetch this host attempted is timed**, and the line is who decided:
+		// an outcome this host reached on its own — nothing configured, an origin
+		// nobody named, a malformed request, an address the policy will not dial — is
+		// microseconds of parsing and comparison, and putting it in this histogram
+		// would drag an add-on's p99 towards a latency nobody waited for. It is on the
+		// counter below instead, which is the series that was built to carry it. The
+		// same argument the redirect histogram makes about a killed invocation.
+		//
+		// `dns_failed` is the near miss and it *is* timed: a name that will not
+		// resolve is the world answering slowly rather than this host declining, and
+		// the seconds are usually a resolver timeout an operator needs to see.
+		addonFetch: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name: "linkctrl_addon_fetch_duration_seconds",
+			Help: "Time one add-on's outbound request took, by add-on. Only requests " +
+				"this host attempted are here; a refusal this host decided itself, " +
+				"address_refused included, is on linkctrl_addon_fetch_total.",
+			Buckets: fetchBuckets,
+		}, []string{"addon"}),
+
+		// `outcome` is abi.FetchOutcomes, which is closed and is eleven words, so
+		// this is bounded at eleven series per add-on that declared the grant — and
+		// at nothing at all for one that did not, since a series is created by an
+		// observation rather than by an installation. The vocabulary being the
+		// guest's own branch vocabulary is the point: an operator reading `too_large`
+		// off a dashboard and an add-on's author reading it off a return value are
+		// looking at one fact.
+		addonFetchTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "linkctrl_addon_fetch_total",
+			Help: "Outbound requests each add-on made, by add-on and outcome (ok, " +
+				"unconfigured, origin_refused, class_refused, invalid_request, " +
+				"dns_failed, address_refused, redirect_refused, too_large, timeout, " +
+				"connect_failed).",
+		}, []string{"addon", "outcome"}),
 	}
 
 	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -401,6 +456,7 @@ func NewMetrics() *Metrics {
 		m.automationFirings,
 		m.addonLoads, m.addonInfo, m.addonRefusals, m.addonSchemaBytes,
 		m.addonLargeObjects, m.addonRedirect, m.addonRedirectKill,
+		m.addonFetch, m.addonFetchTotal,
 		buildInfo,
 		// Go runtime and process collectors: memory, goroutines, GC, file
 		// descriptors, CPU. Free, standard, and the first thing anyone asks
@@ -866,6 +922,24 @@ func (m *Metrics) ObserveAddonRedirectKill(addon, step string) {
 	m.addonRedirectKill.WithLabelValues(addon, step).Inc()
 }
 
+// ObserveAddonFetch records one outbound request an add-on made (M68.5): the
+// outcome always, and the duration only when this host attempted the request
+// rather than refusing it.
+//
+// One method rather than two because the two series are written together on every
+// path and a caller that could write one without the other would be a caller that
+// eventually does. A zero duration means *this never dialled*, which is why it is
+// the absence of an observation rather than an observation of zero.
+func (m *Metrics) ObserveAddonFetch(addon, outcome string, d time.Duration) {
+	if m == nil {
+		return
+	}
+	m.addonFetchTotal.WithLabelValues(addon, outcome).Inc()
+	if d > 0 {
+		m.addonFetch.WithLabelValues(addon).Observe(d.Seconds())
+	}
+}
+
 // SetAddonLargeObjects records how many large objects one add-on's role owns
 // (M63).
 //
@@ -927,6 +1001,51 @@ type AddonKills struct {
 // one column and the split belongs on the detail page.
 func (k AddonKills) Total() uint64 { return k.Instantiate + k.Call }
 
+// AddonFetchStats is one add-on's outbound-request record (M68.5).
+//
+// Beside the redirect figures rather than folded into them, because they are two
+// different paths with two different bounds: a redirect invocation is priced in
+// milliseconds against a deadline this product sets, and an outbound request is
+// priced against a server somebody else runs.
+type AddonFetchStats struct {
+	// Count is how many requests this host attempted, which is the population the
+	// estimate below is over. A refusal this host decided itself — an unnamed
+	// origin, an address the policy will not dial — is in Outcomes and deliberately
+	// not here.
+	Count uint64 `json:"count"`
+	// Refused is every outcome but `ok`, added up. One number because the page has
+	// one line for it and the breakdown is Outcomes.
+	Refused uint64 `json:"refused"`
+	// Outcomes is each word of abi.FetchOutcomes this add-on has produced, with how
+	// often — ordered so a page does not reorder its own rows between renders.
+	Outcomes []AddonFetchOutcome `json:"outcomes,omitempty"`
+
+	P99 time.Duration `json:"-"`
+	Sum time.Duration `json:"-"`
+
+	P99Seconds float64 `json:"p99_seconds"`
+	SumSeconds float64 `json:"sum_seconds"`
+}
+
+// AddonFetchOutcome is one word of the vocabulary and how often it happened.
+type AddonFetchOutcome struct {
+	Outcome string `json:"outcome"`
+	Count   uint64 `json:"count"`
+}
+
+// Observed reports whether this add-on has made an outbound request at all. A
+// module holding no egress grant has none, and the page draws nothing rather than
+// zeros — the same rule the redirect figures follow.
+//
+// All three counts, rather than the two that are drawn: every field this struct
+// carries is written beside one of them, so *unobserved* and *all-zero* are the
+// same state and [AddonPerformance.IsZero] can rest on that. Outcomes is the one
+// that would otherwise be reachable alone — a counter incremented for `ok` with
+// no duration observed beside it.
+func (f AddonFetchStats) Observed() bool {
+	return f.Count > 0 || f.Refused > 0 || len(f.Outcomes) > 0
+}
+
 // AddonPerformance is one add-on's redirect-path record.
 type AddonPerformance struct {
 	// Classes is one entry per class this add-on has actually been observed in,
@@ -936,12 +1055,36 @@ type AddonPerformance struct {
 	// ran on the redirect path has an empty slice, and the page draws a dash.
 	Classes []AddonRedirectStats `json:"classes,omitempty"`
 	Kills   AddonKills           `json:"kills"`
+	// Fetch is the outbound-request record (M68.5), zero-valued and unobserved for
+	// an add-on that has never made one.
+	Fetch AddonFetchStats `json:"fetch"`
 }
 
 // Observed reports whether this add-on has any redirect-path record at all.
+//
+// The **redirect** path and not this struct as a whole, deliberately: it is what
+// the manager's list draws a dash from, and m68.md's promise that a module holding
+// no redirect grant shows no redirect figures rather than zeros is this predicate
+// kept. A module that has only ever fetched has not run there and must still read
+// false here. Whether the object is *published at all* is [AddonPerformance.IsZero].
 func (p AddonPerformance) Observed() bool {
 	return len(p.Classes) > 0 || p.Kills.Total() > 0
 }
+
+// IsZero is what `json:",omitzero"` asks of this struct, and it is a method
+// because the encoder's own answer stopped being the right one when
+// [AddonFetchStats] joined it.
+//
+// omitzero compares the whole struct, and until M68.5 that comparison and
+// [AddonPerformance.Observed] coincided — the only fields were the redirect ones.
+// Fetch broke the coincidence: a module holding `network.fetch` and a route
+// prefix, with no redirect class at all, has an all-zero redirect record and a
+// non-zero struct after its first outbound request, and the field-by-field
+// comparison would have published a `performance` object carrying nothing but
+// zeros for the path the module never took. The API document's claim is now what
+// this method says — absent for a module with **no record of either kind** — and
+// there is one predicate rather than two that agreed by accident.
+func (p AddonPerformance) IsZero() bool { return !p.Observed() && !p.Fetch.Observed() }
 
 // AddonPerformance reads the two per-module series M66 publishes and returns them
 // by add-on name.
@@ -1028,6 +1171,35 @@ func (m *Metrics) AddonPerformance() map[string]AddonPerformance {
 				})
 				out[name] = p
 			}
+		case "linkctrl_addon_fetch_duration_seconds":
+			for _, metric := range f.GetMetric() {
+				name := labelOf(metric.GetLabel(), "addon")
+				h := metric.GetHistogram()
+				if name == "" || h == nil || h.GetSampleCount() == 0 {
+					continue
+				}
+				p := out[name]
+				p99 := bucketQuantile(h.GetSampleCount(), h.GetBucket(), 0.99)
+				p.Fetch.Count = h.GetSampleCount()
+				p.Fetch.P99, p.Fetch.P99Seconds = seconds(p99), p99
+				p.Fetch.Sum, p.Fetch.SumSeconds = seconds(h.GetSampleSum()), h.GetSampleSum()
+				out[name] = p
+			}
+		case "linkctrl_addon_fetch_total":
+			for _, metric := range f.GetMetric() {
+				name := labelOf(metric.GetLabel(), "addon")
+				outcome := labelOf(metric.GetLabel(), "outcome")
+				n := uint64(metric.GetCounter().GetValue())
+				if name == "" || outcome == "" || n == 0 {
+					continue
+				}
+				p := out[name]
+				p.Fetch.Outcomes = append(p.Fetch.Outcomes, AddonFetchOutcome{Outcome: outcome, Count: n})
+				if outcome != fetchOK {
+					p.Fetch.Refused += n
+				}
+				out[name] = p
+			}
 		case "linkctrl_addon_redirect_kills_total":
 			for _, metric := range f.GetMetric() {
 				name, step := labelOf(metric.GetLabel(), "addon"), labelOf(metric.GetLabel(), "step")
@@ -1052,10 +1224,25 @@ func (m *Metrics) AddonPerformance() map[string]AddonPerformance {
 		slices.SortFunc(p.Classes, func(a, b AddonRedirectStats) int {
 			return strings.Compare(classRank(a.Class), classRank(b.Class))
 		})
+		// Most frequent first, and alphabetically inside a tie, so the row an
+		// operator is looking for is at the top and the order does not move between
+		// two renders of the same numbers.
+		slices.SortFunc(p.Fetch.Outcomes, func(a, b AddonFetchOutcome) int {
+			if a.Count != b.Count {
+				return int(b.Count) - int(a.Count) //nolint:gosec // G115: two scrape counts, and the sign is what is read
+			}
+			return strings.Compare(a.Outcome, b.Outcome)
+		})
 		out[name] = p
 	}
 	return out
 }
+
+// fetchOK is abi.FetchOK, spelled here because this package does not import the
+// add-on ABI and must not: internal/observability is imported by everything and a
+// dependency on the add-on surface would invert that. A test in internal/addon
+// holds the two strings together.
+const fetchOK = "ok"
 
 // classRank puts inline first and observe second, whatever they are called.
 func classRank(class string) string {

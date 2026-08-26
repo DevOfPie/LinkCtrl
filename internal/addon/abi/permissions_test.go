@@ -1,6 +1,9 @@
 package abi
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,7 +15,7 @@ import (
 //
 // m62.md requires that adding an entry be "a code change with a test asserting
 // the set, the same discipline `?src=` uses for its closed vocabulary". This is
-// that test, and the literal below is the whole of it: a seventh permission, a
+// that test, and the literal below is the whole of it: a tenth permission, a
 // renamed one, or one that quietly became grantable fails here and has to be
 // argued for in the diff that changes it.
 //
@@ -46,6 +49,11 @@ func TestThePermissionVocabularyIsExactlyThis(t *testing.T) {
 		// routes.own_prefix: a manifest declaring *run on the redirect path* should
 		// not turn out to have declared *and edit where the visitor goes*.
 		{"redirect.rewrite_query", true},
+		// The ninth, added at M68.5 (D367). Grantable from the moment it exists,
+		// unlike redirect.inline, because the function behind it lands in the same
+		// milestone — there was no capability to declare early against, since the
+		// gap this closes was found at M69's validation rather than planned for.
+		{"network.fetch", true},
 	}
 
 	if len(Permissions) != len(want) {
@@ -242,5 +250,71 @@ func TestPermissionStorageNamesAnEntryInTheVocabulary(t *testing.T) {
 	}
 	if p.BackedBy != "M63" {
 		t.Errorf("%q is backed by %q, want M63", p.Name, p.BackedBy)
+	}
+}
+
+// TestEveryDocumentedPermissionCountIsTied is the vocabulary's half of what
+// [TestTheDocumentedLiveCountIsTheOneThisListHolds] does for the function list,
+// and it exists because the same drift had already happened here without anything
+// noticing: `docs/configuration.md` said the vocabulary was *the seven below* over
+// a table of eight, from M66 until M68.5 read the sentence.
+//
+// Two counts, and they are not the same number. The **vocabulary** is every token
+// a manifest may declare. The **gating set** is the distinct permissions the
+// functions name, which is smaller — `redirect.rewrite_query` gates no function at
+// all, since what it permits is one field of a record `redirect_answer_write`
+// already carries — and it is the one that bounds `linkctrl_addon_refusals_total`'s
+// label cardinality, which is why `docs/operations.md` states both in one sentence.
+//
+// Anchored rather than swept, unlike the function counts. The noun here is
+// *permissions*, which appears in these documents hundreds of times about API-key
+// scopes and role grants, so a both-directions sweep would be a list of exemptions
+// longer than the list of claims. What makes the anchor honest instead is that a
+// sentence stating the size and *not* named here is a sentence this test does not
+// protect — so the list is checked against the documents it names on every run,
+// and adding a tenth token reddens each of them.
+func TestEveryDocumentedPermissionCountIsTied(t *testing.T) {
+	gating := map[string]bool{}
+	for _, f := range Functions {
+		if f.Requires != "" {
+			gating[f.Requires] = true
+		}
+	}
+	vocabulary, gates := len(Permissions), len(gating)
+	for _, tc := range []struct {
+		what, file, sentence string
+		counts               []int
+		spelling             int
+	}{
+		{"the vocabulary size", "Plan.md",
+			"a closed %s-token vocabulary", []int{vocabulary}, 1},
+		{"the vocabulary size", "docs/configuration.md",
+			"it is the %s below", []int{vocabulary}, 1},
+		{"the vocabulary size", "docs/configuration.md",
+			"%s, and the list is closed", []int{vocabulary}, 0},
+		{"the vocabulary size", "docs/configuration.md",
+			"Everything else costs one of the %s.", []int{vocabulary}, 1},
+		{"the gating set", "docs/operations.md",
+			"%s today of a %s-token vocabulary", []int{gates, vocabulary}, 1},
+		{"the vocabulary size", "CHANGELOG.md",
+			"The permission vocabulary is %s tokens", []int{vocabulary}, 1},
+	} {
+		words := make([]any, 0, len(tc.counts))
+		for _, n := range tc.counts {
+			spellings, ok := functionCountWords[n]
+			if !ok {
+				t.Fatalf("%s in %s is %d and there is no spelling for it here", tc.what, tc.file, n)
+			}
+			words = append(words, spellings[tc.spelling])
+		}
+		want := flattenCounts(fmt.Sprintf(tc.sentence, words...))
+		src, err := os.ReadFile(filepath.Join(repoRootOf(t), filepath.FromSlash(tc.file)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(flattenCounts(string(src)), want) {
+			t.Errorf("%s does not say %q. %s is %d and the sentence stating it has "+
+				"stopped saying so", tc.file, want, tc.what, tc.counts[0])
+		}
 	}
 }

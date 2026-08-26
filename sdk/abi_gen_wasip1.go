@@ -74,6 +74,10 @@ func wasmRedirectDecisionRead(decisionPtr unsafe.Pointer, decisionLen uint32) in
 //go:noescape
 func wasmRedirectAnswerWrite(answerPtr unsafe.Pointer, answerLen uint32) int32
 
+//go:wasmimport linkctrl network_fetch
+//go:noescape
+func wasmNetworkFetch(requestPtr unsafe.Pointer, requestLen uint32, responsePtr unsafe.Pointer, responseLen uint32) int32
+
 // HostABIVersion is the ABI version of the host this module is running in.
 // A module's manifest declares the generation it was built against and the
 // host refuses a mismatch before instantiation, so this is not how a module
@@ -640,4 +644,64 @@ func RedirectAnswerWrite(answer []byte) error {
 		return statusError(n)
 	}
 	return nil
+}
+
+// NetworkFetch makes one outbound request from the host and hands you what
+// came back. It is the only way out of this sandbox and it is bounded on
+// every axis the host can bound it on. **Where** is the operator's: the
+// URL's origin — scheme, host and port — must be one they named in a
+// setting your manifest declared as carrying origins, and an add-on
+// configured with none reaches nothing at all. Your manifest cannot name a
+// host, so a discovery document pointing at a second origin is a second
+// origin the operator has to authorize before you can follow it; that is
+// the bound, and it is why an issuer whose token endpoint lives on another
+// name needs both written down. **What** is the host's: https only, GET or
+// form-encoded POST, no request headers of your choosing — the host sets
+// Accept, Content-Type and its own User-Agent — and no response header
+// reaches you but the content type, so nothing a third party sets in a
+// browser can be laundered through this call. **How far** is fixed: every
+// address the name resolves to is checked at the moment of dialling, so
+// loopback, link-local, unique-local, the private ranges and this machine's
+// own metadata service are refused however the name got there; a redirect
+// is followed only on the origin it started on; the response is cut off at
+// the host's size cap; and the whole call is bounded by the host's timeout
+// and by whatever is left of the invocation's own. **When** is the class:
+// this is callable from a route handler and from nowhere else, because an
+// inline module holds a visitor's request open against a deadline in
+// milliseconds and an observing one has no caller to spend a budget
+// against. The two redirect classes are refused in **two different places**
+// and you branch on two different things. An **inline** invocation never
+// reaches this function at all: it is outside the redirect-safe subset, so
+// the call is ErrDenied — the same refusal storage_query gets there, and
+// deliberately the same one an undeclared permission gets, so it is
+// uncounted and tells you nothing about what the host implements. An
+// **observing** invocation reaches it and comes back with the
+// `class_refused` outcome, which is a counter label. Nothing here traps in
+// either case: the answer is a FetchResponse whose `outcome` says what
+// happened, from a closed vocabulary you can branch on, and an operator
+// sees the same word as a counter label — or, in the inline case, the
+// ErrDenied every function outside that subset returns.
+//
+// request is what to fetch, as a FetchRequest record.
+//
+// ABI: linkctrl.network_fetch, since 0.1.4; implemented since this version.
+//
+// Requires the network.fetch permission, declared in this add-on's
+// manifest. A module that did not declare it gets ErrDenied, whether or not
+// the host implements the function.
+func NetworkFetch(request []byte) ([]byte, error) {
+	buf := make([]byte, initialBuffer)
+	for attempt := 0; attempt < growthAttempts; attempt++ {
+		n := wasmNetworkFetch(bytesPtr(request), uint32(len(request)), bytesPtr(buf), uint32(len(buf)))
+		runtime.KeepAlive(request)
+		runtime.KeepAlive(buf)
+		if n < 0 {
+			return nil, statusError(n)
+		}
+		if int(n) <= len(buf) {
+			return buf[:n:n], nil
+		}
+		buf = make([]byte, n)
+	}
+	return nil, ErrInternal
 }

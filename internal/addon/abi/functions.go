@@ -19,11 +19,12 @@ package abi
 // grant on either would be a line in every manifest that bought an operator
 // nothing.
 //
-// Ten capability groups across eight declarable permissions, and they do not map
+// Eleven capability groups across nine declarable permissions, and they do not map
 // one to one onto milestones: logging and
 // config are M61's, storage is M63's, routes and the session *read* are M64's, the
 // session *hook* and the two ungated host facts — entropy and the clock — are
-// M65's, and the redirect group is M66's. All of those work. Template rendering
+// M65's, the redirect group is M66's, and the one that reaches outward is
+// M68.5's. All of those work. Template rendering
 // from a module's own files is declared and
 // **still refused** — M64 answered the rendering half by wrapping what a module
 // returns rather than by parsing markup a module ships, which is D259 and is why
@@ -387,6 +388,48 @@ var Functions = []Function{
 			"ErrInvalid, and so is a verdict outside the vocabulary. Called twice in one " +
 			"invocation the second is ErrInvalid, for the reason http_response_write is.",
 	},
+	{
+		Name: "network_fetch", Go: "NetworkFetch", Since: "0.1.4", BackedBy: "M68.5", Live: true,
+		Requires: PermissionNetworkFetch,
+		Params: []Param{
+			{Name: "request", Kind: Bytes, Doc: "what to fetch, as a FetchRequest record"},
+			{Name: "response", Kind: OutBytes, Doc: "what came back, as a FetchResponse record"},
+		},
+		Carries: []string{"FetchRequest", "FetchResponse"},
+		Doc: "NetworkFetch makes one outbound request from the host and hands you what came " +
+			"back. It is the only way out of this sandbox and it is bounded on every axis " +
+			"the host can bound it on. **Where** is the operator's: the URL's origin — " +
+			"scheme, host and port — must be one they named in a setting your manifest " +
+			"declared as carrying origins, and an add-on configured with none reaches " +
+			"nothing at all. Your manifest cannot name a host, so a discovery document " +
+			"pointing at a second origin is a second origin the operator has to authorize " +
+			"before you can follow it; that is the bound, and it is why an issuer whose " +
+			"token endpoint lives on another name needs both written down. **What** is the " +
+			"host's: https only, GET or form-encoded POST, no request headers of your " +
+			"choosing — the host sets Accept, Content-Type and its own User-Agent — and no " +
+			"response header reaches you but the content type, so nothing a third party " +
+			"sets in a browser can be laundered through this call. **How far** is fixed: " +
+			"every address the name resolves to is checked at the moment of dialling, so " +
+			"loopback, link-local, unique-local, the private ranges and this machine's own " +
+			"metadata service are refused however the name got there; a redirect is " +
+			"followed only on the origin it started on; the response is cut off at the " +
+			"host's size cap; and the whole call is bounded by the host's timeout and by " +
+			"whatever is left of the invocation's own. **When** is the class: this is " +
+			"callable from a route handler and from nowhere else, because an inline " +
+			"module holds a visitor's request open against a deadline in milliseconds and " +
+			"an observing one has no caller to spend a budget against. The two redirect " +
+			"classes are refused in **two different places** and you branch on two " +
+			"different things. An **inline** invocation never reaches this function at " +
+			"all: it is outside the redirect-safe subset, so the call is ErrDenied — the " +
+			"same refusal storage_query gets there, and deliberately the same one an " +
+			"undeclared permission gets, so it is uncounted and tells you nothing about " +
+			"what the host implements. An **observing** invocation reaches it and comes " +
+			"back with the `class_refused` outcome, which is a counter label. Nothing " +
+			"here traps in either case: the answer is a FetchResponse whose `outcome` " +
+			"says what happened, from a closed vocabulary you can branch on, and an " +
+			"operator sees the same word as a counter label — or, in the inline case, " +
+			"the ErrDenied every function outside that subset returns.",
+	},
 }
 
 // Records is every structured payload the ABI carries.
@@ -503,6 +546,50 @@ var Records = []Record{
 			{"body", "string", "the body, as UTF-8 text — this direction carries no encoded " +
 				"form, because the content types an add-on may name are text and a flag " +
 				"saying otherwise would be a flag with nothing behind it"},
+		},
+	},
+	{
+		Name: "FetchRequest",
+		Doc: "One outbound request an add-on is asking the host to make. Deliberately " +
+			"narrow: there is no header map, because a header is the shape through which " +
+			"a request grows a credential, a host override or a cookie nobody declared, " +
+			"and the two an OIDC exchange actually needs are the host's to set. What is " +
+			"left is a URL the operator already authorized the origin of, a method from a " +
+			"closed pair, and a form-encoded body.",
+		Fields: []Field{
+			{"url", "string", "the absolute https URL to fetch. Its origin — scheme, host and " +
+				"port — must be one the operator named in an origin setting of this add-on, " +
+				"and anything else is refused before a packet leaves"},
+			{"method", "string", "GET or POST; empty is GET. Nothing wider, because a " +
+				"discovery fetch and a token exchange are what this exists for"},
+			{"body", "string", "for POST, the form-encoded body — the host sets " +
+				"application/x-www-form-urlencoded and nothing else may be sent. Ignored on a " +
+				"GET, which is ErrInvalid rather than a body quietly dropped"},
+		},
+	},
+	{
+		Name: "FetchResponse",
+		Doc: "What came back, or what stopped it. `outcome` is a closed vocabulary and it " +
+			"is the first thing to read: everything else is empty unless it says `ok`. " +
+			"**No response header crosses but the content type** — a Set-Cookie, a " +
+			"Location or an Authenticate header from somebody else's server has no " +
+			"business in an add-on's hands, and the type is the one an add-on needs in " +
+			"order to know whether it was handed the JSON it asked for.",
+		Fields: []Field{
+			{"outcome", "string", "what happened, from the closed vocabulary in FetchOutcomes: " +
+				"`ok` means a response arrived and says nothing about its status code"},
+			{"status", "number", "the HTTP status code, and 0 when outcome is not ok. A 404 or " +
+				"a 500 from the other end is an `ok` outcome carrying that number — the host " +
+				"reached who it was told to and does not judge the answer"},
+			{"content_type", "string", "the response's Content-Type, and the only header of it " +
+				"that crosses"},
+			{"body", "string", "the body, base64 when body_base64 says so, cut off at the " +
+				"host's size cap — a response over the cap is the `too_large` outcome with no " +
+				"body at all rather than a truncated one, because a truncated JSON document " +
+				"is a parse error blamed on the wrong party"},
+			{"body_base64", "boolean", "whether body is base64 rather than text; it is true " +
+				"exactly when the response's own bytes were not valid UTF-8, for the reason " +
+				"HTTPRequest carries the same pair"},
 		},
 	},
 	{

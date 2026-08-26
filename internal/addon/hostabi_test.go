@@ -1532,6 +1532,13 @@ func TestAnAddonPostsToTheLogAndCannotReadItBack(t *testing.T) {
 		"name":     "page",
 		"response": `{"status":200,"body":"ok"}`,
 		"claim":    `{"subject":"probe-subject","issuer":"https://idp.test"}`,
+		// network_fetch's input, and driving it here dials nothing: the state this
+		// sweep builds is not a route invocation, so the class gate refuses it before
+		// the origin policy is consulted and the record it writes back is the refusal.
+		// That is what makes the out-buffer assertion below meaningful for it — the
+		// buffer is written on the refusal path exactly as on the success one, which
+		// is the property abi.FetchOutcomes exists to give.
+		"request": `{"url":"https://idp.test/.well-known/openid-configuration"}`,
 	}
 	const inputDefault = "[]"
 

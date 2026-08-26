@@ -88,6 +88,12 @@ func init() {
 	denied("redirect_decision_read", err)
 	denied("redirect_answer_write", sdk.RedirectAnswerWrite(nil))
 
+	// The egress limb (M68.5). Denied for the ordinary reason and denied before
+	// anything is parsed: dispatch refuses the grant first, so a module that
+	// declared nothing cannot tell whether the URL it named was even well formed.
+	_, err = sdk.NetworkFetch([]byte(`{"url":"https://idp.test/.well-known/openid-configuration"}`))
+	denied("network_fetch", err)
+
 	// The other half of what an ungated function means. log costs nothing, so this
 	// module — which declared nothing at all — is the widest untrusted input the
 	// host has, and this is that input behaving like one: a newline that would close

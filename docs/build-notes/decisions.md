@@ -447,7 +447,14 @@ file. Append a row when you append an entry.
 | [M62, strip the variation selectors; there is no base set](#2026-08-21--m62-strip-the-variation-selectors-there-is-no-base-set) | D283, owner-answered, superseding D270's remedy: every variation selector is deleted from an add-on's log message rather than escaped, and there is no exemption for the emoji case. D270's carve-out and the two predicates written under it, D276 and D277, are withdrawn — and never landed, being on the unmerged branch `wip/m62-sanitizer`. Why the threat is legibility rather than confidentiality, why there is no base set that two attempts could have found, what the ~354 monochrome symbols cost, and the proof that nothing rested on the injectivity stripping gives up |
 | [The foundation cannot reach outward, and one constraint nobody chose](#2026-08-25--the-foundation-cannot-reach-outward-and-one-constraint-nobody-chose) | D364: an add-on declares that it needs egress and the operator decides where — why the operator rather than the manifest, and what it costs. D365: *install is an upload, never a fetch* was nobody's decision, so URL install is new function rather than a reopening, and it lands behind the egress milestone. Plus what the two cost the phase's count |
 | [The conversation Plan.md promised, and what it decided](#2026-08-26--the-conversation-planmd-promised-and-what-it-decided) | D366: Phase 4 proceeds at seventeen with one slot left — what was actually weighed (not the count, but that M69 produced insertions before starting), and the two alternatives declined |
+| [M68.5, how an add-on reaches outward: the four shapes the answer took](#2026-08-26--m685-how-an-add-on-reaches-outward-the-four-shapes-the-answer-took) | D367: origins come from a manifest-declared setting the operator fills in, marked by a flag rather than a fifth setting type; the outcome is a closed vocabulary in the record rather than one of the five ABI statuses; the coherence rule is one-directional; and the route deadline is built for every route handler rather than only for the ones that fetch. Plus the measured defaults, the exemption the authentication egress scan gained, and the one thing this milestone deliberately does not carry |
 | [M67 reopened: the leak tripwire measures warm-up](#2026-08-26--m67-reopened-the-leak-tripwire-measures-warm-up) | D368: there is no leak — growth against cycle count, and why a falling per-cycle cost proves warm-up rather than a leak; what the test's window gets wrong; why reopening rather than a loose commit or a wider tolerance. D369: the workload made the defect invisible — wazero dedups identical modules, so the sabotage the tripwire was built for could never have failed, and each cycle now installs distinct bytes |
+| [M68.5, the bound that never fired](#2026-08-26--m685-the-bound-that-never-fired) | D370: the route deadline is a bound *inside* HTTP_REQUEST_TIMEOUT rather than the first bound a route handler ever had — the tree fact that falsifies D367's last paragraph, why the bound is kept at ten seconds rather than removed, the fetch timeout resized to three because the budget it was a third of did not exist, and both nestings moved out of comments into `Config.Validate`. Also the four documents whose count or claim the first attempt left stale, and the two log sites that escaped what the neutralizing handler escapes. D371: the milestone's own *no deadline to spend* clause amended — a fact the plan asserted, the build inherited, and a measurement disproved |
+| [M68.5, what a refusal list claims and what a stored value authorizes](#2026-08-26--m685-what-a-refusal-list-claims-and-what-a-stored-value-authorizes) | D372: an operator's stored value that a *new* manifest marks as naming an origin — why the claim was narrowed rather than the value invalidated, what an `origin` column on `addon_settings` would have bought, and the environment half that no column can reach. D373: the refusal list stops being the mechanism — `2001::/23` refused as a delegated block so the next carve-out is refused before IANA writes it, why the list got shorter while getting wider, and what the block still does not cover. Also `address_refused` leaving the duration histogram, and the third egress bound gaining the validation its two neighbours had |
+| [M68.5, one rule and two refusals, because a document said one](#2026-08-26--m685-one-rule-and-two-refusals-because-a-document-said-one) | D374: an inline redirect invocation is refused `network_fetch` by M66's dispatch gate and gets `ErrDenied`, while the observing class reaches the function and gets the `class_refused` outcome and its counter — one rule, two refusals, and seven places said one. Why `network_fetch` was not put on `abi.InlineSafe` to make the word uniform, what that would have falsified, and the test that could not have caught it because it sits below the gate. Also `TestARedirectIsCheckedForItsAddressToo`, which refused the *first* hop and so asserted nothing about redirects at all |
+| [M68.5, the address policy is inverted](#2026-08-26--m685-the-address-policy-is-inverted) | D375: an address is refused unless it is public — the denylist was found short in three of four reviews, why `fec0::/10` made the shape clear, what inverting buys (a range nobody thought of becomes refused rather than reachable) and what it costs |
+| [M68.5, what "globally routable" is, and a rule that refused an instance running no add-ons](#2026-08-26--m685-what-globally-routable-is-and-a-rule-that-refused-an-instance-running-no-add-ons) | D376: the shape D375's inversion took — `2000::/3` and the nine prefixes covering 1.0.0.0 through 223.255.255.255, why the IPv4 half is honestly weaker than the IPv6 half and what that buys anyway, and `address_rule=` as the greppable half of the cost D375 accepted. D377: the route-deadline nesting rule is guarded on `ADDONS_DIR` being set, reversing the comment that deliberately put it outside the guard — it refused to start an instance that runs no add-ons, over a default nobody chose. Also the two hand-copied enumerations of the outcome vocabulary that nothing checked |
+| [M68.5, an object the API said could not exist, and what a refusal costs to log](#2026-08-26--m685-an-object-the-api-said-could-not-exist-and-what-a-refusal-costs-to-log) | D378: `performance` is published when there is a record of **either** kind — `omitzero` and `Observed()` coincided only while the struct held redirect fields alone, and M69's own add-on is the shape that broke it; why the object is right and the sentence was wrong, and the `IsZero()` that makes it one predicate instead of two that agreed by accident. D379: a guest-drivable refusal warns only when the log is the only channel — three sites drop to `Debug`, and the rule explains the four Warns beside them rather than excusing them. D380: the response headers are bounded at 64 KiB and it is not a knob, why the outcome is `connect_failed` rather than `too_large` |
 
 | [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
 | [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
@@ -39384,6 +39391,143 @@ entry does not pre-answer it: with the last slot spent, one more is a conversati
 about the cap itself. Naming that here is the whole point of having had this one
 early rather than mid-milestone.
 
+## 2026-08-26 — M68.5, how an add-on reaches outward: the four shapes the answer took
+
+### D367 — the shape of egress, decided four ways below one owner answer
+
+[D364](#2026-08-25--the-foundation-cannot-reach-outward-and-one-constraint-nobody-chose)
+decided the design: *the manifest declares a need, the operator names the origins*.
+It did not decide how, and four choices sat under it. Each is recorded because each
+had a plausible alternative and because
+[M68.6](phase-details/m68.6.md) and [M69](phase-details/m69.md) both build on the
+answers.
+
+**Origins come from a manifest-declared setting, marked by a flag.** m68.5.md says
+*a declared setting the operator fills in — M68's page, M64's types*, and two
+readings survive that sentence: a setting the **manifest** declares, or one the
+**host** synthesizes for every add-on holding the grant. The manifest's own bullet
+decides it — *a log line naming the setting* only means something if the setting has
+a name the add-on chose — so an add-on declares
+`{"name": "provider_origins", "type": "text", "origin": true}` and the operator
+fills it in. The flag is a boolean beside the existing four types rather than a
+fifth type, because what changes is the *meaning* and not the input: the manager
+draws the same text box, and a fifth type would be a shape M68's page had to learn
+to render for nothing. What the flag costs is three refusals that make *the
+manifest cannot name a destination* structural rather than promised — such a
+setting is `text`, carries no `default`, and carries no `options`. A default would
+be a host the publisher chose and the operator inherited; options would be a list
+of them; a `select` would be the manifest naming the choices outright.
+
+**The value is a space-separated list, not one origin.** Measured rather than
+assumed: Google serves discovery from `accounts.google.com`, the token endpoint
+from `oauth2.googleapis.com` and the key set from `www.googleapis.com`. With one
+origin per setting, an add-on whose author had anticipated one field would be an
+add-on nobody could point at such a provider — and the add-on's author is exactly
+the party this design says must not be deciding where it reaches. So the field
+takes as many as the operator writes, and every one of them is still theirs.
+
+**A refusal is a word in the record, not one of the five ABI statuses.** Every
+other refusal in this ABI is a negative [abi.Status], and this one is not, which is
+a departure worth the entry. m68.5.md asks for *a closed vocabulary the guest can
+branch on, and each one is a counter label* — and the five statuses cannot tell a
+timeout from a size cap from a refused address, which are three different things
+for both readers: an add-on retries one of them and an operator investigates
+another. Collapsing them would have made the `outcome` label of
+`linkctrl_addon_fetch_total` a second vocabulary invented for the metric, which is
+the drift the closed-vocabulary discipline exists to prevent. So `FetchResponse`
+carries `outcome`, eleven words, and the negative statuses keep what they mean
+everywhere else here: the guest's own fault, and the host's. The alternative —
+`StatusDenied` for the unconfigured case, statuses for the rest, the record for
+what is left — was written out and rejected as two mechanisms for one question.
+
+**The coherence rule is one-directional.** An origin-marked setting without
+`network.fetch` is refused at load; the grant without an origin setting is legal.
+The second direction was built first and reverted: it broke
+`TestGrantabilityIsNotAValidationQuestion`, which walks the vocabulary asserting
+that a manifest declaring any single token validates — a **shipped** claim, and one
+this milestone has no business narrowing. It is also wrong on its own terms. An
+add-on holding the grant with nowhere to point reaches nothing, and *reaching
+nothing* is not a broken state here: it is the `unconfigured` outcome, which this
+design produces on purpose for every add-on nobody has configured yet. Refusing it
+would make validation ask whether a declared capability is *useful* rather than
+whether it is coherent. It is a publishing mistake, so it gets a boot-log warning
+and the same treatment migrations-without-storage gets in the direction that
+matters.
+
+**The route deadline covers every route invocation, not only a fetching one.**
+m68.5.md's *first job* was to say what bounds a fetching route handler and build
+it. What the tree turned out to have was no bound at all: a route ran under the
+request's context, `LINKCTRL_HTTP_WRITE_TIMEOUT` does not cancel one, and a module
+that looped held one of the sixteen instance slots — shared with the redirect path
+— for as long as the visitor waited. A deadline conditional on the permission would
+have left that hole open for every add-on that did not declare it, while being a
+second rule to reason about. Fifteen seconds, which is three fetches at the default
+timeout and sits under the write timeout where the visitor's patience ends anyway.
+
+### The defaults were measured, and here is what was measured
+
+2026-08-26, four public identity providers. Discovery documents: 839 bytes
+(Apple), 1,217 (GitHub Actions), 1,399 (Google), 1,728 (Microsoft). Key sets:
+2,880 (Apple), 5,547 (GitHub Actions), 12,852 (Microsoft). These are documents
+whose transfer time is a TLS handshake and a round trip rather than bytes on a
+wire, which is what makes a **five-second** timeout generous rather than tight and
+a **256 KiB** cap twenty times the largest of them. The cap is deliberately the
+same number `maxResponseBody` uses for what an add-on may *answer* with: one figure
+for what crosses this boundary in either direction is one figure for an operator to
+hold.
+
+### The egress scan gained its first exemption, and the claim narrowed
+
+`TestTheSecondFactorOpensNoSocket` (M53, extended to `internal/addon` at M65) has
+asserted since 0.3.0 that *nothing on an authentication path in this product
+reaches the network*. This milestone makes that false as written, and the response
+is to say what is true now rather than to widen a pattern quietly: **this product's
+own authentication code does not dial**, and an add-on's outbound request is a
+capability an operator granted to somebody else's module. The exemption is
+`internal/addon/fetch.go` by name — one file — and that confinement is what the
+narrowed claim rests on, so a second file in that package that dials fails the scan
+rather than joining a list. The test also now asserts the exempt path exists, since
+an exemption naming a file that moved is one that has quietly stopped exempting
+anything. `docs/SECURITY.md`'s egress row goes from **five** connections to six,
+and the sixth is the first whose destination somebody outside this project chose.
+
+### What this deliberately does not carry, and why it will be asked for
+
+**No request headers.** The ABI carries no header map, so a token endpoint is
+reached with `client_secret_post` and there is no way to send `Authorization`. A
+header is the shape through which a request grows a credential nobody granted, a
+`Host` override that defeats the origin check, or a cookie no prefix was declared
+for — and the two headers an OIDC exchange actually needs are ones the host sets
+itself. The cost is real and is stated here rather than discovered at M69: a
+provider that advertises only `client_secret_basic` cannot be reached, and the fix
+is a field on `FetchRequest` bounded by a closed allowlist of header names, which
+is additive and argued when something needs it.
+
+**No response headers but the content type**, so a `Set-Cookie` or a `Location`
+from a third party never reaches a module.
+
+**No connection pooling.** Keep-alives are off. A pooled connection would outlive
+the instance the pool hands back, and an add-on removed at runtime would leave one
+open to somebody else's server.
+
+**No proxy.** `http.ProxyFromEnvironment` is deliberately not used: a proxy
+connects on this host's behalf to an address the dial-time check never sees, which
+would make the whole address policy advisory. An operator who needs egress through
+a proxy needs it enforced in the network, which is what `docs/SECURITY.md` already
+says about the destination validator.
+
+### What is *not* claimed
+
+The address policy is a **refusal list plus the stdlib's predicates**, and
+m68.5.md's own risk says what that is worth: *the test suite is written against the
+bypasses somebody thought of*. Nothing here closes that. What the build does
+instead is split the claim so neither half rests on the other — the policy is a
+pure function driven by a table of forty-odd representations, and the wiring is
+asserted by dialling `https://localhost:<port>` for real with the policy untouched,
+which is the DNS-rebinding shape without a DNS server: a name, resolved by the
+operating system, that no amount of reading the URL distinguishes from any other.
+Both halves fail when either is sabotaged, which was confirmed rather than assumed.
+
 ## 2026-08-26 — M67 reopened: the leak tripwire measures warm-up
 
 ### D368 — there is no leak, and the instrument was measuring the wrong window
@@ -39478,3 +39622,651 @@ exercising a workload under which the property it guards cannot fail. *A test
 that has never failed has not been shown to test anything* is the rule this
 repository already has; what neither it nor the sabotage caught is a test that
 **did** fail on demand, for a reason unrelated to the line it was protecting.
+
+
+## 2026-08-26 — M68.5, the bound that never fired
+
+### D370 — the route deadline is a bound inside the request deadline, not the first one
+
+M68.5's first attempt was rejected on seven findings. The address policy was not
+among them: the reviewer tried to break it and could not. What it was rejected on
+is the milestone's *first job* — **say what bounds a fetching route handler and
+build it** — and the answer that was built was defended with the wrong number.
+
+**The tree fact.** `internal/httpx/router.go` wraps the whole application tree in
+`RequestTimeout(cfg.HTTP.RequestTimeout)`, which is a **context** deadline
+(`internal/httpx/timing.go`) defaulting to fifteen seconds
+(`internal/config/config.go`). `internal/httpx/addons.go` hands `r.Context()` to
+`Host.Route`, which does `context.WithTimeout(ctx, h.deadlineForRoute())` — also
+fifteen seconds. `WithTimeout` keeps whichever deadline is earlier and the
+request's starts strictly first, so **the new bound never fired at default
+configuration**. Measured by the reviewer: with a 300 ms parent context the `/spin`
+fixture returns in 300.7 ms with *module closed with context deadline exceeded*.
+Six places asserted the opposite, and each of them named `HTTP_WRITE_TIMEOUT`
+(thirty seconds, which genuinely does not cancel a context) while none named
+`HTTP_REQUEST_TIMEOUT` (fifteen, which does).
+
+**[D367's last paragraph is superseded.](#2026-08-26--m685-how-an-add-on-reaches-outward-the-four-shapes-the-answer-took)**
+Its first sentence stands — the deadline covers every route invocation rather than
+only a fetching one, and the argument for that is unchanged. What is false is
+everything after *What the tree turned out to have was no bound at all*: a route
+did have a bound, it was the request deadline, and `HTTP_WRITE_TIMEOUT` was never
+the number at issue. That text stays as written because this file is append-only;
+this paragraph is the pointer forward.
+
+**Why the bound is kept rather than removed.** The other honest outcome was to
+delete the knob and record that the request deadline had been the answer all along.
+It was written out and declined on two grounds, both of which are properties of the
+tree rather than preferences:
+
+- **A bound that fires *first* is not the same bound.** When the request deadline
+  is what elapses, host and guest end on the same context: the module is closed and
+  the handler that would turn that into a page, a log line and a counter has no
+  budget left either. A margin under it means the host closes the guest, observes
+  `ErrGuestFailed`, and still has a live request to answer with. Five seconds under
+  fifteen is that margin.
+- **`RequestTimeout(0)` returns the handler untouched.** An operator who has
+  disabled the request timeout has no bound on an add-on's page at all, and that is
+  the deployment where a module holding one of the sixteen instance slots until the
+  visitor gives up is still reachable.
+
+So the default moves **fifteen seconds → ten**, and the reason written beside it is
+the one above rather than the write timeout.
+
+**The fetch timeout was a third of a budget that did not exist.** Five seconds was
+defended as *a third of what the route deadline allows, so a handler doing the three
+fetches an authorization-code flow needs has room for all of them*. Under the
+finding above the real budget was whatever remained of the fifteen-second request
+deadline after middleware, session lookup, CSRF, rate limiting and instantiation,
+and 3 × 5s does not fit in it. The measurement behind the number was about document
+*size* and still holds — 839 to 1,728 bytes of discovery document, 2,880 to 12,852
+of key set, transfers whose cost is a handshake and a round trip. What did not hold
+was the arithmetic, so the number moves **five seconds → three**, which is still an
+order of magnitude over what was measured and is the largest value at which three
+fetches fit inside ten seconds.
+
+**Both nestings are now enforced instead of described.** `Config.Validate` gains two
+rules on the model of the `FEED_TIMEOUT` one it already had — *a knob whose upper
+half cannot take effect is not a knob*:
+
+- `ADDON_ROUTE_DEADLINE` must be positive and, when `HTTP_REQUEST_TIMEOUT` is set,
+  strictly under it.
+- `ADDON_FETCH_TIMEOUT` must be positive and must not exceed the route deadline.
+
+They sit outside the `Addons.Enabled()` guard deliberately: a misconfigured pair is
+misconfigured whether or not `ADDONS_DIR` points anywhere yet, and refusing it only
+once somebody installs an add-on is refusing it on the worst day. The exception is
+`HTTP_REQUEST_TIMEOUT=0`, where there is nothing above to nest inside and no rule is
+applied — asserted, so a later tightening cannot break that deployment silently.
+
+**What made this survivable to build twice is the test's blind spot, and it is
+named here.** `TestARouteInvocationIsBounded` drives `Host.Route` with
+`context.Background()`. That proves the host bound *exists* and is structurally
+incapable of noticing that it never binds, because there is no caller deadline for
+it to lose to. `TestTheRouteDeadlineNestsInsideTheCallersOwn` asserts both
+directions — host shorter, and caller shorter — and
+`TestTheAddonEgressBoundsNestInsideTheRequestDeadline` asserts the two defaults
+against `HTTP_REQUEST_TIMEOUT`'s. Neither is a substitute for the validation; they
+are what makes the validation's *premise* checkable.
+
+### The five smaller findings, and what each cost
+
+**`docs/SECURITY.md`'s Egress row contradicted itself twice.** The count edit moved
+*five connections* to six in the row's opening and left *the weakest of the five*
+and *so the five can be checked* standing in the same paragraph — the milestone's
+own stated failure mode, an enumeration true when written and wrong within a
+milestone. Both are now six.
+
+**Two log sites escaped what the neutralizing handler escapes.**
+`hostState.originsFor` passed `moduleText(err.Error())` into `s.hostLog`, and
+`originString` — called from four `slog.String` sites — did the same. logsafe.go
+states the rule and names the symptom: *every call site here logs the raw value and
+lets this file escape it*, and pre-escaping makes a reader meet `\\u200b` where an
+operator typed a zero-width space. Both now log raw. The reviewer found one of the
+two; a test now covers the property rather than either site.
+
+**`docs/slo.md` called the slot interaction one-sided.** It said *the change is in
+the direction that helps*, which is true of a spinning module and not of the
+capability this milestone adds. The sixteen instance slots are shared between
+add-on pages and inline redirect invocations, and an inline invocation that finds
+none is skipped **without waiting** (`redirect.go`, the `default:` arm) — the
+redirect served without the module and
+`linkctrl_rate_limited_total{limit="addon_inline"}` incremented. A route handler
+used to be compute-bound and give its slot back in milliseconds; one that fetches
+holds it for a network round trip. So sixteen concurrent sign-in flows skip inline
+redirect add-ons for the duration. That is M66's designed degradation rather than a
+broken promise, and the section that exists to discharge the redirect-path rule now
+says so, because *nothing on this path fetches* is true while *nothing on this path
+is affected* is not.
+
+**Two reserved names shipped without their CHANGELOG line.** `fetch` and `route`
+join `AddonReservedNames`, so an add-on in a directory of either name stops loading
+after an upgrade. The precedent was set twice in the same file — `pool` at M66.5 and
+the two reserved *setting* names before it — and the M68.5 entry listed the three
+new variables and neither name. It does now.
+
+**The refusal list closed against a register rather than against four names.** The
+reviewer found `0.0.0.0/8` dialled — `IsUnspecified` catches `0.0.0.0` and nothing
+catches `0.0.0.1` — plus `192.31.196.0/24`, `192.175.48.0/24` and `2001:20::/28`
+absent. Adding exactly those four would reproduce the milestone's own risk, *the
+test suite is written against the bypasses somebody thought of*, so the list's claim
+changed instead: it is now **every entry in IANA's IPv4 and IPv6 special-purpose
+address registries that the stdlib predicates do not already cover**, which is
+eleven additions and a claim a reader can check against a document this project does
+not write. None was reachable on Linux, so this was an enumeration gap rather than a
+bypass — which is the only reason it is recorded here rather than as a defect.
+
+### D371 — M68.5's *no deadline to spend* clause, amended
+
+**The bullet as it stood** (`m68.5.md`): *"For a **route** handler there is no
+deadline to spend — `m64.md` bounds memory and asks that a `<250ms` dashboard
+target not be broken, and that is not a bound a fetch can be checked against —
+so this milestone's first job is to say what bounds a fetching route handler and
+to build it."*
+
+**As amended:** *"For a **route** handler the bound is the application tree's own
+request deadline, `HTTP_REQUEST_TIMEOUT`, which is a context deadline every
+request already carries — so this milestone's first job is to say what bounds a
+fetching route handler and to build whatever that answer needs."*
+
+**The tree fact:** `internal/httpx/router.go` wraps the whole application tree in
+`RequestTimeout(cfg.HTTP.RequestTimeout)`, a context deadline defaulting to 15s,
+and `internal/httpx/addons.go` hands `r.Context()` straight to `Host.Route`. So a
+route handler has been bounded since long before this milestone, and
+`internal/addon/http.go`'s own pre-existing comment says it: *"the deadline every
+application request carries closes the instance underneath a spinning guest."*
+M68.5's first reviewer measured it — a spinning fixture returned in 300.7ms under
+a 300ms parent context.
+
+**A fact and not an assertion, so amended rather than prompted.** What the bullet
+*requires* is unchanged and is what the build answered: say what bounds a
+fetching route handler, and build what that answer needs. What was wrong is the
+premise clause, and nobody could have decided differently about whether a
+deadline existed — it either did or it did not, and it did.
+
+**It is the same defect the milestone was rejected for**, one level up. The plan
+said there was no bound; the build then added one and defended it against the
+wrong variable; the reviewer measured. Writing *there is no deadline* into a
+milestone file without checking is how the build inherited the belief, which is
+worth recording because this plan was reviewed and the clause survived it.
+
+## 2026-08-26 — M68.5, what a refusal list claims and what a stored value authorizes
+
+Third attempt. The second was rejected on four findings, two of which were claims
+this milestone's own diff makes and does not keep. Both are recorded here because
+each was a choice rather than a slip, and the other two — a metric counting a
+refusal as a request, and the one bound of three with no validation — were
+repairs, written into the code beside what they repair.
+
+### D372 — a value the operator typed does not become a destination, and the claim says so rather than the code
+
+`docs/SECURITY.md` and `CHANGELOG.md` both said **a new version of an add-on
+cannot quietly reach somewhere the old one did not**. The tree does not enforce
+that sentence. `originsFor` pairs the `origin` flag off the manifest *in hand*
+with a value out of `addon_settings` or the process environment, and neither
+source records what the setting was when the value was written. So:
+
+- v1 declares `homepage` as ordinary text; the operator types their own URL in.
+- v2 declares `network.fetch` and marks that same setting `origin: true`.
+- On the next load this host dials it, and no operator act ever named it a
+  destination. The operator sees the new permission and not the promotion.
+
+**The choice was between narrowing the sentence and invalidating the value**, and
+the second is the one that sounds right: `addon_settings` already carries a
+`secret boolean` recording what the setting was *at the moment it was saved*, for
+this exact shape of attack one milestone ago (04800, and M67 made
+remove-then-install the documented replacement path). An `origin boolean` beside
+it, written from `decl.Origin` on save and required by `originsFor`, is the same
+mechanism against the same swap.
+
+**It was not taken, and the reason is that it is partial in a way that makes the
+gap harder to see rather than smaller.** A value can reach an add-on from two
+places, and only one of them has a save moment to stamp:
+
+- **Stored** — the Add-on manager writes a row, and a column could record the flag.
+- **Environment** — `LINKCTRL_ADDON_<NAME>_<SETTING>`, merged **on top** of the
+  stored value by D347, with no row, no timestamp and nothing to stamp. Worse,
+  `SettingView.Editable()` is false for an environment-sourced setting, so a value
+  the column refused could never be re-affirmed through the page. The column would
+  not defer an environment origin; it would refuse one **permanently**.
+
+So the column closes the manager half, leaves the environment half exactly as it
+is, and requires the sentence to be narrowed anyway — while leaving a reader of
+that narrower sentence believing transitions are handled. Half a mechanism costs
+a migration, a state an operator has to resolve, and page copy, and buys a
+smaller gap that is harder to find. Deciding what an environment-sourced origin
+*means* here is a change to D347's precedence rule, which is the owner's and is
+not in this milestone's scope.
+
+**What was done instead**, and it is more than a narrowing:
+
+- The sentence now claims only what the manifest schema actually guarantees —
+  *no version of an add-on, new or old, can name a destination in a file you do
+  not edit* — which is true, is what the tests assert, and is what
+  `TestAManifestCannotNameAHost` holds.
+- `docs/SECURITY.md` gains the transition as its own paragraph, in the operator's
+  terms: when an upgrade adds `network.fetch`, read the settings marked as naming
+  an origin before trusting it, the way you would read the permissions. An
+  operator who cannot act on a risk is not being told about it, so it says what to
+  do. `CHANGELOG.md` says the short version.
+- [F336](deferred-findings.md#open) files the behaviour, pointing at
+  [F332](deferred-findings.md#open) as the same defect reached from removal
+  rather than from upgrade — both are the same surface and the same choice about
+  when a stored value stops being the operator's answer.
+
+**Severity, stated rather than assumed.** Nothing is escalated. Installing a
+version costs `addons.manage`, which is non-delegable and is the highest grant
+this product has, and that principal could name any origin they liked by typing
+one. For the deception to buy an attacker anything they need the operator to have
+already typed an *attacker-controlled* URL into a plain setting — at which point
+v1 could simply have flagged it `origin` and asked. What is real is the
+mismatch between what the operator consented to and what the host now does, and
+D364's whole point is that only the operator decides where an add-on may reach.
+That is why it is a filed row and a paragraph an operator can act on, rather than
+a sentence deleted.
+
+### D373 — the refusal list is no longer what stops the next range being missed
+
+The list claimed to be *every entry in IANA's IPv4 and IPv6 special-purpose
+address registries that the predicates do not already cover*. It was not. The
+first review of the file found four missing; the second found six more, every one
+of them IPv6: `2001:1::1/128` (PCP), `2001:1::2/128` (TURN), `2001:1::3/128`
+(DNS-SD service registration), `2001:30::/28` (DRIP), `5f00::/16` (SRv6 SIDs) and
+`3fff::/20` (documentation). None is private space, so the security consequence
+was small. The defect was the claim, and the shape of it is m68.5.md's first
+risk in as many words — *an enumeration true when written* — with the added
+insult that `TestEveryRefusedPrefixIsActuallyRefused` walks the list, so nothing
+in the suite could ever have caught an omission from it.
+
+**Adding six and re-asserting completeness would have been the third time.** Four
+of the six are carve-outs of one block — `2001::/23`, IANA's IPv6 IETF Protocol
+Assignments — which is delegated whole, holds nothing anybody routes to, and is
+where every new special-purpose IPv6 assignment since Teredo has come from. So it
+is refused **as the block**, the way `192.0.0.0/24` already was on the IPv4 side,
+and the six entries that were enumerated individually inside it are gone from the
+list. The next address IANA carves out of that block is refused before it is
+written.
+
+Two consequences worth having on the record:
+
+- **The list got shorter as it got wider** — twenty-nine prefixes to twenty-six —
+  and the count guard moved from 28 to 26 with the reason beside it, because that
+  guard exists to catch a deletion and this was not one. The six subsumed entries
+  are still named, in the test table, which is where a reader checks *what is
+  inside the block* and where they belong.
+- **The block is not a complete answer and the claim no longer pretends
+  otherwise.** `5f00::/16` and `3fff::/20` are top-level allocations, not
+  carve-outs, and against a *new* top-level allocation there is no mechanism at
+  all. So the claim now carries the date it was read — 2026-08-26 — rather than
+  an unqualified completeness. A dated claim is one a reader can diff; an
+  undated one is one they have to trust.
+
+### Also in this attempt
+
+- **`address_refused` left the duration histogram.** It is this milestone's
+  headline refusal, the `Control` hook that raises it runs before `connect(2)`,
+  and it was landing in `linkctrl_addon_fetch_duration_seconds` — whose help
+  string said *only requests that reached the network are here* — inflating the
+  add-on's p99 with a decision taken in microseconds, the exact effect the
+  surrounding comment claimed to be avoiding. The rule the code now states is
+  **who decided**: an outcome this host reached on its own is counted and not
+  timed; an outcome the world handed back is timed. That keeps `dns_failed`
+  timed, which is right — a name that will not resolve is a resolver answering
+  slowly, and an operator wants the seconds. It costs the DNS lookup that
+  preceded an `address_refused`, deliberately: a lookup's latency filed as a
+  request's is a number about a request this host refused to make. Six documents
+  and one help string moved with it, and
+  `TestAFetchIsCountedAndOnlyAnAttemptedOneIsTimed` is what holds it.
+- **`LINKCTRL_ADDON_FETCH_MAX_BYTES` gained the validation its two neighbours
+  had.** This milestone created all three bounds and validated two;
+  `fetchMaxBytesFrom` substitutes 256 KiB for anything at or under zero, so an
+  operator writing `0` meaning *no cap* got the default and was told nothing.
+  `Config.Validate` now refuses it, and the sentence says there is no way to ask
+  for no cap and why — the body is held in memory to cross the ABI boundary, so
+  an unbounded one is an unbounded heap sourced from a server this product does
+  not run.
+
+## 2026-08-26 — M68.5, one rule and two refusals, because a document said one
+
+The third review of this milestone rejected it on a claim rather than on the
+machinery: it re-read the SSRF bounds and again found no bypass, and then found
+that seven places said `class_refused` is what a redirect-class invocation gets,
+which is true of one of the two classes and false of the other.
+
+### D374 — the inline class keeps M66's refusal, and the documents say which class gets which
+
+**What is actually true.** Dispatch refuses a call before any host function runs
+when `st.inline && !abi.CallableInline(f.Name)` (`internal/addon/hostabi.go`), and
+`network_fetch` is correctly absent from `abi.InlineSafe`. So an inline redirect
+invocation gets `abi.StatusDenied` — `ErrDenied` at the guest — and never reaches
+`doFetch`. The observing class is not `inline`, reaches the function, and is
+refused inside it with the `class_refused` outcome and its counter. One rule, two
+refusals, in two places.
+
+**Both halves of the seven places were wrong in the same direction.** The guest
+half — the SDK doc comment, `internal/addon/abi/functions.go`,
+`internal/addon/abi/surface.go`, `docs/addon-abi.md` twice — told an add-on's
+author to branch on an outcome that an inline module never receives. The operator
+half — `docs/operations.md` and `internal/httpx/web_addons.go`'s meaning table —
+described a `linkctrl_addon_fetch_total` row that the inline class cannot produce,
+because that refusal is deliberately uncounted: it is the redirect hot path, and
+M66 decided that a module looping there does not get to decide how much an
+instance logs or counts.
+
+**The alternative was to make the inline class reach `class_refused`**, by putting
+`network_fetch` on `abi.InlineSafe` and letting `mayFetch` do the refusing. It was
+declined, and not on cost. `InlineSafe` is M66's shipped claim about what an
+inline invocation may call — *no storage, no request, no session, no template*,
+every member an in-memory read of something the host already holds — and adding
+the one function that opens a socket to that list would falsify it in order to
+improve a word in a record. It would also cost the redirect path a counter
+increment per refused call, which is what M66 refused to spend. The bound the
+milestone actually promises — *nothing on the redirect path fetches* — holds
+either way; what was at stake was only which refusal the guest is handed.
+
+So the seven places now say which class gets which, `docs/addon-abi.md` tells a
+module written for both classes to branch on the error first and the outcome
+second, and `docs/slo.md` says the same where somebody looking for the M68.5
+measurement would go.
+
+**And the test that was cited could not have caught it.**
+`TestOnlyARouteInvocationMayFetch` calls `hostState.doFetch` directly, which is
+*below* the dispatch gate, so its inline rows assert the second line of defence
+and cannot see what a guest receives. The new
+`TestNeitherRedirectClassMayFetchAndTheGuestIsToldSo` drives the `redirect`
+fixture — a real module compiled against the generated SDK — through both classes
+and asserts what each is told: `ErrDenied` and no fetch counter for the inline
+class, the `class_refused` record and exactly one counter for the observing one.
+`TestAnObservingModuleWithoutTheGrantIsRefusedBeforeTheClassIsReached` is its
+pair, and is what makes the `class_refused` mean *the class* rather than *the
+manifest*.
+
+### Also in this attempt
+
+- **`TestARedirectIsCheckedForItsAddressToo` asserted nothing about redirects.**
+  It pointed a loopback-refusing policy at a loopback test server, so the *first*
+  dial was refused and no redirect was ever issued; it passed identically with
+  `checkRedirect` and the redirect hop deleted. The milestone requires the address
+  check *again on any address a redirect leads to — the rebinding case*, and that
+  requirement had no assertion behind it.
+
+  The shape is forced by what a redirect may be. A hop that changes origin is
+  refused by `checkRedirect` before anything is dialled, so the only redirect that
+  can reach the address policy is a **same-origin** one — same name, therefore a
+  second address only because the resolver answered differently. That is DNS
+  rebinding, and it is what the test now imitates: the first dial is genuinely
+  permitted, the server genuinely redirects, and the second dial of the same name
+  is refused. Two things keep it honest — the dial count is asserted, and the same
+  fetch is run first under a policy that permits both dials, where it must come
+  back with the second hop's body. Removing `Control` from the dialer turns it
+  red, which is the property being claimed.
+
+## 2026-08-26 — M68.5, the address policy is inverted
+
+### D375 — an address is refused unless it is public, rather than refused if it is listed
+
+**The pattern that forced it.** `refuseAddress` is a denylist, and M68.5's reviews
+found it short **three times in four**: four IPv4 special-purpose entries at the
+first, six IPv6 entries at the second, and `fec0::/10` — deprecated IPv6
+site-local, RFC 3879 — at the fourth. Each was fixed. Each fix was followed by
+another omission. The third attempt already changed the mechanism once, refusing
+`2001::/23` whole so IANA's future carve-outs inside it are covered in advance,
+and that worked for the block it covered and not for the space outside it.
+
+`fec0::/10` is the case that makes the shape clear rather than the case that
+matters most: it is not in the IANA *special-purpose* registry the list's claim is
+scoped to — it sits in the IPv6 Address Space registry as reserved — so the claim
+was **honest and the hole was real at the same time**. A denylist of *everywhere
+that is not the public internet* is not a finite list anybody holds in their head,
+and no amount of care makes it one.
+
+**Owner: invert it.** An address passes only if it falls in globally-routable
+unicast space; everything unlisted is refused. The list stops being the mechanism
+and becomes an optimisation and a set of named exceptions.
+
+**What the inversion buys is a change of failure mode, and that is the whole
+argument.** Under a denylist, a range nobody thought of is **reachable**, and the
+symptom is an SSRF nobody observes. Under an allowlist, a range nobody thought of
+is **refused**, and the symptom is an operator reporting that a legitimate origin
+will not resolve. For a control whose entire job is completeness, the second is
+the direction to be wrong in.
+
+**What it costs, stated because it is real.** It will refuse something legitimate
+eventually — IPv6 space IANA allocates after this ships is the obvious case — and
+that is a support burden this project takes on deliberately. The refusal must
+therefore say *which* rule refused it and be greppable, or an operator meets a
+name that will not resolve and no way to find out why. And it is a redesign of
+this milestone's central mechanism on its fifth pass, which was weighed against
+simply adding `fec0::/10`; the pattern above is why the cheaper answer was
+declined.
+
+**Two alternatives were declined.** Fixing the three findings and taking a fifth
+pass — an hour's work, and the third patch to the same enumeration, with a fourth
+omission waiting. Stopping the run under
+[§4](phase-loop.md#4-repeat-or-stop)'s *same gap survived two workers* — literal
+and defensible, and it would have left a milestone otherwise reviewed clean twice
+over sitting uncommitted with M67's commit unpushed behind it.
+
+**This does not reopen anything.** M68.5 has never landed; the inversion is a
+change to work in flight, not a correction to a shipped claim.
+
+## 2026-08-26 — M68.5, what "globally routable" is, and a rule that refused an instance running no add-ons
+
+### D376 — the shape the inversion took, and the half of it that is honestly weaker
+
+[D375](#2026-08-26--m685-the-address-policy-is-inverted) decided that an address
+passes only if it is in globally-routable unicast space. That phrase has to become
+two lists, and they are not equally strong.
+
+**IPv6 is a real inversion.** IANA allocates global unicast from `2000::/3` and
+from nowhere else, so `routableSpace` names that block and everything outside it is
+refused without anybody having had to think of it: `fc00::/7`, `fe80::/10`, the
+`fec0::/10` that broke the fourth review, `ff00::/8`, both NAT64 prefixes, the
+discard prefix, IPv4-compatible `::/96`, and `5f00::/16` — which the previous
+attempt had to add by name and which now needs no entry at all. A top-level
+allocation IANA makes after this ships is refused the same way, which is the whole
+point and also the cost.
+
+**IPv4 is weaker, and the reason is that IPv4 has no such block.** The space is
+densely delegated, so the allowlist is 1.0.0.0 through 223.255.255.255 — nine
+prefixes covering exactly that range — with the special-purpose ranges inside it
+carved out by name. Forgetting one of those is still a range that gets dialled. Two
+things make that acceptable rather than a denylist wearing a hat: IPv4 is exhausted,
+so the registry it is drawn from is closed in a way IPv6's is not, and the outer
+bound refuses `0.0.0.0/8`, all of multicast, the reserved `240.0.0.0/4` and the
+limited broadcast address without an entry — four of the ranges the first review
+found missing. `TestTheRoutableSpaceIsExactlyWhatItSaysItIs` walks all 256 `/8`s,
+because nine prefixes covering a range exactly is not something a reader checks by
+eye and an off-by-one in either direction is a defect: one bit too wide is a range
+that gets dialled, one bit too narrow is a piece of the public internet that stops
+working.
+
+**`carvedOut` is exceptions, and the test says which.** Every entry has to sit
+*inside* `routableSpace` or it is excepting from a space this host does not dial
+anyway — not wrong, empty, and an empty exception is how a list comes to look
+longer than the policy it states. Under the denylist there was no difference
+between the two kinds of entry.
+
+**The named predicates are naming, not mechanism.** `IsLoopback` and the four
+beside it stay, because a log line saying `loopback` is worth more to whoever reads
+it than one saying `outside routable space`. What makes them decorative is that
+`127.0.0.0/8` and `169.254.0.0/16` — the only two ranges off the public internet
+that sit inside the IPv4 cover — are in `carvedOut` as well, so the two lists are
+the whole policy. The address table asserts it row by row: for every address, the
+lists alone reach the same verdict the policy does.
+
+**`address_rule=` is the greppable half of what D375 accepted.** An allowlist
+refuses something legitimate eventually, and what the operator sees is an add-on
+reporting that a name will not resolve. So a refusal is its own log line — not an
+`error=` field on the generic one — carrying the address and a token naming the
+rule: `loopback`, `link-local`, `multicast`, `unspecified`, `not-global-unicast`,
+`carved-out`, and `outside-routable-space`, which is the one that means *this
+policy may be wrong about your origin*. docs/operations.md tells an operator to
+grep for it and says which token separates a misconfiguration from a refusal worth
+reporting. `TestAnAddressRefusalNamesTheRuleThatRefusedIt` holds the line's shape,
+because the token appearing inside a wrapped error string is not the same as a line
+somebody can find.
+
+**The old completeness claim is deleted rather than restated.** Three restatements
+of *this list is complete against IANA's special-purpose registries, read on a
+date* had been written across four attempts, and each was true when written. What
+stands where it stood is the inversion and the argument for it, and the list below
+it no longer claims to be complete because nothing now rests on its being so.
+
+### D377 — the route-deadline nesting rule is guarded on add-ons being enabled
+
+The rule refuses `ADDON_ROUTE_DEADLINE` at or over `HTTP_REQUEST_TIMEOUT`, and it
+was written deliberately outside the `Addons.Enabled()` guard, with a comment
+saying so: *a misconfigured pair is a misconfigured pair whether or not this
+deployment has pointed ADDONS_DIR at anything yet*.
+
+**That comment was wrong about who it refuses.** `LINKCTRL_HTTP_REQUEST_TIMEOUT=5s`
+is valid today and nothing has ever refused it. `ADDON_ROUTE_DEADLINE` has no
+minimum of its own and defaults to `10s`. So the rule as written refuses to start
+an instance with `ADDONS_DIR` unset, running no add-ons, over the default value of
+a variable that operator has never heard of — and an upgrade that will not start is
+the most expensive failure this file has.
+
+**The line that decides which of these rules is guarded is who wrote the value.**
+`ADDON_ROUTE_DEADLINE` at zero, `ADDON_FETCH_TIMEOUT` over it and
+`ADDON_FETCH_MAX_BYTES` at zero each require somebody to have set that variable, so
+refusing them costs a deployment nothing it did not ask for, and they stay
+universal. The cross-check against `HTTP_REQUEST_TIMEOUT` is the only one that can
+fire on two defaults, and it is the only one guarded. The original comment's fear —
+*refusing it on the day somebody installs one* — is answered by what installing an
+add-on takes: setting `ADDONS_DIR`, which is a restart, and the refusal arrives at
+that boot, before any add-on has served anything.
+
+**It is still an upgrade break, and CHANGELOG.md says so.** An instance that *does*
+run add-ons and has `HTTP_REQUEST_TIMEOUT` at `10s` or less will not start until
+the route deadline comes down. The three documents that described the remedy as
+*raise the one above it* now name both directions, because the operator being
+refused set the request timeout deliberately and the other number is the one they
+have never seen — so the message names lowering `ADDON_ROUTE_DEADLINE` first.
+
+### The two enumerations nothing checked
+
+The eleven-word outcome vocabulary was hand-copied into `api/openapi.yaml`'s
+`outcome` enum and into `linkctrl_addon_fetch_total`'s `Help`, and neither was tied
+to `abi.FetchOutcomes` — the manager page's meaning map and the host's own mapping
+both were. One is what somebody writing against this API reads and the other is
+what an operator reads off `/metrics`, so a word added or renamed would have left
+both wrong silently. `TestTheOutcomeVocabularyIsTheSameWhereverItIsEnumerated`
+parses both and asserts set *equality*, in the shape
+`internal/auth/documented_scopes_test.go` and `internal/store/cascade_test.go`
+already use for claims anchored in `openapi.yaml`. This is m68.5.md's own bullet
+about four enumerations going stale in this phase, applied to the two places that
+had escaped it.
+
+## 2026-08-26 — M68.5, an object the API said could not exist, and what a refusal costs to log
+
+M68.5's sixth pass. Three findings from the fifth review, none of which touches
+[D375](#2026-08-26--m685-the-address-policy-is-inverted)'s inverted address policy —
+that was reviewed sound and complete against both IANA registries and is untouched.
+
+### D378 — `performance` is published when there is a record of **either** kind
+
+`Managed.Performance` is omitted with `json:",omitzero"`, and omitzero compares the
+whole struct. Until this milestone that comparison and
+`observability.AddonPerformance.Observed()` gave the same answer for every reachable
+state, because the only fields were the redirect ones: `Classes` and `Kills`. So
+`api/openapi.yaml` and `manager.go` both said the object is **absent entirely** for a
+module that has never run on the redirect path, and both attributed that to
+`Observed()`.
+
+`Fetch` broke the coincidence. **The failing case is M69's own add-on** —
+`routes.own_prefix` and `network.fetch`, no redirect class at all — which after one
+outbound request has an all-zero redirect record and a non-zero struct, so the
+encoder published `{"performance":{"kills":{"instantiate":0,"call":0},"fetch":{…}}}`
+for a module the document said could not have one. It is schema-valid (`required:
+[kills, fetch]` is met), so no test could catch it; the false thing was the prose.
+
+**The object is right and the sentence was wrong.** The alternative was to keep the
+sentence by suppressing the object for a fetch-only module, and it is worse in the
+obvious way: the fetch figures are the thing this milestone records, the manager
+already draws them, and a client would have had to read the page to learn what the
+API refused to say. What the absence has always been *for* is telling *no
+observations* from *fast*, and that reading survives intact — it just now covers
+both paths, which is what the object covers.
+
+**One predicate, not two that agreed by accident.** `AddonPerformance` gained
+`IsZero() bool`, which `encoding/json` uses in place of its own comparison, and it
+is `!Observed() && !Fetch.Observed()`. A third field added later cannot re-open this
+gap by being non-zero. `Observed()` itself is unchanged and still means the
+**redirect** path alone, because that is what the manager's list draws a dash from
+and what m68.md promised: a module that has only ever fetched has not run there and
+must still read false. `AddonFetchStats.Observed()` gained `len(Outcomes) > 0`, so
+that *unobserved* and *all-zero* are the same state on that half too rather than
+nearly the same.
+
+`TestThePerformanceObjectIsPublishedExactlyWhenThereIsARecord` drives the shapes and
+asserts that the key's presence and `IsZero()` are the same answer — which is the
+assertion that would have failed the day the two stopped agreeing.
+
+### D379 — a guest-drivable refusal warns only when the log is the only channel
+
+Three refusals this milestone added logged at `Warn`, once per call, with no
+throttle: `class_refused` in `hostabi.go`, and `unconfigured` and `origin_refused` in
+`fetch.go`. Every other guest-drivable refusal in `hostabi.go` is `Debug`, and this
+milestone's own comment argued that the inline path must stay at Debug because *a
+module looping there would otherwise decide how much an instance logs*. `unconfigured`
+costs no network at all and a route handler now holds ten seconds, so a module
+holding `network.fetch` and `routes.own_prefix` pointed at nothing could write Warn
+lines at CPU speed for the whole deadline, across all sixteen slots, on a publicly
+reachable page. `class_refused` is reached by the *observing* class, which is
+redirect-driven — the very reason the inline case was held to Debug.
+
+**The rule: Warn is for a refusal an operator has no other way to see.** Where a
+counter and the Add-on manager already carry the fact, the line is Debug — the level
+buys nothing an operator does not already have, and it costs an instance whatever a
+module cares to make it cost. All three are
+`linkctrl_addon_fetch_total{addon,outcome}` and all three are rendered per add-on
+with a sentence saying what to do about each word, which is what `configuration.md`
+and `docs/SECURITY.md` already promise in the phrase *visible without reading logs*.
+
+**It explains the Warns beside them rather than excusing them**, which is what made
+this worth deciding rather than leaving three sites disagreeing with their file. Two
+carry a fact nothing else carries: the address refusal names *which rule* refused
+under `address_rule=`, which the counter's single `address_refused` word cannot, and
+the wire-failure line beside it carries the transport's error. Two cannot be driven
+by a guest alone: `originsFor`'s malformed-origin line needs an operator's typo to
+exist, and `storageFailed`'s denial has neither counter nor page. The wire failures
+also cost a socket, so the network sets their rate — the second half of the test, and
+the half these two configuration refusals fail outright, deciding nothing and
+dialling nothing.
+
+The address refusal is the one that is genuinely both, guest-drivable at CPU speed
+with a literal address and kept at Warn anyway. That is deliberate: a module looping
+there is announcing an attempt on this host's internal space, which is the argument
+`storageFailed` already makes for its own denial.
+
+**The cost is stated rather than hidden.** An operator watching only the log now sees
+nothing when an add-on is inert; `operations.md` and `CHANGELOG.md` say where to
+watch instead, and `operations.md`'s alert for this was already written against the
+label rather than against a log. `TestTheConfigurationShapedRefusalsDoNotWarn` holds
+the decision to the tree, with the malformed-origin line as its control.
+
+### D380 — the response **headers** are bounded, and it is not a knob
+
+`MaxResponseHeaderBytes` was unset on the fetch transport, so Go's 10 MiB default
+bounded the headers while `LINKCTRL_ADDON_FETCH_MAX_BYTES` bounded the body at 256
+KiB — forty times apart. `config.go`'s own argument for refusing an unbounded body
+applies to a header field verbatim: *the response is held in memory to cross the
+add-on boundary and an unbounded body from a server this product does not run is an
+unbounded heap*. A compromised IdP is inside the threat model `docs/SECURITY.md`
+names for this door, and it does not have to send a body to spend this host's memory.
+
+**64 KiB, fixed.** Eight times the largest header block ordinary servers will emit —
+nginx and Apache both refuse a request field over about 8 KiB — and small enough that
+sixteen slots fetching at once is megabytes rather than gigabytes. Not configurable,
+because the two bounds an operator turns are the ones a legitimate provider can
+plausibly need turned and no provider needs this one; a third knob would be a third
+thing to get wrong for no case anybody can name.
+
+**The outcome is `connect_failed`**, not `too_large`. The exchange failed below the
+response and the transport raises an ordinary error, which `fetchFailure` classifies
+as it classifies any other wire failure. Mapping it to `too_large` would need the
+transport's error *text* matched, which rests a documented outcome on a string Go may
+change, and would make one word mean two different faults. `configuration.md` says
+which is which.
+

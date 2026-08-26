@@ -249,6 +249,27 @@ func handle() int32 {
 		_ = sdk.Log(sdk.LevelInfo, "pages: grew by "+strconv.Itoa(mb)+" MiB")
 		return answer(response{Body: "grew " + strconv.Itoa(len(block)) + " bytes"})
 
+	case "/spin":
+		// A handler that never returns, which is how both bounds on a route
+		// invocation are measured. On the application path the request context's
+		// own deadline would eventually close this loop; the route deadline M68.5
+		// added is shorter, fires first, and is the only bound here at all when a
+		// caller brings no deadline — which is what the host test drives. Either
+		// way the runtime is built WithCloseOnContextDone, so the instance is
+		// closed underneath this loop rather than waited for.
+		//
+		// Arithmetic rather than a host call, for the reason the `spinning`
+		// fixture's loop is arithmetic: what the host interrupts is a *running
+		// guest*, and a loop that spent its time inside a host function would be
+		// testing the host's own re-entry instead. It also must not log — a tight
+		// loop writing to an operator's log is unbounded output, and a fixture that
+		// left one running would push this process's resident set past what
+		// `TestRepeatedInstallAndRemovalDoesNotGrowResidentMemory` measures.
+		// `spun` is exported so nothing may conclude the work is dead.
+		for i := uint32(1); ; i++ {
+			spun = spun*31 + i
+		}
+
 	case "/nothing":
 		// A handler that answers nothing at all, which the host has to turn into a
 		// failure rather than into an empty page.
@@ -306,3 +327,10 @@ func init() {
 }
 
 func main() {}
+
+// spun is the accumulator the /spin handler feeds, exported so that no compiler
+// may reason the loop away. See that case for why it is arithmetic.
+var spun uint32
+
+//go:wasmexport linkctrl_fixture_spun
+func fixtureSpun() int32 { return int32(spun) } //nolint:gosec // G115: a fixture accumulator, read for its liveness rather than its value

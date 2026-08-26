@@ -949,6 +949,21 @@ func pageData(t *testing.T) map[string]any {
 				{"Class": "observe", "Count": uint64(9412), "P99": "812µs", "Mean": "451µs"},
 			},
 			"KillsInstantiate": uint64(0), "KillsCall": uint64(2),
+			// The outbound-request section (M68.5), which sits beside the redirect
+			// figures and is gated the same way — a module that has never reached
+			// outward shows nothing here rather than a row of zeros. Observed in the
+			// fixture, because a section nothing renders is a section no page test
+			// examines.
+			"Fetch": map[string]any{
+				"Observed": true, "Count": uint64(37), "Refused": uint64(4),
+				"P99": "412ms", "Mean": "180ms",
+			},
+			"FetchOutcomes": []map[string]any{
+				{"Outcome": "ok", "Count": uint64(37), "Means": "the request reached the origin"},
+				{"Outcome": "origin_refused", "Count": uint64(3),
+					"Means": "the add-on asked for an origin you did not name"},
+				{"Outcome": "timeout", "Count": uint64(1), "Means": "the origin did not answer in time"},
+			},
 			"Settings":         addonSettingViews(),
 			"SettingMaxLength": 8192,
 			"FieldErrors":      map[string]string{},
@@ -1762,6 +1777,12 @@ type addonSettingStub struct {
 	Value      string
 	Configured bool
 	EnvVar     string
+	// Origin marks the setting that names where an add-on may make outbound
+	// requests (M68.5). The template draws a different sentence under it, because
+	// filling that field in authorizes a server-side request rather than
+	// configuring a value, and a page that read like a URL box would be the whole
+	// of what went wrong.
+	Origin bool
 }
 
 func (s addonSettingStub) Editable() bool { return s.EnvVar == "" }
@@ -1770,6 +1791,7 @@ func (s addonSettingStub) IsSecret() bool { return s.Kind == "secret" }
 func (s addonSettingStub) IsSelect() bool { return s.Kind == "select" }
 func (s addonSettingStub) IsToggle() bool { return s.Kind == "toggle" }
 func (s addonSettingStub) On() bool       { return s.IsToggle() && s.Value == "true" }
+func (s addonSettingStub) IsOrigin() bool { return s.Origin }
 
 // addonSettingViews is the manager detail page's settings fixture: all four
 // declared types at once, plus one the environment answers.
@@ -1786,5 +1808,10 @@ func addonSettingViews() []addonSettingStub {
 		{Name: "client_secret", Kind: "secret", Configured: true},
 		{Name: "issuer", Kind: "text", Configured: true,
 			EnvVar: "LINKCTRL_ADDON_CLICKSTATS_ISSUER"},
+		// The origin field (M68.5), unset — which is the state that matters, since
+		// an add-on nobody has pointed anywhere reaches nothing. It is a text
+		// setting like the first one and renders a different sentence beneath it,
+		// which is the whole of what the flag changes on this page.
+		{Name: "provider_origins", Kind: "text", Origin: true},
 	}
 }

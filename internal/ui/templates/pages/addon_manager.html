@@ -69,6 +69,51 @@
   {{end}}
 </section>
 
+{{/* ---- outbound requests ------------------------------------------------- */}}
+
+{{/* M68.5, and it sits beside the redirect figures because it answers the same
+     question about a different path: what is this module costing, and what is
+     being refused. Gated the same way, and for the same reason — a module that
+     holds no egress grant shows nothing here rather than a row of zeros. */}}
+{{if .Fetch.Observed}}
+<section class="mb-6 rounded-lg border border-line bg-raised p-6">
+  <h2 class="text-sm font-medium text-ink">Outbound requests</h2>
+  <p class="mt-1 text-sm text-muted">Requests this module made from this server, to the origins you named in its settings. Cumulative since this process started, and the p99 covers only the requests this server actually attempted &mdash; a refusal it decided itself is on the list below instead.</p>
+  <dl class="mt-4 grid gap-4 sm:grid-cols-2">
+    <div class="rounded-md border border-line px-3 py-2">
+      <dt class="text-xs uppercase tracking-wide text-subtle">Requests made</dt>
+      <dd class="mt-1 text-sm text-ink">{{.Fetch.Count}}<span class="ml-2 text-xs text-muted">mean {{.Fetch.Mean}}, p99 {{.Fetch.P99}}</span></dd>
+    </div>
+    <div class="rounded-md border border-line px-3 py-2">
+      <dt class="text-xs uppercase tracking-wide text-subtle">Refused</dt>
+      <dd class="mt-1 text-sm text-ink">{{.Fetch.Refused}}<span class="ml-2 text-xs text-muted">this host stopped these before or during the request</span></dd>
+    </div>
+  </dl>
+  {{if .FetchOutcomes}}
+  <div class="mt-4 overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-line text-left text-xs uppercase tracking-wide text-subtle">
+          <th scope="col" class="py-2 pr-4 font-medium">Outcome</th>
+          <th scope="col" class="py-2 pr-4 text-right font-medium">Count</th>
+          <th scope="col" class="py-2 font-medium">Means</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .FetchOutcomes}}
+        <tr class="border-b border-line last:border-0">
+          <th scope="row" class="py-2 pr-4 text-left font-medium text-ink">{{.Outcome}}</th>
+          <td class="py-2 pr-4 text-right tabular-nums text-muted">{{.Count}}</td>
+          <td class="py-2 text-xs text-muted">{{.Means}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</section>
+{{end}}
+
 {{/* ---- settings --------------------------------------------------------- */}}
 
 {{if .Settings}}
@@ -135,7 +180,14 @@
            the constant the save is actually refused on. */}}
       <input id="setting-{{.Name}}" name="setting_{{.Name}}" type="text" value="{{.Value}}" maxlength="{{$.SettingMaxLength}}"
              class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
-      {{if .Default}}<p class="mt-1 text-xs text-subtle">Empty means unset, and the add-on then reads its declared default of <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Default}}</code>.</p>{{else}}<p class="mt-1 text-xs text-subtle">Empty means unset.</p>{{end}}
+      {{if .IsOrigin}}
+      {{/* M68.5. This field is not a URL field and the page has to say so: what
+           is typed here is what this server will be allowed to connect to on the
+           add-on's behalf. The manifest cannot name a host, so this is the only
+           place a destination enters — and an operator who reads it as somewhere
+           to paste an issuer URL has authorized egress without noticing. */}}
+      <p class="mt-1 text-xs text-warn-ink">Naming an origin here lets this add-on make requests <strong>from this server</strong> to it. Scheme, host and port &mdash; <code class="rounded bg-sunken px-1 py-0.5">https://idp.example.com</code> &mdash; separated by spaces for more than one, and no path. Empty means the add-on reaches nothing at all.</p>
+      {{else if .Default}}<p class="mt-1 text-xs text-subtle">Empty means unset, and the add-on then reads its declared default of <code class="rounded bg-sunken px-1 py-0.5 text-xs">{{.Default}}</code>.</p>{{else}}<p class="mt-1 text-xs text-subtle">Empty means unset.</p>{{end}}
       {{end}}
       {{template "field_error" (index $.FieldErrors .Name)}}
     </div>

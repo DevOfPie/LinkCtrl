@@ -264,6 +264,11 @@ const (
 //
 // A test holds the list against [Functions] in both directions, and asserts that
 // nothing requiring [PermissionStorage] is on it.
+//
+// `network_fetch` is off it, and that is the one absence worth naming: it means an
+// inline invocation's egress refusal is *this* one — [StatusDenied] from dispatch —
+// and not the `class_refused` outcome the observing class gets. Two refusals for
+// one rule, and a guest branches on two different things.
 var InlineSafe = []string{
 	"abi_version",
 	"log",
@@ -286,6 +291,92 @@ var RedirectVerdicts = []string{"", "allow", "veto"}
 // VerdictVeto is the one verdict that changes anything, named because the host
 // branches on it.
 const VerdictVeto = "veto"
+
+// FetchMethods is the closed pair [Function] `network_fetch` will carry. Empty is
+// GET, which is what a module reading a discovery document writes.
+//
+// Two, and the second exists only because a token exchange is a POST: OIDC's
+// authorization-code flow turns a code into a token by posting a form, and
+// nothing else this ABI is for needs a body at all. A method outside this pair is
+// [StatusInvalid] rather than passed through, so the surface cannot grow a PUT by
+// somebody forgetting to check.
+var FetchMethods = []string{"", "GET", "POST"}
+
+// FetchOutcomes is the closed vocabulary of [Record] FetchResponse's `outcome`
+// field, and it is one vocabulary doing two jobs: a guest branches on it, and an
+// operator reads the same word as the `outcome` label of
+// `linkctrl_addon_fetch_total`.
+//
+// **One vocabulary rather than the five [Statuses]**, which is a deliberate
+// departure from how every other refusal in this ABI is reported. The statuses
+// cannot tell a timeout from a size cap from a refused address, and those are
+// three different things for both readers — an add-on retries one of them and an
+// operator investigates another. So the negative statuses keep what they are for
+// here, the guest's own faults, and everything that happened because of where the
+// add-on pointed the host comes back inside the record. Nothing traps and nothing
+// is silently substituted.
+//
+// The set is closed and a test holds it against the host's mapping in both
+// directions, for the reason [Permissions] is closed: a vocabulary that can grow a
+// member in a diff nobody read is a label cardinality nobody bounded.
+var FetchOutcomes = []string{
+	// A response arrived. It says nothing about the status code, which is the
+	// record's own field: reaching a server that answered 500 is this host doing
+	// exactly what it was asked.
+	"ok",
+	// The operator has named no origin for this add-on, so it may reach nothing.
+	// The ordinary state of an add-on nobody has configured yet, and the reason a
+	// module that talks outward should say so on its own page rather than failing
+	// mysteriously.
+	"unconfigured",
+	// The URL's origin is not one the operator named. A discovery document
+	// pointing somewhere else lands here, which is the attack this bound exists
+	// to stop.
+	"origin_refused",
+	// The invocation is not one that may fetch at all, whatever the manifest
+	// declared: an observing redirect invocation, or the instance made at load. A
+	// route handler is the only caller.
+	//
+	// **The inline class does not produce this word**, and the difference is
+	// where the refusal happens rather than what it means. `network_fetch` is
+	// outside [InlineSafe], so an inline invocation is refused by dispatch before
+	// the fetch machinery is entered and gets [StatusDenied] — see that list's own
+	// note. It is therefore not a counter label for that class either, which
+	// docs/operations.md says in the operator's terms.
+	"class_refused",
+	// The request record was the add-on's fault — not a URL, not https, a method
+	// outside FetchMethods, a body on a GET.
+	"invalid_request",
+	// The name did not resolve.
+	"dns_failed",
+	// The name resolved, and an address it resolved to is one this host will not
+	// dial. The rule is an allowlist: an address is dialled only if it falls in
+	// globally-routable unicast space, so loopback, link-local, unique-local, the
+	// private ranges and anything nobody has thought about are all refused by
+	// default rather than by an entry. Checked when the connection is made rather
+	// than when the URL is parsed, so a name that answers differently the second
+	// time is refused the second time. The host's log names which rule refused it,
+	// under `address_rule=`.
+	"address_refused",
+	// A redirect pointed off the origin it started on. Same-origin redirects are
+	// followed; nothing else is.
+	"redirect_refused",
+	// The response was larger than the host's cap. No body comes back — a
+	// truncated document is a parse error blamed on the add-on's author.
+	"too_large",
+	// The host's fetch timeout elapsed, or what was left of the invocation's own
+	// budget did.
+	"timeout",
+	// Anything else that went wrong on the wire: the connection refused, the TLS
+	// handshake rejected, the peer hanging up mid-body. One outcome rather than a
+	// taxonomy, because the add-on's response to all of them is the same and the
+	// detail is in the host's log.
+	"connect_failed",
+}
+
+// FetchOK is the one outcome that means a response arrived, named because both
+// the host and a consumer branch on it.
+const FetchOK = "ok"
 
 // Function is one entry in the ABI: what a module may import.
 type Function struct {

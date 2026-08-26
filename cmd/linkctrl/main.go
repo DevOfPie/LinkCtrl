@@ -343,6 +343,12 @@ func run(cfg config.Config, _ io.Writer) error {
 		InstantiateDeadline: cfg.Addons.InstantiateDeadline,
 		PoolSize:            cfg.Addons.PoolSize,
 		PoolTTL:             cfg.Addons.PoolTTL,
+		// M68.5. The page bound and the two egress bounds. The first is what stops a
+		// module holding an instance slot for as long as a visitor will wait; the
+		// other two are what an outbound request costs at most, in time and in bytes.
+		RouteDeadline: cfg.Addons.RouteDeadline,
+		FetchTimeout:  cfg.Addons.FetchTimeout,
+		FetchMaxBytes: cfg.Addons.FetchMaxBytes,
 	})
 	if err != nil {
 		return fmt.Errorf("add-on host: %w", err)

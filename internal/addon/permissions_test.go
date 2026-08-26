@@ -21,6 +21,17 @@ func grantable() []string {
 	return out
 }
 
+// originSetting is what a manifest declaring every grantable permission has to
+// carry from M68.5 on: `network.fetch` and an origin-marked setting are refused
+// apart, so a fixture that takes the whole vocabulary takes this too.
+//
+// Empty by default, which is the state that matters most — an add-on holding the
+// grant and pointed at nothing reaches nothing — and a test that wants it pointed
+// somewhere sets the value through Options.Settings.
+func originSetting() Setting {
+	return Setting{Name: "provider_origins", Type: SettingText, Origin: true}
+}
+
 // The two spellings of one rule, held together. The vocabulary is authored in
 // internal/addon/abi and the manifest's shape check is permissionRe here, and a
 // token the host publishes that a manifest may not declare would be a grant

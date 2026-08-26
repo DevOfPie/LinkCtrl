@@ -53,6 +53,13 @@ func pagesHost(t *testing.T, tweak func(*Manifest)) (*Host, *logSink) {
 	if tweak != nil {
 		tweak(&m)
 	}
+	// After the tweak, and conditional on the grant: a manifest declaring an
+	// origin-marked setting without `network.fetch` is refused (M68.5), and half
+	// the callers here narrow the permission list to prove something about a
+	// grant the add-on does not hold.
+	if slices.Contains(m.Permissions, abi.PermissionNetworkFetch) {
+		m.Settings = append(m.Settings, originSetting())
+	}
 	install(t, dir, m, code)
 
 	sink := &logSink{}
@@ -1345,10 +1352,20 @@ var documentedNumberSites = []struct {
 			// says what the pool is *not*, which is this bound.
 			"neither variable changes how many add-on invocations run at once, " +
 				"which is still {n} and still fixed in the build",
+			// M68.5's route deadline, where the slot budget is what the bound gives
+			// back: a route handler that will not return holds one of these until
+			// the deadline elapses, and before the deadline existed, until the
+			// request timeout did.
+			"a module that will not return holds one of the {n} instance slots for " +
+				"as long as the visitor waits",
 		},
 		untied: []string{
 			// How many dashboard pages scrolled sideways at 360px, in 0.4.0.
 			"at 360px, sixteen of the",
+			// How many ABI functions do anything, which reached sixteen at M68.5 and
+			// collides with this file's concurrency bound only by arithmetic. Tied by
+			// internal/addon/abi's own sweep, which is where the number comes from.
+			"sixteen functions work; the rest are declared and refuse",
 		}},
 	{path: "Plan.md",
 		sentences: []string{
@@ -1365,7 +1382,16 @@ var documentedNumberSites = []struct {
 			// is tied by internal/addon/abi's own sweep. It collides here only because
 			// this file's concurrency bound happens to be spelled with the same word,
 			// and it arrived at M66 when the ABI reached sixteen functions.
-			"one of its sixteen functions still refuses",
+			"one of its seventeen functions still refuses",
+			// The live count in the same row, which reached sixteen at M68.5 and
+			// collides for the same reason. Tied by internal/addon/abi.
+			"so sixteen are live",
+		}},
+	{path: "docs/SECURITY.md",
+		untied: []string{
+			// The ABI's live count, which reached sixteen at M68.5. Tied by
+			// internal/addon/abi's anchored sweep, not by this file's bound.
+			"sixteen of those functions do anything today",
 		}},
 	{path: "docs/addon-abi.md",
 		sentences: []string{
@@ -1399,6 +1425,16 @@ var documentedNumberSites = []struct {
 			"of a run whose {n} instance slots have headroom for ~35,000 " +
 				"invocations a second",
 			"{n} in flight plus {idle} kept warm, each held to {mem}",
+			// M68.5's written discharge, where the slot budget is the one line from
+			// that milestone to this document's subject. Three sentences rather than
+			// one, because the rejection of that milestone's first attempt was partly
+			// that it stated only the half that helps: the deadline gives a slot back
+			// from a spinning module, and a *fetching* route handler holds one for a
+			// network round trip where a computing one held it for milliseconds.
+			"those {n} slots are shared with the redirect path",
+			"{n} concurrent sign-in round trips on an add-on's pages are {n} slots " +
+				"held for seconds",
+			"{n} is fixed in the build",
 		},
 		untied: []string{
 			// Cache-hit runs in the performance record.

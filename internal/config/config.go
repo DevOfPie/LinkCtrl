@@ -582,6 +582,36 @@ type AddonsConfig struct {
 	// hour it means the pool holds nothing; on one with a redirect a second it means
 	// the sweep never finds an idle entry at all.
 	PoolTTL time.Duration `env:"ADDON_POOL_TTL" envDefault:"1m"`
+
+	// RouteDeadline is how long one request to an add-on's own page may take
+	// (M68.5), start to finish: instantiating the module, running its handler and
+	// every host call inside it, including an outbound fetch.
+	//
+	// **It is a bound inside HTTP_REQUEST_TIMEOUT, not the first bound a route
+	// handler ever had.** A route runs under the application tree's request
+	// context, which [HTTPConfig.RequestTimeout] already cancels at fifteen
+	// seconds — so this only ever fires if it is shorter, which [Config.Validate]
+	// enforces. Ten seconds leaves the host five to turn a killed guest into a page
+	// and a counter instead of dying with it, holds three fetches at FetchTimeout,
+	// and is the only bound at all on an instance that has set HTTP_REQUEST_TIMEOUT
+	// to zero. See addon.DefaultRouteDeadline for what the earlier fifteen got
+	// wrong and how it was measured.
+	RouteDeadline time.Duration `env:"ADDON_ROUTE_DEADLINE" envDefault:"10s"`
+
+	// FetchTimeout bounds one outbound request an add-on makes (M68.5), connect
+	// through the last byte of the body.
+	//
+	// It is a ceiling and not a reservation: a fetch ends at this or at whatever is
+	// left of RouteDeadline, whichever comes first, so an add-on cannot buy time by
+	// reaching outward. Three seconds is an order of magnitude over what this
+	// capability is for and is what lets three of them fit inside RouteDeadline —
+	// see addon.DefaultFetchTimeout for the documents that were measured.
+	FetchTimeout time.Duration `env:"ADDON_FETCH_TIMEOUT" envDefault:"3s"`
+
+	// FetchMaxBytes is the largest response body an add-on's fetch will carry back
+	// (M68.5). A response over it is refused whole rather than truncated, because a
+	// truncated JSON document is a parse error blamed on the add-on's author.
+	FetchMaxBytes int64 `env:"ADDON_FETCH_MAX_BYTES" envDefault:"262144"`
 }
 
 // Enabled reports whether this instance has an add-on host at all.
@@ -640,7 +670,7 @@ var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
 // AddonReservedNames are add-on names no manifest may take, because this file
 // already spells a variable that a setting of that add-on would spell too.
 //
-// Three entries. `LINKCTRL_ADDON_INLINE_DEADLINE`
+// Five entries. `LINKCTRL_ADDON_INLINE_DEADLINE`
 // ([AddonsConfig.InlineDeadline]) and `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`
 // ([AddonsConfig.InstantiateDeadline]) are instance-wide, and each is also exactly
 // what a setting called `deadline` on an add-on called `inline` or `instantiate`
@@ -649,7 +679,13 @@ var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
 // ([AddonsConfig.PoolSize], [AddonsConfig.PoolTTL]) — which is why both variables
 // keep their second half to one word: `LINKCTRL_ADDON_POOL_IDLE_TIMEOUT` would
 // also be an add-on called `pool_idle` with a setting called `timeout`, and one
-// reserved name could not close both readings.
+// reserved name could not close both readings. M68.5 added the last two the same
+// way: `route` for `LINKCTRL_ADDON_ROUTE_DEADLINE`
+// ([AddonsConfig.RouteDeadline]), and `fetch` for `LINKCTRL_ADDON_FETCH_TIMEOUT`
+// and `LINKCTRL_ADDON_FETCH_MAX_BYTES` ([AddonsConfig.FetchTimeout],
+// [AddonsConfig.FetchMaxBytes]) — which is one reserved name covering two
+// variables again, and is why the second of them is `max_bytes` and not
+// `maximum_response_bytes`.
 // The collision is the same one [AddonOverrideNames] closes and it is closed the
 // same way — the ambiguity is made not to exist rather than resolved, because a
 // concatenation offers nothing to resolve it with.
@@ -660,7 +696,7 @@ var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
 // collision. internal/addon's manifest validation is where it is refused, for the
 // reason the override names are refused there — this package is imported by that
 // one and not the other way round.
-var AddonReservedNames = []string{"inline", "instantiate", "pool"}
+var AddonReservedNames = []string{"fetch", "inline", "instantiate", "pool", "route"}
 
 // AddonOverrides reads the operator's answers about one add-on.
 //
@@ -1383,6 +1419,79 @@ func (c Config) Validate() error {
 			add("ADDONS_DIR: %q is not a directory; it holds one directory per "+
 				"add-on, each with an addon.json", c.Addons.Dir)
 		}
+	}
+
+	// The two add-on egress bounds nest, and the nesting is checked here rather
+	// than described in three comments (M68.5).
+	//
+	// **An instance running no add-ons is not held to all three of these, and the
+	// line is who wrote the value.** ADDON_ROUTE_DEADLINE at zero, ADDON_FETCH_TIMEOUT
+	// over it and ADDON_FETCH_MAX_BYTES at zero each require somebody to have set
+	// that variable, so refusing them costs a deployment nothing it did not ask for
+	// and is outside the Enabled guard below.
+	//
+	// The cross-check against HTTP_REQUEST_TIMEOUT is the one that does not, and it
+	// is the one that is guarded. The two defaults do not collide — ten inside
+	// fifteen — but LINKCTRL_HTTP_REQUEST_TIMEOUT=5s is valid today and nothing has
+	// ever refused it, and without the guard this release would refuse to start on
+	// the *default* value of a variable that operator has never heard of, on an
+	// instance with ADDONS_DIR unset. That is a rule reaching into a deployment it
+	// has no business in. With add-ons enabled the same pair is a real
+	// misconfiguration — the route deadline cannot fire — and the operator hears
+	// about it at the boot where it begins to matter, which is the boot that first
+	// loads an add-on. It is still an upgrade break for an instance that runs them,
+	// and CHANGELOG.md says so rather than leaving it to be discovered.
+	//
+	// **The outer check is the one that had to exist.** A route deadline at or over
+	// HTTP_REQUEST_TIMEOUT never fires: the request context is created first, in
+	// httpx.RequestTimeout, and cancels the same context. M68.5's first attempt set
+	// this to fifteen against a request timeout of fifteen and the knob did nothing,
+	// which is the FEED_TIMEOUT case above reached from the other side — a knob whose
+	// upper half cannot take effect.
+	// A request timeout of zero disables that middleware entirely, and then the route
+	// deadline is the only bound there is, so there is nothing to nest inside.
+	if c.Addons.RouteDeadline <= 0 {
+		add("ADDON_ROUTE_DEADLINE: must be positive, got %s; it is what gives an "+
+			"instance slot back when somebody else's module will not return",
+			c.Addons.RouteDeadline)
+	} else if c.Addons.Enabled() && c.HTTP.RequestTimeout > 0 &&
+		c.Addons.RouteDeadline >= c.HTTP.RequestTimeout {
+		// Both remedies, because the default is the one more likely to be at fault:
+		// an operator who deliberately set a short HTTP_REQUEST_TIMEOUT is being
+		// refused over a number they never chose, and telling them only to raise it
+		// would be telling them to undo the setting they meant.
+		add("ADDON_ROUTE_DEADLINE (%s): must be under HTTP_REQUEST_TIMEOUT (%s), which "+
+			"already cancels the same request context and starts first; at or over it "+
+			"this bound never fires and the host has no budget left to answer with. "+
+			"Lower ADDON_ROUTE_DEADLINE, which you may never have set, or raise "+
+			"HTTP_REQUEST_TIMEOUT above it",
+			c.Addons.RouteDeadline, c.HTTP.RequestTimeout)
+	}
+	if c.Addons.FetchTimeout <= 0 {
+		add("ADDON_FETCH_TIMEOUT: must be positive, got %s; zero would mean no bound "+
+			"on a connection to a server this project does not run", c.Addons.FetchTimeout)
+	} else if c.Addons.RouteDeadline > 0 && c.Addons.FetchTimeout > c.Addons.RouteDeadline {
+		add("ADDON_FETCH_TIMEOUT (%s): must not exceed ADDON_ROUTE_DEADLINE (%s); a "+
+			"fetch happens inside a route invocation and cannot outlast it",
+			c.Addons.FetchTimeout, c.Addons.RouteDeadline)
+	}
+	// The third of the three, and it is here because it was the one that was not.
+	// M68.5 created all three bounds and validated two, so an operator who wrote
+	// `LINKCTRL_ADDON_FETCH_MAX_BYTES=0` meaning *no cap* got 256 KiB and was told
+	// nothing — addon.fetchMaxBytesFrom substitutes the default for anything at or
+	// under zero, the way every other bound in that package treats a zero, and a
+	// default arriving silently where an operator asked for the opposite is the
+	// asymmetry this closes.
+	//
+	// There is no way to ask for no cap, deliberately: the body is read into memory
+	// to hand across the ABI boundary, so an unbounded one is a heap this host
+	// cannot bound from a server it does not run. Refusing the request is the
+	// sentence, rather than a knob whose upper end is a memory exhaustion.
+	if c.Addons.FetchMaxBytes <= 0 {
+		add("ADDON_FETCH_MAX_BYTES: must be positive, got %d; there is no way to ask "+
+			"for no cap, because the response is held in memory to cross the add-on "+
+			"boundary and an unbounded body from a server this product does not run "+
+			"is an unbounded heap", c.Addons.FetchMaxBytes)
 	}
 
 	if c.Alias.Length < 4 || c.Alias.Length > 12 {

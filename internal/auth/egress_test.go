@@ -79,12 +79,41 @@ var authenticationPackages = []string{
 //
 // If the scan grows a third exemption, that is worth arguing about rather than
 // adding.
+//
+// # The exemption M68.5 argued for, and what the claim narrowed to
+//
+// `internal/addon/fetch.go` dials, on purpose, and it is the first file in any of
+// these three packages that does. That makes this test's sentence — *nothing on
+// an authentication path in this product reaches the network* — false as written,
+// and the honest response is to say what it is now instead of quietly widening a
+// pattern.
+//
+// **What it asserted, and still does:** none of this product's own authentication
+// code reaches the network of its own accord. TOTP is arithmetic, a session is a
+// row, and a password is a hash — there is nobody to ask, and a verification
+// service arriving with a feature is exactly what this scan is for.
+//
+// **What is now true beside it:** an add-on may reach outward, because an operator
+// declared a permission and named an origin (D364). That is not this product
+// dialling on an authentication path; it is a capability an operator granted to
+// somebody else's code, and it will run on an authentication path when the OIDC
+// add-on lands. The two claims are different and the second does not weaken the
+// first — but only because the egress is confined to **one file**, which is what
+// this exemption asserts. A second file in internal/addon that dials would be a
+// second door with its own bounds, and it would fail here rather than joining a
+// list.
+//
+// `docs/SECURITY.md`'s egress row carries the disclosure, and it is the sixth
+// connection counted there.
 func TestTheSecondFactorOpensNoSocket(t *testing.T) {
 	// Files exempt from the scan, by path relative to the package being walked.
-	// Empty today, and kept as a declared empty set rather than as an absent
-	// concept: an exemption added later is then a visible diff with a name beside
-	// it, instead of a `continue` somebody slipped into the loop.
-	exempt := map[string]bool{}
+	// One, and it is the diff-with-a-name-beside-it this set was kept empty for:
+	// M68.5's outbound fetch is a declared capability an operator configured, and
+	// it is confined to this file so that "this product's own authentication code
+	// does not dial" stays checkable. See the second half of the comment above.
+	exempt := map[string]bool{
+		"../addon/fetch.go": true,
+	}
 
 	var scanned int
 	for _, dir := range authenticationPackages {
@@ -108,10 +137,13 @@ func TestTheSecondFactorOpensNoSocket(t *testing.T) {
 			scanned++
 			for i, line := range strings.Split(string(b), "\n") {
 				if m := outboundFromAnAuthenticationPath.FindString(line); m != "" {
-					t.Errorf("%s:%d uses %s. Nothing on an authentication path in this "+
-						"product reaches the network: TOTP is arithmetic over a clock and "+
-						"a shared secret, and a second factor that asked somebody would be "+
-						"a channel docs/SECURITY.md's egress row does not name.",
+					t.Errorf("%s:%d uses %s. This product's own authentication code does not "+
+						"reach the network: TOTP is arithmetic over a clock and a shared "+
+						"secret, and a second factor that asked somebody would be a channel "+
+						"docs/SECURITY.md's egress row does not name. An add-on's outbound "+
+						"request is the one exception and it lives in addon/fetch.go, which "+
+						"is exempt by name — a second file that dials is a second door and "+
+						"belongs in that row before it belongs here.",
 						rel, i+1, m)
 				}
 			}
@@ -121,6 +153,16 @@ func TestTheSecondFactorOpensNoSocket(t *testing.T) {
 	if scanned == 0 {
 		t.Fatal("scanned no files; the walk is broken rather than the packages clean")
 	}
+	// The exemption is a claim about the tree and is checked as one: a name that
+	// stops matching a file is an exemption that has quietly stopped exempting
+	// anything, and the scan would then be passing because the door moved rather
+	// than because it is shut.
+	for rel := range exempt {
+		if _, err := os.Stat(rel); err != nil {
+			t.Errorf("%s is exempt from this scan and is not there: %v", rel, err)
+		}
+	}
+
 	// A floor rather than an exact count, because both packages grow. Low enough
 	// that it never needs revising and high enough that a walk which found one
 	// file fails here instead of passing.

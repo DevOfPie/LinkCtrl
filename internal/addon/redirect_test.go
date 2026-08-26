@@ -316,6 +316,11 @@ func TestAnInlineInvocationReachesOnlyTheRedirectSafeSubset(t *testing.T) {
 		"redirect: inline_http_request=denied",
 		// The other class's read, from this one.
 		"redirect: inline_event_read=denied",
+		// And egress (M68.5), which is the newest member of the set and the one
+		// with a second refusal behind it — see
+		// TestNeitherRedirectClassMayFetchAndTheGuestIsToldSo for why *denied*
+		// rather than an outcome is the right word here.
+		"redirect: inline_network_fetch=denied",
 	} {
 		if !strings.Contains(logs, want) {
 			t.Errorf("the fixture did not report %q\n%s", want, logs)
@@ -748,6 +753,82 @@ func TestAModuleHoldingBothClassesIsStillOnlyInOneAtATime(t *testing.T) {
 	h.Inline(t.Context(), decisionFor("quiet", "https://example.test/"))
 	if got := sink.String(); !strings.Contains(got, "redirect: inline_event_read=denied") {
 		t.Errorf("an inline invocation reached the observe class's read\n%s", got)
+	}
+}
+
+// --- egress, and the two places a redirect class meets it ---------------------
+
+// m68.5.md: *egress is refused on the redirect path*, and *a test that a refused
+// path refuses*. The refusal is real in both classes and it is **not the same
+// refusal**, which is what this test exists to pin down — the third review of this
+// milestone found seven places describing one where there are two.
+//
+// Driven from the guest, and that is the whole point. `TestOnlyARouteInvocationMayFetch`
+// calls [hostState.doFetch] directly, which is *below* the dispatch gate, so it
+// cannot see that an inline invocation never arrives there at all. Only a module
+// that made the call can report what it was told.
+//
+//   - **Inline**: `network_fetch` is outside abi.InlineSafe, so dispatch refuses
+//     it before any of fetch.go runs and the guest gets ErrDenied — the same
+//     refusal `storage_query` gets one line above it, and deliberately
+//     indistinguishable from the undeclared-permission one (M66). Uncounted, also
+//     deliberately: that is the redirect hot path and the debug log is the record.
+//   - **Observe**: not inline, so it reaches the function and is refused by the
+//     class inside it. The guest gets a FetchResponse saying `class_refused` and
+//     the operator gets the counter.
+func TestNeitherRedirectClassMayFetchAndTheGuestIsToldSo(t *testing.T) {
+	h, sink, metrics := redirectHost(t, grantable()...)
+
+	h.Inline(t.Context(), decisionFor("quiet", "https://example.test/"))
+	if got := sink.String(); !strings.Contains(got, "redirect: inline_network_fetch=denied") {
+		t.Errorf("an inline invocation did not report ErrDenied for network_fetch\n%s", got)
+	}
+	// The counter an inline refusal does *not* write. Asserted rather than assumed,
+	// because docs/operations.md tells an operator what this series means and a row
+	// nobody can produce is a row that means something else.
+	if series := seriesLike(scrape(t, metrics), "linkctrl_addon_fetch_total"); series != "" {
+		t.Errorf("an inline refusal reached the fetch counter, which is off by design "+
+			"on the redirect path:\n%s", series)
+	}
+
+	h.Observe(RedirectEvent{LinkID: "l"})
+	logs := waitFor(t, sink, "redirect: observe_network_fetch=")
+	if !strings.Contains(logs, "redirect: observe_network_fetch=outcome:class_refused") {
+		t.Errorf("an observing invocation did not get the class_refused record\n%s", logs)
+	}
+	// Polled for the reason the histogram above is: the guest's log line is written
+	// inside the call and the counter after it.
+	series := `linkctrl_addon_fetch_total{addon="redirect",outcome="class_refused"} 1`
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		scraped := scrape(t, metrics)
+		if strings.Contains(scraped, series) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("the scrape does not carry %s\n%s", series,
+				seriesLike(scraped, "linkctrl_addon_fetch_total"))
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// The grant is still checked first, which is what makes the `class_refused` above
+// mean *the class* rather than *the manifest*. A module that never declared
+// `network.fetch` gets ErrDenied in the observing class too, and learns nothing
+// about whether this host implements the function at all.
+func TestAnObservingModuleWithoutTheGrantIsRefusedBeforeTheClassIsReached(t *testing.T) {
+	h, sink, metrics := redirectHost(t, PermissionRedirectObserve)
+	h.Observe(RedirectEvent{LinkID: "l"})
+	logs := waitFor(t, sink, "redirect: observe_network_fetch=")
+	if !strings.Contains(logs, "redirect: observe_network_fetch=denied") {
+		t.Errorf("a module that did not declare network.fetch was not refused by the grant\n%s", logs)
+	}
+	// An undeclared call is counted on the refusals series and not on the fetch
+	// one: it never reached the fetch machinery.
+	if series := seriesLike(scrape(t, metrics), "linkctrl_addon_fetch_total"); series != "" {
+		t.Errorf("a grant refusal reached the fetch counter:\n%s", series)
 	}
 }
 

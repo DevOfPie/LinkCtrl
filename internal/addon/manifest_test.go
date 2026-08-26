@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 )
 
 // valid is the manifest every case below mutates one field of, so a failing case
@@ -393,5 +394,37 @@ func TestAManifestLargerThanTheBoundIsRefused(t *testing.T) {
 		t.Fatal("a manifest past the bound parsed")
 	} else if !strings.Contains(err.Error(), "larger than") {
 		t.Errorf("the error does not say the file is too large:\n%v", err)
+	}
+}
+
+// Every reserved add-on **name** is refused, walked off the list rather than
+// spelled out here.
+//
+// The list has grown three times — `inline` and `instantiate` at M65, `pool` at
+// M66.5, `fetch` and `route` at M68.5 — and each addition means an add-on in a
+// directory of that name stops loading on upgrade. A test naming the entries would
+// have had to grow with it and did not exist at all; this one cannot go stale,
+// which is the property this phase keeps discovering it needs.
+func TestEveryReservedNameIsRefusedAsAnAddonName(t *testing.T) {
+	t.Parallel()
+	if len(config.AddonReservedNames) < 5 {
+		t.Fatalf("the reserved list holds %d names and was written with more",
+			len(config.AddonReservedNames))
+	}
+	for _, name := range config.AddonReservedNames {
+		m := valid()
+		m.Name = name
+		// Cleared, because a cookie prefix is derived from the name and would
+		// otherwise be a second reason and a confusing message.
+		m.CookiePrefixes = nil
+		err := m.Validate()
+		if err == nil {
+			t.Errorf("a manifest named %q validates, and this product reads a variable "+
+				"of its own from LINKCTRL_ADDON_%s_*", name, strings.ToUpper(name))
+			continue
+		}
+		if !strings.Contains(err.Error(), "reserved") {
+			t.Errorf("%q is refused without saying it is reserved: %v", name, err)
+		}
 	}
 }

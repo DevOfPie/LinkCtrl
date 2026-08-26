@@ -603,6 +603,7 @@ var functionCountWords = map[int][]string{
 	11: {"Eleven", "eleven"}, 12: {"Twelve", "twelve"},
 	13: {"Thirteen", "thirteen"}, 14: {"Fourteen", "fourteen"},
 	15: {"Fifteen", "fifteen"}, 16: {"Sixteen", "sixteen"},
+	17: {"Seventeen", "seventeen"},
 }
 
 // --- the same counts, everywhere they are written ---------------------------
@@ -729,6 +730,10 @@ var notThisFunctionCount = map[string][]string{
 		// A pair, and one the sweep could not see until it learned to read past a
 		// word: `two host functions` names storage_query and storage_exec.
 		"and two host functions to read and write it",
+		// M68.5's entry, and it counts what the release *added* rather than the
+		// list — one function and one permission. The same shape as the 0.1.1 line
+		// above it.
+		"through one new host function and one new permission",
 	},
 	// Pairs, not counts of the list: the two storage functions, the two the
 	// session boundary is split into, the two ungated sources.
@@ -744,6 +749,10 @@ var notThisFunctionCount = map[string][]string{
 		// exemption named is now a table rather than a sentence, so there is no
 		// count in it to excuse.
 		"and the two functions above",
+		// The egress limb's opening sentence (M68.5). It names `network_fetch` and
+		// says what is singular about it — that it is the only one that leaves this
+		// machine — rather than counting the list, which at that point is seventeen.
+		"network_fetch is the one function that leaves this machine",
 	},
 	// The host functions M66's timing fixture calls, which is what the deadline was
 	// measured against and is not a count of the published list.

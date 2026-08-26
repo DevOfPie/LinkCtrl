@@ -534,6 +534,35 @@ type Options struct {
 	// traffic (M66.5). Zero means [DefaultPoolTTL], and an instance sets it from
 	// LINKCTRL_ADDON_POOL_TTL.
 	PoolTTL time.Duration
+
+	// RouteDeadline is how long one request to an add-on's own route may take,
+	// start to finish (M68.5). Zero means [DefaultRouteDeadline], and an instance
+	// sets it from LINKCTRL_ADDON_ROUTE_DEADLINE.
+	//
+	// **The bound m68.5.md required before anything was allowed to fetch**, and it
+	// applies to every route invocation rather than only to the ones that do — a
+	// deadline conditional on a permission would leave the hole open for every
+	// add-on that did not declare it while being a second rule to reason about.
+	//
+	// It is a bound **inside** the caller's, not the first one a route handler ever
+	// had. An application request already carries LINKCTRL_HTTP_REQUEST_TIMEOUT's
+	// context deadline and that cancels this same context, so the value only means
+	// anything while it is shorter; internal/config refuses one that is not. What
+	// the margin buys is a host that is still alive when the guest is killed, and
+	// what the bound buys outright is an instance slot back from a module that will
+	// not return — including on an instance that has turned the request timeout
+	// off. See [DefaultRouteDeadline].
+	RouteDeadline time.Duration
+
+	// FetchTimeout bounds one outbound request an add-on makes (M68.5). Zero means
+	// [DefaultFetchTimeout], and an instance sets it from
+	// LINKCTRL_ADDON_FETCH_TIMEOUT.
+	FetchTimeout time.Duration
+
+	// FetchMaxBytes is the largest response body an add-on's fetch may bring back
+	// (M68.5). Zero means [DefaultFetchMaxBytes], and an instance sets it from
+	// LINKCTRL_ADDON_FETCH_MAX_BYTES.
+	FetchMaxBytes int64
 }
 
 // FailureClassError is an operator override this host cannot interpret.
@@ -794,6 +823,18 @@ type Host struct {
 	// and neither is derived from it — see pool.go.
 	poolSize int
 	poolTTL  time.Duration
+	// The egress limb (M68.5); fetch.go is where all of it is used.
+	//
+	// fetcher is the outbound client, one per host: keep-alives are off, so sharing
+	// it hands no add-on a socket another one opened, and building one per
+	// invocation would build a TLS configuration per request for nothing.
+	fetcher *fetcher
+	// routeDeadline is Options.RouteDeadline with its default applied: how long one
+	// request to an add-on's own route may take. Not any of the redirect bounds and
+	// not derived from one — a page is allowed to be slow in a way a redirect is
+	// not, which is the whole reason it is a separate number.
+	routeDeadline time.Duration
+
 	// poolStop cancels the idle sweep's context; poolWG waits for it.
 	poolStop context.CancelFunc
 	poolWG   sync.WaitGroup
@@ -899,7 +940,10 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		instantiateDeadline: instantiate,
 		poolSize:            poolSizeFrom(opts.PoolSize),
 		poolTTL:             poolTTLFrom(opts.PoolTTL),
+		routeDeadline:       routeDeadlineFrom(opts.RouteDeadline),
 	}
+	h.fetcher = newFetcher(fetchTimeoutFrom(opts.FetchTimeout),
+		fetchMaxBytesFrom(opts.FetchMaxBytes), log)
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
 	// because it is what lets M66 interrupt a module that will not return: a
@@ -1004,6 +1048,17 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			loaded.Manifest.ABIVersion, string(loaded.FailureClass),
 			loaded.grants.String())
 		started = append(started, loaded)
+		if loaded.grants.Has(abi.PermissionNetworkFetch) && !loaded.Manifest.hasOriginSetting() {
+			// Coherent and inert: the manifest asked an operator to authorize outbound
+			// requests and gave them no field to say where. Validation does not refuse
+			// it — an add-on that reaches nothing is the state this design produces on
+			// purpose — but an operator who granted something and sees nothing happen
+			// is owed the reason, and the add-on's author is the one who can fix it.
+			log.Warn("an add-on declared the outbound-request permission and no setting "+
+				"marked `origin`, so it can reach nothing; this is its author's to fix",
+				slog.String("addon", loaded.Manifest.Name),
+				slog.String("permission", abi.PermissionNetworkFetch))
+		}
 		// The grants are named rather than counted. A count answers "did anything
 		// change" and nothing else, and what an operator reading a boot log needs to
 		// know about a module they installed is which capabilities it asked for —

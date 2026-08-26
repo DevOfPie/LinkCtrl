@@ -12,6 +12,15 @@ import "slices"
 // below.
 const PermissionStorage = "storage.own_schema"
 
+// PermissionNetworkFetch is the second entry another file branches on by name,
+// and for the same reason [PermissionStorage] is the first: the host's manifest
+// validation needs it. An add-on that declares an origin setting has to have
+// declared this grant, and one that declares this grant has to declare an origin
+// setting — a manifest holding only the first half is asking an operator to
+// authorize a reach nothing will use, and one holding only the second could
+// never fetch anything it was pointed at.
+const PermissionNetworkFetch = "network.fetch"
+
 // Permissions is the add-on permission vocabulary: every grant an add-on may
 // declare, and the whole of what one can be trusted with.
 //
@@ -138,6 +147,24 @@ var Permissions = []Permission{
 			"refusing, and a module cannot acquire it by having asked for the weaker " +
 			"one. Useless on its own — an add-on that declares this and not " +
 			"redirect.inline is never on the path to use it.",
+	},
+	{
+		Name: PermissionNetworkFetch, Grantable: true, BackedBy: "M68.5",
+		Doc: "Make an outbound request from the host, to an origin **the operator named** " +
+			"and to no other. This grant carries no hosts, no patterns and no URLs, and it " +
+			"cannot: an add-on's author declares that the add-on talks to something, and the " +
+			"person running the instance decides what that something is, by filling in a " +
+			"setting the manifest declared as carrying origins. An add-on holding this and " +
+			"configured with nothing reaches nothing, which is the ordinary state of one " +
+			"that has just been installed. What the host enforces beyond the origin is not " +
+			"negotiable by either party: https only, GET and form-encoded POST only, no " +
+			"request headers of the add-on's choosing, every address the name resolves to " +
+			"checked at the moment of dialling so that loopback, link-local, unique-local " +
+			"and the private ranges are refused, no redirect followed off the origin it " +
+			"started on, a response size cap and a request timeout. It is the sharpest " +
+			"grant here after session.mint, and it composes with storage.own_schema into " +
+			"something worth stating plainly: an add-on holding both can read its own " +
+			"tables and send what it finds to the origin the operator authorized.",
 	},
 }
 

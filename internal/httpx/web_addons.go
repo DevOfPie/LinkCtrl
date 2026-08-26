@@ -196,10 +196,56 @@ type addonDetailPageData struct {
 	// Carried from the constant rather than written into the template, so the two
 	// cannot come to differ in magnitude as well as in unit.
 	SettingMaxLength int
+	// Fetch is the outbound-request record (M68.5), rendered beside the redirect
+	// figures. Strings for the reason the redirect figures are: a page shows a
+	// duration and a dash, not a nanosecond count.
+	Fetch addonFetchSummary
+	// FetchOutcomes is the breakdown, most frequent first, each with the sentence
+	// that says what an operator should do about it.
+	FetchOutcomes []addonFetchOutcomeRow
 	// FieldErrors puts a refusal beside the input that earned it.
 	FieldErrors map[string]string
 	Notice      string
 	Error       string
+}
+
+// addonFetchSummary is the two-tile outbound-request summary.
+type addonFetchSummary struct {
+	Observed bool
+	Count    uint64
+	Refused  uint64
+	P99      string
+	Mean     string
+}
+
+// addonFetchOutcomeRow is one row of the outcome breakdown.
+type addonFetchOutcomeRow struct {
+	Outcome string
+	Count   uint64
+	// Means is what the word means for the person reading the page. The ABI's own
+	// documentation is written for an add-on's author and says what a guest should
+	// do; this says what an *operator* should do, which for half the vocabulary is
+	// "fill in a setting" and for the other half is "this is the add-on's author's
+	// to fix".
+	Means string
+}
+
+// fetchOutcomeMeaning is the operator's reading of each word in
+// abi.FetchOutcomes. A word with no sentence here renders with none rather than
+// with somebody else's, and a test holds the map against the vocabulary so that a
+// tenth outcome is a failing build rather than a blank cell.
+var fetchOutcomeMeaning = map[string]string{
+	"ok":               "the request reached the origin; its status code is the add-on's to read",
+	"unconfigured":     "no origin is set for this add-on, so it can reach nothing — fill in its origin setting above",
+	"origin_refused":   "the add-on asked for an origin you did not name; add it above if you meant to allow it",
+	"class_refused":    "the add-on tried to reach outward from an invocation that may not fetch: an observing redirect handler, or its own start-up",
+	"invalid_request":  "the add-on asked for something this host does not send — not https, or a method beyond GET and form POST",
+	"dns_failed":       "the name did not resolve",
+	"address_refused":  "the name resolved outside the public internet: this host dials globally-routable addresses only, and the log line names the rule under address_rule",
+	"redirect_refused": "the origin redirected off itself, which this host does not follow",
+	"too_large":        "the response was larger than this instance carries; LINKCTRL_ADDON_FETCH_MAX_BYTES is the bound",
+	"timeout":          "the origin did not answer in time; LINKCTRL_ADDON_FETCH_TIMEOUT is the bound",
+	"connect_failed":   "the connection or the TLS handshake failed",
 }
 
 // addonClassRow is one class's figures on the detail page.
@@ -379,6 +425,21 @@ func (h *Web) loadAddonDetail(w http.ResponseWriter, r *http.Request) (addonDeta
 			row.Mean = shortDuration(time.Duration(float64(c.Sum) / float64(c.Count)))
 		}
 		data.Classes = append(data.Classes, row)
+	}
+	f := m.Performance.Fetch
+	data.Fetch = addonFetchSummary{
+		Observed: f.Observed(), Count: f.Count, Refused: f.Refused,
+		P99: "—", Mean: "—",
+	}
+	if f.Count > 0 {
+		data.Fetch.P99 = shortDuration(f.P99)
+		// float64 for the reason the class mean above is one.
+		data.Fetch.Mean = shortDuration(time.Duration(float64(f.Sum) / float64(f.Count)))
+	}
+	for _, o := range f.Outcomes {
+		data.FetchOutcomes = append(data.FetchOutcomes, addonFetchOutcomeRow{
+			Outcome: o.Outcome, Count: o.Count, Means: fetchOutcomeMeaning[o.Outcome],
+		})
 	}
 	return data, true
 }

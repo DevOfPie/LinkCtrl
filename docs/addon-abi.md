@@ -684,7 +684,9 @@ on every redirect they make.
 invocation may call `abi_version`, `log`, `random_bytes`, `time_now`,
 `config_get`, and the two functions above. Everything else is `ErrDenied` inside
 one — storage above all, because the redirect path does no I/O of this product's
-own either and an add-on does not get to be the exception. Anything you need
+own either and an add-on does not get to be the exception, and `network_fetch`
+beside it, which is why a module that fetches gets an error here rather than the
+`class_refused` outcome the observing class gets. Anything you need
 during a redirect has to be in memory, and your memory is new every invocation,
 so in practice it has to be a `config_get` or a constant.
 
@@ -705,6 +707,149 @@ query holding a character RFC 3986 does not allow there — a `#` above all — 
 The destination you are handed is the one the visitor would have received:
 routing rules, the split arm, the deep-link path and any forwarded query are
 already applied. Strip what you were installed to strip and hand the rest back.
+
+## Reaching outward, and only where the operator pointed you
+
+`network_fetch` is the one function that leaves this machine. It costs
+`network.fetch`, and the design is decided by the answer this product gives to
+outbound requests in general: **avoid them, and make the ones that happen as
+narrow as they can be.**
+
+### Your manifest declares a need. It cannot declare a destination.
+
+There is no host list, no pattern and no URL anywhere in `addon.json`, and the
+manifest schema refuses one — a setting marked `origin` carries no `default` and
+no `options`, must be `text`, and is refused outright without the permission
+beside it. So an add-on's author says *this add-on talks to something* and the
+person running the instance says *to what*.
+
+```json
+{
+  "permissions": ["network.fetch"],
+  "settings": [
+    { "name": "provider_origins", "type": "text", "origin": true }
+  ]
+}
+```
+
+The operator fills that field in from the Add-on manager, with one origin or
+several separated by spaces — `https://idp.example.com`, scheme, host and port,
+no path. **Until they do, every call answers `unconfigured` and nothing leaves
+this machine.** An add-on that talks outward does not work when it is installed;
+it works when it is configured, and saying so on your own page is the difference
+between an operator who configures it and one who files a bug.
+
+Declaring the permission with no origin-marked setting is legal — nothing is
+refused for it — and it is inert: the operator has nowhere to name an origin, and
+the boot log says as much. It is a publishing mistake rather than a security one.
+
+### Which invocation may fetch: a route handler, and nothing else
+
+**A redirect-class invocation of either kind is refused.** The inline class holds
+a visitor's request open against `LINKCTRL_ADDON_INLINE_DEADLINE`, 25 ms by
+default, and a network round trip is tens; the answer would be a killed invocation
+every time. The observe class runs after the response with no caller whose budget
+a round trip could be spent against, so it has no bound to be checked against and
+is refused rather than given a new one. Neither is a judgement about your module —
+it is the class, and no manifest changes it.
+
+**The two are refused in two different places, and you branch on two different
+things.** An *observing* invocation reaches `network_fetch` and comes back with the
+`class_refused` outcome, which is also a counter label an operator can see. An
+*inline* invocation never reaches the function at all: it is outside the
+[redirect-safe subset](#redirectinline--on-the-path-while-somebody-waits), so the
+call is `ErrDenied` — exactly what `storage_query` returns there, and exactly what
+any function returns when you did not declare its permission. That sameness is deliberate: an inline
+module learns nothing about what this host implements. Nothing is counted for it
+either, because that is the redirect hot path.
+
+If you write one module for both classes, branch on the error first and on the
+outcome second — the inline case never gives you an outcome to read.
+
+A route handler is bounded by `LINKCTRL_ADDON_ROUTE_DEADLINE`, ten seconds by
+default, which covers instantiating your module, running your handler and every
+host call inside it. A fetch is bounded by
+`LINKCTRL_ADDON_FETCH_TIMEOUT` — three seconds by default — **or** by what is left
+of the route deadline, whichever ends first. You cannot buy time by fetching.
+
+Neither number is yours and both can be lower on the instance running you: the
+route deadline is required to sit under the host's own request timeout, and the
+fetch timeout under the route deadline. Three fetches at the defaults — a
+discovery document, a token exchange and a key set — fit; a fourth is what an
+operator would have to raise both for. Budget your handler as though the deadline
+were shorter than the default, because on somebody's deployment it is.
+
+### What the host will and will not do
+
+- **`https` only.** A cleartext URL is `invalid_request` before anything resolves.
+- **`GET`, or a form-encoded `POST`.** Nothing wider: a discovery fetch and a
+  token exchange are what this is for. A body on a `GET` is refused rather than
+  dropped.
+- **No headers of yours.** The record carries none, and the host sets exactly
+  three: `Accept: application/json`, its own `User-Agent`, and
+  `Content-Type: application/x-www-form-urlencoded` on a `POST`. A token endpoint
+  is therefore reached with `client_secret_post`; there is no way to send an
+  `Authorization` header, and adding one is a change to this ABI rather than
+  something a module can arrange.
+- **No response header but the content type.** A `Set-Cookie` or a `Location`
+  from somebody else's server does not reach you.
+- **Every resolved address is checked at the moment of dialling, against an
+  allowlist.** An address is dialled only if it falls in globally-routable unicast
+  space — `1.0.0.0/8` through `223.255.255.255` and `2000::/3`, less the ranges
+  carved out inside them — and refused otherwise. Loopback, link-local (the
+  metadata service above all), unique-local and the private ranges are refused
+  because of that rather than because somebody listed them, and so is a range
+  nobody has thought about. It is checked on every address the name resolves to,
+  however the name got there and whatever it answered last time. The outcome is
+  `address_refused`, and the host's own log says which rule refused it. **This
+  will one day refuse an origin that was legitimate** — IPv6 space allocated after
+  this shipped is the case to expect — and that is deliberate: the alternative
+  failure mode is a range nobody thought of being reachable. Tell your operator to
+  grep their log for `address_rule=`.
+- **A redirect is followed only on the origin it started on**, at most three
+  hops. Anything else is `redirect_refused`. This is what stops a compromised
+  discovery document redirecting your token exchange to a third party — and the
+  origin allowlist stops you following such a document yourself, because the
+  second origin is one the operator did not name.
+- **The response is capped** at `LINKCTRL_ADDON_FETCH_MAX_BYTES`, 256 KiB by
+  default. Over it is `too_large` **with no body at all**, because a truncated
+  JSON document is a parse error you would spend an afternoon on.
+- **No connection outlives the call.** Keep-alives are off, so nothing is pooled
+  across invocations and no socket is shared between add-ons.
+
+### The outcome is the first thing to read
+
+`network_fetch` does not trap and does not refuse with a status: it answers a
+`FetchResponse` whose `outcome` is one of a closed vocabulary, and everything else
+in the record is empty unless it says `ok`. The negative statuses keep what they
+mean everywhere else in this ABI — your own fault, and the host's.
+
+| `outcome` | Means |
+| --- | --- |
+| `ok` | A response arrived. `status` is the origin's own, and a 404 or a 500 is still `ok` — this host reached who it was told to and does not judge the answer |
+| `unconfigured` | The operator has named no origin for this add-on |
+| `origin_refused` | The URL's origin is not one they named |
+| `class_refused` | This invocation is not a route handler: an observing redirect invocation, or your module's own start-up. An *inline* invocation gets `ErrDenied` instead and never sees an outcome |
+| `invalid_request` | Not https, not a method this host makes, a body on a `GET`, or past a bound |
+| `dns_failed` | The name did not resolve |
+| `address_refused` | It resolved to an address this host will not dial |
+| `redirect_refused` | A redirect left the origin, or the chain was too long |
+| `too_large` | The **body** was over the size cap; no body comes back |
+| `timeout` | The host's fetch bound, or the invocation's, elapsed |
+| `connect_failed` | Anything else on the wire — a response whose **headers** exceeded the host's own bound is here rather than under `too_large`, because the exchange failed below the response and that word is the body's |
+
+An operator sees the same word as the `outcome` label of
+`linkctrl_addon_fetch_total{addon,outcome}`, beside
+`linkctrl_addon_fetch_duration_seconds{addon}` — so *this add-on is being refused*
+is a question they can answer from a dashboard rather than from your log lines.
+
+### Three origins, not one, for some providers
+
+The bound is *the origin*, and some identity providers spread discovery, the token
+endpoint and the key set across three hostnames. The operator names all three in
+the one field; your add-on cannot name them and cannot widen the field. Say which
+ones you need in your own documentation — that sentence is the whole of what
+stands between an operator and an add-on that half works.
 
 ## The clock and the entropy are this machine's
 
@@ -849,7 +994,7 @@ can verify, and the second is a CSRF carve-out on a route anything holding
 
 <!-- BEGIN GENERATED: the function table -->
 
-The ABI is **0.1.3**, generation **1**, and this host loads generation 1 or newer.
+The ABI is **0.1.4**, generation **1**, and this host loads generation 1 or newer.
 
 | Function | Since | Requires | Status | What it is |
 | --- | --- | --- | --- | --- |
@@ -869,6 +1014,7 @@ The ABI is **0.1.3**, generation **1**, and this host loads generation 1 or newe
 | `redirect_event_read`<br>`sdk.RedirectEventRead()` | 0.1.0 | `redirect.observe` | **live** | RedirectEventRead reads the redirect this add-on is observing. What it carries is at most what click_events may carry — prefix-derived and country-level, and no client address in any form. The grant it costs is redirect.observe, which is out-of-band observation and nothing more: running inside the redirect path itself is redirect.inline, a separate declaration, so a module cannot reach the path by holding this. The host calls your `linkctrl_redirect_observe` export once per recorded redirect, **after the visitor has already been answered and after the click is durable**, so nothing you do here can delay or fail a redirect — and nothing you do here can affect one either. Outside such an invocation it is ErrNotFound, which is what a module calling it from package initialization gets. An instance that could not be given the event within the host's own bound is dropped rather than queued: observation is best-effort by construction, exactly as the click pipeline it is fed from is. |
 | `redirect_decision_read`<br>`sdk.RedirectDecisionRead()` | 0.1.2 | `redirect.inline` | **live** | RedirectDecisionRead reads the redirect this module is being asked about, while the visitor waits. The host calls your `linkctrl_redirect_inline` export after it has decided where the visitor goes and **before it has written anything** — before the gates that spend a link's budget, so a veto costs nobody a click. What crosses is the decision and not the visitor: the link, the alias and the destination, and no field derived from the person in front of the browser. Watching visitors is redirect.observe's job and it happens off this path. Outside an inline invocation this is ErrNotFound. |
 | `redirect_answer_write`<br>`sdk.RedirectAnswerWrite(answer []byte)` | 0.1.2 | `redirect.inline` | **live** | RedirectAnswerWrite is how an inline module answers, and it is the only channel it has: `linkctrl_redirect_inline` returns a status and not a payload, for the reason the request handler does. Not calling it is the ordinary case and means *allow* — a module that only watches writes nothing, and a module the host had to kill wrote nothing either, so the two agree. A verdict of `veto` refuses the visitor with the same page a gate refuses with; the alias, the destination and the reason are never echoed to them. A `query` alters the destination's query string and costs redirect.rewrite_query on top of redirect.inline — ErrDenied without it — and it is a **replacement** rather than a merge: what you write is the whole query, and an empty string with `rewrite` set removes it. You cannot reach the scheme, the host, the port or the path, because the host substitutes your query into the URL it already decided rather than accepting a URL from you. A query carrying anything outside RFC 3986's query characters is ErrInvalid, and so is a verdict outside the vocabulary. Called twice in one invocation the second is ErrInvalid, for the reason http_response_write is. |
+| `network_fetch`<br>`sdk.NetworkFetch(request []byte)` | 0.1.4 | `network.fetch` | **live** | NetworkFetch makes one outbound request from the host and hands you what came back. It is the only way out of this sandbox and it is bounded on every axis the host can bound it on. **Where** is the operator's: the URL's origin — scheme, host and port — must be one they named in a setting your manifest declared as carrying origins, and an add-on configured with none reaches nothing at all. Your manifest cannot name a host, so a discovery document pointing at a second origin is a second origin the operator has to authorize before you can follow it; that is the bound, and it is why an issuer whose token endpoint lives on another name needs both written down. **What** is the host's: https only, GET or form-encoded POST, no request headers of your choosing — the host sets Accept, Content-Type and its own User-Agent — and no response header reaches you but the content type, so nothing a third party sets in a browser can be laundered through this call. **How far** is fixed: every address the name resolves to is checked at the moment of dialling, so loopback, link-local, unique-local, the private ranges and this machine's own metadata service are refused however the name got there; a redirect is followed only on the origin it started on; the response is cut off at the host's size cap; and the whole call is bounded by the host's timeout and by whatever is left of the invocation's own. **When** is the class: this is callable from a route handler and from nowhere else, because an inline module holds a visitor's request open against a deadline in milliseconds and an observing one has no caller to spend a budget against. The two redirect classes are refused in **two different places** and you branch on two different things. An **inline** invocation never reaches this function at all: it is outside the redirect-safe subset, so the call is ErrDenied — the same refusal storage_query gets there, and deliberately the same one an undeclared permission gets, so it is uncounted and tells you nothing about what the host implements. An **observing** invocation reaches it and comes back with the `class_refused` outcome, which is a counter label. Nothing here traps in either case: the answer is a FetchResponse whose `outcome` says what happened, from a closed vocabulary you can branch on, and an operator sees the same word as a counter label — or, in the inline case, the ErrDenied every function outside that subset returns. |
 
 ### Permissions
 
@@ -884,6 +1030,7 @@ An add-on declares what it needs in its manifest's `permissions` array, and the 
 | `redirect.observe` | yes | Observe redirects this instance served, out of band. What crosses is at most what click_events may carry — prefix-derived and country-level, and no client address in any form — so this grant cannot be widened into one by the host implementing it. |
 | `redirect.inline` | yes | Run inside the redirect path itself, where a module's own latency is added to the response. Distinct from redirect.observe so that a module cannot acquire it by accident. What it buys is the decision and a verdict on it: the module is handed the destination this instance has chosen and may let it stand or veto it, and a veto is the same refusal a gate answers with. What it does not buy is the rest of the ABI — an inline invocation may call only the redirect-safe subset, so there is no storage, no request, no session and no template on the hot path, whatever the manifest declared. Nor does it buy editing the destination, which is redirect.rewrite_query. The host bounds how long the module holds the path and completes the redirect without it when that runs out; the latency it adds inside that bound is the add-on's own, and this product's published redirect promise is measured with no inline add-on on the path. |
 | `redirect.rewrite_query` | yes | Alter the query string of the destination an inline module was handed, and nothing else about it: the scheme, the host, the port and the path are the host's and are unchanged by construction, because the host substitutes the query into the URL it already decided rather than accepting one the module wrote. That bound is what keeps the destination validator's single door single — every tier above the SSRF refusals judges by host, so a query the module chose cannot change any tier's verdict. It is a second token rather than something redirect.inline implies (D317): stripping fbclid or appending a privacy parameter is a sharper power than watching and refusing, and a module cannot acquire it by having asked for the weaker one. Useless on its own — an add-on that declares this and not redirect.inline is never on the path to use it. |
+| `network.fetch` | yes | Make an outbound request from the host, to an origin **the operator named** and to no other. This grant carries no hosts, no patterns and no URLs, and it cannot: an add-on's author declares that the add-on talks to something, and the person running the instance decides what that something is, by filling in a setting the manifest declared as carrying origins. An add-on holding this and configured with nothing reaches nothing, which is the ordinary state of one that has just been installed. What the host enforces beyond the origin is not negotiable by either party: https only, GET and form-encoded POST only, no request headers of the add-on's choosing, every address the name resolves to checked at the moment of dialling so that loopback, link-local, unique-local and the private ranges are refused, no redirect followed off the origin it started on, a response size cap and a request timeout. It is the sharpest grant here after session.mint, and it composes with storage.own_schema into something worth stating plainly: an add-on holding both can read its own tables and send what it finds to the origin the operator authorized. |
 
 ### Statuses
 
@@ -971,6 +1118,28 @@ What an add-on answers a request with, and what the host will let it. `content_t
 | `location` | string | For a redirect; never a permanent one, which the host enforces rather than trusts |
 | `set_cookie` | array | Cookies to set, bounded by the same prefixes the manifest declares — a namespace an add-on owns is one it owns in both directions, or it could overwrite a cookie it is not allowed to read; the host applies its own Secure, HttpOnly and SameSite attributes, and packs the whole set into one cookie of its own so that an add-on's share of a browser's cookie store is fixed rather than chosen |
 | `body` | string | The body, as UTF-8 text — this direction carries no encoded form, because the content types an add-on may name are text and a flag saying otherwise would be a flag with nothing behind it |
+
+#### `FetchRequest`
+
+One outbound request an add-on is asking the host to make. Deliberately narrow: there is no header map, because a header is the shape through which a request grows a credential, a host override or a cookie nobody declared, and the two an OIDC exchange actually needs are the host's to set. What is left is a URL the operator already authorized the origin of, a method from a closed pair, and a form-encoded body.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `url` | string | The absolute https URL to fetch. Its origin — scheme, host and port — must be one the operator named in an origin setting of this add-on, and anything else is refused before a packet leaves |
+| `method` | string | GET or POST; empty is GET. Nothing wider, because a discovery fetch and a token exchange are what this exists for |
+| `body` | string | For POST, the form-encoded body — the host sets application/x-www-form-urlencoded and nothing else may be sent. Ignored on a GET, which is ErrInvalid rather than a body quietly dropped |
+
+#### `FetchResponse`
+
+What came back, or what stopped it. `outcome` is a closed vocabulary and it is the first thing to read: everything else is empty unless it says `ok`. **No response header crosses but the content type** — a Set-Cookie, a Location or an Authenticate header from somebody else's server has no business in an add-on's hands, and the type is the one an add-on needs in order to know whether it was handed the JSON it asked for.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `outcome` | string | What happened, from the closed vocabulary in FetchOutcomes: `ok` means a response arrived and says nothing about its status code |
+| `status` | number | The HTTP status code, and 0 when outcome is not ok. A 404 or a 500 from the other end is an `ok` outcome carrying that number — the host reached who it was told to and does not judge the answer |
+| `content_type` | string | The response's Content-Type, and the only header of it that crosses |
+| `body` | string | The body, base64 when body_base64 says so, cut off at the host's size cap — a response over the cap is the `too_large` outcome with no body at all rather than a truncated one, because a truncated JSON document is a parse error blamed on the wrong party |
+| `body_base64` | boolean | Whether body is base64 rather than text; it is true exactly when the response's own bytes were not valid UTF-8, for the reason HTTPRequest carries the same pair |
 
 #### `SessionContext`
 

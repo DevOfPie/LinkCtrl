@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon"
+	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
@@ -365,4 +367,30 @@ func readRepoFile(t *testing.T, rel string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// TestEveryFetchOutcomeHasAnOperatorsReading (M68.5).
+//
+// The vocabulary is closed and it is the guest's branch vocabulary, which means it
+// is written for an add-on's author: `origin_refused` tells a module what to do
+// about a refusal, and tells an operator nothing about which field to fill in. The
+// manager's page is where the second reading lives, so a word without one renders
+// a blank cell — and a tenth word added to the ABI would render eleven of them.
+//
+// Both directions, because either gap is a defect: a word with no sentence is a
+// blank cell, and a sentence with no word is a row nobody will ever see, which is
+// how a map like this comes to describe an outcome that was renamed.
+func TestEveryFetchOutcomeHasAnOperatorsReading(t *testing.T) {
+	for _, o := range abi.FetchOutcomes {
+		if fetchOutcomeMeaning[o] == "" {
+			t.Errorf("the ABI publishes the outcome %q and the manager's page has no "+
+				"sentence for it, so an operator meeting it reads a blank cell", o)
+		}
+	}
+	for o := range fetchOutcomeMeaning {
+		if !slices.Contains(abi.FetchOutcomes, o) {
+			t.Errorf("the page explains the outcome %q and the ABI does not publish it; "+
+				"it is a row nobody can reach", o)
+		}
+	}
 }

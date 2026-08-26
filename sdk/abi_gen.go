@@ -9,7 +9,7 @@ import "errors"
 // manifest declares ABIGeneration in its abi_version field; the host
 // refuses a module built against a generation it does not implement, before
 // instantiating it.
-const ABIVersion = "0.1.3"
+const ABIVersion = "0.1.4"
 
 // ABIGeneration is the integer a manifest's abi_version field must carry
 // for a module built against this SDK.

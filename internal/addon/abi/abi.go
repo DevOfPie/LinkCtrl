@@ -47,7 +47,7 @@ import (
 const (
 	VersionMajor = 0
 	VersionMinor = 1
-	VersionPatch = 3
+	VersionPatch = 4
 )
 
 // Version is the SemVer string the ABI publishes, and what the abi_version host
@@ -75,12 +75,21 @@ const (
 // patch is invisible in the way the two above are not: nothing new is importable,
 // so a module built against 0.1.3 loads on a 0.1.2 host unchanged.
 //
+// **M68.5 moved it the ordinary way**, which after M68's exception is worth
+// saying: `network_fetch` is a function this ABI did not have, so the *adding a
+// function* row applies unchanged — additive, the patch moves, [Generation] does
+// not, and a module built against 0.1.3 and rebuilt against 0.1.4 can import it
+// while one that is not rebuilt cannot see it. It is the same shape as
+// `redirect_decision_read` at 0.1.2, and the same one failure mode: a module
+// built against 0.1.4 loaded on a 0.1.3 host fails to instantiate, naming the
+// import.
+//
 // **Making `redirect_event_read` live moved nothing**, and that is the policy
 // working rather than an omission: implementing a function this ABI already
 // declared is not a change to the contract, which docs/addon-abi.md states in as
 // many words and is the whole reason the declared-but-refused pattern costs no
 // version at all.
-const Version = "0.1.3"
+const Version = "0.1.4"
 
 // Generation is the integer axis a breaking change moves along, and it is what a
 // manifest's abi_version field names.
