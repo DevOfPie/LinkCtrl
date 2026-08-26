@@ -653,13 +653,15 @@ func (h *Host) unload(ctx context.Context, l Loaded, pools map[string]*addonPool
 		_ = l.module.Close(ctx)
 	}
 	if l.compiled != nil {
-		// **Promptness rather than a leak fix, and that was measured.** wazero
-		// releases a compiled module's mapping from a finalizer once nothing
-		// references it, so forty install/remove cycles without this line moved the
-		// resident set by −208 KiB. It is still right to close it: waiting for a
-		// collection to release megabytes of mapped code is a thing that happens
-		// eventually rather than a thing that happens. Safe with outstanding calls
-		// by wazero's own contract — see removeGrace.
+		// **A leak fix, and the measurement that once called it promptness was
+		// reinstalling the same bytes.** wazero keys compiled code by a hash of the
+		// module, so cycling one unchanged add-on shares a single compiled copy and
+		// removing this line costs nothing — which is what forty such cycles
+		// reported, at −208 KiB. Version two of an add-on hashes differently, and
+		// remove-then-install is the upgrade path this phase ships: without this
+		// close, five installs of successive versions left 128 MiB behind that
+		// nothing gives back (M67, reopened). Safe with outstanding calls by
+		// wazero's own contract — see removeGrace.
 		_ = l.compiled.Close(ctx)
 	}
 	// After the runtime objects, so nothing can be executing a statement on a pool

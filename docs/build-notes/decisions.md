@@ -447,6 +447,7 @@ file. Append a row when you append an entry.
 | [M62, strip the variation selectors; there is no base set](#2026-08-21--m62-strip-the-variation-selectors-there-is-no-base-set) | D283, owner-answered, superseding D270's remedy: every variation selector is deleted from an add-on's log message rather than escaped, and there is no exemption for the emoji case. D270's carve-out and the two predicates written under it, D276 and D277, are withdrawn — and never landed, being on the unmerged branch `wip/m62-sanitizer`. Why the threat is legibility rather than confidentiality, why there is no base set that two attempts could have found, what the ~354 monochrome symbols cost, and the proof that nothing rested on the injectivity stripping gives up |
 | [The foundation cannot reach outward, and one constraint nobody chose](#2026-08-25--the-foundation-cannot-reach-outward-and-one-constraint-nobody-chose) | D364: an add-on declares that it needs egress and the operator decides where — why the operator rather than the manifest, and what it costs. D365: *install is an upload, never a fetch* was nobody's decision, so URL install is new function rather than a reopening, and it lands behind the egress milestone. Plus what the two cost the phase's count |
 | [The conversation Plan.md promised, and what it decided](#2026-08-26--the-conversation-planmd-promised-and-what-it-decided) | D366: Phase 4 proceeds at seventeen with one slot left — what was actually weighed (not the count, but that M69 produced insertions before starting), and the two alternatives declined |
+| [M67 reopened: the leak tripwire measures warm-up](#2026-08-26--m67-reopened-the-leak-tripwire-measures-warm-up) | D368: there is no leak — growth against cycle count, and why a falling per-cycle cost proves warm-up rather than a leak; what the test's window gets wrong; why reopening rather than a loose commit or a wider tolerance. D369: the workload made the defect invisible — wazero dedups identical modules, so the sabotage the tripwire was built for could never have failed, and each cycle now installs distinct bytes |
 
 | [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
 | [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
@@ -39382,3 +39383,98 @@ declined when the add-on's absence first stopped the run
 entry does not pre-answer it: with the last slot spent, one more is a conversation
 about the cap itself. Naming that here is the whole point of having had this one
 early rather than mid-milestone.
+
+## 2026-08-26 — M67 reopened: the leak tripwire measures warm-up
+
+### D368 — there is no leak, and the instrument was measuring the wrong window
+
+`TestRepeatedInstallAndRemovalDoesNotGrowResidentMemory` went red at M68.5's
+gates. It is [M67](phase-details/m67.md)'s, it fails on trees M68.5 never
+touched, and its filer ([F335](deferred-findings.md#open)) reported it as
+*fails under coverage, and on main too* — true, and not the cause.
+
+**Measured rather than reasoned about**, at the owner's direction: growth against
+cycle count, with finalizers settled by five `runtime.GC()`/`debug.FreeOSMemory()`
+rounds 150ms apart, because wazero releases a compiled module's mapping from a
+finalizer and a finalizer runs after the GC that queues it.
+
+| cycles | grown | per cycle |
+| --- | --- | --- |
+| 5 | +27,972 KiB | +5,594 KiB |
+| 10 | +29,416 KiB | +2,941 KiB |
+| 20 | +30,680 KiB | +1,534 KiB |
+| 40 | +40,248 KiB | +1,006 KiB |
+
+**A per-cycle leak holds per-cycle cost constant. This falls by 5.5x**, nearly all
+of it arrives in the first five cycles, and ten to twenty cycles adds 1.2 MiB in
+total. That is one-time warm-up — allocator arenas and whatever the runtime
+caches — and not a leak. **The tree is correct.**
+
+**What is wrong is the test's window.** It takes **one** warm-up cycle and then
+allows 16 MiB across exactly the stretch that grows ~28 MiB in warm-up alone, so
+whether it passes depends on how much of that lands inside the measurement.
+That is the 20-to-103 MiB spread its filer saw on identical work, and it is why
+`make check` was green at M67's acceptance and at M68's: luck, both times.
+
+**Reopened rather than fixed as a loose commit.** M67's bullet has two limbs —
+*repeated install/remove cycles hold resident memory flat*, which the measurement
+above confirms, and *the leak risk is bounded by test*, which is not delivered by
+a test whose verdict is a coin toss. The second limb is a shipped claim that is
+not true, which is what reopening is for; a commit outside the milestone would
+leave `m67.md` asserting it with the correction findable only in a commit
+message. Owner-answered, over that alternative and over widening the tolerance —
+which was declined on the grounds that a tolerance set above noise nobody
+explained will not catch the leak it exists for.
+
+**The repair is the window, not the number.** Warm up until the resident set
+settles rather than once, and assert on the growth of a later window rather than
+on a total that has arena growth in it. The figures above are the record so
+nobody re-derives them, and the one thing the new test must keep is what
+`heldBytes`'s comment already argues: `HeapAlloc` is not this measure, because
+wazero maps compiled code outside the Go heap and a host that never closed a
+module measured *smaller* under it.
+
+**M68.5 is finished and waits behind this**, which is the right order and is
+worth naming: a red gate stops a commit, and the first exception to that is the
+expensive one.
+
+### D369 — the tripwire could not have caught the line it was written for
+
+The repair is two windows of five cycles, the later bounded by a quarter of the
+earlier's growth with an 8 MiB floor — a shape that needs no number taken from
+this machine, because warm-up is what makes a second window cheap and a leak is
+what makes it as expensive as the first.
+
+**What the build found is worse than the window defect.** wazero keys compiled
+code by a hash of the module, so ten cycles of the *same* bytes share one
+compiled copy however many times they are installed. Deleting `l.compiled.Close`
+therefore costs nothing measurable — which is exactly what M67 measured at
+**−208 KiB**, and then recorded in `unload` as *promptness rather than a leak
+fix*. That reading was not a subtle mistake about garbage collection; it was the
+test workload making the defect invisible, and **no tolerance and no window would
+have caught it.**
+
+Each cycle now installs a distinct module — a wasm custom section carrying the
+cycle number — which is both what defeats the dedup and what the shipped upgrade
+path already does: remove-then-install is how a version changes, and successive
+versions are what a retaining host accumulates. Under that workload the sabotage
+grows the later window by **128,524 KiB against a 46,129 KiB bound**, about 25 MiB
+a cycle. `unload`'s comment is corrected to say so.
+
+**The entry this falsifies is named rather than edited**, which is this log's own
+convention and the D179 precedent. **[The 2026-08-24 M67 entry](#2026-08-24--m67-an-add-on-arrives-and-leaves-and-the-directory-is-still-the-only-store)
+is superseded in three of its claims**: that closing the compiled module is
+*promptness rather than a leak fix*; that forty cycles without `l.compiled.Close`
+moved the resident set by −208 KiB; and that ten cycles of a 1.8 MB module grow
+the resident set by under 16 MiB. All three are true of the deduped workload that
+entry measured and false of the one the test now runs. Its text stands, because
+this file is append-only and it was an honest report of what was measured; this
+paragraph is the pointer forward that stops a reader taking it as current.
+
+**The lesson is about the workload, not the instrument**, and it is the second
+time this milestone has taught it: [D368](#2026-08-26--m67-reopened-the-leak-tripwire-measures-warm-up)
+found a test measuring the wrong window, and this one found the same test
+exercising a workload under which the property it guards cannot fail. *A test
+that has never failed has not been shown to test anything* is the rule this
+repository already has; what neither it nor the sabotage caught is a test that
+**did** fail on demand, for a reason unrelated to the line it was protecting.

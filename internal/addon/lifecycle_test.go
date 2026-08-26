@@ -602,77 +602,152 @@ func TestRemovalAuditsAndReleasesWhenTheCallerHasHungUp(t *testing.T) {
 	assertAudited(t, rec, audit.ActionAddonRemoved, "hangup", m.SHA256)
 }
 
-// The leak bound. Install and remove the same module repeatedly and the memory
-// this process holds afterwards does not grow with the number of cycles.
+// The leak bound. Install and remove an add-on repeatedly and what this process
+// holds does not accumulate with the number of cycles.
 //
-// **The tolerance is stated rather than tight**, and what makes the assertion
-// mean something is the ratio rather than the number: the module is 1.8 MB of
-// wasm and each load makes an instance holding 8 MiB of guest memory, so a host
-// that retained one per cycle would be most of a hundred megabytes up after ten,
-// and one that merely fragments is a few. Sixteen MiB sits between those two
-// outcomes with room on both sides and does not depend on the machine.
+// **Two windows of the same length, because a total cannot tell a leak from
+// warm-up.** What stood here before was one warm-up cycle and then a 16 MiB
+// allowance across ten more — over a stretch that grows about 28 MiB in warm-up
+// alone, so the verdict turned on how much of that landed inside the
+// measurement, and `make check` was green at M67's acceptance and at M68's by
+// luck both times. D368 has the figures. Measured now: a first window, which
+// pays for whatever the runtime caches on the way, and a second, which is what a
+// steady state costs. **A leak is what makes the second window as expensive as
+// the first** — a per-cycle cost that does not fall is the definition of one —
+// and warm-up is what makes it cheap. So the bound is a fraction of the first
+// window rather than a byte count, and knows nothing about this machine.
 //
-// **What this does and does not catch, measured rather than assumed.** Removing
-// `l.module.Close` reddens it — wazero refuses the next install outright, because
-// a module of that name is still instantiated, which is the leak announcing
-// itself. Removing `l.compiled.Close` does **not**: forty cycles without it moved
-// the resident set by −208 KiB, because wazero releases a compiled module's
-// mapping from a finalizer once nothing references it. So closing the compiled
-// form is promptness rather than a leak fix, and this test is honest about
-// bounding what the runtime *holds* rather than about every line unload calls.
-// Said here because the opposite belief is the one a reader would otherwise take
-// from the assertion.
+// **The floor is a guard that does not currently bind, and saying so is the
+// point.** It exists so a quarter of nearly nothing cannot fail on drift, and
+// under this workload the first window is never small: since every cycle
+// compiles a distinct module the first window is a per-cycle cost rather than
+// the one-time arena cost, measured at 88–105 MiB across six runs, so the bound
+// lands at 22–26 MiB and the floor would bind only below a 32 MiB first window.
+// It is kept for the shape rather than for today's numbers.
+//
+// **What this test does not claim is single-install sensitivity.** Retaining one
+// compiled module inside the later window costs about what the bound allows —
+// measured at +28.2, +15.9 and +19.6 MiB against bounds near 23 MiB, so one
+// leaked install is a coin toss rather than a red. What it catches is a leak
+// that repeats, which is what a lifecycle leak is: the sabotage it exists for
+// costs 25 MiB a cycle and comes in five times past the bound. Healthy
+// steady-state swing reaches ±7.5 MiB under the gate's own flags, which is the
+// number the floor is set above.
+//
+// **Every cycle installs different bytes, and that is load-bearing.** wazero
+// keys compiled code by a hash of the module, so reinstalling identical bytes
+// hands back the copy it compiled last time and one retained compiled module is
+// all a whole run can hold. That is why the shape this replaces measured
+// −208 KiB under a sabotage that deleted `l.compiled.Close` outright, and why
+// unload's comment called that line promptness rather than a leak fix. A custom
+// section carrying the cycle number makes each install a distinct module, which
+// is also what the shipped upgrade path does: m67.md ships remove-then-install
+// as the way an add-on's version changes, and successive versions are exactly
+// what a retaining host would accumulate.
+//
+// **What it catches, sabotaged rather than argued.** Removing `l.module.Close`
+// reddens it outright: wazero refuses the next install, because a module of that
+// name is still instantiated. Removing `l.compiled.Close` grows the later window
+// by 128,524 KiB against the 46,129 KiB that run allowed — 25 MiB a cycle, and
+// nothing gives it back.
 func TestRepeatedInstallAndRemovalDoesNotGrowResidentMemory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a memory measurement over ten wasm compilations")
 	}
 	h, _, _, _ := lifecycleHost(t)
-	req, _ := uploadFor(t, "cycling", ClassDegrade)
+	code := fixture(t, "minimal")
 
+	n := 0
 	cycle := func() {
-		if _, err := h.install(t.Context(), nil, req); err != nil {
-			t.Fatalf("installing: %v", err)
+		n++
+		if _, err := h.install(t.Context(), nil, cyclingUpload(t, code, n)); err != nil {
+			t.Fatalf("installing on cycle %d: %v", n, err)
 		}
 		if _, err := h.remove(t.Context(), nil, "cycling"); err != nil {
-			t.Fatalf("removing: %v", err)
+			t.Fatalf("removing on cycle %d: %v", n, err)
 		}
 	}
-	// One outside the measurement, for the reason every measurement in this package
-	// takes one: the first compilation of a module pays for whatever the runtime
-	// caches on the way and is not what a steady state costs.
-	cycle()
 
-	const (
-		cycles    = 10
-		tolerance = 16 << 20
-	)
-	before := heldBytes(t)
-	for range cycles {
+	// Five, because five is where the resident set settles: D368's series has five
+	// cycles carrying 27,972 KiB of the 29,416 that ten cost, and a per-cycle
+	// reading taken in this process is flat from the fourth on. It is a window
+	// rather than a warm-up to be thrown away, because what it cost is what the
+	// second window is judged against.
+	const window = 5
+	// Above the noise, under one leaked cycle. Both halves are measured; the
+	// paragraph above says where.
+	const floor = 8 << 20
+
+	start := heldBytes(t)
+	for range window {
+		cycle()
+	}
+	settled := heldBytes(t)
+	for range window {
 		cycle()
 	}
 	after := heldBytes(t)
 
-	grew := int64(after) - int64(before)
-	t.Logf("%d install/remove cycles: %d KiB held before, %d KiB after, %+d KiB",
-		cycles, before/1024, after/1024, grew/1024)
-	if grew > tolerance {
-		t.Errorf("ten install/remove cycles grew the heap by %d KiB, past the %d KiB "+
-			"tolerance; a compiled module or an instance is not being closed",
-			grew/1024, tolerance/1024)
+	early, late := int64(settled)-int64(start), int64(after)-int64(settled)
+	bound := max(early/4, floor)
+	t.Logf("%d cycles a window: %d KiB held, %+d KiB across the first, %+d KiB "+
+		"across the second, bound %d KiB", window, start/1024, early/1024,
+		late/1024, bound/1024)
+	if late > bound {
+		t.Errorf("the second %d cycles grew the resident set by %d KiB against the "+
+			"first %d's %d KiB, past the %d KiB this allows; cycling is accumulating "+
+			"rather than warming up, so a compiled module or an instance is not being "+
+			"closed", window, late/1024, window, early/1024, bound/1024)
 	}
 	if h.Len() != 0 {
 		t.Errorf("the host runs %d add-ons after the cycles", h.Len())
 	}
 }
 
+// cyclingUpload is one install of the `cycling` add-on, distinct from every
+// other one: the module carries a custom section naming the cycle, so it hashes
+// differently and wazero compiles it rather than handing back what it compiled
+// before. See the test above for why that distinction is the whole measurement.
+//
+// A custom section is ignored by every runtime, which is what makes this a
+// different module rather than a different program.
+func cyclingUpload(t *testing.T, code []byte, n int) InstallRequest {
+	t.Helper()
+	name := "linkctrl-cycle-" + strconv.Itoa(n)
+	// A name-length-prefixed name, then a byte of content — wazero refuses a
+	// custom section that is nothing but its own name. Then section id 0 and the
+	// section's length. Every length here is under 128, so each LEB128 is itself.
+	section := append([]byte{byte(len(name))}, name...)
+	section = append(section, 0)
+	module := append(append([]byte{}, code...), 0, byte(len(section)))
+	module = append(module, section...)
+
+	m := manifestFor("cycling", ClassDegrade, module)
+	raw, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return InstallRequest{Manifest: raw, Module: module}
+}
+
 // heldBytes is this process's resident set, which is the measure the bullet
-// names and the only one that would have caught the defect it is about.
+// names.
 //
 // **`runtime.MemStats.HeapAlloc` is not this, and it was tried first.** wazero
 // compiles a module into memory it maps itself, outside the Go heap entirely, so
-// a host that never closed a compiled module measured *smaller* after ten cycles
-// than before — the test passed under a sabotage that removed the exact line it
-// exists to hold. Resident set is what moves when an `mmap` is not unmapped.
+// resident set is what moves when an `mmap` is not unmapped. That premise is a
+// fact about the runtime and is why this reads `/proc`.
+//
+// **The evidence that used to be quoted here was retired on 2026-08-26**, and
+// what retired it is worth keeping. This comment said HeapAlloc measured
+// *smaller* after ten cycles than before, and that the test passed under the
+// sabotage removing the line it exists to hold. Both readings came from the
+// deduped workload D369 describes, under which nothing could have caught that
+// sabotage and the resident set moved −208 KiB too. Under the workload this test
+// now runs — a distinct module per cycle — HeapAlloc does move with the leak:
+// 2,472 → 21,526 → 38,734 KiB sabotaged against 2,470 → 2,503 → 692 KiB healthy.
+// So the choice of instrument stands on the mapping fact above rather than on an
+// anecdote the workload invalidated.
 //
 // Linux only, and the test skips elsewhere rather than measuring something
 // weaker: this product ships in a container and `/proc/self/status` is where the
@@ -682,8 +757,18 @@ func heldBytes(t *testing.T) uint64 {
 	// The Go side returned to the operating system first, so what is left to
 	// measure is what the runtime under test is holding rather than what the
 	// allocator has not got round to releasing.
-	runtime.GC()
-	debug.FreeOSMemory()
+	//
+	// **Five rounds spaced out, not one, and that is D368's method rather than a
+	// precaution.** wazero releases some of what it maps from a finalizer, and a
+	// finalizer runs after the collection that queued it rather than during it, so
+	// a single round reads a number that is still moving. Two readings taken this
+	// way are subtractable from each other, which is the whole of what the test
+	// above needs from this.
+	for range 5 {
+		runtime.GC()
+		debug.FreeOSMemory()
+		time.Sleep(150 * time.Millisecond)
+	}
 	status, err := os.ReadFile("/proc/self/status")
 	if err != nil {
 		t.Skipf("no /proc/self/status to read a resident set from: %v", err)
