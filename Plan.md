@@ -635,7 +635,15 @@ class costs a visitor when nothing is pooled produced a milestone the build
 turned out to need, and the owner chose to spend the reserve on it knowing what
 the reserve was being held for. The phase is therefore at its planning target
 with no slack: an insertion M69 produces is a conversation about the cap of
-eighteen, not a slot. Recorded in
+eighteen, not a slot. **That conversation happened on 2026-08-26**, when M69's
+validation produced two insertions before the milestone started —
+[M68.5](docs/build-notes/phase-details/m68.5.md) and
+[M68.6](docs/build-notes/phase-details/m68.6.md), taking the phase to seventeen
+— and the owner chose to proceed with one slot left rather than move the cap or
+close the phase early. So the sentence above has been honoured rather than
+overtaken: what it promised was a decision, and the decision is
+[D366](docs/build-notes/decisions.md#2026-08-26--the-conversation-planmd-promised-and-what-it-decided).
+Recorded in
 [D333](docs/build-notes/decisions.md#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)
 rather than left as a sentence describing a reserve that no longer exists.
 
@@ -666,7 +674,9 @@ consumer that proves it.
 | [M66.5](docs/build-notes/phase-details/m66.5.md) | Instances are reused, so a visitor stops paying for a cold start | M66 · M60 *(ordering)* | Owner-added scope 2026-08-23 — reverses D319, which declined pooling before an add-on had been measured under load |
 | [M67](docs/build-notes/phase-details/m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | The install/remove halves of the manager answer · split from the surface at the plan's review |
 | [M68](docs/build-notes/phase-details/m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | The manager answer's visible half: listing, per-module performance, orphaned data, the purge choice |
-| [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
+| [M68.5](docs/build-notes/phase-details/m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | [F334](docs/build-notes/deferred-findings.md#open) — the gap M69's validation found; owner-answered scope 2026-08-25 |
+| [M68.6](docs/build-notes/phase-details/m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | Owner-added scope 2026-08-25 — corrects M67's *never a fetch*, which no decision backed |
+| [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
 | [M69.9](docs/build-notes/phase-details/m69.9.md) | **Pre-release adversarial review** | everything below it | — |
 | [M70](docs/build-notes/phase-details/m70.md) | Deferred findings, documentation pass, 0.4.0 | all | Phase close · owed-work #3 (the 1.0 sentence) |
 

@@ -32,12 +32,17 @@ milestone, is in [workflow.md](../workflow.md).
 ## Phase 4
 
 Planned 2026-08-18 — fourteen milestones, M59–M70; the ordering table and its
-dependency edges are [Plan.md](../../../Plan.md#phase-4-build-plan)'s. **Fifteen
-as built**: [M66.5](m66.5.md) was added on 2026-08-23, after measuring what M66's
-inline class costs a visitor when nothing is pooled — a milestone the build turned
-out to need, which [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
-allows without a phase-boundary conversation, and which leaves the phase at the
-planning target rather than past it. Phase 3
+dependency edges are [Plan.md](../../../Plan.md#phase-4-build-plan)'s. **Seventeen
+as built**, and the three additions are named rather than counted: [M66.5](m66.5.md)
+on 2026-08-23, after measuring what M66's inline class costs a visitor when
+nothing is pooled; [M68.5](m68.5.md) and [M68.6](m68.6.md) on 2026-08-25, when
+M69's validation found the foundation cannot make an outbound request at all
+([F334](../deferred-findings.md#open)) and the owner corrected a constraint M67
+had shipped on nobody's decision. All three are milestones the build turned out
+to need rather than optimistic planning, which is the case
+[planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
+2026-08-11 clarification allows. **Seventeen is past the planning target of
+fifteen and inside the cap of eighteen**, which is the honest way to say it. Phase 3
 released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 
 | # | Milestone | Depends on | Status |
@@ -54,7 +59,9 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 | [M66.5](m66.5.md) | Instances are reused, so a visitor stops paying for a cold start | M66 · M60 *(ordering)* | done |
 | [M67](m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | done |
 | [M68](m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | done |
-| [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · M68 *(ordering)* | not started |
+| [M68.5](m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | not started |
+| [M68.6](m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | not started |
+| [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | not started |
 | [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | not started |
 | [M70](m70.md) | Deferred findings, documentation pass, 0.4.0 | all | not started |
 

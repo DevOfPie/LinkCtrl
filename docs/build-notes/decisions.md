@@ -445,6 +445,8 @@ file. Append a row when you append an entry.
 | [M63, a prefix is not a proof of ownership: the amendment](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership-the-amendment) | D281, owner-answered: the sweep's identification clause quoted as it stood and as amended, the hand-made role a reviewer had it wipe, the two catalogue facts an add-on can neither manufacture nor revoke, and the two answers declined — not sweeping at all, and sweeping everything and saying so |
 | [M63, detect and refuse; the sweep is removed](#2026-08-21--m63-detect-and-refuse-the-sweep-is-removed) | D282, owner-answered, reversing D281: `ClearOrphanedAddonRoleSettings` and its boot call are removed, because the `pg_auth_members` fact D281 rested on is written automatically for a `NOSUPERUSER CREATEROLE` creator — measured — so it proves nothing on the shipped privilege. The post-condition's `pg_db_role_setting` branch already refuses an add-on that parked anything, which needs no proof of ownership; the residue an uninstalled add-on leaves is inert and is stated in four documents rather than swept |
 | [M62, strip the variation selectors; there is no base set](#2026-08-21--m62-strip-the-variation-selectors-there-is-no-base-set) | D283, owner-answered, superseding D270's remedy: every variation selector is deleted from an add-on's log message rather than escaped, and there is no exemption for the emoji case. D270's carve-out and the two predicates written under it, D276 and D277, are withdrawn — and never landed, being on the unmerged branch `wip/m62-sanitizer`. Why the threat is legibility rather than confidentiality, why there is no base set that two attempts could have found, what the ~354 monochrome symbols cost, and the proof that nothing rested on the injectivity stripping gives up |
+| [The foundation cannot reach outward, and one constraint nobody chose](#2026-08-25--the-foundation-cannot-reach-outward-and-one-constraint-nobody-chose) | D364: an add-on declares that it needs egress and the operator decides where — why the operator rather than the manifest, and what it costs. D365: *install is an upload, never a fetch* was nobody's decision, so URL install is new function rather than a reopening, and it lands behind the egress milestone. Plus what the two cost the phase's count |
+| [The conversation Plan.md promised, and what it decided](#2026-08-26--the-conversation-planmd-promised-and-what-it-decided) | D366: Phase 4 proceeds at seventeen with one slot left — what was actually weighed (not the count, but that M69 produced insertions before starting), and the two alternatives declined |
 
 | [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
 | [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
@@ -39249,3 +39251,134 @@ shape for a contract another repository compiles against — it would stop the A
 being versioned by the product's release cadence — and it is a scope change
 touching the generator, the consumer test, CI, `releasing.md` and M61's own
 entries, which wants its own milestone rather than a corner of this one.
+
+## 2026-08-25 — the foundation cannot reach outward, and one constraint nobody chose
+
+Two owner answers, taken together because the second is why the first has a
+second milestone behind it.
+
+### D364 — an add-on declares that it needs egress; the operator decides where
+
+[F334](deferred-findings.md#open): sixteen ABI functions, none network-shaped;
+eight permission tokens, none naming egress; a guest module config granting a
+name, a start function, a random source and two clocks. An OIDC relying party
+needs a discovery fetch, a **token exchange** and a JWKS fetch, and m69.md
+requires authorization-code with PKCE by name — the token exchange being exactly
+what that flow adds over the implicit one OAuth's security guidance deprecates.
+So the acceptance test answered its own question before a line of the add-on was
+written, which is the cheapest moment it could have.
+
+**Owner, verbatim: *"General egress should always be avoided and any egress
+should be done as securely as possible."*** That decides the design rather than
+constraining it. [M68.5](phase-details/m68.5.md) is the milestone: the manifest
+declares a **need** and never a destination, the operator names the origins in
+settings, and an unconfigured add-on that talks outward is inert rather than
+trusting a default.
+
+**Why the operator rather than the manifest**, since the alternative is the more
+familiar shape. A manifest allowlist an operator approves at install is not
+tighter — the operator is the gate either way — and it invites approving a list
+without reading it, which is how permission dialogs stop working. Under this
+answer an add-on's author cannot widen its reach at all, only the person running
+the instance can, and for OIDC it costs nothing: the issuer URL is per-deployment
+and the operator supplies it regardless. The third option put — the manifest
+declaring and the host enforcing with no operator step — was argued against and
+declined, because it lets a later version of an add-on widen where it connects.
+
+**The cost is stated**: an add-on that talks outward does not work until it is
+configured, so *install and it runs* is gone for that class. And this answer is
+also less machinery than the alternative, so cheapness and strictness agree here
+— worth saying, because when they agree the recommendation deserves more scrutiny
+rather than less.
+
+### D365 — *install is an upload, never a fetch* was nobody's decision
+
+`m67.md` shipped that bullet and its commit message argued SSRF for it at length.
+**No decision backs it.** `grep` over this file finds nothing, and
+[phase-4-candidates.md](phase-4-candidates.md) — the file that records the
+owner's planning answers — contains no mention of upload, fetch or URL at all. It
+was the plan author's assumption, written as a stance, reviewed as one, and
+shipped as one.
+
+**Owner, verbatim: *"I don't recall making a decision to not retrieve modules
+from URLs, and my intention was to provide a store for modules later on top of
+local/direct url installs."*** So the intended shape is local **and** direct-URL
+installs, with a store built on top of them.
+
+**Recorded as new function rather than as a defect**, which decides its route:
+M67's claims are all true and its code does what it says, so nothing is reopened
+— the scope was wrong, not the tree. That distinction is the one keeping the
+status table meaningful and stretching it here would blur it. So
+[planning.md](planning.md)'s path, and [M68.6](phase-details/m68.6.md).
+
+**Owner: Phase 4, after the egress milestone.** A URL install needs exactly the
+resolution, address refusal, redirect handling and size cap M68.5 builds, so it
+sits behind that milestone and reuses it rather than growing a second fetch path.
+The declined alternative was Phase 5 alongside the store, which would have closed
+this phase sooner and let URL install be designed with the thing it serves; its
+cost was that 0.4.0's documents would describe upload-only as a stance rather
+than as a stage.
+
+**`m67.md` is corrected in place** with a dated note saying the behaviour stands
+and the reason did not, pointing at M68.6. The file is not rewritten and the
+milestone is not reopened: what was wrong was a sentence claiming somebody chose
+something, and the correction says so.
+
+### What this costs the phase, counted rather than implied
+
+Phase 4 planned fourteen, ran to fifteen at [M66.5](phase-details/m66.5.md), and
+is **seventeen** with these two. The cap the owner moved to on 2026-08-18 is
+eighteen, so this is inside it with one slot left — and the reserve that slot
+used to be was already spent at M66.5 and recorded as spent
+([D333](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms),
+`Plan.md`). Both are milestones the build turned out to need rather than
+optimistic planning, which is the case
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
+2026-08-11 clarification allows without a phase-boundary conversation. **The next
+insertion is that conversation**, and M69 — the one milestone most likely to
+produce insertions, and which has now produced one before starting — is still
+ahead.
+
+Both are numbered below [M69.9](phase-details/m69.9.md), so both sit inside the
+pre-release review's range, and both are above M68, so nothing M64.9 covered is
+reopened.
+
+## 2026-08-26 — the conversation Plan.md promised, and what it decided
+
+### D366 — Phase 4 proceeds at seventeen, with one slot left and M69 still ahead
+
+[D333](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)
+spent Phase 4's reserved slot at M66.5 and wrote the consequence into `Plan.md`
+in these words: *an insertion M69 produces is a conversation about the cap of
+eighteen, not a slot.* M69's validation then produced **two** —
+[M68.5](phase-details/m68.5.md) and [M68.6](phase-details/m68.6.md) — before the
+milestone started, taking the phase from fifteen to seventeen. The plan review of
+that addition is what noticed the sentence was owed and unpaid.
+
+**Owner: proceed.** Build the two, then M69, at seventeen with one slot left.
+
+**What was weighed was not the count.** Seventeen inside eighteen needs no
+permission; the 2026-08-11 clarification already allows milestones the build
+turns out to need. What made it a real question is what is still ahead: M69 is
+the milestone *designed* to surface what the foundation got wrong, it has now
+produced insertions **before it started**, and the honest reading of that is that
+it is likely to produce more. Proceeding spends the last slot on that
+possibility.
+
+Two alternatives were declined with their costs. **Moving the cap** would stop
+the phase being paced by a number and let M69 find what it finds — and it is
+exactly the pressure the cap was set on 2026-08-18 to resist, a phase growing one
+insertion at a time with nobody ever being the person who decided it was large;
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
+is explicit that moving it for one phase and for every phase after are different
+decisions, and only the first was ever taken. **Closing at M68.6** and opening
+Phase 5 with OIDC would ship a coherent 0.4.0 — a foundation that reaches outward
+and installs from a URL — and would give the acceptance test a phase sized for
+whatever it uncovers; it was declined for the second time, having already been
+declined when the add-on's absence first stopped the run
+([D362](#2026-08-25--m69s-subject-does-not-exist-and-who-builds-it)).
+
+**What happens at the next insertion is now the interesting question**, and this
+entry does not pre-answer it: with the last slot spent, one more is a conversation
+about the cap itself. Naming that here is the whole point of having had this one
+early rather than mid-milestone.
