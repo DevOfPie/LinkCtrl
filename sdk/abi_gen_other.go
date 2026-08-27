@@ -442,7 +442,11 @@ func RedirectAnswerWrite(answer []byte) error {
 // either case: the answer is a FetchResponse whose `outcome` says what
 // happened, from a closed vocabulary you can branch on, and an operator
 // sees the same word as a counter label — or, in the inline case, the
-// ErrDenied every function outside that subset returns.
+// ErrDenied every function outside that subset returns. **One call is one
+// request**: a response too large for the buffer you offered is held by the
+// host and handed to your retry rather than fetched again, which is the
+// calling convention's *a function that changes something* rule answered
+// for a change that happens on somebody else's server.
 //
 // request is what to fetch, as a FetchRequest record.
 //

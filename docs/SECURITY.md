@@ -1004,6 +1004,23 @@ above.
   timeout. It is transient rather than stored, and it is bounded only by
   `temp_file_limit`, which needs a superuser to set on the add-on's role. So alert
   on the filesystem as well, not only on these two.
+- **An authentication add-on moves part of who-may-sign-in to somebody else, and
+  the OIDC add-on is the first-party one.** What you take on with
+  [`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC), or with
+  any module holding `session.mint`, is two parties: the identity provider, whose
+  assertion this instance acts on for whoever has connected that identity here;
+  and the add-on's release, which you authorize by typing a `sha256` the install
+  refuses to proceed without — **read it from the release's `SHA256SUMS` — **which does not exist yet**: `LinkCtrl-OIDC` has no tag and no release as of 0.4.0's development, so until one is cut the digest comes from the `addon.json` shipped beside the module and an operator verifies it against a build they made themselves and not
+  from the page the link was on**. What you do *not* take on is a new way in for
+  anybody the provider vouches for: an assertion for an external identity nobody
+  has connected mints nothing, the connection is written only while the person it
+  belongs to is signed in here in their own browser, and there is no matching on
+  the email address an assertion carries. What you do not take on either is a
+  dependency for local sign-in: a provider that is down takes external sign-in
+  with it and leaves passwords, second factors and existing sessions untouched.
+  Every mint is in the instance-wide audit log as `session.minted_by_addon`,
+  naming the add-on and the issuer and carrying neither the external subject nor
+  the address the assertion asserted.
 - **Back up before upgrading**, and test the restore. Migrations run at boot and
   `down` migrations drop columns.
 

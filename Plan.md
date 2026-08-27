@@ -161,7 +161,7 @@ rather than rendering a world uniformly colored "unknown".
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |
-| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. **OIDC is Phase 4's, as a first-party add-on rather than in core** ([M69](docs/build-notes/phase-details/m69.md), D211). OAuth, SSO and SCIM stay unscheduled (D109) |
+| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. **OIDC built in 4** ([M69](docs/build-notes/phase-details/m69.md), D211), as a first-party add-on rather than in core: [`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC), which an operator installs and configures. Somebody still has to be handed the sign-in URL — a control on the sign-in page is [M69.5](docs/build-notes/phase-details/m69.5.md)'s. OAuth, SSO and SCIM stay unscheduled (D109) |
 
 Destination blocking is two threat models wearing one name, and the *Abuse
 prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`

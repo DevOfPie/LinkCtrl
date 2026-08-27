@@ -499,6 +499,8 @@ file. Append a row when you append an entry.
 | [M68, three answers the rejection needed](#2026-08-25--m68-three-answers-the-rejection-needed) | D353: a menu item is drawn from the wiring as well as from the permission — the nav entry that 404s on every instance without an add-ons directory, the two fixes declined, and the general rule it settles. D354: a stored secret's secrecy is a column rather than a manifest's claim, why it changes the rendered type and not only the value, and why a refusal was the wrong shape. D355: a save drains the add-on's instance pool, because M66.5's kept instances made *on its next invocation* false for up to a pool TTL for the module that caches a value at start-up |
 | [M68, the ABI policy decides its own case, and the drain reaches the busy instance](#2026-08-25--m68-the-abi-policy-decides-its-own-case-and-the-drain-reaches-the-busy-instance) | D356: M61's self-repair clause spent — `config_get` gains a source, the table row that decides it, why it is additive and why the patch moves to 0.1.3. D357: the drain reaches an instance that is **in flight**, which corrects [D355](#d355--a-save-drains-the-add-ons-instance-pool): emptying the idle set reaches the resting half, and an add-on under traffic has its instances out. D358: the demo's coverage row asserts the module *ran*, because `addon_pageviews.views` is a fact no seeder can write |
 | [M68, what a name inherits, and the harness that had never run](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) | D359: a stored secret's withholding bounds the page and not the module, why hiding it from `config_get` was declined, and what the documents now say instead. D360: `addon_settings` is the fourth thing a purge leaves, counted at the point of decision rather than deleted, and F332 is the half that is behaviour. D361: the test instance runs the sample add-on so the browser harness executes at all, and the two costs of that — the core SLO column, and `lctl` on the host. Plus the inherited redirect-path measurement, re-run |
+| [M69, the acceptance test's four answers](#2026-08-27--m69-the-acceptance-tests-four-answers) | D391: a retry of `network_fetch` is answered from the response already fetched — the double token exchange that broke sign-in, why `session_mint`'s check-before-you-change answer does not transfer, and the two declined alternatives. D392: the acceptance test relaxes the address policy and the trust store under `//go:build integration` and nothing else — why routing real public IPv4 to a bridge was declined, and the operator consequence that had never been written down. D393: the add-on is rebuilt from the module proxy at a pinned pseudo-version, reproducing the published artifact byte for byte, rather than vendored or added to this repository's go.mod. D394: dex pinned by digest in a compose file `make up` never reads, health-gated on a discovery document rather than on a started container, and the demo's OIDC exception recorded rather than discovered |
+| [M69, the acceptance test's own amendment](#2026-08-27--m69-the-acceptance-tests-own-amendment) | D395: the *minor bump* clause amended to *patch* — under M61's policy the minor is the generation, and F346 moved the patch exactly as written |
 
 ---
 
@@ -40765,3 +40767,188 @@ that starts telling the truth about format changes from the first consumer rathe
 than the first tag, which is arguably what a cross-repo contract is for. What it
 costs is a version ladder before 1.0 that the deprecation policy carries forever,
 and a `schema_version` table with two rows whose difference is one optional field.
+
+## 2026-08-27 — M69, the acceptance test's four answers
+
+The milestone the whole add-on foundation was built toward: *if the OIDC add-on
+cannot be built, the foundation is wrong.* It could be built, and it works. What
+follows is the four things that had to be decided to prove it in **this**
+repository, and the one defect proving it found.
+
+### D391 — a retry of `network_fetch` is answered from what was already fetched
+
+**The defect, first, because it is why this entry leads with it.** The add-on's
+token exchange was sent to the provider **twice**, and the second one came back
+`invalid_grant`. Sign-in failed. Nothing was wrong with the add-on.
+
+The ABI's out-parameter convention says a value too large for the offered buffer
+means nothing was written and the caller retries at the size it was told, and
+`sdk`'s first buffer is 512 bytes (`sdk/runtime_wasip1.go:17`). A token response
+is about 2 KiB. So every real token exchange took two calls, and the second call
+re-entered `hostState.doFetch` and made the request again.
+
+The convention already knew about this hazard and had answered it once, for
+`session_mint`: *a function that changes something checks the buffer before it
+changes it*. That answer does not transfer. `session_mint` can check against the
+record at its widest because a `MintedSession` is a fixed shape; a fetch's widest
+answer is `LINKCTRL_ADDON_FETCH_MAX_BYTES`, 256 KiB by default, and demanding a
+quarter-megabyte buffer before any add-on may fetch anything would price every
+add-on for the largest document any add-on might read.
+
+**So the answer is to hold the response rather than to check the buffer.** The
+first call fetches, cannot write, and keeps the encoded answer on the
+per-invocation `hostState`; the retry — matched on the request record's own bytes
+— is served from it. The hold is dropped as soon as it is delivered and dropped by
+a fetch of anything else, so a module deliberately fetching the same URL twice
+still gets two requests. Bounded by construction: one response, at most the fetch
+size cap, on a state that is discarded when the request ends.
+
+**Two alternatives were declined.** Growing the SDK's initial buffer moves the
+threshold and does not remove it — a JWKS with four keys is over any figure worth
+defaulting to, and the failure returns silently on somebody else's provider.
+Making `network_fetch` return a handle the guest then reads in pieces is a second
+calling convention for one function, permanent under M61's policy.
+
+**The ABI moves to 0.1.5, and which kind of fix it is had to be decided.**
+`docs/addon-abi.md`'s table does not settle a bug fix that changes an observable
+answer; the paragraph under it does, and it splits on whether an add-on could
+reasonably have relied on the old answer. Nothing could reasonably rely on its
+token exchange being sent twice, and the old behaviour contradicted the calling
+convention's own text — so it is **additive**, the patch moves and the generation
+does not. The patch is invisible in the way M68's was: nothing new is importable,
+so a module built against 0.1.4 loads on a 0.1.5 host and stops being affected
+without being rebuilt. Written into CHANGELOG.md with which of the two it was,
+because the table requires that of either answer.
+
+**It is fixed inside M69 rather than deferred**, under workflow.md's rule that a
+defect making the *current* milestone's claim false is in spec whatever it looks
+like: the milestone's claim is that a stock instance signs somebody in through
+OIDC, and it could not. It is recorded as a row in deferred-findings.md all the
+same, closed against this milestone, because the finding is what the exercise
+produced and a fix with no finding behind it is a fix nobody can trace. **Whether
+it also reopens [M68.5](phase-details/m68.5.md)** — whose file says *one outbound
+request* — is scheduling, and scheduling is the owner's.
+
+### D392 — the acceptance test relaxes two bounds, under a build tag, and nothing else
+
+M69 requires a **containerized identity provider**, and two of this product's own
+bounds make one unreachable from a test. Neither is wrong and neither was
+changed.
+
+The address policy (M68.5) dials globally-routable unicast space and refuses
+everything else, so a provider published on `127.0.0.1` is refused, and so is one
+on a docker bridge, which is RFC 1918 and carved out. And a fetch is https-only,
+so the provider serves TLS with a certificate no public root store knows.
+
+**The declined alternative is the one worth naming**, because it was the first
+idea: give the container an address inside routable space by creating a docker
+network on a subnet in it. That works. What it costs is taking a range of
+somebody else's real public IPv4 and routing it to a bridge — on the developer's
+machine and on every CI runner — which is a larger and far less reviewable thing
+to do than a test seam, and it is wrong in a way that is invisible until the day
+the runner needs to reach an address in the range that was picked.
+
+So `internal/addon/egress_integration.go` carries two functions behind
+`//go:build integration`: `TestReach`, which permits *named addresses* and puts
+every other address through `refuseAddress` unchanged, and `TestTrust`, which
+*adds* a root to the system pool. No shipped binary contains either — `make check`,
+`go build ./cmd/...`, the image and every release compile the package without the
+tag. Everything else about the door is the shipped one: https only, the origin
+allowlist, no add-on-chosen header, the redirect rule, the size caps, the
+timeouts. The address policy's own coverage is unaffected and still leaves
+`allowAddr` alone, which is what exercises the real wiring.
+
+**A consequence worth writing down for operators**, and now in
+`docs/configuration.md`: an identity provider on a private network address cannot
+be used at all. That is the policy working as designed, and it had never been said
+where somebody deploying OIDC would read it.
+
+### D393 — the add-on is rebuilt from the module proxy, not vendored and not checked out
+
+The test installs the **published** add-on. Three ways to get it, and two are
+wrong.
+
+Committing the module is refused by `.gitignore`'s existing rule and m60.md's
+reason: a 5.5 MB binary is a build input nobody reviews. Adding
+`github.com/DevOfPie/LinkCtrl-OIDC` to this repository's `go.mod` puts the host in
+the add-on's dependency graph, which is the architecture backwards, and it would
+sit in `go.sum` for everybody who builds this server.
+
+`scripts/oidc-fixture.sh` fetches the module at a **pinned pseudo-version**,
+copies it out of the module cache and builds it *as its own main module* with the
+add-on's own flags. That last detail is not fussiness: `-trimpath` writes
+`<module>@<version>/…` into a binary built as a dependency and `<module>/…` into
+one built as the main module, so building it the ordinary way produces different
+bytes. Built this way it reproduces the published artifact **exactly**, and the
+script asserts that against the digest the release's own `addon.json` names —
+`695385a1…`. A drift in either fails there, naming what happened, rather than in a
+test whose subject is OIDC.
+
+This is also what makes m69.md's SDK-consumption bullet mechanical rather than a
+claim: the `go.mod` the proxy served is asserted for the module path, for a direct
+requirement on `github.com/DevOfPie/LinkCtrl`, and for the absence of `replace`
+and `exclude`. The version resolving at all is proven by the fixture existing.
+The **`LICENSE` the proxy served** is asserted the same way, which is owed-work
+#4 checked against what was published rather than against a checkout.
+
+### D394 — dex, pinned by digest, in a compose file `make up` never reads
+
+The provider is **dex v2.44.0, pinned by digest**, in
+`docker-compose.integration.yml` — a separate file, because `docker-compose.yml`
+is the operator-facing stack and an identity provider with a password in a tracked
+file is not something an operator runs. Compose applies the override file
+automatically to the default file and never under an explicit `-f`, so `make up`
+cannot reach it. `scripts/idp.sh` names the project explicitly for the same
+reason in reverse: the Makefile exports `COMPOSE_PROJECT_NAME` per instance, and a
+provider that joined `linkctrl-test` would be torn down by `make down`.
+
+**Pinning and health-gating are the milestone's own requirement**, m69.md's second
+risk, and F256's single-flake budget is the lesson it cites. The digest is what
+makes the browser leg safe to write at all: the test reads dex's own login form,
+and a form that changes shape under a tag that did not move is exactly that flake.
+`scripts/idp.sh up` waits for compose's healthcheck **and** for a discovery
+document that parses, because those are two different claims and a suite that
+starts on the first and fails on the second is a flake nobody can reproduce.
+
+**The connector is a static password list and the protocol is not mocked**, which
+is the distinction m69.md's *not a mock of the protocol* draws: dex does real
+discovery, real PKCE, a real `client_secret_post` exchange, real RS256 signing and
+a real key set. What the static list replaces is the upstream identity source —
+the thing dex asks to find out who somebody is — which no OIDC relying party can
+observe.
+
+**The demo does not get OIDC**, and this is where that is recorded rather than
+discovered: m69.md says so, the demo has no identity provider, and a sign-in flow
+against a throwaway one demonstrates nothing a visitor can use. The inherited
+demo rule's exception is therefore stated. `demoCoverage()` is untouched, because
+this milestone seeds nothing and claims nothing about the demo.
+
+
+## 2026-08-27 — M69, the acceptance test's own amendment
+
+### D395 — M69's *minor bump* clause, amended
+
+**The bullet as it stood** (`m69.md`): *"An ABI change it forces before 1.0 is a
+**minor** bump under M61's policy, exercised for real — the deprecation policy's
+first live case, if one arises."*
+
+**As amended:** the same, with **patch** in place of *minor*.
+
+**The tree fact:** [docs/addon-abi.md](../addon-abi.md)'s policy makes the
+**minor** the *generation*, which is the breaking class; an additive change moves
+the **patch** while the major is zero. F346's fix moved `abi.Version` from
+`0.1.4` to `0.1.5`, and the SDK, the generated table and the host all followed —
+so the policy behaved exactly as written and the milestone file described a
+different one.
+
+**A fact and not an assertion, so amended rather than prompted.** Nobody could
+have decided differently about which component a policy already published moves;
+the bullet named the wrong one.
+
+**The clause's condition was met, which is the part worth recording.** *If one
+arises* — one did. The deprecation policy's first live case is F346, raised by
+the acceptance test the milestone exists to run, and it went through the table's
+*a bug fix that contradicts its own documentation* limb rather than needing a new
+one. That is the second time this phase has put the policy under load and had it
+hold; the first was [M68](phase-details/m68.md)'s, which had to repair the policy
+before it could use it (D356).

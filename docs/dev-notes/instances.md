@@ -79,7 +79,7 @@ make instances                  # both stacks, and whether they are up
 make up                         # start test
 make logs                       # follow test's application log
 make rebuild                    # test, from nothing: volumes gone, image rebuilt, migrated
-make test-integration           # against test
+make test-integration           # against test, plus the suite's own identity provider
 make up INSTANCE=demo           # start demo, without touching its data
 make demo-update                # the milestone refresh; see below
 ```
@@ -107,6 +107,32 @@ result against the package's inputs, and the instance's *database state* is not
 one of them, so a suite that passed before a schema or seed change will report
 `(cached)` and pass again without executing. See the standing rule in
 [workflow.md](../build-notes/workflow.md#standing-rules).
+
+## A third container, and it belongs to neither instance
+
+`make test-integration` starts one more thing: **dex**, on `127.0.0.1:5554`,
+from `docker-compose.integration.yml`. It is the identity provider M69's
+acceptance test signs a person in through, and it is not an instance — it is the
+suite's, under its own compose project (`linkctrl-idp`), so `make down` does not
+take it and `INSTANCE=demo` does not make a second one.
+
+```sh
+make idp-up                     # start it and wait for a discovery document
+make idp-down                   # stop it and remove its volumes
+make oidc-fixture               # rebuild the OIDC add-on the test installs
+```
+
+Both are prerequisites of `make test-integration` and `make ci-integration`, so
+the ordinary path needs neither by hand. Reach for them when a run failed on the
+provider rather than on the product, or after changing the pin in
+`scripts/oidc-fixture.sh`.
+
+Two generated things sit under `test/integration/testdata/` and are gitignored:
+the certificate dex serves, which `scripts/idp.sh` makes with `openssl` on first
+use, and the add-on itself, which `scripts/oidc-fixture.sh` fetches from the
+module proxy at a pinned version and rebuilds. The second prints the digest it
+produced and refuses to hand over anything that does not match what the published
+release names.
 
 ## Ports
 

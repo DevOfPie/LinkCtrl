@@ -47,7 +47,7 @@ import (
 const (
 	VersionMajor = 0
 	VersionMinor = 1
-	VersionPatch = 4
+	VersionPatch = 5
 )
 
 // Version is the SemVer string the ABI publishes, and what the abi_version host
@@ -89,7 +89,22 @@ const (
 // declared is not a change to the contract, which docs/addon-abi.md states in as
 // many words and is the whole reason the declared-but-refused pattern costs no
 // version at all.
-const Version = "0.1.4"
+//
+// **M69 moved it for a bug fix**, which is the first time that has happened and is
+// decided by the second of the two cases docs/addon-abi.md's table could not
+// settle: *a bug fix that changes an observable answer is breaking if an add-on
+// could reasonably have relied on the old answer, and additive if the old answer
+// contradicted its own documentation*. `network_fetch` made the request a second
+// time when the guest's buffer was too small for the answer, which contradicts the
+// calling convention's own *a function that changes something makes sure the retry
+// is not a second attempt* — and no add-on could reasonably rely on its
+// authorization-code exchange being sent twice. So it is additive, the patch moves,
+// [Generation] does not, and this patch is invisible in the way M68's was: nothing
+// new is importable, so a module built against 0.1.4 loads on a 0.1.5 host
+// unchanged and stops being affected — the fix is the host's, and a module gets
+// it by being run rather than by being rebuilt. Written into CHANGELOG.md under *Fixed*
+// with which of the two it was, as the table requires.
+const Version = "0.1.5"
 
 // Generation is the integer axis a breaking change moves along, and it is what a
 // manifest's abi_version field names.

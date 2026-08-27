@@ -1,0 +1,60 @@
+# dex, configured as the identity provider M69's acceptance test signs in through.
+#
+# Every value here is public by design: this provider exists for one test suite,
+# holds one invented person, and is reachable on loopback only. The password below
+# is the hash of the word `password`, which is what makes it readable rather than
+# a secret somebody has to look up.
+#
+# The issuer is compared byte for byte against the `iss` claim of every ID token,
+# and the add-on refuses an issuer that is not `https` — so the scheme, the host
+# and the port here have to match docker-compose.integration.yml's published port
+# and the certificate scripts/idp.sh generates. Three files, one fact.
+
+issuer: https://127.0.0.1:5554/dex
+
+storage:
+  # Nothing survives a restart, which is what a test fixture wants: a run starts
+  # from a provider that has never seen this instance.
+  type: memory
+
+web:
+  https: 0.0.0.0:5554
+  tlsCert: /etc/dex/tls/idp.crt
+  tlsKey: /etc/dex/tls/idp.key
+
+telemetry:
+  # Plain HTTP, not published outside the container, and only so the compose
+  # healthcheck has something to ask without a certificate.
+  http: 0.0.0.0:5558
+
+oauth2:
+  # No consent screen. The screen is dex's own page and a person clicking Grant
+  # Access; what this suite is asserting is the protocol either side of it, and
+  # driving a second form would add a hop that can change shape without adding a
+  # claim. The authorization-code flow, PKCE, the token exchange and the ID token
+  # are all unaffected by it.
+  skipApprovalScreen: true
+
+staticClients:
+  - id: linkctrl-integration
+    secret: linkctrl-integration-secret
+    name: LinkCtrl integration test
+    # Exact match, and dex enforces it: the add-on sends this value as
+    # `redirect_uri` and dex refuses a code to any other. It is a name that does
+    # not resolve, deliberately — the browser leg of the test stops at this
+    # redirect and re-issues it against the instance under test, so nothing ever
+    # dials it, and a value that *did* resolve would be a real address a failing
+    # test could send an authorization code to.
+    redirectURIs:
+      - https://linkctrl.test/addons/oidc/callback
+
+# The connector is a static password list. It is the upstream identity source —
+# what dex asks to find out who somebody is — and not the protocol dex speaks to
+# LinkCtrl, which is the real thing and is the point of running dex at all.
+enablePasswordDB: true
+staticPasswords:
+  - email: "person@example.com"
+    # bcrypt of "password".
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    username: "person"
+    userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"

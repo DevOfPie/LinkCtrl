@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"go/build/constraint"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -146,6 +147,19 @@ func TestTheSecondFactorOpensNoSocket(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read %s: %v", rel, err)
 			}
+			// A file no shipped binary contains is not this product's authentication
+			// code, and skipping one is not the same as exempting it. The exemption
+			// above is a claim about the tree — *the egress is confined to one file* —
+			// and it stays a claim of exactly that size because what is skipped here is
+			// checked rather than named: the file's own build constraint has to be
+			// unsatisfiable without the `integration` tag, which `go build ./cmd/...`,
+			// `make check`, the container image and every release set for nothing.
+			// M69 added the first such file (`../addon/egress_integration.go`), which
+			// dials nothing at all — it configures the one client fetch.go owns, for a
+			// test that signs somebody in through a containerized identity provider.
+			if onlyInTheIntegrationBuild(b) {
+				continue
+			}
 			scanned++
 			for i, line := range strings.Split(string(b), "\n") {
 				if m := outboundFromAnAuthenticationPath.FindString(line); m != "" {
@@ -215,4 +229,33 @@ func TestTheScanWouldActuallyFail(t *testing.T) {
 				"that fires on ordinary handler code gets exempted rather than obeyed", m, line)
 		}
 	}
+}
+
+// onlyInTheIntegrationBuild reports whether this file's build constraint keeps it
+// out of every build that does not set the `integration` tag.
+//
+// Asked of the constraint rather than of the filename, so a file cannot buy the
+// skip by being called something. Two evaluations and both have to hold: with
+// every tag set the file is in, and with every tag but `integration` set it is
+// out — which is the whole of *this file exists for the integration build and for
+// nothing else*.
+func onlyInTheIntegrationBuild(src []byte) bool {
+	for _, line := range strings.Split(string(src), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case line == "":
+			continue
+		case strings.HasPrefix(line, "//"):
+			expr, err := constraint.Parse(line)
+			if err != nil {
+				continue
+			}
+			return expr.Eval(func(string) bool { return true }) &&
+				!expr.Eval(func(tag string) bool { return tag != "integration" })
+		default:
+			// Past the header. A build constraint after this point is not one.
+			return false
+		}
+	}
+	return false
 }

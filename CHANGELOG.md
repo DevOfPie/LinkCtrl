@@ -29,6 +29,35 @@ migrations run at boot.
 
 ### Added
 
+- **OIDC sign-in, as a first-party add-on rather than as a feature of this
+  server.**
+
+  [`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC) is an
+  OpenID Connect relying party that installs into an instance the way any other
+  add-on does: discovery, an authorization-code flow with PKCE, a token exchange,
+  an ID token verified against the provider's key set, and an assertion this
+  server acts on. It is published separately, it consumes only this project's
+  published SDK, and nothing about it is compiled into this server — which is the
+  point. If it could not be built against the add-on interface, the interface was
+  wrong.
+
+  **Connecting comes before signing in.** An assertion about an external identity
+  nobody has connected signs nobody in. You sign in with a password, visit the
+  add-on's linking page, and from then on that provider identity reaches your
+  account. There is deliberately no matching on the email address an assertion
+  carries. Every session minted this way is in the instance audit log as
+  `session.minted_by_addon`, naming the add-on and the provider.
+
+  **What running it costs you** is in
+  [docs/configuration.md](docs/configuration.md) — the two parties you trust, what
+  happens when the provider is down, and the fact that a provider on a private
+  network address cannot be reached at all, because this server dials globally
+  routable space and nothing else.
+
+  **The public demo does not run it**, deliberately: there is no identity provider
+  behind the demo and a sign-in flow against a throwaway one shows nothing you
+  could use.
+
 - **A module can arrive from a URL, with a digest you supply.**
 
   Installing an add-on no longer means having its files on the machine you are
@@ -1060,6 +1089,30 @@ migrations run at boot.
 
   The runtime is [wazero](https://github.com/tetratelabs/wazero), which needs no
   cgo, so the published binaries and image stay statically linked.
+
+### Fixed
+
+- **An add-on's outbound request is made once, whatever size the answer is.**
+
+  An add-on asks the host to fetch something into a buffer it owns, and the
+  add-on interface says a buffer too small means nothing was written and the
+  caller tries again at the size it was told. That retry was making the request a
+  second time. For reading a document it was invisible; for anything the other end
+  counts it was not — an OpenID Connect token exchange went out twice and the
+  second one came back `invalid_grant`, so sign-in failed for every response over
+  512 bytes, which is every real one.
+
+  The host now keeps what came back and answers the retry from it. A module that
+  deliberately fetches the same address twice still gets two requests. Nothing
+  about an add-on changes; the fix is entirely in this server. Found by building
+  the OIDC add-on against it, which is what that exercise is for.
+
+  **The add-on ABI moves to 0.1.5**, and which kind of fix it is has to be said
+  because the policy has two answers for a bug fix that changes an observable
+  answer: it is the **additive** one, because the old answer contradicted the
+  calling convention's own documentation and nothing could reasonably have relied
+  on a request being sent twice. Nothing new is importable, so a module built
+  against 0.1.4 loads on a 0.1.5 host unchanged and simply stops being affected.
 
 ## [0.3.0] - 2026-08-18
 

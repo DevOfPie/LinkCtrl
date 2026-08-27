@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -539,16 +540,25 @@ var hostFuncs = map[string]hostFunc{
 		if !ok {
 			return int32(abi.StatusInvalid)
 		}
-		var req fetchRequest
-		if err := json.Unmarshal(raw, &req); err != nil {
-			return int32(abi.StatusInvalid)
+		// The retry, answered from what the first call already brought back. See
+		// hostState.fetchHeld: this is the one function here whose call is not a
+		// read, and re-entering it would put a second request on the wire.
+		encoded := st.heldFetch(raw)
+		if encoded == nil {
+			var req fetchRequest
+			if err := json.Unmarshal(raw, &req); err != nil {
+				return int32(abi.StatusInvalid)
+			}
+			out := st.doFetch(ctx, req)
+			var err error
+			if encoded, err = json.Marshal(out); err != nil {
+				st.releaseFetch()
+				return st.marshalFailed("network_fetch", err)
+			}
 		}
-		out := st.doFetch(ctx, req)
-		encoded, err := json.Marshal(out)
-		if err != nil {
-			return st.marshalFailed("network_fetch", err)
-		}
-		return writeOut(mod, stack[2], stack[3], encoded)
+		n := writeOut(mod, stack[2], stack[3], encoded)
+		st.holdFetch(raw, encoded, n, int(api.DecodeU32(stack[3])))
+		return n
 	},
 }
 
@@ -635,6 +645,35 @@ func (s *hostState) doFetch(ctx context.Context, req fetchRequest) fetchResponse
 	s.metrics.ObserveAddonFetch(name, out.Outcome, dialled)
 	return out
 }
+
+// heldFetch is the answer to a request this guest has already been told it could
+// not hold, or nil.
+//
+// Matched on the request record's own bytes rather than on a URL, because what
+// the convention says the guest will repeat is the call — the same record, at a
+// larger buffer. Anything else is a different fetch and gets one.
+func (s *hostState) heldFetch(raw []byte) []byte {
+	if s.fetchHeld == nil || !bytes.Equal(s.fetchFor, raw) {
+		return nil
+	}
+	return s.fetchHeld
+}
+
+// holdFetch keeps the answer exactly when the guest could not take it, and drops
+// it in every other case.
+//
+// Dropping is the half worth stating: an answer that was delivered must not be
+// able to answer a later call, or a module fetching the same URL twice on purpose
+// would get one request and two identical responses.
+func (s *hostState) holdFetch(raw, encoded []byte, written int32, capacity int) {
+	if written >= 0 && len(encoded) > capacity {
+		s.fetchFor, s.fetchHeld = raw, encoded
+		return
+	}
+	s.releaseFetch()
+}
+
+func (s *hostState) releaseFetch() { s.fetchFor, s.fetchHeld = nil, nil }
 
 // readStatement reads the (sql, args) pair both storage functions begin with.
 //
@@ -1418,6 +1457,39 @@ type hostState struct {
 	// at dispatch, because the function is outside abi.InlineSafe, so that class
 	// never reaches doFetch and gets StatusDenied rather than a record.
 	mayFetch bool
+	// fetchFor and fetchHeld are the answer to a request the guest has already
+	// made and could not hold, kept so that the retry the calling convention
+	// prescribes does not make that request a second time.
+	//
+	// **It is the same hazard `session_mint` has** — see [mintedSessionMaxBytes] —
+	// and it arrives from the same direction: the out-parameter convention says a
+	// value too large for the offered buffer means nothing was written and the
+	// caller retries at the size it was told. On a *read* that costs one extra
+	// marshal, which is why `encoded` above exists. On this function the first call
+	// has already been made on the wire, so a retry that re-entered doFetch would
+	// send it again — and an authorization-code exchange, a payment, or anything
+	// else somebody's server counts is not a thing to send twice.
+	//
+	// `session_mint` solves it by checking the buffer *before* it mints, against
+	// the widest answer that function can produce. That is not available here: the
+	// widest answer is LINKCTRL_ADDON_FETCH_MAX_BYTES, 256 KiB by default, and
+	// demanding a quarter-megabyte buffer before any fetch may happen would price
+	// every add-on for the largest document any add-on might read. So the answer is
+	// held instead, and the retry is served from it.
+	//
+	// Bounded by construction: one response per invocation, at most the fetch size
+	// cap, and a per-request instance is discarded when the request ends. Cleared
+	// as soon as it is delivered, and cleared by a fetch of anything else, so the
+	// only call it can ever answer is the retry of the call that filled it — a
+	// module deliberately fetching the same URL twice gets two requests, because
+	// the first one's answer was delivered and the hold went with it.
+	//
+	// Found by M69: the OIDC add-on's token exchange was sent twice, the second
+	// time answering `invalid_grant`, because a token response is about 2 KiB and
+	// the SDK's first buffer is 512 bytes. Nothing about it is specific to that
+	// add-on — it is every response over 512 bytes.
+	fetchFor  []byte
+	fetchHeld []byte
 
 	// metrics is the host's registry, held so that a refusal decided *inside* a
 	// host function rather than by dispatch reaches the same counter dispatch

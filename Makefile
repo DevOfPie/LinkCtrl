@@ -142,7 +142,7 @@ test: addon-fixtures ## Unit tests with the race detector
 # It cannot live in test/integration, because that package cannot import package
 # main.
 .PHONY: test-integration
-test-integration: require-db-password guard-test-integration require-stack ## Integration tests (needs Postgres and Redis)
+test-integration: require-db-password guard-test-integration require-stack oidc-fixture idp-up ## Integration tests (needs Postgres, Redis and the test IdP)
 	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
 		go test -race -tags=integration -timeout 30m ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
@@ -401,7 +401,7 @@ ci-lint: shellcheck htmx swagger-ui css ## The CI lint job's steps, short of gol
 # tests that never ran claim to cover the cache — so an unset variable fails here
 # instead of passing quietly.
 .PHONY: ci-integration
-ci-integration: addon-fixtures ## Integration tests against caller-provided services — what CI runs
+ci-integration: addon-fixtures oidc-fixture idp-up ## Integration tests against caller-provided services — what CI runs
 	@test -n "$(TEST_DATABASE_URL)" || { \
 		echo "TEST_DATABASE_URL is not set — refusing to run against an unknown database."; \
 		exit 1; \
@@ -551,6 +551,32 @@ addon-fixtures: $(ADDON_FIXTURES) ## Build the WASM test modules the add-on host
 $(ADDON_FIXTURE_DIR)/%.wasm: $$(wildcard $(ADDON_FIXTURE_SRC)/$$*/*.go) $(ADDON_SDK_SRC)
 	@mkdir -p $(ADDON_FIXTURE_DIR)
 	GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o $@ ./$(ADDON_FIXTURE_SRC)/$*
+
+# The OIDC add-on, and it is not one of the fixtures above: those are this
+# repository's own test modules, and this is `DevOfPie/LinkCtrl-OIDC` — a
+# different repository, fetched from the module proxy at a pinned version and
+# rebuilt into the artifact its published manifest names. M69's acceptance test
+# installs it, so the script's digest check is the difference between testing the
+# add-on that was published and testing whatever built today.
+#
+# Not a file rule. What decides whether it has to run is the digest of what is
+# already there against the pin in the script, which a timestamp cannot express,
+# so the script answers that question itself and exits immediately when the
+# fixture is current.
+.PHONY: oidc-fixture
+oidc-fixture: ## Build the released OIDC add-on the integration suite installs
+	@scripts/oidc-fixture.sh
+
+# The identity provider the acceptance test signs in through. `up` generates the
+# certificate dex serves if it is not there, starts the container and waits for a
+# discovery document — not for a started container, which is a different claim.
+.PHONY: idp-up
+idp-up: ## Start the integration suite's identity provider (dex) and wait for it
+	@scripts/idp.sh up
+
+.PHONY: idp-down
+idp-down: ## Stop the integration suite's identity provider
+	@scripts/idp.sh down
 
 ## ---- database -------------------------------------------------------------
 

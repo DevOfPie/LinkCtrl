@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1014,6 +1015,119 @@ func TestOnlyARouteInvocationMayFetch(t *testing.T) {
 	route := base.forRequest(&Request{Method: "GET", Path: "/"}, SessionContext{}, RequestIn{})
 	if got := route.doFetch(context.Background(), req); got.Outcome == "class_refused" {
 		t.Error("a route invocation was refused for its class, and it is the one that may fetch")
+	}
+}
+
+// --- the retry that must not become a second request -------------------------
+
+// **A fetch the guest could not hold is not made twice**, and this is the one
+// function on the ABI where that sentence has to be asserted rather than assumed.
+//
+// The out-parameter convention says a value larger than the offered buffer means
+// nothing was written and the caller retries at the size it was told, and the SDK
+// does exactly that with a first buffer of 512 bytes. On a read a retry costs one
+// extra marshal, and the other function here that changes something —
+// `session_mint` — checks the buffer before it mints. This one cannot: its answer
+// does not exist until the request has been made, so re-entering it sends the
+// request again. M69 found what that costs — the OIDC add-on's token exchange
+// went out twice and the second one came back `invalid_grant`, because a token
+// response is about 2 KiB.
+//
+// Driven through the ABI entry rather than through [hostState.doFetch], because
+// the claim is about the buffer and the buffer only exists at that boundary.
+func TestAFetchTheGuestCouldNotHoldIsNotMadeTwice(t *testing.T) {
+	t.Parallel()
+	// Bigger than the SDK's first buffer and bigger than the small one below, so
+	// the first call cannot fit and the convention's retry is what follows.
+	body := `{"padding":"` + strings.Repeat("x", 2048) + `"}`
+	var requests atomic.Int32
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(ts.Close)
+
+	m := Manifest{
+		Name:        "oidc",
+		Permissions: []string{abi.PermissionNetworkFetch},
+		Settings:    []Setting{{Name: "provider_origins", Type: SettingText, Origin: true}},
+	}
+	grants, _ := resolveGrants(m)
+	st := newHostState(m, grants, nil,
+		newSettingValues(map[string]config.Secret{"provider_origins": config.Secret(ts.URL)}),
+		slog.New(slog.NewTextHandler(io.Discard, nil)), nil, false)
+	st.fetcher = newTestFetcher(t, ts, permitLoopback)
+	st = st.forRequest(&Request{Method: "GET", Path: "/"}, SessionContext{}, RequestIn{})
+
+	// A guest's memory to write into, from a module that is loaded and never
+	// called: what is under test is the host function, and the fixture is here to
+	// own a linear memory the convention can be exercised against.
+	code := fixture(t, "minimal")
+	dir := t.TempDir()
+	install(t, dir, manifestFor("minimal", ClassRequired, code), code)
+	h, err := openHost(t, dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod := h.Addons()[0].Module()
+	mem := mod.Memory()
+
+	const (
+		inputAt = uint32(2048)
+		outAt   = uint32(8192)
+		small   = uint32(512)
+	)
+	request, err := json.Marshal(fetchRequest{URL: ts.URL + "/token", Method: http.MethodPost, Body: "grant_type=authorization_code"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, mem, inputAt, request)
+
+	call := func(capacity uint32) int32 {
+		return hostFuncs["network_fetch"](context.Background(), st, mod, []uint64{
+			uint64(inputAt), uint64(len(request)), uint64(outAt), uint64(capacity),
+		})
+	}
+
+	need := call(small)
+	if need <= int32(small) {
+		t.Fatalf("the answer was %d bytes and fits a %d-byte buffer, so this test is "+
+			"not exercising the retry at all", need, small)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("the first call put %d requests on the wire", got)
+	}
+
+	//nolint:gosec // G115: need is positive and is the size the host just reported
+	if got := call(uint32(need)); got != need {
+		t.Fatalf("the retry answered %d, and the host had said %d", got, need)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("the retry made the request again: %d requests reached the server, and "+
+			"an authorization code exchanged twice is a sign-in that fails", got)
+	}
+	raw, ok := mem.Read(outAt, uint32(need)) //nolint:gosec // G115: as above
+	if !ok {
+		t.Fatal("the retry wrote outside the guest's memory")
+	}
+	var got fetchResponse
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("what the retry wrote is not a FetchResponse: %v", err)
+	}
+	if got.Body != body {
+		t.Errorf("the retry answered a body of %d bytes, and the server sent %d",
+			len(got.Body), len(body))
+	}
+
+	// And the hold is gone: a module deliberately fetching the same thing again
+	// gets a second request, because the first answer was delivered.
+	if n := call(uint32(need)); n != need { //nolint:gosec // G115: as above
+		t.Fatalf("the third call answered %d", n)
+	}
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("a fetch made after the answer was delivered reached the server %d "+
+			"times, so the held answer outlived the call it belonged to", got)
 	}
 }
 
