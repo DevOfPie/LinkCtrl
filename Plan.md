@@ -646,7 +646,12 @@ validation produced two insertions before the milestone started —
 [M68.5](docs/build-notes/phase-details/m68.5.md) and
 [M68.6](docs/build-notes/phase-details/m68.6.md), taking the phase to seventeen
 — and the owner chose to proceed with one slot left rather than move the cap or
-close the phase early. So the sentence above has been honoured rather than
+close the phase early. **That slot was spent on 2026-08-27**, on
+[M69.5](docs/build-notes/phase-details/m69.5.md), when building the OIDC add-on
+found the flow it proves is reachable only by being handed a URL. The phase is at
+eighteen, which is the cap: **the next insertion is a conversation about the cap
+itself**, and M69's host-side half has not landed. See
+[D389](docs/build-notes/decisions.md#2026-08-27--m695-added-the-acceptance-tests-last-inch). So the sentence above has been honoured rather than
 overtaken: what it promised was a decision, and the decision is
 [D366](docs/build-notes/decisions.md#2026-08-26--the-conversation-planmd-promised-and-what-it-decided).
 Recorded in
@@ -683,6 +688,7 @@ consumer that proves it.
 | [M68.5](docs/build-notes/phase-details/m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | [F334](docs/build-notes/deferred-findings.md#closed) — the gap M69's validation found; owner-answered scope 2026-08-25 |
 | [M68.6](docs/build-notes/phase-details/m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | Owner-added scope 2026-08-25 — corrects M67's *never a fetch*, which no decision backed |
 | [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
+| [M69.5](docs/build-notes/phase-details/m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | [F345](docs/build-notes/deferred-findings.md#open) — the last inch the acceptance test found; owner-answered scope 2026-08-27 |
 | [M69.9](docs/build-notes/phase-details/m69.9.md) | **Pre-release adversarial review** | everything below it | — |
 | [M70](docs/build-notes/phase-details/m70.md) | Deferred findings, documentation pass, 0.4.0 | all | Phase close · owed-work #3 (the 1.0 sentence) |
 

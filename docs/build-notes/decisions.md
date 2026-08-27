@@ -460,6 +460,7 @@ file. Append a row when you append an entry.
 | [M68.6, the numbers under D384, and a bound the standard library already held](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held) | D385: what D384 delegated, decided and written down — the inflated cap as its own constant at the same value as the fetch cap, a ratio of fifty with a one-mebibyte floor and the measurements at both ends, and `bundle_expands` as a fourteenth entry in a closed vocabulary rather than a fourteenth reason to say `bundle_invalid`. Also the fact that made one test expect a different code than it was written to expect: `archive/zip` refuses a member that outruns its own declared size |
 | [M68.6, a ratio that is a bound rather than a verdict](#2026-08-26--m686-a-ratio-that-is-a-bound-rather-than-a-verdict) | D386: [D385](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held)'s two figures become one limit the gzip reader **stops at**, because a ratio checked after `io.ReadAll` had already spent the 32 MiB it existed to save — the argument was right and the code did not meet it. Also: the exact form of the ratio changes from truncating division to a multiplication, the zip's declared sum is checked by subtraction so a crafted `uint64` cannot wrap it, and the two bounds are told apart by a test rather than by their sharing a code
 | [M68.6, two vocabularies held from the end that was open](#2026-08-27--m686-two-vocabularies-held-from-the-end-that-was-open) | D387: the ratio and the install's refusal codes were each argued in one direction and asserted in the other. A ratio bomb small enough to build cheaply is refused by the floor, so `maxBundleRatio` could be lowered to almost anything and stay green — the test that pins it is built inside the window where it binds and writes fifty out as a literal. And `URLInstallCodes` was held against the page's sentences and against nothing on the wire, so a word added to `fetchFailure` would have reached an operator as the generic refusal. D388: the demo bullet named a `demoFeature` row for a claim a SQL count cannot make — amended as a fact, and the shape the demo rule keeps producing |
+| [M69.5 added: the acceptance test's last inch](#2026-08-27--m695-added-the-acceptance-tests-last-inch) | D389: an add-on that can mint a session gets a way for somebody to start it — why it is worth the phase's last slot, the two declined alternatives, and why D364's manifest-declares-a-need rule is what bounds the design. D390: the manifest gains a label **and** a relative path the host joins and bounds, and `schema_version` stays 1 on D234's ground with D232's counter-argument named |
 
 | [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
 | [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
@@ -40666,3 +40667,101 @@ is the same confusion from the other side — a milestone reaching for
 `demoCoverage()` because it is the named mechanism, for a claim `demoCoverage()`
 is not built to make. The rule is about a feature being *visible* in the demo;
 what proves visibility is not always a query.
+
+## 2026-08-27 — M69.5 added: the acceptance test's last inch
+
+### D389 — the sign-in an add-on made possible gets a way to start it
+
+[F345](deferred-findings.md#open), found building the OIDC add-on: the flow works
+end to end — discovery, PKCE, callback, an ID token verified against a fetched
+JWKS, a session minted by the host, all against a live provider — and **nobody
+can start it without being handed a URL**. `template_render` is not live, an
+add-on's route may not answer `text/html`, and the host escapes what a guest
+returns, so *Sign in with your provider* is not a thing an add-on can put
+anywhere a person looks.
+
+M69's own bullet is an integration test proving the flow, and it passes without
+any of this. So the question put to the owner was whether the phase closes with
+the gap.
+
+**Owner: fix it in Phase 4, as a milestone.** [M69.5](phase-details/m69.5.md).
+
+**Why it is worth the phase's last slot.** The acceptance test's framing is *if
+the OIDC add-on cannot be built, the foundation is wrong*, and a foundation whose
+flagship add-on is unreachable by an ordinary user is wrong in the way that shows
+up last and matters most — it is the difference between a capability and a
+feature. A third party evaluating this add-on foundation meets the README's
+*paste this URL* before they meet anything the seventeen milestones built.
+
+**What it costs, and it is the whole remaining slack.** Phase 4 planned fourteen,
+ran to fifteen at [M66.5](phase-details/m66.5.md), seventeen at M68.5 and M68.6,
+and is **eighteen** here — which is the cap the owner moved to on 2026-08-18, so
+there is none left. The next insertion is a conversation about the cap itself,
+and [M69](phase-details/m69.md) has not landed: its host-side half is still ahead
+and it is the milestone that produced four of the last five insertions.
+
+**Two alternatives were declined.** Shipping 0.4.0 with the gap and fixing it in
+Phase 5 alongside the module store — cheaper, and it ships the worked example
+with a paste-a-URL instruction as the first thing an evaluator sees. And a
+narrower thing than a milestone, one setting producing one link — which is a
+mechanism invented for a single add-on, the shape this phase has spent seventeen
+milestones not doing.
+
+**The design is bounded by D364's rule rather than by a new one**, and that is
+the reason to think this is a milestone rather than a sprawl: the manifest
+declares a **label** and never a destination, the host composes the target from
+the add-on's own route prefix, and the operator decides whether it appears. An
+add-on's author cannot change what a visitor sees by shipping a new version — the
+same sentence that decided egress, applied to the one page every visitor with an
+account meets.
+
+### D390 — what the manifest gains, and why its version does not move
+
+Two answers, both owner-given 2026-08-27 at the plan review of
+[M69.5](phase-details/m69.5.md), because each settles what that milestone
+asserts rather than how it is built.
+
+**The manifest declares a label *and* a relative path.** The first draft of the
+bullet said *label* and then described the host composing a target from *the
+route prefix plus a declared relative path*, which is two fields wearing one
+field's description, and [D389](#2026-08-27--m695-added-the-acceptance-tests-last-inch)
+recorded only the label. **Two fields, joined by the host, with the result
+asserted to be under the add-on's own prefix** — so `..`, an absolute URL, a
+scheme and a leading `/` are each refused. The manifest names a place inside the
+one the host already gave it, which is D364's *declares a need, never a
+destination* holding at a second surface.
+
+*Label alone* was declined, and the reason is worth keeping: it would make the
+route prefix's **root** a reserved meaning the ABI never gave it, so an add-on
+already serving something there would have to move — pushing a constraint onto
+every future add-on to avoid one manifest field. The OIDC add-on's start route
+is not its prefix root, so the case is real rather than hypothetical. A third
+option — the host asking the module at load which route starts the flow — was
+declined as a new ABI function for one string, permanent under M61's policy.
+
+**`schema_version` stays `1`.** [the M61 entry that settled it](#2026-08-19--m61-a-cookie-namespace-comes-from-the-name-not-from-whoever-installed-first)
+records the precedent — *`schema_version` stays 1*, for a field added to a schema
+**no release has published** — and
+that condition is true as written: 0.4.0 is untagged and the manifest format has
+never shipped in a release. *(The plan review cited this precedent as D234; D234
+is the first-come cookie-namespace rule in the same entry, and the schema_version
+reasoning is that entry's rather than that number's. Corrected here so the next
+reader follows a pointer that lands.)*
+
+**D232's argument is named rather than waved past**, because it is the one that
+cuts the other way. It says the format was settled in one milestone *rather than
+growing a field per milestone across a boundary another repository is already
+compiling against*, and `internal/addon/manifest.go` records M61's
+`cookie_prefixes` as the exception that proves the cost — a field is cheapest to
+get right **before** anything is built against it. That boundary now has a real
+consumer: `LinkCtrl-OIDC` is written against this format. So this answer turns on
+reading *published* as the word D234 actually used, meaning a release rather than
+a consumer, and the cost of that reading is that the phase's own add-on has to
+change its `addon.json` — which it must anyway, since without the two fields no
+link renders and nothing M69.5 claims is provable against it.
+
+**Bumping to 2 was declined**, with what it would have bought: a version number
+that starts telling the truth about format changes from the first consumer rather
+than the first tag, which is arguably what a cross-repo contract is for. What it
+costs is a version ladder before 1.0 that the deprecation policy carries forever,
+and a `schema_version` table with two rows whose difference is one optional field.
