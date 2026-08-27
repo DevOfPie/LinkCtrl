@@ -422,7 +422,14 @@ func TestAnAddressRefusalNamesTheRuleThatRefusedIt(t *testing.T) {
 		rule string
 		addr string
 	}{
-		{"https://localhost:" + port + "/x", "loopback", "127.0.0.1"},
+		// The literal rather than `localhost`, because this row asserts *which
+		// address* the line names and a name does not decide that — a dual-stack
+		// resolver answers `::1` first and CI's does, so the row demanded
+		// 127.0.0.1 of a refusal that correctly named ::1 and was correctly
+		// `loopback`. A *name* resolving to loopback is what
+		// TestAFetchToLoopbackIsRefusedWhenTheNameHidesIt covers; this one is
+		// about the log line, so it dials something unambiguous.
+		{"https://127.0.0.1:" + port + "/x", "loopback", "127.0.0.1"},
 		// Not in routableSpace and not in carvedOut: nothing in fetch.go mentions
 		// it, and the log still says why.
 		{"https://[4000::1]/x", "outside-routable-space", "4000::1"},
