@@ -2187,16 +2187,55 @@ hardware rather than the publisher.
 
 ### Installing one
 
-Upload the module and the `addon.json` that describes it. The host checks the
-module against the manifest's digest before it writes anything, and the add-on is
-running when the page comes back — no restart.
+**Two ways, and they produce the same add-on.** Upload the module and the
+`addon.json` that describes it, or give this instance a URL to fetch it from. The
+host checks the module against the manifest's digest before it writes anything
+either way, and the add-on is running when the page comes back — no restart.
 
 **An add-on runs with whatever its manifest declares.** Read the permissions
 before you install one: `session.mint` means it decides who is signed in, and
 `storage.own_schema` means it owns tables in your database.
 
+#### From a URL
+
+The URL names a **bundle**: a `.tar`, a `.tar.gz` or a `.zip` holding
+`addon.json` and the module it names, and nothing else. One file, because a
+manifest and a module fetched separately could come from two different moments.
+
+Ship whichever container your release pipeline already emits. **The name plays no
+part** — this instance decides what a bundle is from its leading bytes, so a
+`.tar.gz` that is really a zip installs, and a `.tar` that is really an error page
+is refused as not a bundle. All three carry the same rule about what may be
+inside: exactly two plain files with plain names, so no directory, no symbolic
+link, no path and no repeated name. A compressed bundle is bounded a second time
+on what it may amount to once opened — the smaller of 32 MiB and fifty times what
+was fetched — and that is where the decompressor **stops**, so a bundle expanding
+by more than any module plausibly does is refused part-unpacked rather than
+unpacked and then declined. Below a mebibyte the ratio does not apply: a small
+tar is mostly padding, and its ratio says nothing about it.
+
+**Type the expected `sha256` beside the URL, and get it from somewhere else.**
+The digest is the whole of what makes this safe, and it is the digest of the
+bundle rather than of the module inside it: this instance refuses to write
+anything unless the fetched bytes hash to what you typed. A digest copied off the
+same page as the URL proves nothing — whoever can change the one can change the
+other. The manifest inside the bundle also declares the module's digest, and that
+check still runs; it says the module matches its own manifest, which whoever
+built the bundle decided.
+
+**What the fetch can reach is bounded and it is not configurable.** `https` only.
+The address is checked after the name resolves, on every address it resolves to,
+and only the public internet is dialled — loopback, link-local, private and
+carrier-grade NAT ranges are refused, so a URL cannot be used to make this server
+probe your own network. A redirect that leaves the origin you typed is not
+followed. A refusal names which of those bounds it hit rather than telling you to
+check a digest that is fine.
+
+Uploading is still the right answer for a large module or a slow link: the fetch
+is bounded at ten seconds, and on an upload the bytes travel on your own request.
+
 Two shapes cannot be installed here and the page says so: an add-on that ships
-`.sql` migration files (those files are not part of the upload — place its
+`.sql` migration files (those files are not part of either shape — place its
 directory in `LINKCTRL_ADDONS_DIR` and restart), and any add-on at all on an
 instance whose add-ons directory is read-only.
 

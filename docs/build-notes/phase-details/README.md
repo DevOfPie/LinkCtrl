@@ -60,7 +60,7 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 | [M67](m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | done |
 | [M68](m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | done |
 | [M68.5](m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | done |
-| [M68.6](m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | not started |
+| [M68.6](m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | done |
 | [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | not started |
 | [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | not started |
 | [M70](m70.md) | Deferred findings, documentation pass, 0.4.0 | all | not started |

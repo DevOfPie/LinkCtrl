@@ -304,3 +304,56 @@ func addonDigest(code []byte) string {
 	sum := sha256.Sum256(code)
 	return hex.EncodeToString(sum[:])
 }
+
+// The same gate on the second door (M68.6).
+//
+// Asserted here rather than in internal/addon for that package's reason: nothing
+// outside internal/auth can mint an authority, so a unit test cannot produce an
+// actor holding `addons.manage` and a gate only reachable through the check would
+// be a gate only testable against a database. This is that database.
+//
+// **Both directions, and the refused one is checked before the fetch.** A tenant's
+// URL install must be forbidden rather than refused later for some other reason —
+// if the permission check sat after the fetch, an ordinary registrant on an open
+// instance would be able to make this server connect to an address of their
+// choosing, which is the request forgery the whole design is arranged against.
+// The address here is documentation space and is carved out, so a fetch that
+// happened would be visible as a different refusal than this one.
+func TestOnlyTheInstancePrincipalMayInstallAnAddonFromAURL(t *testing.T) {
+	f := newAddonLifecycle(t)
+
+	req := addon.URLInstallRequest{
+		URL:    "https://192.0.2.1/gated.tar",
+		SHA256: strings.Repeat("ab", 32),
+	}
+	_, err := f.host.InstallFromURL(t.Context(), f.tenant, req)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("a tenant's URL install answered %v, want forbidden — and anything "+
+			"other than forbidden means this server was asked to make a request on "+
+			"the word of somebody who may not install add-ons", err)
+	}
+	if f.host.Len() != 0 {
+		t.Fatal("a refused URL install started an add-on")
+	}
+
+	// The principal gets past the gate and is stopped by the address policy
+	// instead, which is the pair of facts this asserts: the permission is what
+	// decides who may ask, and the address policy is what decides where.
+	_, err = f.host.InstallFromURL(t.Context(), f.principal, req)
+	if errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("the instance principal's URL install was forbidden: %v", err)
+	}
+	var ve domain.ValidationErrors
+	if !errors.As(err, &ve) {
+		t.Fatalf("the principal's URL install answered %v, want a refusal naming a "+
+			"bound: 192.0.2.0/24 is documentation space and is not dialled", err)
+	}
+	if ve[0].Code != "fetch_address_refused" {
+		t.Errorf("the principal's URL install was refused with %q, want the address "+
+			"policy — a refusal naming the wrong bound is one an operator cannot act on",
+			ve[0].Code)
+	}
+	if f.host.Len() != 0 {
+		t.Fatal("a refused fetch installed something")
+	}
+}

@@ -104,6 +104,15 @@ import (
 // The two remaining zeros — `addon_identity_links` and `session.minted_by_addon` —
 // stay absent for M65's own reason and not for this one: the sample add-on holds no
 // `session.mint`, so a link would still be a sign-in that did not happen.
+//
+// **M68.6 turns the install's absent audit record into a row of its own**, and the
+// row asserts the absence rather than explaining it away. The milestone adds a
+// second install shape — a URL and a digest — and the demo shows the *control*
+// without ever using it: the control is markup, so what asserts it is a template
+// test in internal/ui rather than a count here, and what a count can say is that
+// this instance has fetched and installed nothing. It must stay able to say that.
+// A demo that dialled out to fill a page would be making a scheduled outbound
+// request nobody agreed to, on the one instance strangers are invited to inspect.
 
 // demoFeature is one thing the demo must show, and the query that proves it does.
 type demoFeature struct {
@@ -1347,6 +1356,35 @@ func demoCoverage() []demoFeature {
 			Shows: "the Add-on manager's detail page with three declared settings " +
 				"carrying values somebody picked, and a secret that is not set, " +
 				"which is the state that field has to render",
+		},
+		{
+			// M68.6's install-from-a-URL, and this row is about what the demo does
+			// **not** do.
+			//
+			// The control is on the page unconditionally — it is markup, and
+			// `TestTheInstallControlOffersBothShapes` in internal/ui is what asserts
+			// both shapes render, because a rendered form is not a count and no query
+			// here can be about one. What a query *can* be about is whether this
+			// instance has ever fetched and installed anything, and the answer must
+			// be no: the demo has nothing to fetch from, and a seeder that dialled out
+			// to make a page look busier would be a scheduled outbound request nobody
+			// asked for and docs/SECURITY.md's egress row does not list.
+			//
+			// So it is the zero row M67's paragraph above predicted, kept zero for a
+			// second reason now that the capability exists. `addon.installed` is
+			// still absent because the demo's module arrives with the image, and
+			// after this milestone it is *also* absent because nothing here fetches.
+			// Seeding one would be a record of an install that did not happen, in the
+			// one log whose whole value is that it is not fabricated.
+			Milestone: "M68.6", Feature: "No install this instance performed, and no fetch",
+			Query: `SELECT count(*) FROM audit_logs
+			        WHERE action IN ('addon.installed', 'addon.removed')`,
+			MaxIsZero: true,
+			Shows: "the install control in both its shapes — an upload, and a URL " +
+				"with the digest beside it — over an instance whose add-on came " +
+				"with the image. A row here would mean the demo reached out to " +
+				"somebody's server, or that somebody wrote a record of an install " +
+				"that never happened",
 		},
 	}
 }

@@ -29,6 +29,62 @@ migrations run at boot.
 
 ### Added
 
+- **A module can arrive from a URL, with a digest you supply.**
+
+  Installing an add-on no longer means having its files on the machine you are
+  sitting at. The install control on the Add-on manager, and
+  `POST /api/v1/addons`, now take a **bundle URL** and the **`sha256` that
+  bundle must hash to** as an alternative to the two file parts. Uploading still
+  works exactly as it did, as does placing a directory in
+  `LINKCTRL_ADDONS_DIR` and restarting; all three produce the same add-on, and
+  from the digest check onward they are one code path.
+
+  A bundle is a **`.tar`, a `.tar.gz` or a `.zip`** holding `addon.json` and the
+  module it names, and nothing else. One object, because a manifest and a module
+  fetched separately could come from two different moments — and because it is
+  what makes the next sentence structural rather than a promise.
+
+  Ship whichever container your release pipeline already emits. **The file's
+  name plays no part**: what a bundle is comes from its leading bytes, so a
+  `.tar.gz` that is really a zip installs and a `.tar` that is really an error
+  page is refused. All three carry the same rule about what may be inside —
+  **exactly two plain files with plain names**, so no directory, no symbolic
+  link, no path and no repeated name — and a compressed bundle is bounded a
+  second time on what it may amount to once opened, at the smaller of 32 MiB and
+  fifty times what was fetched. That figure is where decompression **stops**, so
+  a container expanding by more than a module plausibly does is refused
+  part-unpacked rather than unpacked and then declined, and a small archive is
+  never refused for a ratio that is really its padding.
+
+  **The digest is yours and never the URL's.** It covers the whole bundle, it is
+  checked before an archive reader or a JSON parser is pointed at the bytes, and
+  nothing is written unless it matches. A checksum published beside a module
+  proves nothing: whoever can serve the one can serve the other. What this
+  bounds is that the bundle is the one you meant — it cannot make a digest you
+  copied off the same page mean anything, and the install form says so where you
+  are about to paste them. Publisher identity, in a module store, is what would
+  answer that; this is the foundation it goes on top of.
+
+  **Where the fetch can reach is not configurable.** `https` only. Addresses are
+  checked after the name resolves, on every address it resolves to and on every
+  hop, against the same globally-routable-unicast policy an add-on's own fetch
+  meets — so a URL install cannot be used to make your server probe loopback,
+  link-local, a cloud metadata service or a private range. A redirect that
+  leaves the origin you typed is not followed. Ten seconds for the whole
+  transfer, 32 MiB at most: a large module over a slow link should be uploaded
+  instead, where the bytes travel on your own request.
+
+  **A refusal says which bound it hit** — a bad address, a redirect off the
+  origin, a status that was not `200`, a digest that did not match, an archive
+  that is not a bundle, an archive that unpacks to too much — rather than
+  telling you to check a digest that is fine.
+
+  This needs `addons.manage`, like every other add-on lifecycle operation, and
+  is in the instance-wide audit log the same way; the server log adds one line
+  naming the origin the module came from. `docs/SECURITY.md` states the trade in
+  full: you are trusting the URL's host to serve the bytes your digest names,
+  and the digest is what makes that a bounded trust rather than an unbounded one.
+
 - **An add-on can reach outward, and only where the operator pointed it.**
 
   Until now nothing an add-on could import touched the network, which meant the
@@ -243,13 +299,13 @@ migrations run at boot.
   that could install an add-on would carry whatever that add-on's own manifest
   declares, which is a reach nothing about the key bounds.
 
-  **A module is uploaded, never fetched.** `POST /api/v1/addons` takes a
-  `multipart/form-data` body carrying the `.wasm` and the `addon.json` that
-  describes it, at most 32 MiB together. There is no field naming a URL for the
-  server to download from, and there will not be one. The manifest is parsed and
-  the module is checked against the manifest's digest **before anything is
-  written to disk**, so bytes that are not the bytes the manifest describes never
-  reach the directory this instance executes from. An install spends
+  **A module is uploaded.** `POST /api/v1/addons` takes a `multipart/form-data`
+  body carrying the `.wasm` and the `addon.json` that describes it, at most
+  32 MiB together. The manifest is parsed and the module is checked against the
+  manifest's digest **before anything is written to disk**, so bytes that are not
+  the bytes the manifest describes never reach the directory this instance
+  executes from. *(This paragraph said there is no field naming a URL and there
+  will not be one; the entry below adds one, and neither has been released.)* An install spends
   `LINKCTRL_UPLOAD_RATE_PER_MIN` — thirty a minute per address, on top of the API
   limit, and **the same bucket a QR code's logo upload spends**. Removal carries
   no body and is not charged.

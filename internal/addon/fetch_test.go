@@ -113,6 +113,13 @@ func TestTheAddressPolicyRefusesEverythingOffThePublicInternet(t *testing.T) {
 		{"192.52.193.1", true, "AMT"},
 		{"192.31.196.1", true, "AS112-v4"},
 		{"192.175.48.1", true, "the direct delegation AS112 service"},
+		// F337, closed at M68.6. The one address in this table that no registry
+		// produces: Azure's WireServer is ordinary public IPv4, so it is global
+		// unicast, inside routable space, and reached by no predicate — the exact
+		// shape a denylist misses and an allowlist does not save you from, because
+		// it is inside the allowed space.
+		{"168.63.129.16", true, "Azure's WireServer, which is public IPv4 and is not a destination"},
+		{"168.63.129.15", false, "its neighbour, which is somebody's ordinary host"},
 		{"100::1", true, "the IPv6 discard-only prefix"},
 		{"2001:2::1", true, "IPv6 benchmarking"},
 		{"2001:3::1", true, "AMT over IPv6"},

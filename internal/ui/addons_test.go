@@ -186,3 +186,59 @@ func TestTheDetailPageShowsNoRedirectFiguresForAModuleThatHasNone(t *testing.T) 
 		t.Error("the page says there are no figures for a module that has figures")
 	}
 }
+
+// **Both install shapes are on the manager, and the digest is beside the URL**
+// (M68.6).
+//
+// The page is where the second shape becomes something an evaluator can find:
+// the API had it the moment the field existed, and a capability reachable only by
+// `curl` is one nobody opening this instance will see. What is asserted is the
+// controls and their pairing, because the pairing is the safety property — a
+// reader in a hurry who fills in a URL and not a digest has asked this instance to
+// fetch and execute whatever an address answers with, and the two inputs sitting
+// together in one form is what makes that hard to do by accident.
+//
+// The warning is asserted too, and it is the one sentence on this page no
+// mechanism can replace: a URL and a digest copied from the same web page
+// authenticate nothing.
+func TestTheInstallControlOffersBothShapes(t *testing.T) {
+	body := renderPage(t, "addons", map[string]any{"MaxUpload": "32 MiB"})
+
+	for _, want := range []struct{ needle, why string }{
+		{`name="manifest"`, "M67's upload keeps working unchanged"},
+		{`name="module"`, "M67's upload keeps working unchanged"},
+		{`name="url"`, "a module can arrive from a URL"},
+		{`name="sha256"`, "the operator supplies the digest, never the URL"},
+	} {
+		if !strings.Contains(body, want.needle) {
+			t.Errorf("the install control has no %s control: %s", want.needle, want.why)
+		}
+	}
+
+	// One form for the URL shape, holding both of its fields: the digest cannot be
+	// submitted without the URL and the URL cannot be submitted without the digest,
+	// which is what "beside" has to mean to be worth anything.
+	url := strings.Index(body, `name="url"`)
+	digest := strings.Index(body, `name="sha256"`)
+	if url < 0 || digest < 0 || digest < url {
+		t.Fatalf("the digest field is not after the URL field (%d, %d)", url, digest)
+	}
+	between := body[url:digest]
+	if strings.Contains(between, "</form>") {
+		t.Error("the URL and the digest are in different forms, so one can be sent " +
+			"without the other — which is a request to fetch and execute whatever " +
+			"an address answers with")
+	}
+	if !strings.Contains(body[digest:], "required") {
+		t.Error("the digest field is not required")
+	}
+
+	if !strings.Contains(body, "copied from the same place prove nothing") {
+		t.Error("the page does not say that a URL and a digest from the same page " +
+			"authenticate nothing, which is the one risk here no mechanism removes")
+	}
+	// The upload's own bound is still stated, on the shape it bounds.
+	if !strings.Contains(body, "32 MiB") {
+		t.Error("the install control no longer states its size bound")
+	}
+}

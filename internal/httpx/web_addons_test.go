@@ -394,3 +394,71 @@ func TestEveryFetchOutcomeHasAnOperatorsReading(t *testing.T) {
 		}
 	}
 }
+
+// --- M68.6: the second install shape ------------------------------------------
+
+// **Every bound a URL install can hit words itself, and none of them collapses to
+// *the upload was refused*.**
+//
+// The mechanism is the same one the migrations refusal uses — the field error's
+// own code, never a substring of a message — and the reason there are now
+// fourteen of them rather than one is that they need different things done about
+// them. A refused address means the URL points somewhere private; a digest
+// mismatch means the bundle is not the one you named; a 404 means the release page
+// is wrong. One sentence covering all three is a sentence that helps with none.
+//
+// Both directions, for [TestEveryFetchOutcomeHasAnOperatorsReading]'s reason: a
+// code with no sentence is a blank flash, and a sentence for a code the service
+// cannot produce is one nobody will ever read.
+func TestEveryUrlInstallRefusalWordsWhichBoundBit(t *testing.T) {
+	generic := addonFailureMessage("anything-unrecognised")
+	seen := map[string]bool{}
+	for _, code := range addon.URLInstallCodes {
+		err := domain.ValidationErrors{{Field: "url", Code: code, Message: "detail"}}
+		got := addonFailureCode(err)
+		if got != code {
+			t.Errorf("the service refuses a URL install with %q and the page maps it to "+
+				"%q, so the reader is told the upload was refused when nothing was "+
+				"uploaded", code, got)
+			continue
+		}
+		msg := addonFailureMessage(code)
+		if msg == generic || msg == "" {
+			t.Errorf("%q has no sentence of its own on the page, so an operator meeting "+
+				"it reads %q and cannot act on it", code, msg)
+			continue
+		}
+		if seen[msg] {
+			t.Errorf("%q is worded with a sentence another code already uses; the codes "+
+				"exist because the bounds need different things done about them", code)
+		}
+		seen[msg] = true
+		// Every one of them says the same true thing about state, because the
+		// question an operator has after a refused install is whether anything
+		// landed. Nothing ever does: the digest is checked before the bundle is
+		// parsed and the parse before anything is written.
+		if !strings.Contains(msg, "Nothing was written") {
+			t.Errorf("%q does not say that nothing was written: %q", code, msg)
+		}
+	}
+	// And nothing here widens the migrations refusal or the generic one.
+	if got := addonFailureCode(domain.ValidationErrors{{
+		Field: "module", Code: "checksum_mismatch",
+	}}); got != "invalid" {
+		t.Errorf("an upload's checksum mismatch mapped to %q", got)
+	}
+}
+
+// The refusals are still literals, and a URL install is where that matters most:
+// the field error's message is assembled out of a bundle somebody else served.
+func TestAUrlInstallRefusalNeverRendersWhatTheOriginSent(t *testing.T) {
+	hostile := "<script>alert(1)</script>"
+	err := domain.ValidationErrors{{
+		Field: "url", Code: addon.CodeBundleInvalid,
+		Message: "the bundle holds " + hostile,
+	}}
+	msg := addonFailureMessage(addonFailureCode(err))
+	if strings.Contains(msg, "script") || strings.Contains(msg, hostile) {
+		t.Errorf("the page rendered text that came out of a fetched archive: %q", msg)
+	}
+}

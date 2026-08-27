@@ -105,6 +105,18 @@ var authenticationPackages = []string{
 //
 // `docs/SECURITY.md`'s egress row carries the disclosure, and it is the sixth
 // connection counted there.
+//
+// # M68.6 added a second caller and no second door
+//
+// A URL install fetches an add-on bundle, which is a seventh connection in that
+// row — and `internal/addon/install_url.go` is **not** exempt here and does not
+// need to be. It opens nothing: it builds a request and hands it to the fetcher
+// in `fetch.go`, so the dialling, the address policy and the redirect rule are
+// still one implementation in one file. That is what makes the exemption still a
+// claim about the tree rather than a growing list, and it is why that milestone
+// refactored the fetch into a mechanism with two callers instead of writing a
+// second client. If a later change moves any dialling verb into a second file
+// here, this scan says so before the egress row does.
 func TestTheSecondFactorOpensNoSocket(t *testing.T) {
 	// Files exempt from the scan, by path relative to the package being walked.
 	// One, and it is the diff-with-a-name-beside-it this set was kept empty for:

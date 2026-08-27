@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
@@ -37,10 +38,19 @@ import (
 // file a publisher signed off, which is exactly the substitution
 // internal/addon's staging deliberately avoids.
 //
-// **There is no `url` field and there never will be one here.** See
-// addon.InstallRequest: a field naming somewhere for the server to fetch a module
-// from is the cleanest request forgery this product could offer, because the
-// danger is the request rather than the response.
+// **Since M68.6 there is a second shape, and it is two ordinary fields rather
+// than two files**: `url` and `sha256`. The two shapes are mutually exclusive and
+// the OpenAPI document expresses that as a `oneOf` over two closed objects rather
+// than as a sentence, so a body carrying three of the four fields is refused by
+// the schema as well as by [readAddonInstall].
+//
+// M67's file said there never would be one, and argued server-side request
+// forgery. The argument was real and the stance was nobody's decision (D365): what
+// answers it is internal/addon's address policy — resolution-time refusal of
+// everything outside globally-routable unicast space, on every address a name
+// resolves to and every hop of a redirect — plus a digest the *operator* supplies,
+// never the URL. Neither of those existed when M67 was written. internal/addon/
+// install_url.go is where the whole argument lives; this file only reads fields.
 //
 // # Authorization is the service's, as everywhere else
 //
@@ -54,6 +64,7 @@ import (
 // what a caller sees do not construct a wasm runtime.
 type AddonLifecycle interface {
 	Install(ctx context.Context, actor *auth.Identity, req addon.InstallRequest) (addon.Installed, error)
+	InstallFromURL(ctx context.Context, actor *auth.Identity, req addon.URLInstallRequest) (addon.Installed, error)
 	Remove(ctx context.Context, actor *auth.Identity, name string) (addon.Installed, error)
 }
 
@@ -71,12 +82,12 @@ type AddonAPI struct {
 // because the body is the same summary a removal answers with, a client can
 // compare what it installed against what it later removed without a second call.
 func (a *AddonAPI) Install(w http.ResponseWriter, r *http.Request) {
-	req, err := readAddonUpload(w, r)
+	req, err := readAddonInstall(w, r)
 	if err != nil {
 		WriteError(w, r, err)
 		return
 	}
-	out, err := a.Addons.Install(r.Context(), IdentityFrom(r.Context()), req)
+	out, err := req.install(r.Context(), a.Addons, IdentityFrom(r.Context()))
 	if err != nil {
 		WriteError(w, r, err)
 		return
@@ -105,36 +116,72 @@ func (a *AddonAPI) Remove(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, out)
 }
 
-// addonUploadFields are the two parts, named here so the refusals below and the
-// OpenAPI document cannot drift apart by a spelling.
+// addonInstallFields are the four field names, here so that the refusals below,
+// the dashboard's form and the OpenAPI document cannot drift apart by a spelling.
 const (
 	addonManifestField = "manifest"
 	addonModuleField   = "module"
+	addonURLField      = "url"
+	addonDigestField   = "sha256"
 )
 
-// readAddonUpload reads the two parts out of a multipart body.
+// addonInstall is one install request in whichever of the two shapes arrived.
+//
+// A struct rather than two readers, because the shapes are mutually exclusive and
+// *which one arrived* is a decision that has to be made once, in one place, with
+// both sets of fields in view. Two readers would each have to decide what to do
+// about the other's fields being present, which is the same decision made twice.
+type addonInstall struct {
+	upload  addon.InstallRequest
+	fetch   addon.URLInstallRequest
+	fromURL bool
+}
+
+// install hands the request to whichever service operation it is.
+//
+// On this side of the boundary rather than in the two handlers, so the dashboard
+// and the API cannot come to disagree about which shape means which call — the
+// property m67.md called *no private side door*, extended to the second shape.
+func (i addonInstall) install(
+	ctx context.Context, svc AddonLifecycle, actor *auth.Identity,
+) (addon.Installed, error) {
+	if i.fromURL {
+		return svc.InstallFromURL(ctx, actor, i.fetch)
+	}
+	return svc.Install(ctx, actor, i.upload)
+}
+
+// readAddonInstall reads one install request out of a multipart body, in either
+// shape.
 //
 // Its own reader rather than [readUploadedFile]'s, and the difference is the
 // bound: that one is written around `qr.MaxLogoUploadBytes`, one part, and an
-// image decoder behind it. This carries two file parts, one of them megabytes,
-// and the bound it enforces is [addon.MaxUploadBytes] over the whole body — over
-// the *body*, so a caller cannot send a 30 MiB manifest and a 30 MiB module and
-// have each part pass its own check.
+// image decoder behind it. This carries up to two file parts, one of them
+// megabytes, and the bound it enforces is [addon.MaxUploadBytes] over the whole
+// body — over the *body*, so a caller cannot send a 30 MiB manifest and a 30 MiB
+// module and have each part pass its own check.
+//
+// **One multipart body for both shapes**, and the URL shape's two fields are
+// ordinary form fields inside it rather than a second content type. That keeps one
+// reader and one service call for the dashboard and the API alike, which is what
+// makes the browser form and `curl` provably the same path rather than two paths
+// somebody keeps in step.
 //
 // Nothing here reads a filename. The names of the files on disk are the manifest's
 // business — `addon.json` is this host's constant and the module's name is a
 // validated manifest field — so what a client called its local copy decides
 // nothing, exactly as it decides nothing for a logo.
-func readAddonUpload(w http.ResponseWriter, r *http.Request) (addon.InstallRequest, error) {
-	var out addon.InstallRequest
+func readAddonInstall(w http.ResponseWriter, r *http.Request) (addonInstall, error) {
+	var out addonInstall
 	tooLarge := domain.ValidationErrors{{
 		Field: addonModuleField, Code: "too_large",
 		Message: "an add-on upload is at most " + byteSize(addon.MaxUploadBytes),
 	}}
 	notMultipart := domain.ValidationErrors{{
 		Field: addonModuleField, Code: "invalid",
-		Message: "this endpoint takes a multipart/form-data body carrying a " +
-			addonManifestField + " part and a " + addonModuleField + " part",
+		Message: "this endpoint takes a multipart/form-data body carrying either a " +
+			addonManifestField + " part and a " + addonModuleField + " part, or a " +
+			addonURLField + " field and a " + addonDigestField + " field",
 	}}
 
 	r.Body = http.MaxBytesReader(w, r.Body, addon.MaxUploadBytes)
@@ -158,9 +205,13 @@ func readAddonUpload(w http.ResponseWriter, r *http.Request) (addon.InstallReque
 		}
 		switch name {
 		case addonManifestField:
-			out.Manifest = body
+			out.upload.Manifest = body
 		case addonModuleField:
-			out.Module = body
+			out.upload.Module = body
+		case addonURLField:
+			out.fetch.URL = strings.TrimSpace(string(body))
+		case addonDigestField:
+			out.fetch.SHA256 = strings.TrimSpace(string(body))
 		default:
 			// Refused rather than ignored. A part this endpoint does not know is a
 			// caller who believes something will happen that will not — the same
@@ -168,14 +219,41 @@ func readAddonUpload(w http.ResponseWriter, r *http.Request) (addon.InstallReque
 			// reason: an install is not a place to guess.
 			return out, domain.ValidationErrors{{
 				Field: name, Code: "unknown",
-				Message: "an add-on upload carries a " + addonManifestField + " part and a " +
-					addonModuleField + " part, and nothing else",
+				Message: "an add-on install carries " + addonManifestField + " and " +
+					addonModuleField + " parts, or " + addonURLField + " and " +
+					addonDigestField + " fields, and nothing else",
 			}}
 		}
 	}
-	// The two "required" refusals are the service's, not this reader's: internal/
-	// addon answers them so that a caller gets the same message whichever surface
-	// it came through, and so that this function has one job.
+
+	// **A field submitted empty is a field that was not filled in.** The dashboard
+	// draws two forms and a browser sends only the one that was used, but an
+	// unfilled file input still produces an empty part in some browsers, and a
+	// caller building the body by hand may send four. Emptiness is what the reader
+	// judges, so a blank field never makes a request ambiguous.
+	uploaded := len(out.upload.Manifest) > 0 || len(out.upload.Module) > 0
+	fetched := out.fetch.URL != "" || out.fetch.SHA256 != ""
+	switch {
+	case uploaded && fetched:
+		return addonInstall{}, domain.ValidationErrors{{
+			Field: addonURLField, Code: "exclusive",
+			Message: "an install is an upload or a fetch and not both: send " +
+				addonManifestField + " and " + addonModuleField + ", or " + addonURLField +
+				" and " + addonDigestField,
+		}}
+	case fetched:
+		out.fromURL = true
+		out.upload = addon.InstallRequest{}
+		if out.fetch.URL == "" {
+			return addonInstall{}, domain.ValidationErrors{{
+				Field: addonURLField, Code: "required",
+				Message: "a digest was sent with no URL to fetch",
+			}}
+		}
+	}
+	// The remaining "required" refusals are the service's, not this reader's:
+	// internal/addon answers them so that a caller gets the same message whichever
+	// surface it came through, and so that this function has one job.
 	return out, nil
 }
 

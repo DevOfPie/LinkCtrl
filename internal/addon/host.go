@@ -829,6 +829,14 @@ type Host struct {
 	// it hands no add-on a socket another one opened, and building one per
 	// invocation would build a TLS configuration per request for nothing.
 	fetcher *fetcher
+	// installFetcher is the same mechanism under M68.6's bounds: [MaxUploadBytes]
+	// instead of the response cap an add-on gets, and [InstallFetchTimeout]
+	// instead of the three seconds a discovery document is allowed. A second
+	// *fetcher* and not a second fetch *path* — both drive [fetcher.get], so the
+	// address policy and the redirect rule are one implementation, and only the
+	// two numbers and the origin policy differ. Their files say why each number
+	// is not the other.
+	installFetcher *fetcher
 	// routeDeadline is Options.RouteDeadline with its default applied: how long one
 	// request to an add-on's own route may take. Not any of the redirect bounds and
 	// not derived from one — a page is allowed to be slow in a way a redirect is
@@ -944,6 +952,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	}
 	h.fetcher = newFetcher(fetchTimeoutFrom(opts.FetchTimeout),
 		fetchMaxBytesFrom(opts.FetchMaxBytes), log)
+	// Not configurable, and deliberately: the two knobs an operator turns are the
+	// ones a legitimate identity provider can plausibly need turned, and a bundle
+	// fetch is bounded by the request it runs inside as well. See
+	// [InstallFetchTimeout].
+	h.installFetcher = newFetcher(InstallFetchTimeout, MaxUploadBytes, log)
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
 	// because it is what lets M66 interrupt a module that will not return: a

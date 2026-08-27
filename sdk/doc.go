@@ -22,6 +22,30 @@
 // every manifest field; docs/addon-abi.md documents this ABI and the deprecation
 // policy that governs it.
 //
+// # Publishing the two files as one
+//
+// An operator can upload the pair, or point their instance at a URL. The URL
+// names a **bundle**: a tar, a gzipped tar or a zip holding addon.json and the
+// module it names, and nothing else — no directory entry, no symlink, no path,
+// no duplicate name, no third file. Ship whichever your release pipeline already
+// emits; the host reads the container out of the leading bytes rather than out
+// of the URL, so the file's name is yours to choose.
+//
+//	tar -czf myaddon-1.0.0.tar.gz addon.json myaddon.wasm
+//	sha256sum myaddon-1.0.0.tar.gz
+//
+// Publish that second number **somewhere other than the page the URL is on**.
+// The operator types it beside the URL and the host refuses to write anything
+// unless the bundle hashes to it, so it is the whole of what makes a URL install
+// safe — and a digest an operator reads off the same page as the address they
+// are pasting proves nothing about either.
+//
+// A compressed container is bounded twice by the host — on the wire, and again
+// after it is decompressed — and refused if it expands by more than any module
+// plausibly does. Nothing a build tool produces comes near that, so what it means
+// in practice is that a bundle assembled by hand out of something other than your
+// two files may be turned away for the shape rather than for its size.
+//
 // # What the host grants
 //
 // Only what is in this package. A module is instantiated with no filesystem, no

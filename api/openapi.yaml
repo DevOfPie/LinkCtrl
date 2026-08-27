@@ -140,7 +140,9 @@ tags:
       holds and which no API key can hold at all: an add-on carries whatever
       permissions its own manifest declares, so a credential that could install
       one would have widened its reach past every scope it was issued with. A
-      module arrives in the request body and is never fetched from a URL.
+      module arrives in the request body, or is fetched from a URL the operator
+      types with the digest they expect beside it. Both shapes land at the same
+      address and take the same path from the digest check onward.
   - name: feeds
     description: >
       Whether this instance sends destinations to a third party, and to whom.
@@ -215,12 +217,46 @@ paths:
         the same order and with the same refusals a module placed by hand meets
         at boot.
 
-        **Two parts, and nothing is fetched.** The body is
-        `multipart/form-data` carrying `manifest` and `module`, at most
-        32 MiB together. There is no field naming a URL for the server to
-        download a module from, and there will not be one: the danger of such a
-        field is the request rather than the response, which no validation
-        helps with.
+        **Two shapes, and they are mutually exclusive.** The body is
+        `multipart/form-data`, at most 32 MiB, and it carries either the
+        `manifest` and `module` parts — the module and the `addon.json` that
+        describes it, as files — or the `url` and `sha256` fields, which name a
+        bundle for this instance to fetch. A body carrying fields from both is
+        refused, and the schema below says so rather than this paragraph.
+
+        **What a URL install fetches is one object.** A bundle is a `.tar`, a
+        `.tar.gz` or a `.zip` holding `addon.json` and the module it names, and
+        nothing else; there is no separate manifest fetch, because a manifest
+        and a module fetched separately can come from two different moments.
+
+        **The container is read from the bytes, never from the URL.** An
+        extension is typed by whoever supplied the address, so it is a claim
+        rather than a fact — a `.tar.gz` that is really a zip installs, and a
+        `.tar` that is really an HTML error page is refused as not a bundle. All
+        three carry the same member rule: exactly two plain files with bare
+        names, so no directory entry, no symbolic link, no path and no duplicate
+        name. A compressed bundle is bounded again after it is decompressed, and
+        one that expands implausibly is refused as a decompression bomb.
+
+        **The digest is yours and never the URL's.** `sha256` is what the
+        fetched bundle must hash to, and it is checked before anything inside is
+        parsed. A checksum published beside the module proves nothing — whoever
+        can serve the one can serve the other — so a manifest fetched from the
+        URL is never the only source of its own module's digest. What this
+        bounds is that the bundle is the bundle you meant; it cannot make a
+        digest you copied off the same page mean anything.
+
+        **What the fetch may reach.** https only. Addresses are checked after
+        resolution, on every address a name resolves to, and only globally
+        routable unicast space is dialled — loopback, link-local, private and
+        carrier-grade NAT ranges are refused, which is what makes this something
+        other than a request-forgery endpoint. A redirect that leaves the origin
+        you typed is not followed. Each of those refusals is its own `422` code
+        in the field errors, so a caller can tell a bad address from a bad
+        digest from a bad archive. Until M68.6 this endpoint took no URL at all
+        and said it never would; that stance was nobody's decision, and the
+        address policy and the operator-supplied digest are what answer the
+        argument behind it.
 
         **What it cannot install.** An add-on whose manifest declares migration
         files ships `.sql` alongside its module, and those files are not part of
@@ -258,18 +294,7 @@ paths:
         content:
           multipart/form-data:
             schema:
-              type: object
-              required: [manifest, module]
-              properties:
-                manifest:
-                  type: string
-                  format: binary
-                  description: The add-on's `addon.json`, verbatim.
-                module:
-                  type: string
-                  format: binary
-                  description: >
-                    The `.wasm` the manifest's `sha256` describes.
+              $ref: "#/components/schemas/AddonInstall"
       responses:
         "201":
           description: The add-on is installed and running
@@ -7965,6 +7990,64 @@ components:
           description: Opaque keyset cursor; present when `has_more`.
         has_more: { type: boolean }
 
+    AddonInstall:
+      type: object
+      additionalProperties: false
+      title: An install
+      description: |
+        One install, in one of two shapes, and never in both.
+
+        **An upload** carries `manifest` and `module` as file parts: the add-on's
+        `addon.json` verbatim, and the `.wasm` its `sha256` describes.
+
+        **A fetch** carries `url` and `sha256`: a bundle for this instance to
+        download, and what it must hash to. A bundle is a `.tar`, a `.tar.gz` or
+        a `.zip` holding `addon.json` and the module it names, and which of the
+        three it is comes from its leading bytes rather than from the URL.
+
+        The exclusivity is in the `oneOf` below rather than in this paragraph —
+        each branch requires its own pair and forbids the other's, so a body
+        carrying three or four of these fields matches neither and is refused by
+        the schema as well as by the server.
+      properties:
+        manifest:
+          type: string
+          format: binary
+          description: The add-on's `addon.json`, verbatim.
+        module:
+          type: string
+          format: binary
+          description: The `.wasm` the manifest's `sha256` describes.
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: |
+            Where the bundle is. `https` only, no credentials, and the address it
+            resolves to has to be on the public internet.
+        sha256:
+          type: string
+          pattern: "^[0-9a-fA-F]{64}$"
+          description: |
+            What the fetched bundle must hash to, lowercase hex — the digest of
+            the whole archive, not of the module inside it. Supplied by the operator
+            and never read out of anything this instance fetched. Required
+            whenever `url` is sent: an install that fetched whatever the URL
+            happened to serve would be a request forgery with the answer
+            executed, and this is what stops that.
+      oneOf:
+        - title: An upload
+          required: [manifest, module]
+          not:
+            anyOf:
+              - required: [url]
+              - required: [sha256]
+        - title: A fetch
+          required: [url, sha256]
+          not:
+            anyOf:
+              - required: [manifest]
+              - required: [module]
     Addon:
       type: object
       additionalProperties: false

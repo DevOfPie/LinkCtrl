@@ -143,6 +143,32 @@
       <span class="ml-3 text-xs text-subtle">An add-on runs with whatever its manifest declares. Install one you trust.</span>
     </div>
   </form>
+
+  {{/* ---- the second shape (M68.6) -------------------------------------- */}}
+
+  <div class="mt-6 border-t border-line pt-6">
+    <h3 class="mb-1 text-sm font-medium text-ink">Or fetch it from a URL</h3>
+    <p class="mb-4 text-sm text-muted">This instance downloads the bundle itself, so it must be able to reach the address: it dials public addresses only, and follows no redirect that leaves the origin you typed. A bundle is a <code class="rounded bg-sunken px-1 py-0.5 text-xs">.tar</code>, <code class="rounded bg-sunken px-1 py-0.5 text-xs">.tar.gz</code> or <code class="rounded bg-sunken px-1 py-0.5 text-xs">.zip</code> holding <code class="rounded bg-sunken px-1 py-0.5 text-xs">addon.json</code> and the module it names &mdash; two plain files, no directory &mdash; at most {{.MaxUpload}}, and which of the three it is comes from the file rather than from its name.</p>
+    <form method="post" action="/instance/addons" enctype="multipart/form-data" class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="addon-url" class="block text-sm font-medium text-ink">Bundle URL <span class="text-subtle">(https)</span></label>
+        <input id="addon-url" name="url" type="url" inputmode="url" required placeholder="https://example.com/pageviews-1.0.0.tar.gz"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-sm focus:border-accent focus:outline-none">
+      </div>
+      <div>
+        <label for="addon-sha256" class="block text-sm font-medium text-ink">Expected sha256 <span class="text-subtle">(of the bundle)</span></label>
+        <input id="addon-sha256" name="sha256" type="text" required pattern="[0-9a-fA-F]{64}" maxlength="64" spellcheck="false" autocomplete="off" placeholder="64 hex characters"
+               class="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none">
+      </div>
+      <div class="sm:col-span-2">
+        <p class="text-xs text-warn-ink">The digest is the whole of what makes this safe, and it has to come from somewhere other than the page the URL came from. A URL and a digest copied from the same place prove nothing: whoever can change the one can change the other. Nothing is written until the fetched bytes hash to what you typed.</p>
+      </div>
+      <div class="sm:col-span-2">
+        <button type="submit" class="cursor-pointer rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Fetch and install</button>
+        <span class="ml-3 text-xs text-subtle">The same permission, the same checks, and the same add-on afterwards.</span>
+      </div>
+    </form>
+  </div>
 </div>
 {{end}}
 

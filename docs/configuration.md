@@ -903,12 +903,27 @@ logo spends: [`LINKCTRL_UPLOAD_RATE_PER_MIN`](#rate-limits),
 thirty a minute per address by default, charged on top of the API's own limit.
 That row says why one bucket covers two endpoints of very different sizes.
 
-**What an upload cannot install.** The body carries exactly two parts, `manifest`
-and `module`, at most 32 MiB together, and nothing is ever fetched from a URL. So
-an add-on whose manifest declares `migrations` ships `.sql` files that are not in
-the upload, and it is refused with a message saying so — install that one by
-placing its directory here and restarting. An add-on that owns a schema and
-creates its tables from its own code installs fine.
+**Two shapes at one address, and they are mutually exclusive.** The body carries
+either `manifest` and `module` as file parts, or a `url` and the `sha256` the
+bundle at it must hash to; at most 32 MiB either way — and, for a compressed
+bundle, at most 32 MiB again once it is decompressed. A bundle is a `.tar`, a
+`.tar.gz` or a `.zip` holding `addon.json` and the module it names, as two plain
+files with no directory and no symbolic link; which of the three it is comes from
+the file's leading bytes rather than from the URL's extension.
+
+**A URL install fetches, and where it may reach is not configurable.** `https`
+only, addresses checked after resolution against the same globally-routable-only
+policy an add-on's own fetch meets, no redirect off the origin that was typed,
+and ten seconds for the whole transfer. The digest is supplied by whoever is
+installing and is never read out of anything this instance fetched, which is what
+makes the trust bounded: you are trusting the host to serve the bytes the digest
+names, and nothing else. `docs/SECURITY.md` states that trade in full.
+
+**What neither shape can install.** An add-on whose manifest declares
+`migrations` ships `.sql` files that are in neither the upload nor the bundle,
+and it is refused with a message saying so — install that one by placing its
+directory here and restarting. An add-on that owns a schema and creates its
+tables from its own code installs fine.
 
 **There is no upgrade-in-place.** Installing over a name that is already taken is
 refused; replacing an add-on is a removal and then an install. A name that

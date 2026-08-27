@@ -455,6 +455,11 @@ file. Append a row when you append an entry.
 | [M68.5, the address policy is inverted](#2026-08-26--m685-the-address-policy-is-inverted) | D375: an address is refused unless it is public — the denylist was found short in three of four reviews, why `fec0::/10` made the shape clear, what inverting buys (a range nobody thought of becomes refused rather than reachable) and what it costs |
 | [M68.5, what "globally routable" is, and a rule that refused an instance running no add-ons](#2026-08-26--m685-what-globally-routable-is-and-a-rule-that-refused-an-instance-running-no-add-ons) | D376: the shape D375's inversion took — `2000::/3` and the nine prefixes covering 1.0.0.0 through 223.255.255.255, why the IPv4 half is honestly weaker than the IPv6 half and what that buys anyway, and `address_rule=` as the greppable half of the cost D375 accepted. D377: the route-deadline nesting rule is guarded on `ADDONS_DIR` being set, reversing the comment that deliberately put it outside the guard — it refused to start an instance that runs no add-ons, over a default nobody chose. Also the two hand-copied enumerations of the outcome vocabulary that nothing checked |
 | [M68.5, an object the API said could not exist, and what a refusal costs to log](#2026-08-26--m685-an-object-the-api-said-could-not-exist-and-what-a-refusal-costs-to-log) | D378: `performance` is published when there is a record of **either** kind — `omitzero` and `Observed()` coincided only while the struct held redirect fields alone, and M69's own add-on is the shape that broke it; why the object is right and the sentence was wrong, and the `IsZero()` that makes it one predicate instead of two that agreed by accident. D379: a guest-drivable refusal warns only when the log is the only channel — three sites drop to `Debug`, and the rule explains the four Warns beside them rather than excusing them. D380: the response headers are bounded at 64 KiB and it is not a knob, why the outcome is `connect_failed` rather than `too_large` |
+| [M68.6, a module arrives from a URL, and what an operator's digest is worth](#2026-08-26--m686-a-module-arrives-from-a-url-and-what-an-operators-digest-is-worth) | D381: the URL names an **uncompressed tar bundle** rather than a bare `.wasm` — the shape the milestone's own bullets forced, why a compressed container was refused, and what it costs a publisher. **Taken by the worker rather than put to the owner**, with the stall that would otherwise have followed named as the reason. D382: the fetch became one mechanism with two callers instead of a second client, which is what let the authentication egress scan keep asserting one door. D383: F337 closed here — Azure's WireServer carved out by name, because *the operator named it* is a weaker bound at this door than at M68.5's |
+| [M68.6, three containers and one member rule](#2026-08-26--m686-three-containers-and-one-member-rule) | D384: tar, tar.gz and zip all accepted, superseding the worker's tar-only choice — the member rule (two bare-named plain files, depth zero) applied identically to all three is what makes decompression affordable, plus detection by content, a ratio bound, and zip's own refusals |
+| [M68.6, the numbers under D384, and a bound the standard library already held](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held) | D385: what D384 delegated, decided and written down — the inflated cap as its own constant at the same value as the fetch cap, a ratio of fifty with a one-mebibyte floor and the measurements at both ends, and `bundle_expands` as a fourteenth entry in a closed vocabulary rather than a fourteenth reason to say `bundle_invalid`. Also the fact that made one test expect a different code than it was written to expect: `archive/zip` refuses a member that outruns its own declared size |
+| [M68.6, a ratio that is a bound rather than a verdict](#2026-08-26--m686-a-ratio-that-is-a-bound-rather-than-a-verdict) | D386: [D385](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held)'s two figures become one limit the gzip reader **stops at**, because a ratio checked after `io.ReadAll` had already spent the 32 MiB it existed to save — the argument was right and the code did not meet it. Also: the exact form of the ratio changes from truncating division to a multiplication, the zip's declared sum is checked by subtraction so a crafted `uint64` cannot wrap it, and the two bounds are told apart by a test rather than by their sharing a code
+| [M68.6, two vocabularies held from the end that was open](#2026-08-27--m686-two-vocabularies-held-from-the-end-that-was-open) | D387: the ratio and the install's refusal codes were each argued in one direction and asserted in the other. A ratio bomb small enough to build cheaply is refused by the floor, so `maxBundleRatio` could be lowered to almost anything and stay green — the test that pins it is built inside the window where it binds and writes fifty out as a literal. And `URLInstallCodes` was held against the page's sentences and against nothing on the wire, so a word added to `fetchFailure` would have reached an operator as the generic refusal. D388: the demo bullet named a `demoFeature` row for a claim a SQL count cannot make — amended as a fact, and the shape the demo rule keeps producing |
 
 | [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
 | [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
@@ -40270,3 +40275,394 @@ transport's error *text* matched, which rests a documented outcome on a string G
 change, and would make one word mean two different faults. `configuration.md` says
 which is which.
 
+## 2026-08-26 — M68.6, a module arrives from a URL, and what an operator's digest is worth
+
+### D381 — the URL names a bundle, and the bundle is an uncompressed tar
+
+**Taken by the worker building M68.6, not put to the owner, and that is the first
+thing this entry has to say.** `m68.6.md` settles what the install must *do* and
+leaves the container shape open, and every alternative below is a real choice the
+owner might have made differently. It was decided rather than asked because the
+question arrives in the middle of step 2 and a worker that meets a prompt returns
+it unanswered and stops — which would have parked the milestone on a wire format
+whose alternatives are one file apart while nothing is released. The standing rule
+that covers this is workflow.md's: *an actor deciding on the owner's behalf
+because the loop would otherwise stall* writes the decision down before acting on
+it, and most of all then. Nothing has been tagged, so this is reversible at the
+cost of one file and the sentences that describe it.
+
+**The milestone's own bullets force a container.** Three of them together leave no
+other shape: the bytes arrive over *one* fetch; from the digest check onward the
+path is M67's, which means *the manifest is parsed and the module checked against
+it*, so the manifest arrives too; and *fetching a manifest independently of its
+module* is named under **deliberately not done**, because it makes the pair
+separable. One request that carries a manifest and a module is a container. The
+test the file asks for settles it beyond doubt — *a manifest whose `sha256`
+matches a module the operator did not expect* is a test with nothing to serve
+unless a manifest is being fetched.
+
+**Uncompressed tar, over three alternatives.**
+
+*A JSON envelope with the module base64 inside* was declined by an argument this
+repository had already made, in `internal/httpx/api_addons.go`, for the upload:
+base64 in a document costs a third more bytes and makes the manifest *a string
+inside a document rather than the file a publisher signed off*. That argument does
+not stop applying because the bytes came over HTTP.
+
+*`.tar.gz`*, which is what this project ships its own releases as, was declined for
+one property: a compressed container has to be bounded twice, on the wire and
+after inflation, and a decompression bomb becomes a thing to defend against rather
+than a thing not to have. With no compression layer, `MaxUploadBytes` bounds the
+fetch **and** the unpacked members, because the members of a tar are smaller than
+the tar.
+
+*`.zip`* was declined for the same reason plus a second: it needs an `io.ReaderAt`
+and a central directory, so the reader has more surface than a sequential walk.
+
+**What it costs is a publisher's convenience, and it is stated in the code and in
+`docs/usage.md`**: a `.tar` on a release page is two to three times the `.tar.gz`
+beside it. That is the price of one bound instead of two, and the size cap is 32
+MiB against fixtures of 1.8–3.6 MB, so it buys nobody a refusal they would not
+otherwise have had.
+
+**The digest covers the whole bundle.** That is what makes *a manifest fetched from
+the URL cannot be the sole source of its own module's digest* structural rather
+than promised: there is no separable manifest to be the source of anything.
+
+**Two members, both plain files, both bare names.** A directory, a symlink, a hard
+link, a device and a name with a separator or a `..` in it are each refused by
+name. The reader never touches a filesystem — the members are held in memory and
+handed to M67's own `stage`, which writes them under names it takes from the
+*manifest* — so a hostile bundle cannot choose a path even if one of those
+refusals were wrong. Both defences, deliberately: a defence that is the only one
+is a defence nobody can check.
+
+### D382 — one fetch mechanism with two callers, rather than a second client
+
+`m68.6.md` requires *one fetch path in this product rather than two* and
+`m68.5.md` had already written the seam for it: `fetcher` takes the origin policy
+as an argument and enforces the address policy itself, so *a caller that has no
+allowlist at all still cannot reach 169.254.169.254*.
+
+What the seam did not survive contact with is the **logging**. `fetch` interleaved
+the mechanism with four log lines written in one voice — *an add-on's outbound
+request* — and an install has no add-on and a different thing to tell an operator.
+So the mechanism moved into `fetcher.get`, which logs nothing and returns the
+outcome, the stage it failed at and the error; `fetch` keeps every line it had,
+word for word, and the install path writes its own. A shared line would have had
+to be true of both, which is how a log stops naming what happened.
+
+**The second caller is a second `fetcher` value, not a second fetch path**, and
+the two numbers are why there is a second value at all: the cap is
+`MaxUploadBytes` rather than the 256 KiB response bound, and the timeout is ten
+seconds rather than three. Both are argued at their constants against the same
+ceiling M68.5 was resized against — an install is a request in the application
+tree, so `HTTP_REQUEST_TIMEOUT` cancels the context it runs under, and a bound at
+or above fifteen seconds would never fire. Neither is configurable: an install is
+bounded by the request it runs inside as well, and a third and fourth knob would
+be more to get wrong for no case anybody can name (D380's reasoning, applied
+again).
+
+**This is what let the authentication egress scan keep its one exemption.**
+`internal/auth/egress_test.go` says in as many words that *a second file in
+internal/addon that dials is a second door with its own bounds and fails here
+rather than joining a list*. `install_url.go` opens nothing: it builds a request
+and hands it to `fetch.go`. Had the install written its own client, the honest
+outcome would have been a second exemption and a weaker claim in
+`docs/SECURITY.md`, and the refactor is what avoided paying that.
+
+**The origin policy is `operatorURL`, an empty struct**, and the emptiness is the
+argument M68.5's file predicted: an install is authorized by `addons.manage` and
+by the typing, so there is no configured set to check against and the policy
+permits the origin of the URL it was handed. The redirect rule then does the rest
+— a hop off that origin is refused by `checkRedirect`, exactly as it is for an
+add-on — which is how *the operator typed one address* stays a bound rather than
+becoming an entry point to a chain.
+
+### D383 — F337 closed here, and why this is the door that decides it
+
+[F337](deferred-findings.md) was filed against M68.5 and explicitly **not** a
+finding against it: Azure's WireServer, `168.63.129.16`, is ordinary public IPv4,
+so it is global unicast, inside `routableSpace`, and matched no carve-out. The
+row's own disposition said the question was M68.6's, and the reason is the one
+this milestone is built on — under M68.5 reaching a routable address costs an
+operator writing it into a *setting* on a deployment, and here it costs a paste
+into a form.
+
+**Carved out, `168.63.129.16/32`**, rather than defended. The alternative was to
+argue that the digest and `addons.manage` are enough, and that argument fails on
+what the harm is: the digest decides whether a *response* becomes a module, and
+the harm at a metadata endpoint is the *request*. A refusal that arrives after the
+socket opened is not a refusal. `addons.manage` bounds who may ask and says
+nothing about where, which is precisely the split D375 exists to keep.
+
+**It is the only entry in `carvedOut` that no registry produces**, and that is
+worth naming: every other line traces to an RFC or to IANA's special-purpose
+registry, and this one traces to a cloud vendor allocating a host-agent endpoint
+out of public space. The finding asked for the question to be answered *once, for
+both doors, rather than twice*, and one prefix in the shared list is what that
+looks like. `TestEveryCarvedOutRangeIsInsideRoutableSpaceAndRefused` covers it
+like any other entry, and the address table gains two rows — the address, and its
+neighbour `168.63.129.15`, which is somebody's ordinary host and stays reachable,
+so the carve-out is asserted to be a `/32` rather than a range.
+
+## 2026-08-26 — M68.6, three containers and one member rule
+
+### D384 — all three formats, and the depth limit is what makes that affordable
+
+[D381](#2026-08-26--m686-a-module-arrives-from-a-url-and-what-an-operators-digest-is-worth) recorded the worker's own
+choice of **uncompressed tar**, made mid-step-2 and flagged for the owner because
+it decides what every add-on publisher ships. Put to them; **superseded here**.
+
+**Owner, verbatim: *"Allow all 3 and limit the directory depth that is extracted
+for compressed options as well if it will help defend against exploits."***
+
+So `tar`, `tar.gz` and `zip` are all accepted, and the answer to *does limiting
+depth help* is yes and it is already how the tar reader works: **exactly two
+plain files, bare names, no directory component, no symlink, no traversal** —
+depth zero, which is the strictest form of the bound the owner asked for. What
+this decision does is make that one rule rather than tar's rule, applied
+identically to all three, so a container format cannot be the thing that widens
+what a bundle may contain.
+
+**Why all three is defensible rather than merely accommodating.** The reason to
+pick one was to avoid defending decompression; the reason to pick tar was that
+there is nothing to decompress. Accepting the other two takes that defence on
+deliberately, and the bound that makes it affordable is the member rule: a bomb
+that inflates to gigabytes still has to present exactly two bare-named plain
+files, and the inflated-size cap refuses it before the member rule is even
+reached. Format variety is then a parser question rather than a policy question.
+
+**What it obliges the build to do**, beyond accepting three magic numbers:
+
+- **Detect by content, never by the URL's extension.** An extension is typed by
+  whoever supplies the URL and proves nothing about the bytes; a `.tar.gz` that
+  is a zip is a fact about the file, not an error about the name.
+- **Bound compressed formats twice** — the fetched bytes as now, *and* the
+  inflated bytes — and refuse an implausible expansion ratio rather than only an
+  absolute size, because the absolute cap alone lets a small archive spend the
+  whole budget on CPU.
+- **One member rule for all three**, asserted per format by test, so the tar path
+  and the zip path cannot drift into two policies.
+- **Zip's own defects are refused explicitly**: duplicate member names, a member
+  name carrying any path separator or `..`, and anything that is not a stored or
+  deflated plain file. Zip is the format with the largest parser surface here and
+  it gets the most specific refusals.
+- **A refusal names which bound bit**, as every other refusal at this door does.
+
+**The cost, stated.** Two more parsers at the door where getting bounds right has
+already taken six passes across this milestone and its predecessor, and a
+decompression bomb becomes something this product refuses rather than something
+it cannot receive. That is a real increase in surface, taken knowingly, in
+exchange for a publisher shipping the container their release pipeline already
+emits.
+
+
+## 2026-08-26 — M68.6, the numbers under D384, and a bound the standard library already held
+
+### D385 — the three figures a ratio bound needs, and the code it refuses with
+
+[D384](#2026-08-26--m686-three-containers-and-one-member-rule) settled the policy
+and left three things to the build: *bound the inflated bytes*, *refuse an
+implausible expansion ratio*, and *a refusal names which bound bit*. Each of those
+is a number or a word, none of them is in that entry, and all three are choices a
+later reader would otherwise have to reverse-engineer out of a constant.
+
+**The inflated cap is `MaxUploadBytes`, written as its own constant.** Same value,
+different bound: the fetch cap is about what this host will *download* and this
+one is about what it will *produce*, and a single constant serving both would make
+a future change to either one a silent change to the other. Thirty-two mebibytes
+against fixtures of 1.8 MB to 3.6 MB, so it refuses nothing a publisher ships.
+
+**The ratio is fifty, with a floor of one mebibyte, and both ends are measured.**
+This repository's own fixtures gzip at 3.3 and 3.5 — 1,866,051 bytes to 570,076,
+3,609,321 to 1,027,181 — text-heavy containers reach ten, and deflate's ceiling is
+1032. Fifty is an order of magnitude above the first figure and an order of
+magnitude below the last, which is the only defensible shape for a bound whose
+two ends are both estimates. **The floor is not a softening**: a tar pads every
+member to 512 bytes and ends with 1024 zero bytes, so a bundle holding a small
+module is mostly padding and compresses at twenty or thirty times while amounting
+to nothing at all. Below a mebibyte the ratio is measuring the padding, and a
+bound that refuses legitimate small bundles for a property of the format is worse
+than no bound, because the absolute cost it is protecting against is a megabyte.
+
+**`bundle_expands` is a fourteenth code rather than a fourteenth reason to say
+`bundle_invalid`.** The vocabulary on the install form is closed and a test holds
+it against the sentence the page words for each entry, so adding one is a change
+to a surface and not only to this reader. It earns that: *these bytes are not an
+add-on bundle* and *this is a valid archive and it unpacks to too much* have
+nothing in common for the operator — the first is the wrong URL and the second is
+the right URL and the wrong file — and collapsing them would be exactly the *the
+upload was refused* failure the codes were introduced to end.
+
+**And one fact found rather than decided, recorded because it changed a test's
+expectation.** `archive/zip` enforces a member's declared `UncompressedSize64`: a
+read that takes the decompressed count past it returns `ErrFormat`. So a zip whose
+central directory declares a kilobyte and whose member carries 33 MiB is refused
+as *not a zip* rather than as an expansion, and the test asserting it says so in
+those terms instead of asserting the code it was drafted to expect. What follows
+is that the declared-size check at the central directory is a real bound rather
+than a hint — it is enforced downstream — and that the per-member budget in
+`bundleMembers.read` is a backstop nothing in the suite reaches. That is written
+at the function rather than left to be inferred, because a bound whose tests never
+fire looks like dead code to whoever reads it next, and this one is load-bearing
+precisely when one of the other three stops being true.
+
+
+## 2026-08-26 — M68.6, a ratio that is a bound rather than a verdict
+
+### D386 — the figure the decompressor stops at, and how far that was from what was written
+
+Found by M68.6's reviewer, in the tree
+[D385](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held)
+describes. The comment on `maxBundleRatio` argued, correctly, that *with
+`maxBundleInflated` alone, a two-kilobyte gzip of zeros still buys 32 MiB of
+allocation and the CPU to produce it, for the cost of one small request* — and
+`inflate` read the stream through `io.LimitReader(zr, maxBundleInflated+1)` and
+consulted the ratio afterwards. So the ratio decided *whether to accept* and
+never *what to spend*: a 100 KB gzip inflating to 30 MiB was refused as
+`bundle_expands` having cost the host the whole 30 MiB and `io.ReadAll`'s
+doubling on top of it, and the two-kilobyte bomb the comment names never reached
+the ratio at all, because the absolute cap stopped it first at 32 MiB. The same
+argument was asserted in `docs/SECURITY.md`, in `docs/usage.md` and in D384's
+delegation, which is what makes this a defect rather than a comment to soften:
+four statements of a property, and a fifth place where it was not true.
+
+It was never exploitable — `addons.manage` is an instance-level scope no API key
+can hold, and anybody holding it can already write into the add-ons directory —
+so this is claim accuracy. That is exactly the reason to fix it rather than
+reword it: the argument is the right one, and it costs a subtraction to be true.
+
+**The ratio and the cap become one number, `bundleInflatedLimit`**, computed from
+the fetched size before a byte is inflated: `min(maxBundleInflated, max(floor,
+compressed × 50))`. The gzip reader bounds its read at one past it, so a bomb
+costs this host one byte more than the largest bundle it could have accepted from
+that many fetched bytes — a few kilobytes fetched now buy a mebibyte, not 32 of
+them. The zip reader compares its central directory's declared sum against the
+same number, which is where it was already looking. **One bound, applied at each
+format's earliest opportunity**, replacing one bound applied at the earliest
+opportunity in one format and the latest in the other.
+
+**Three things follow that are choices rather than mechanics.**
+
+*The ratio's exact form changes, by less than two per cent.* `inflated /
+compressed > 50` is truncating division and admits up to 50.99 times; the limit
+is a multiplication and admits fifty. D385 said fifty and the multiplication is
+what says fifty, so this is the figure being met rather than moved — and against
+a bound whose two ends are estimates an order of magnitude apart, two per cent is
+not a number anybody was relying on.
+
+*A refusal can no longer name what was measured, and should not.* A reader that
+stopped does not know what the container would have amounted to, so both bounds
+now say **more than**: *more than 32 MiB* where the cap produced the limit, *more
+than fifty times the bytes it was fetched as* where the ratio did. Which one bit
+is recoverable from the limit itself — equal to the cap or below it — so
+[D385](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held)'s
+two sentences survive under one code, and each of the two now has a test that
+fails if it acquires the other's wording. That gap was real: the shipped absolute
+cap test used a bomb the ratio would have refused anyway, so it would have passed
+with the cap deleted.
+
+*The zip's declared sizes are summed by subtraction.* `declared +=
+f.UncompressedSize64` compared afterwards is a comparison an attacker can wrap —
+two entries declaring most of a `uint64` sum to something small — so the check is
+now `f.UncompressedSize64 > limit - declared`, with `declared` never above the
+limit. Not a route to anything on its own, since `archive/zip` enforces each
+declaration on read and the member budget sits under both, but the line was being
+rewritten and a bound that can be wrapped is not a bound.
+
+**And the floor is now asserted rather than merely argued.** Removing
+`maxBundleRatioFloor` broke nothing in the suite before this milestone: no
+fixture in this repository is small enough for it to govern, because the smallest
+module here is 1.8 MB and the floor is one mebibyte. A bundle unpacking to 600 KB
+from 887 fetched bytes — 695 times, which is a tar's padding and not an intent —
+now asserts that it installs, against `unbundle` directly, since a bundle that
+small cannot carry a module this host could compile and an end-to-end version
+would be a test about the compiler.
+
+
+## 2026-08-27 — M68.6, two vocabularies held from the end that was open
+
+### D387 — a bound is pinned where it binds, and a closed list is closed from both ends
+
+Found by M68.6's second review, in the tree
+[D386](#2026-08-26--m686-a-ratio-that-is-a-bound-rather-than-a-verdict) left. Both
+findings are the same shape and neither is a defect in shipped behaviour: a claim
+that something is *asserted by test* where the test asserts the other half of it.
+
+**The ratio was tested twice and neither test could see it.** Both bombs are a
+couple of kilobytes on the wire, and `bundleInflatedLimit` answers
+`maxBundleRatioFloor` for anything fetched below about 21 KB — so what refused
+them was the floor wearing the ratio's sentence, and `maxBundleRatio` could have
+been lowered to almost any figure with the suite green. The constant only binds
+between roughly 21 KB fetched, where fifty times the fetched size clears the
+floor, and 640 KB, where it reaches the cap.
+
+*So the third test is built inside that window, and fifty is written out.* A test
+that computes its expectation from the constant it is checking asserts that the
+constant equals itself, which is exactly the failure being fixed — `ratioUnderTest
+= 50` is the duplication that makes it an assertion, and it is commented as
+deliberate because a reader tidying it into `maxBundleRatio` would silently undo
+this entry. Two cases one byte apart, at the limit and past it, against `inflate`
+directly: five megabytes of padding is not a tar whatever the ratio says, so an
+end-to-end version could only prove the accepted case went on to be refused for
+something else.
+
+*Its construction is a fixed point, and has to be.* The limit is a multiple of the
+compressed size, so padding a payload to reach the limit changes the limit. Each
+pass sets the padding to what the last pass's compressed size asked for; a byte of
+padding costs a thousandth of a byte compressed, so the gap closes twentyfold a
+pass and five passes land on it exactly. The incompressible head is derived from
+a chained SHA-256 rather than drawn from `crypto/rand`, so that convergence is a
+property of the test and not of the run.
+
+**`URLInstallCodes` was closed against the page and open against the wire.**
+internal/httpx proves every code in the list has a sentence of its own; nothing
+proved every outcome an install can arrive at is *in* the list. It was closed only
+by `fetchFailure`'s switch being what it is, so a word added there — a TLS
+refusal, say, told apart from `connect_failed` — would have reached an operator as
+the page's generic *That did not work*, with every gate green.
+
+*The missing half reads the words out of the source that produces them*, the way
+`internal/audit`'s `TestAllActionsIsExhaustive` does, and for the same reason: a
+hand-written enumeration is the thing that goes stale. `fetchFailure`'s returned
+literals, the `Outcome:` values in `fetcher.get`, and `operatorURL.permits`
+between them are every word an install can end on; the `Code…` constants come out
+of install_url.go the same way. The list is then asserted equal to their union in
+both directions, less two words answered otherwise — `invalid_request`, which the
+install door words as `url_invalid` because that names the field to fix, and `ok`,
+which is not a refusal. `fetch_status` is why the declared constants are parsed
+rather than told apart by their prefix: it begins with `fetch_` and is not an
+outcome at all.
+
+This is the pattern the add-on fetch vocabulary already had from both ends —
+`TestEveryOutcomeTheHostProducesIsInTheVocabulary` and
+`TestEveryFetchOutcomeHasAnOperatorsReading` — applied to the door M68.6 opened.
+
+### D388 — M68.6's demo bullet named a mechanism that cannot do the job
+
+**The bullet as it stood** (`m68.6.md`): *"…the manager's install affordance
+showing both shapes is what the demo gains, and a `demoFeature` row asserts it
+the way M68's does."*
+
+**As amended:** *"…a `demoFeature` row asserts the **absence of a fetch** while
+`internal/ui`'s template test asserts the control renders."*
+
+**The tree fact:** a `demoFeature` is a SQL count. The row written for this
+milestone (`cmd/lctl/demo_coverage_test.go`) counts `addon.installed` and
+`addon.removed` actions with `MaxIsZero`, which asserts that no demo install
+reached the network — the bullet's second half, and a real assertion. It cannot
+assert markup, so the *control renders* half is `internal/ui/addons_test.go`'s.
+
+**A fact and not an assertion, so amended rather than prompted.** Both halves of
+what the bullet requires are met by the tree; what was wrong is the mechanism
+named for one of them, and nobody could have decided differently about whether a
+SQL count can see a template.
+
+**Worth one line beyond the amendment.** The demo rule keeps producing this
+shape: [M68](phase-details/m68.md)'s own row was rejected once for asserting
+rows a seeder writes unconditionally rather than anything a module did, and this
+is the same confusion from the other side — a milestone reaching for
+`demoCoverage()` because it is the named mechanism, for a claim `demoCoverage()`
+is not built to make. The rule is about a feature being *visible* in the demo;
+what proves visibility is not always a query.

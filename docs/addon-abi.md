@@ -796,7 +796,10 @@ were shorter than the default, because on somebody's deployment it is.
 - **Every resolved address is checked at the moment of dialling, against an
   allowlist.** An address is dialled only if it falls in globally-routable unicast
   space — `1.0.0.0/8` through `223.255.255.255` and `2000::/3`, less the ranges
-  carved out inside them — and refused otherwise. Loopback, link-local (the
+  carved out inside them — and refused otherwise. **A handful of addresses are
+  refused from inside that space too**, so routable is necessary and not
+  sufficient: today that is Azure's WireServer at `168.63.129.16`, a metadata
+  endpoint that is not a destination and sits in no private range. Loopback, link-local (the
   metadata service above all), unique-local and the private ranges are refused
   because of that rather than because somebody listed them, and so is a range
   nobody has thought about. It is checked on every address the name resolves to,

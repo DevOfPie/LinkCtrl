@@ -726,7 +726,13 @@ the daily release check. Set
 LINKCTRL_UPDATE_CHECK=false
 ```
 
-and restart. Nothing else in this product opens a socket outwards unless you
+and restart. **Two doors are not covered by the sentence that follows, and both
+arrived in 0.4.0**: an add-on holding `network.fetch` reaches an origin its
+operator named in that add-on's settings, and an **install from a URL** fetches
+whatever address the operator typed at the moment they typed it — the one egress
+here that nothing configures in advance. Both are bounded by the address policy
+in [SECURITY.md](SECURITY.md), and an air-gapped instance meets neither unless
+somebody uses them. Nothing else in this product opens a socket outwards unless you
 configure it (`SMTP_HOST`, `FEED_URL`) or a workspace registers a webhook or a
 custom domain; the full accounting is the *Egress* row of
 [SECURITY.md](SECURITY.md).

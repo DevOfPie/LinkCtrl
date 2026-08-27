@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"time"
 
@@ -444,18 +445,21 @@ func (h *Web) loadAddonDetail(w http.ResponseWriter, r *http.Request) (addonDeta
 	return data, true
 }
 
-// AddonInstall takes the upload the manager's Install control sends.
+// AddonInstall takes whichever of the two install shapes the manager's controls
+// sent.
 //
-// The same two parts the API takes, read by the same reader and handed to the same
+// The same fields the API takes, read by the same reader and handed to the same
 // service. There is no dashboard-only path into the host, which is what m67.md's
-// "no private side door" means and is why this handler is nine lines.
+// "no private side door" means and is why this handler is ten lines — and it is
+// why M68.6's URL shape reached the page by the page sending a field, rather than
+// by anything new being written here.
 func (h *Web) AddonInstall(w http.ResponseWriter, r *http.Request) {
-	req, err := readAddonUpload(w, r)
+	req, err := readAddonInstall(w, r)
 	if err != nil {
 		h.addonRedirect(w, r, "", err)
 		return
 	}
-	out, err := h.AddonAdmin.Install(r.Context(), IdentityFrom(r.Context()), req)
+	out, err := req.install(r.Context(), h.AddonAdmin, IdentityFrom(r.Context()))
 	if err != nil {
 		h.addonRedirect(w, r, "", err)
 		return
@@ -761,17 +765,31 @@ func addonFailureCode(err error) string {
 	}
 }
 
-// addonValidationCode picks the one refusal the install form words specifically.
+// addonValidationCode picks the refusals the install form words specifically.
 //
-// A closed set of one, matched against [addon.CodeMigrationsUnsupported] rather
-// than against a substring of a message: the message is assembled from a manifest
-// and the code is not.
+// A closed set, matched against codes the service exports rather than against a
+// substring of a message: a message is assembled from a manifest, a bundle or an
+// origin's answer, and a code is not. Anything outside the set collapses to
+// `invalid`, which is what keeps this a vocabulary rather than a passthrough.
+//
+// **M68.6 is why the set stopped being one.** A URL install can fail at nine
+// different bounds — the address policy, a redirect, the size cap on the wire,
+// the bound decompression is stopped at, the timeout, the digest, the bundle — and
+// m68.6.md's requirement is that the page say which one bit rather than *the
+// upload was refused*, because every one of them has a different thing for the
+// operator to do next. [addon.URLInstallCodes] is the
+// vocabulary and [addonFailureMessage] words every entry in it; a test holds the
+// two together, so a bound added there without a sentence here is a failing build
+// rather than a blank flash.
 func addonValidationCode(err error) string {
 	var ve domain.ValidationErrors
 	if errors.As(err, &ve) {
 		for _, fe := range ve {
 			if fe.Code == addon.CodeMigrationsUnsupported {
 				return "migrations_unsupported"
+			}
+			if slices.Contains(addon.URLInstallCodes, fe.Code) {
+				return fe.Code
 			}
 		}
 	}
@@ -863,6 +881,65 @@ func addonFailureMessage(code string) string {
 		return "This add-on declares migration files, and an upload carries only " +
 			"the module and its manifest. Install it by placing its directory in " +
 			"LINKCTRL_ADDONS_DIR and restarting. Nothing was written."
+
+	// M68.6's bounds, one sentence each. Every one of them says what to do next,
+	// because a refusal an operator cannot act on is the thing the codes exist to
+	// stop: *the upload was refused* was true of all of these and useful for none
+	// of them. D384 added the last of them — a bundle that is a valid archive and
+	// unpacks to too much is not the same event as a bundle that is not an archive,
+	// and the two need different things done about them.
+	case addon.CodeURLInvalid:
+		return "That is not an address this instance will fetch from. A bundle URL " +
+			"is https, names a host, and carries no username or password. Nothing " +
+			"was written."
+	case addon.CodeDigestInvalid:
+		return "The expected digest is not a sha256. Paste the 64 hex characters " +
+			"sha256sum prints for the bundle file. Nothing was written."
+	case addon.CodeDigestMismatch:
+		return "The bundle at that URL is not the one you named: it does not hash " +
+			"to the digest you gave. Either the digest is wrong or the file at that " +
+			"address is not the file you meant. Nothing was written, and nothing " +
+			"was parsed."
+	case addon.CodeBundleInvalid:
+		return "The bytes hashed correctly and are not an add-on bundle. A bundle " +
+			"is a .tar, a .tar.gz or a .zip holding addon.json and the module it " +
+			"names, as two plain files with no directory, no symlink and nothing " +
+			"else. Nothing was written."
+	case addon.CodeBundleExpands:
+		return "That bundle is compressed and unpacks to far more than it was " +
+			"downloaded as — more than an add-on may be, or at a ratio no module " +
+			"produces. Rebuild it from the two files it should hold, or upload it " +
+			"instead. Nothing was written."
+	case addon.CodeBundleMismatch:
+		return "The bundle's manifest names one module and the bundle carries " +
+			"another. Rebuild it from the directory it describes. Nothing was written."
+	case addon.CodeFetchStatus:
+		return "That URL did not answer with the bundle — the server answered a " +
+			"different status. Check the address in a browser first. Nothing was written."
+	case "fetch_address_refused":
+		return "The name in that URL resolved to an address this instance will not " +
+			"dial: it dials globally-routable addresses only, so loopback, link-local " +
+			"and private ranges are refused. The server log names which rule refused " +
+			"it, under address_rule. Nothing was written."
+	case "fetch_redirect_refused":
+		return "That URL redirected to a different origin, which this instance does " +
+			"not follow. Use the address the bundle is actually served from. Nothing " +
+			"was written."
+	case "fetch_dns_failed":
+		return "The name in that URL did not resolve. Nothing was written."
+	case "fetch_timeout":
+		return "Fetching the bundle took too long and was stopped. A large module " +
+			"over a slow link is what this looks like; upload it instead, where the " +
+			"bytes travel on your own request. Nothing was written."
+	case "fetch_too_large":
+		return "That URL answered with more than an add-on bundle may be. Nothing " +
+			"was written."
+	case "fetch_connect_failed":
+		return "The connection to that address, or its TLS handshake, failed. " +
+			"Nothing was written."
+	case "fetch_origin_refused":
+		return "The request ended up asking an origin other than the one that was " +
+			"typed. Nothing was written."
 	default:
 		return "That did not work, and it changed nothing. The reason is in the server log."
 	}

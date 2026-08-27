@@ -269,6 +269,17 @@ var carvedOut = []netip.Prefix{
 	netip.MustParsePrefix("192.52.193.0/24"),
 	netip.MustParsePrefix("192.31.196.0/24"),
 	netip.MustParsePrefix("192.175.48.0/24"),
+	// **Azure's WireServer, and it is the one entry here that no registry
+	// produces** (F337). 168.63.129.16 is a host-agent and instance-metadata
+	// endpoint reachable from every Azure VM, and Microsoft allocated it out of
+	// ordinary public IPv4 — so unlike 169.254.169.254 it is global unicast,
+	// inside routable space, and refused by nothing above. It is carved out for
+	// the reason the documentation and benchmarking blocks are: it is not a
+	// destination. Closed under M68.6 rather than under M68.5, because a URL
+	// install is the door where *the operator named it* stops being much of a
+	// bound — the naming is a paste into a form rather than a value in a setting
+	// somebody deployed.
+	netip.MustParsePrefix("168.63.129.16/32"),
 	// IANA's IPv6 IETF Protocol Assignments block (RFC 2928), refused whole rather
 	// than entry by entry: everything in it is delegated to the IETF and nothing in
 	// it is a host anybody reaches — Teredo, benchmarking, AMT, AS112-v6, both
@@ -473,10 +484,20 @@ func (s originSet) permits(u *url.URL) (bool, string) {
 }
 
 // fetchRequest is what a guest asked for, decoded and checked.
+//
+// The two header fields are not a guest's: they are set by whichever caller is
+// driving [fetcher.get], because a header is the shape through which a request
+// grows a credential it was not granted or a Host override that defeats the
+// origin check. They carry no JSON tag for that reason — a guest's document
+// cannot reach them.
 type fetchRequest struct {
 	URL    string `json:"url"`
 	Method string `json:"method,omitempty"`
 	Body   string `json:"body,omitempty"`
+
+	// Accept and UserAgent are the whole header set one of these requests carries.
+	Accept    string `json:"-"`
+	UserAgent string `json:"-"`
 }
 
 // fetchResponse is what comes back. It mirrors abi's FetchResponse record field
@@ -595,26 +616,69 @@ func (f *fetcher) checkRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// fetch makes one outbound request, or says why it did not.
+// rawResponse is one outbound exchange as the wire produced it, before anybody
+// encodes it for a guest.
 //
-// It never returns an error: every way this can fail is one of
-// [abi.FetchOutcomes], because the whole point of that vocabulary is that a guest
-// branches on it and an operator reads the same word off a counter. The host's own
-// log carries the detail, which is where a URL an add-on chose belongs.
-func (f *fetcher) fetch(ctx context.Context, addon string, req fetchRequest, policy originPolicy) fetchResponse {
+// [fetcher.get] is the mechanism and this is what it hands back. Body is bytes
+// rather than a string because the second caller — M68.6's URL install — hashes
+// them and unpacks them, and turning a `.wasm` into a string to turn it back
+// would be a copy of a module for nothing.
+type rawResponse struct {
+	// Outcome is a word from [abi.FetchOutcomes], whatever happened.
+	Outcome string
+	// Stage says how far the exchange got, so a caller can word its own log line
+	// without re-deriving it from the error. One of the stage constants below.
+	Stage       string
+	Status      int
+	ContentType string
+	Body        []byte
+	// Refusal is set when the address policy is what stopped the dial, so a
+	// caller can log `address_rule=` without unwrapping anything.
+	Refusal *addressRefusal
+}
+
+// The stages one exchange passes through. A caller logs from these rather than
+// from the error text, because two of the failures below carry no error at all.
+const (
+	stageRequest = "request" // refused before anything was dialled
+	stagePolicy  = "policy"  // the origin was not one the caller authorized
+	stageConnect = "connect" // the exchange did not complete
+	stageRead    = "read"    // the body did not finish arriving
+	stageCap     = "cap"     // the body was larger than this caller carries
+	stageDone    = "done"
+)
+
+// get makes one outbound request under this host's bounds and says what came
+// back.
+//
+// **This is the whole of the mechanism and there is exactly one of it**, which is
+// what m68.6.md means by *one fetch path in this product rather than two*: the
+// address policy, the redirect rule, the timeout and the byte cap are enforced
+// here for an add-on's own fetch and for an operator's URL install alike, and a
+// bound tightened here tightens for both. What differs between the two is what a
+// [fetcher] was built with — the timeout and the cap — and which [originPolicy]
+// it is handed.
+//
+// It logs nothing. Its two callers describe what they were doing in their own
+// words — *an add-on's outbound request*, *an install* — and a shared line would
+// have to be true of both, which is how a log stops naming what happened. The
+// error is returned for the caller to put in that line; [rawResponse.Outcome] and
+// [rawResponse.Stage] are what it branches on.
+func (f *fetcher) get(
+	ctx context.Context, req fetchRequest, policy originPolicy,
+) (*url.URL, rawResponse, error) {
 	u, why := checkFetchRequest(req)
 	if why != "" {
-		f.log.Debug("refused an add-on's outbound request",
-			slog.String("addon", addon), slog.String("reason", why))
-		return fetchResponse{Outcome: "invalid_request"}
+		return u, rawResponse{Outcome: "invalid_request", Stage: stageRequest}, errors.New(why)
 	}
 	if ok, outcome := policy.permits(u); !ok {
-		return fetchResponse{Outcome: outcome}
+		return u, rawResponse{Outcome: outcome, Stage: stagePolicy}, nil
 	}
 
-	// The host's timeout *or* what is left of the invocation's, whichever ends
-	// first — which is what makes "a fetch spends the call's budget" true rather
-	// than a sentence in a document. A guest cannot buy time by fetching.
+	// The host's timeout *or* what is left of the caller's, whichever ends first —
+	// which is what makes "a fetch spends the call's budget" true rather than a
+	// sentence in a document. A guest cannot buy time by fetching, and an install
+	// cannot outlive the request that asked for it.
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
@@ -628,44 +692,32 @@ func (f *fetcher) fetch(ctx context.Context, addon string, req fetchRequest, pol
 	}
 	hr, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
-		return fetchResponse{Outcome: "invalid_request"}
+		return u, rawResponse{Outcome: "invalid_request", Stage: stageRequest}, err
 	}
 	// The whole header set, and it is the host's. An add-on names no header: a
 	// header is the shape through which a request grows a credential it was not
 	// granted, a Host override that defeats the origin check, or a cookie nobody
 	// declared a prefix for. What an OIDC exchange needs is exactly these.
-	hr.Header.Set("Accept", "application/json")
-	hr.Header.Set("User-Agent", "LinkCtrl/"+build.Get().Version+" (+add-on "+addon+")")
+	hr.Header.Set("Accept", req.Accept)
+	hr.Header.Set("User-Agent", req.UserAgent)
 	if method == http.MethodPost {
 		hr.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
 	resp, err := f.client.Do(hr)
 	if err != nil {
-		outcome := fetchFailure(err)
-		// An address refusal gets its own line and its own key, and D375 is why:
-		// the policy is an allowlist, so it will one day refuse an origin that was
-		// perfectly legitimate, and the operator on the other end of that has only
-		// a name that will not resolve to go on. `address_rule=` is what they grep
-		// for — docs/operations.md says so in as many words — and it names which
-		// rule refused, not merely that one did.
+		out := rawResponse{Outcome: fetchFailure(err), Stage: stageConnect}
+		// An address refusal is handed back separately rather than left for the
+		// caller to unwrap, and D375 is why: the policy is an allowlist, so it will
+		// one day refuse an origin that was perfectly legitimate, and the operator
+		// on the other end of that has only a name that will not resolve to go on.
+		// `address_rule=` is what they grep for — docs/operations.md says so in as
+		// many words — and both callers have to be able to write it.
 		var refusal *addressRefusal
 		if errors.As(err, &refusal) {
-			f.log.Warn("this host refused to dial an address an add-on's request resolved to",
-				slog.String("addon", addon),
-				slog.String("origin", originString(u)),
-				slog.String("outcome", outcome),
-				slog.String("address", refusal.addr.String()),
-				slog.String("address_rule", refusal.rule),
-				slog.String("reason", refusal.why))
-			return fetchResponse{Outcome: outcome}
+			out.Refusal = refusal
 		}
-		f.log.Warn("an add-on's outbound request did not complete",
-			slog.String("addon", addon),
-			slog.String("origin", originString(u)),
-			slog.String("outcome", outcome),
-			slog.Any("error", err))
-		return fetchResponse{Outcome: outcome}
+		return u, out, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -673,31 +725,79 @@ func (f *fetcher) fetch(ctx context.Context, addon string, req fetchRequest, pol
 	// the cap" is distinguishable from a body that happened to end there.
 	read, err := io.ReadAll(io.LimitReader(resp.Body, f.maxBytes+1))
 	if err != nil {
-		outcome := fetchFailure(err)
+		return u, rawResponse{Outcome: fetchFailure(err), Stage: stageRead}, err
+	}
+	if int64(len(read)) > f.maxBytes {
+		return u, rawResponse{Outcome: "too_large", Stage: stageCap}, nil
+	}
+
+	return u, rawResponse{
+		Outcome:     abi.FetchOK,
+		Stage:       stageDone,
+		Status:      resp.StatusCode,
+		ContentType: resp.Header.Get("Content-Type"),
+		Body:        read,
+	}, nil
+}
+
+// fetch makes one outbound request on an add-on's behalf, or says why it did not.
+//
+// It never returns an error: every way this can fail is one of
+// [abi.FetchOutcomes], because the whole point of that vocabulary is that a guest
+// branches on it and an operator reads the same word off a counter. The host's own
+// log carries the detail, which is where a URL an add-on chose belongs.
+func (f *fetcher) fetch(ctx context.Context, addon string, req fetchRequest, policy originPolicy) fetchResponse {
+	req.Accept = "application/json"
+	req.UserAgent = "LinkCtrl/" + build.Get().Version + " (+add-on " + addon + ")"
+	u, raw, err := f.get(ctx, req, policy)
+	switch raw.Stage {
+	case stageRequest:
+		f.log.Debug("refused an add-on's outbound request",
+			slog.String("addon", addon), slog.String("reason", err.Error()))
+	case stageConnect:
+		if raw.Refusal != nil {
+			f.log.Warn("this host refused to dial an address an add-on's request resolved to",
+				slog.String("addon", addon),
+				slog.String("origin", originString(u)),
+				slog.String("outcome", raw.Outcome),
+				slog.String("address", raw.Refusal.addr.String()),
+				slog.String("address_rule", raw.Refusal.rule),
+				slog.String("reason", raw.Refusal.why))
+			break
+		}
+		f.log.Warn("an add-on's outbound request did not complete",
+			slog.String("addon", addon),
+			slog.String("origin", originString(u)),
+			slog.String("outcome", raw.Outcome),
+			slog.Any("error", err))
+	case stageRead:
 		f.log.Warn("an add-on's outbound request failed while reading the body",
 			slog.String("addon", addon),
 			slog.String("origin", originString(u)),
-			slog.String("outcome", outcome),
+			slog.String("outcome", raw.Outcome),
 			slog.Any("error", err))
-		return fetchResponse{Outcome: outcome}
-	}
-	if int64(len(read)) > f.maxBytes {
+	case stageCap:
+		// **The body comes back whole or not at all.** Truncating would hand an
+		// add-on a JSON document that fails to parse and let its author blame their
+		// own code.
 		f.log.Warn("an add-on's outbound request answered more than this host will carry",
 			slog.String("addon", addon),
 			slog.String("origin", originString(u)),
 			slog.Int64("cap_bytes", f.maxBytes))
-		return fetchResponse{Outcome: "too_large"}
+	}
+	if raw.Stage != stageDone {
+		return fetchResponse{Outcome: raw.Outcome}
 	}
 
 	out := fetchResponse{
-		Outcome:     abi.FetchOK,
-		Status:      resp.StatusCode,
-		ContentType: resp.Header.Get("Content-Type"),
+		Outcome:     raw.Outcome,
+		Status:      raw.Status,
+		ContentType: raw.ContentType,
 	}
 	// The same pair HTTPRequest carries, and the same function: a JSON document is
 	// UTF-8 and arrives as text, and anything that is not is base64 rather than a
 	// string with replacement characters in it.
-	out.Body, out.BodyBase64 = EncodeRequestBody(read)
+	out.Body, out.BodyBase64 = EncodeRequestBody(raw.Body)
 	return out
 }
 

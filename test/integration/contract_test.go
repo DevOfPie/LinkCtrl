@@ -1300,6 +1300,35 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.uploadParts("POST", p+"/addons", map[string][]byte{
 		"manifest": manifest, "module": module,
 	}, http.StatusConflict, true)
+	// --- and the second shape at the same address (M68.6) --------------------
+	//
+	// What is replayed here is the *document*: that the endpoint takes a `url` and
+	// a `sha256` instead of the two file parts, that the two shapes are exclusive
+	// in the schema rather than in prose, and that a refused fetch is a 422 with
+	// field errors the document describes. What is **not** replayed is a fetch that
+	// succeeds — this instance dials globally-routable addresses only, so a test
+	// server on loopback is refused by the address policy at dial time, which is
+	// the policy working rather than a gap. The fetch itself is driven against a
+	// real origin in internal/addon, where the address check is a field a test can
+	// relax without relaxing the policy.
+	//
+	// So the address below is a documentation range: it parses, it resolves to
+	// itself, and it is carved out — which makes this one call an assertion about
+	// the schema *and* about the bound.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"url":    []byte("https://192.0.2.1/contract.tar"),
+		"sha256": []byte(strings.Repeat("ab", 32)),
+	}, http.StatusUnprocessableEntity, true)
+	// Both shapes at once is refused, and `checkRequest` is false because that is
+	// exactly what the document's `oneOf` refuses: validating the request against
+	// the spec would fail before the server ever answered, which proves the schema
+	// and not the handler. Both are worth having and this is the one that is about
+	// the server.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": module,
+		"url":    []byte("https://192.0.2.1/contract.tar"),
+		"sha256": []byte(strings.Repeat("ab", 32)),
+	}, http.StatusUnprocessableEntity, false)
 	// The manager's reads and its two writes (M68), against the module that is
 	// installed right now. Every one of them is replayed against the document, which
 	// is what the inherited *every UI feature has API support* rule buys here: the
