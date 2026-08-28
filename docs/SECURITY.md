@@ -1010,8 +1010,13 @@ above.
   any module holding `session.mint`, is two parties: the identity provider, whose
   assertion this instance acts on for whoever has connected that identity here;
   and the add-on's release, which you authorize by typing a `sha256` the install
-  refuses to proceed without — **read it from the release's `SHA256SUMS` — **which does not exist yet**: `LinkCtrl-OIDC` has no tag and no release as of 0.4.0's development, so until one is cut the digest comes from the `addon.json` shipped beside the module and an operator verifies it against a build they made themselves and not
-  from the page the link was on**. What you do *not* take on is a new way in for
+  refuses to proceed without — **read it from the release's own `SHA256SUMS` and
+  not from the page the link was on**. `v0.1.0` is the first release. It also
+  publishes build provenance over the module's digest, naming the workflow, the
+  tag and the commit that produced it, which `gh attestation verify oidc.wasm
+  --repo DevOfPie/LinkCtrl-OIDC` checks — **that question is yours to ask before
+  you install**, because this instance enforces the digest you typed and knows
+  nothing about who built the bytes behind it. What you do *not* take on is a new way in for
   anybody the provider vouches for: an assertion for an external identity nobody
   has connected mints nothing, the connection is written only while the person it
   belongs to is signed in here in their own browser, and there is no matching on

@@ -1273,7 +1273,7 @@ The first-party authentication add-on is
 [`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC): an OpenID
 Connect relying party, published separately, consuming only this product's
 published SDK. Its own README is what tells you which settings it declares. What
-belongs here is what running one costs *you*, and it is four things.
+belongs here is what running one costs *you*, and it is five things.
 
 **What you are trusting.** Two parties and no more. The identity provider, which
 decides who somebody is — an assertion it makes is an assertion this instance
@@ -1281,9 +1281,22 @@ acts on, for whoever has connected that identity to an account here. And the
 add-on's release: you give the Add-on manager a bundle and a `sha256`, this
 instance refuses to write anything that does not hash to what you typed, and the
 manifest inside then names the module's own digest, which is checked again before
-anything is instantiated. **Read the digest from the release's `SHA256SUMS` where one exists. **`LinkCtrl-OIDC` has no release yet** — no tag, no published artifact — so today the digest is the one its `addon.json` names and the only way to confirm it independently is to rebuild the module
-rather than from wherever you found the link** — a URL and a digest copied off
-the same page authenticate nothing.
+anything is instantiated. **Read the digest from the release's own `SHA256SUMS`,
+not from wherever you found the link** — a URL and a digest copied off the same
+page authenticate nothing. `v0.1.0` is the first release, and its bundle is
+`linkctrl-oidc-0.1.0.tar.gz`.
+
+The release also publishes **build provenance**, so you can ask who built the
+module rather than only whether it is the one somebody named. The attestation is
+over the module's digest and says which workflow, which tag and which commit
+produced it:
+
+```sh
+gh attestation verify oidc.wasm --repo DevOfPie/LinkCtrl-OIDC
+```
+
+Nothing on this instance checks that for you: the digest is what the install
+enforces, and the attestation is a question you ask GitHub before you type one.
 
 **What happens when the provider is down.** Local sign-in is unaffected: a
 password and a second factor are this instance's own and reach no other machine.

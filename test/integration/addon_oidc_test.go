@@ -3,10 +3,16 @@
 package integration
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"html"
 	"io"
 	"log/slog"
@@ -17,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -44,14 +51,15 @@ import (
 //
 // Nothing in it is a fixture of this repository's. The module is
 // `DevOfPie/LinkCtrl-OIDC` — a different repository, published to the module
-// proxy, consuming only the SDK this repository publishes — rebuilt by
-// `make oidc-fixture` into the exact artifact its release names, and installed
-// under the exact manifest that release ships. The provider is dex, in
-// docker-compose.integration.yml, pinned by digest, and it speaks the real
-// protocol: real discovery, real PKCE, a real `client_secret_post` exchange, a
-// real RS256 ID token and a real key set. Every other add-on test in this
-// package loads a module written to make an assertion; this one loads a module
-// written to sign somebody in, and asks whether it can.
+// proxy, consuming only the SDK this repository publishes — and what is installed
+// is the artifact its **release** published, downloaded by `make oidc-fixture`,
+// checked against the digest that release's `SHA256SUMS` carries, and admitted
+// only once the source at the same tag rebuilds to it byte for byte. The
+// provider is dex, in docker-compose.integration.yml, pinned by digest, and it
+// speaks the real protocol: real discovery, real PKCE, a real
+// `client_secret_post` exchange, a real RS256 ID token and a real key set. Every
+// other add-on test in this package loads a module written to make an assertion;
+// this one loads a module written to sign somebody in, and asks whether it can.
 //
 // # What is emulated, and what is not
 //
@@ -111,6 +119,21 @@ const (
 
 	oidcFixtureDir = "testdata/oidc"
 	oidcCACert     = "testdata/idp/tls/idp.crt"
+
+	// The release this fixture *is*: `DevOfPie/LinkCtrl-OIDC` v0.1.0, published
+	// 2026-08-28 by its own workflow from the tag, with a SLSA build provenance
+	// attestation over the module.
+	//
+	// The three values below are that release's published facts — the tag, the
+	// line its `SHA256SUMS` carries for the bundle, and the module digest its
+	// `addon.json` names — and they are deliberately a **second** copy of what
+	// scripts/oidc-fixture.sh pins. Two copies is what makes this an assertion
+	// rather than a variable: a pin moved without the release moving fails here,
+	// and so does a release re-cut over the same tag.
+	oidcReleaseTag          = "v0.1.0"
+	oidcReleaseBundle       = "linkctrl-oidc-0.1.0.tar.gz"
+	oidcReleaseBundleSHA256 = "68f2d0c5794a042e28868efa2d01eb64fe56d97f888b08f04fdf0290d9515c02"
+	oidcReleaseModuleSHA256 = "695385a1a796a689ad2b3b4f910f93c102adfe304728c5081ed215837cb4477e"
 )
 
 // oidcFixture is a stock instance with the released OIDC add-on installed, and a
@@ -757,6 +780,122 @@ func TestTheOIDCAddonMayBeUsed(t *testing.T) {
 	if !strings.Contains(licence, "Permission is hereby granted, free of charge") {
 		t.Errorf("the add-on's LICENSE carries no grant:\n%s", licence)
 	}
+}
+
+// The release is verifiable end to end, which is m69.md's fourth bullet and the
+// one this acceptance test could not satisfy until `LinkCtrl-OIDC` cut one.
+//
+// The chain has four links and every one of them is compared here rather than
+// assumed:
+//
+//  1. **The checksummed artifact.** The bundle on disk hashes to the line the
+//     release's own `SHA256SUMS` carries — the digest an operator types beside
+//     the URL in the Add-on manager, and the one M68.6's install refuses to
+//     proceed without.
+//  2. **The bundle holds what it says it holds.** It unpacks to exactly a
+//     manifest and a module, and both are byte-identical to the two files this
+//     instance loaded. Nothing about the fixture is a repackaging.
+//  3. **The manifest names the module's digest**, and that digest is the
+//     published one rather than one computed from whatever was on disk.
+//  4. **The loader verifies it on install.** The instance in every other test in
+//     this file loaded that manifest beside that module, which is the check
+//     running for real; that it *refuses* a module the manifest does not
+//     describe is asserted in internal/addon, where the refusal lives.
+//
+// What is not asserted here is the provenance attestation. It is published — over
+// the module's digest, naming the workflow, the tag and the commit — and
+// verifying it needs `gh attestation verify` against Sigstore, which is a
+// credentialled network call this suite has no business making. `docs/SECURITY.md`
+// tells the operator to make it; scripts/oidc-fixture.sh proves the weaker thing
+// a test can prove offline, which is that the source at this tag rebuilds to the
+// module the attestation is over.
+func TestTheOIDCReleaseIsVerifiableEndToEnd(t *testing.T) {
+	bundle := mustFixtureFile(t, filepath.Join(oidcFixtureDir, oidcReleaseBundle))
+	if got := sha256Hex(bundle); got != oidcReleaseBundleSHA256 {
+		t.Fatalf("the bundle in the fixture hashes to %s and the release published %s",
+			got, oidcReleaseBundleSHA256)
+	}
+
+	pin := strings.Fields(string(mustFixtureFile(t, filepath.Join(oidcFixtureDir, "module.txt"))))
+	if len(pin) != 2 || pin[1] != oidcReleaseTag {
+		t.Errorf("the fixture is pinned at %q and this milestone's release is %s",
+			strings.Join(pin, " "), oidcReleaseTag)
+	}
+
+	members := untarGz(t, bundle)
+	if len(members) != 2 {
+		t.Fatalf("the published bundle holds %d members, expected the manifest and "+
+			"the module: %v", len(members), sortedNames(members))
+	}
+	manifest, module := oidcRelease(t)
+	if !bytes.Equal(members[addon.ManifestFile], manifest) {
+		t.Error("the manifest inside the published bundle is not the manifest this " +
+			"instance loaded")
+	}
+	if !bytes.Equal(members["oidc.wasm"], module) {
+		t.Error("the module inside the published bundle is not the module this " +
+			"instance loaded")
+	}
+
+	m, err := addon.ReadManifest(oidcFixtureDir)
+	if err != nil {
+		t.Fatalf("read the published manifest with the host's own parser: %v", err)
+	}
+	if m.SHA256 != oidcReleaseModuleSHA256 {
+		t.Errorf("the published manifest names %s and the release published %s",
+			m.SHA256, oidcReleaseModuleSHA256)
+	}
+	if got := sha256Hex(module); got != m.SHA256 {
+		t.Errorf("the module hashes to %s and its own manifest says %s", got, m.SHA256)
+	}
+	if want := strings.TrimPrefix(oidcReleaseTag, "v"); m.Version != want {
+		t.Errorf("the published manifest calls itself %q and the release is %s",
+			m.Version, want)
+	}
+}
+
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// untarGz reads the published bundle the way M68.6's installer reads one — every
+// member, by name, with no directory to walk — so a bundle that grew a third file
+// is a failure rather than something this reader steps over.
+func untarGz(t *testing.T, raw []byte) map[string][]byte {
+	t.Helper()
+	zr, err := gzip.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("the published bundle is not gzip: %v", err)
+	}
+	defer func() { _ = zr.Close() }()
+
+	out := map[string][]byte{}
+	tr := tar.NewReader(zr)
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read the published bundle: %v", err)
+		}
+		b, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatalf("read %s out of the published bundle: %v", h.Name, err)
+		}
+		out[h.Name] = b
+	}
+	return out
+}
+
+func sortedNames(m map[string][]byte) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // --- small readers ------------------------------------------------------------

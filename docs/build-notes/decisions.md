@@ -501,6 +501,7 @@ file. Append a row when you append an entry.
 | [M68, what a name inherits, and the harness that had never run](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) | D359: a stored secret's withholding bounds the page and not the module, why hiding it from `config_get` was declined, and what the documents now say instead. D360: `addon_settings` is the fourth thing a purge leaves, counted at the point of decision rather than deleted, and F332 is the half that is behaviour. D361: the test instance runs the sample add-on so the browser harness executes at all, and the two costs of that — the core SLO column, and `lctl` on the host. Plus the inherited redirect-path measurement, re-run |
 | [M69, the acceptance test's four answers](#2026-08-27--m69-the-acceptance-tests-four-answers) | D391: a retry of `network_fetch` is answered from the response already fetched — the double token exchange that broke sign-in, why `session_mint`'s check-before-you-change answer does not transfer, and the two declined alternatives. D392: the acceptance test relaxes the address policy and the trust store under `//go:build integration` and nothing else — why routing real public IPv4 to a bridge was declined, and the operator consequence that had never been written down. D393: the add-on is rebuilt from the module proxy at a pinned pseudo-version, reproducing the published artifact byte for byte, rather than vendored or added to this repository's go.mod. D394: dex pinned by digest in a compose file `make up` never reads, health-gated on a discovery document rather than on a started container, and the demo's OIDC exception recorded rather than discovered |
 | [M69, the acceptance test's own amendment](#2026-08-27--m69-the-acceptance-tests-own-amendment) | D395: the *minor bump* clause amended to *patch* — under M61's policy the minor is the generation, and F346 moved the patch exactly as written |
+| [M69, the release arrives and the fixture becomes it](#2026-08-28--m69-the-release-arrives-and-the-fixture-becomes-it) | D396: the fixture is the artifact `LinkCtrl-OIDC` v0.1.0 published, downloaded and checked against that release's own `SHA256SUMS`, with the rebuild from the same tag as what earns the right to install it — why the pin moves off D393's pseudo-version, why both digests are transcribed rather than fetched, why the bundle is downloaded rather than reconstructed, and why the provenance attestation is the operator's question rather than the suite's |
 
 ---
 
@@ -40952,3 +40953,79 @@ the acceptance test the milestone exists to run, and it went through the table's
 one. That is the second time this phase has put the policy under load and had it
 hold; the first was [M68](phase-details/m68.md)'s, which had to repair the policy
 before it could use it (D356).
+
+
+## 2026-08-28 — M69, the release arrives and the fixture becomes it
+
+### D396 — the fixture is the published artifact, and the rebuild is what earns the right to install it
+
+`DevOfPie/LinkCtrl-OIDC` published **v0.1.0** on 2026-08-28 07:56 UTC, by its own
+workflow, from the annotated tag `v0.1.0` at commit `4851439`. Four assets:
+`addon.json`, `linkctrl-oidc-0.1.0.tar.gz`, `oidc.wasm` and `SHA256SUMS`. There
+is a SLSA build provenance attestation over the module's digest naming the
+workflow, the tag and the commit. So m69.md's *release is verifiable end to end*
+bullet became satisfiable, [D393](#d393--the-add-on-is-rebuilt-from-the-module-proxy-not-vendored-and-not-checked-out)'s
+arrangement became the second-best available one, and four places written before
+the release existed — two of which ship to operators — became false in the other
+direction.
+
+**The pin moves from a pseudo-version to the tag.** D393 pinned
+`v0.0.0-20260827052551-90d4bd1e1ecf` because there was nothing else immutable to
+pin. `v0.1.0` is the version the release was *built from*, so pinning it turns
+"the add-on this test installs is the add-on that was published" from an argument
+into a comparison. The module the proxy serves at that tag rebuilds to
+`695385a1…`, which is the digest the release's `oidc.wasm` carries and the digest
+its `addon.json` names — verified before the pin moved, not after.
+
+**What is installed is the release's own bytes; the rebuild is what earns trust
+in them.** `scripts/oidc-fixture.sh` now does both and holds them against each
+other: it builds the module from the tag, downloads the published bundle, refuses
+it unless it hashes to `68f2d0c5…`, unpacks it, and refuses again unless the
+module inside is byte-identical to the rebuild and the manifest inside is
+byte-identical to what this tag's `addon.json.in` produces for that module. Only
+then does the bundle's own manifest and module become the fixture. Installing the
+rebuild instead would have been simpler and would have tested a reproduction of
+the release rather than the release.
+
+**Both digests are written into the script rather than read from `SHA256SUMS`.**
+Fetching the sums file beside the bundle authenticates nothing — it is the same
+page — which is exactly what `docs/configuration.md` tells an operator, and a
+fixture that did the thing the documents warn against would be teaching the
+opposite. Transcribed once, they also catch the case a checksum is for: a release
+re-cut over the same tag fails at the fixture step.
+
+**The bundle is downloaded rather than reconstructed**, and that is deliberate
+rather than lazy. A tarball's bytes depend on how it was packed — file modes,
+ordering, timestamps — and only the release knows that; `LinkCtrl-OIDC` carries a
+later commit, *Pin the bundle's file mode, so its digest is the same number
+everywhere*, precisely because the first cut did not reproduce outside its own
+runner. What has to be true of the bundle is not that this tree can rebuild it,
+but that it holds the module this source builds to, and that is checked directly.
+
+**The provenance attestation is the operator's question, not the suite's.**
+Verifying it means `gh attestation verify` against Sigstore — a credentialled
+network call to a third service, on every integration run, whose failure mode is a
+red suite that says nothing about this product. `docs/SECURITY.md` and
+`docs/configuration.md` now name the command and say plainly that this instance
+does not ask it: the install enforces the digest an operator typed and knows
+nothing about who built the bytes behind it. What the tree proves offline instead
+is the weaker fact the attestation is *about* — that the source at this tag builds
+to the module the attestation is over.
+
+**The cost, stated.** The fixture step now depends on `github.com` as well as on
+the module proxy, which is one more thing that can be down. It is not optional:
+there is no way to check a release you did not fetch, and m69.md's risk about new
+integration surface applies to this the same way it applies to dex.
+
+**What this leaves for [M70](phase-details/m70.md).** Its bullet bumps the
+add-on's `go.mod` to the SDK's `v0.4.0`, which is a new commit in that repository
+and therefore a new add-on release — so the four values pinned here move together
+with it, and the acceptance test is what fails if they move apart.
+
+**One correction that is not a decision**, recorded because it is what the
+milestone's last bullet asks: `docs/configuration.md` and `docs/SECURITY.md` said
+`LinkCtrl-OIDC` had no tag and no release, which was true when written and is now
+the opposite of true. Both now name the release, tell an operator to read the
+digest from its own `SHA256SUMS`, and name the provenance command. `CHANGELOG.md`
+gains the release identity for the same reason: an operator reading the entry had
+no way to learn the add-on has a release at all.

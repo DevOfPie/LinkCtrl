@@ -554,10 +554,11 @@ $(ADDON_FIXTURE_DIR)/%.wasm: $$(wildcard $(ADDON_FIXTURE_SRC)/$$*/*.go) $(ADDON_
 
 # The OIDC add-on, and it is not one of the fixtures above: those are this
 # repository's own test modules, and this is `DevOfPie/LinkCtrl-OIDC` — a
-# different repository, fetched from the module proxy at a pinned version and
-# rebuilt into the artifact its published manifest names. M69's acceptance test
-# installs it, so the script's digest check is the difference between testing the
-# add-on that was published and testing whatever built today.
+# different repository, whose released bundle is downloaded, checked against the
+# digest that release's SHA256SUMS carries, and admitted only once the source at
+# the same tag rebuilds to the module inside it. M69's acceptance test installs
+# it, so those checks are the difference between testing the add-on that was
+# published and testing whatever built today.
 #
 # Not a file rule. What decides whether it has to run is the digest of what is
 # already there against the pin in the script, which a timestamp cannot express,

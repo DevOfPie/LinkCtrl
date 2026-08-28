@@ -54,6 +54,13 @@ migrations run at boot.
   network address cannot be reached at all, because this server dials globally
   routable space and nothing else.
 
+  **Its first release is `v0.1.0`**, and it is verifiable without trusting the
+  page you found it on: the release publishes a `SHA256SUMS` for the bundle you
+  hand the Add-on manager, the manifest inside names the module's own digest, and
+  a build provenance attestation over that digest says which workflow, tag and
+  commit produced it. This server's acceptance test installs that artifact and
+  nothing else.
+
   **The public demo does not run it**, deliberately: there is no identity provider
   behind the demo and a sign-in flow against a throwaway one shows nothing you
   could use.
