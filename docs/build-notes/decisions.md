@@ -502,6 +502,7 @@ file. Append a row when you append an entry.
 | [M69, the acceptance test's four answers](#2026-08-27--m69-the-acceptance-tests-four-answers) | D391: a retry of `network_fetch` is answered from the response already fetched — the double token exchange that broke sign-in, why `session_mint`'s check-before-you-change answer does not transfer, and the two declined alternatives. D392: the acceptance test relaxes the address policy and the trust store under `//go:build integration` and nothing else — why routing real public IPv4 to a bridge was declined, and the operator consequence that had never been written down. D393: the add-on is rebuilt from the module proxy at a pinned pseudo-version, reproducing the published artifact byte for byte, rather than vendored or added to this repository's go.mod. D394: dex pinned by digest in a compose file `make up` never reads, health-gated on a discovery document rather than on a started container, and the demo's OIDC exception recorded rather than discovered |
 | [M69, the acceptance test's own amendment](#2026-08-27--m69-the-acceptance-tests-own-amendment) | D395: the *minor bump* clause amended to *patch* — under M61's policy the minor is the generation, and F346 moved the patch exactly as written |
 | [M69, the release arrives and the fixture becomes it](#2026-08-28--m69-the-release-arrives-and-the-fixture-becomes-it) | D396: the fixture is the artifact `LinkCtrl-OIDC` v0.1.0 published, downloaded and checked against that release's own `SHA256SUMS`, with the rebuild from the same tag as what earns the right to install it — why the pin moves off D393's pseudo-version, why both digests are transcribed rather than fetched, why the bundle is downloaded rather than reconstructed, and why the provenance attestation is the operator's question rather than the suite's |
+| [M69 reopened: the digest was a property of this machine](#2026-08-28--m69-reopened-the-digest-was-a-property-of-this-machine) | D397: the fixture pins the Go toolchain the release was cut with, and reads it from that release's own go.mod rather than transcribing it — why the pin goes in the fixture and not in the CI workflow, why a derived value is as immutable as the tag, what the two measured digests were, and why the digest check being the backstop is what makes deriving safe |
 
 ---
 
@@ -41029,3 +41030,70 @@ the opposite of true. Both now name the release, tell an operator to read the
 digest from its own `SHA256SUMS`, and name the provenance command. `CHANGELOG.md`
 gains the release identity for the same reason: an operator reading the entry had
 no way to learn the add-on has a release at all.
+
+
+## 2026-08-28 — M69 reopened: the digest was a property of this machine
+
+### D397 — the fixture pins the toolchain the release was cut with, read from that release's own go.mod
+
+M69 landed at `d421339`. The *Integration tests* job then failed on it, and on
+`086d325` before it, at the fixture step — before one test ran. The runner built
+`f917a810f6ac58cb35654a0e9c14bc86e7460b3d0775864648182e0f67cc393b`; the release
+published `695385a1a796a689ad2b3b4f910f93c102adfe304728c5081ed215837cb4477e`;
+`scripts/oidc-fixture.sh` refused, exactly as
+[D396](#d396--the-fixture-is-the-published-artifact-and-the-rebuild-is-what-earns-the-right-to-install-it)
+designed it to. That is [F348](deferred-findings.md#closed), and it closes here.
+
+**The cause is a Go patch release, and both halves are measured rather than
+argued.** `.github/workflows/ci.yml:34` pins `GO_VERSION: "1.26"`, which setup-go
+resolves to the newest patch it has — 1.26.7 on the runner, while this machine is
+1.26.5. `go.mod`'s `go 1.26.5` is a language floor and pins nothing. Building
+`LinkCtrl-OIDC@v0.1.0` on this machine under each toolchain in turn gives
+`695385a1…` under go1.26.5 and `f917a810…` under go1.26.7 — the runner's digest,
+reproduced here from its cause. So D396's *reproduces the published artifact
+exactly* was true of one machine's Go, and the acceptance test the whole
+foundation was built toward had never executed in CI at all.
+
+**The fix is in the fixture, not in the workflow — the owner's answer of
+2026-08-28.** Three answers were available: pin the toolchain in the fixture,
+match `GO_VERSION` to whatever cut the release, or accept that the digest check is
+a local-only assertion. The second fixes the runner and nobody else: a
+contributor on any other Go patch gets the same refusal, and the reproducibility
+claim stays a claim about one CI configuration. The third gives up the thing the
+fixture exists for. The first makes the rebuild a function of the source alone,
+which is what `-trimpath` and `-buildvcs=false` were already reaching for and what
+the toolchain was quietly excluded from. It also needs nothing from
+`.github/workflows/`, which this loop may not commit to.
+
+**The pin is read from the module's own go.mod rather than transcribed beside the
+other four.** `LinkCtrl-OIDC`'s release workflow runs setup-go with
+`go-version-file: go.mod`, and its release run logged *Setup go version spec
+1.26.5 / Resolved as '1.26.5'* — so the go.mod at the tag **is** what cut the
+release, and transcribing it here would be copying an answer this tree can derive.
+A tag's go.mod is immutable and proxy-served, so the derived value is as pinned as
+`VERSION` is, and it moves with `VERSION` instead of becoming a fifth line to
+forget when the pin bumps. The derivation mirrors setup-go's own order — a
+`toolchain` line when there is one, the `go` directive otherwise — and refuses
+when the `go` directive names no patch, because `go 1.26` would put the machine
+back in charge of the bytes.
+
+**Deriving is safe because the digest check is the backstop, not because the
+derivation is clever.** If the rule ever reads the wrong value, the build hashes
+to something `MODULE_SHA256` does not name and the fixture refuses — the same
+refusal that surfaced this defect, doing the same job. That is the argument for
+deriving over transcribing: the failure mode of a wrong derivation is identical to
+the failure mode of a wrong transcription, and only one of them can go stale
+silently.
+
+**`GOTOOLCHAIN` is what makes it hold on a machine that has never had that Go.**
+Go fetches the named toolchain from the module proxy when the local one differs,
+and the fixture already talks to the proxy for the module itself, so the runner
+can get it. Verified rather than assumed: with the local `go` forced to 1.26.7 —
+the runner's — the fixture builds `695385a1…` and passes, and with the pin removed
+under that same toolchain it builds `f917a810…` and refuses. The download costs
+about four seconds and happens once per machine.
+
+**What this does not change.** The four pinned values, the two transcribed
+digests, the bundle download and the end-to-end comparison are all as D396 left
+them. The only new thing installed is a toolchain, and the only new refusal is a
+tag whose go.mod names no exact one.

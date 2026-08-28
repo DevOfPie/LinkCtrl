@@ -23,6 +23,18 @@
 # and building it there reproduces the published artifact exactly — verified, and
 # that is what MODULE_SHA256 below asserts on every run.
 #
+# **Why the Go toolchain is pinned too.** Go's compiler output moves between patch
+# releases, so a rebuild that uses whatever `go` the machine happens to have
+# proves something about the machine and nothing about the release. This module
+# builds to MODULE_SHA256 below under go1.26.5 and to
+# f917a810f6ac58cb35654a0e9c14bc86e7460b3d0775864648182e0f67cc393b under go1.26.7
+# — both measured, which is F348, and which is why CI never ran an OIDC test. The
+# pin is read from the module's own go.mod rather than transcribed here, because
+# that is what cut the release: `LinkCtrl-OIDC`'s release workflow runs setup-go
+# with `go-version-file: go.mod`. A tag's go.mod is immutable, so the value is as
+# pinned as VERSION is and it moves with VERSION instead of being a fifth line to
+# forget.
+#
 # **Why both digests are written here rather than read from the release.** They
 # are what an operator types, and an operator who reads a digest off the page the
 # link was on has authenticated nothing — which is what `docs/configuration.md`
@@ -78,12 +90,30 @@ trap 'rm -rf "$work"' EXIT
 cp -r "$dir/." "$work/"
 chmod -R u+w "$work"
 
+# The toolchain the release was cut with, taken from the module's own go.mod the
+# way setup-go's `go-version-file` takes it: a `toolchain` line when there is one,
+# the `go` directive otherwise. GOTOOLCHAIN makes `go` fetch that toolchain from
+# the proxy when the local one differs, so this holds on a machine that has never
+# had it — which is the whole point, the fixture having been reproducible only on
+# the machine that wrote the pin.
+toolchain=$(sed -n 's/^toolchain[[:space:]]\{1,\}\(go[0-9][0-9.]*\)[[:space:]]*$/\1/p' "$work/go.mod" | head -n 1)
+if [ -z "$toolchain" ]; then
+	toolchain=$(sed -n 's/^go[[:space:]]\{1,\}\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)[[:space:]]*$/go\1/p' "$work/go.mod" | head -n 1)
+fi
+if [ -z "$toolchain" ]; then
+	echo "oidc-fixture: $MODULE@$VERSION names no exact Go toolchain in its go.mod," >&2
+	echo "so the build below would use whatever this machine has and the digest it" >&2
+	echo "produces would be a property of the machine rather than of the release." >&2
+	echo "Pin the toolchain here before moving VERSION." >&2
+	exit 1
+fi
+
 # The add-on's own build flags, and they are not decoration. `-buildvcs=false`
 # stops Go stamping a VCS revision that would differ between a checkout and a
 # module cache; `-trimpath` is what makes the bytes a function of the source
 # alone; `-buildmode=c-shared` is the reactor shape this host instantiates.
-echo "oidc-fixture: building the module for wasip1"
-(cd "$work" && GOOS=wasip1 GOARCH=wasm \
+echo "oidc-fixture: building the module for wasip1 with $toolchain"
+(cd "$work" && GOTOOLCHAIN="$toolchain" GOOS=wasip1 GOARCH=wasm \
 	go build -trimpath -buildvcs=false -buildmode=c-shared -o oidc.wasm .)
 
 built=$(sha256sum "$work/oidc.wasm" | cut -d' ' -f1)
@@ -93,6 +123,8 @@ if [ "$built" != "$MODULE_SHA256" ]; then
 	echo "and the release this pin names published" >&2
 	echo "  $MODULE_SHA256" >&2
 	echo "The two have to agree, or the suite is not testing what was published." >&2
+	echo "It was built with $toolchain, read from the module's own go.mod. A digest" >&2
+	echo "that differs only by toolchain is F348 again: check what cut the release." >&2
 	exit 1
 fi
 

@@ -132,7 +132,10 @@ the certificate dex serves, which `scripts/idp.sh` makes with `openssl` on first
 use, and the add-on itself, which `scripts/oidc-fixture.sh` fetches from the
 module proxy at a pinned version and rebuilds. The second prints the digest it
 produced and refuses to hand over anything that does not match what the published
-release names.
+release names. It rebuilds under the Go toolchain that cut the release — read from
+the module's own `go.mod` and fetched by `GOTOOLCHAIN` if this machine has not got
+it — because Go's output moves between patch releases and a digest that depends on
+the local `go` is a fact about the machine (D397).
 
 ## Ports
 
