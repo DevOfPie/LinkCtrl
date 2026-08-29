@@ -242,3 +242,38 @@ func TestTheInstallControlOffersBothShapes(t *testing.T) {
 		t.Error("the install control no longer states its size bound")
 	}
 }
+
+// M69.5. The consent to an add-on's sign-in link is drawn as a toggle like any
+// other, and it carries a sentence no other toggle does — because turning it on
+// is the only setting on this page whose consequence is visible to somebody who
+// has not signed in.
+//
+// Both directions, because "draws a warning" alone would pass on a page that put
+// the same sentence under every checkbox.
+func TestTheSignInConsentSaysWhatTurningItOnDoes(t *testing.T) {
+	const warning = "sign-in page</strong>"
+
+	consent := renderPage(t, "addon_manager", map[string]any{
+		"Settings": []addonSettingStub{{
+			Name: "sign_in_link", Kind: "toggle", Default: "false", SignIn: true,
+		}},
+	})
+	if !strings.Contains(consent, `name="setting_sign_in_link"`) {
+		t.Fatal("the consent is not rendered as a saveable setting at all")
+	}
+	if strings.Contains(consent, `name="setting_sign_in_link" value="true" checked`) {
+		t.Error("the consent is ticked before an operator has agreed to anything")
+	}
+	if !strings.Contains(consent, warning) {
+		t.Errorf("the consent does not say that turning it on changes what every "+
+			"visitor sees:\n%s", consent)
+	}
+
+	ordinary := renderPage(t, "addon_manager", map[string]any{
+		"Settings": []addonSettingStub{{Name: "pkce", Kind: "toggle", Default: "true"}},
+	})
+	if strings.Contains(ordinary, warning) {
+		t.Error("an ordinary toggle carries the sign-in warning, so the sentence " +
+			"says nothing about this particular setting")
+	}
+}

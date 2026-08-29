@@ -1076,6 +1076,10 @@ func run(cfg config.Config, _ io.Writer) error {
 			// every instance that configured no add-ons at all, which is exactly
 			// the cost m60.md promised nobody would pay.
 			Addons: addonRouter(addons),
+			// What an installed add-on offers on the sign-in page (M69.5), through the
+			// same helper and for the same reason: a typed nil here would make every
+			// instance ask the host on every render of its own front door.
+			AddonSignIn: addonSignIn(addons),
 			// The Add-on manager (M68), through the same helper the API field uses
 			// and for the same reason. One interface for both surfaces, so the page
 			// and the API cannot be wired to different halves of the host.
@@ -1296,6 +1300,18 @@ func addonRouter(h *addon.Host) httpx.AddonRouter {
 // endpoint, on an instance whose operator never turned add-ons on, answering the
 // unavailable that addon.ErrNoAddonsDir carries rather than the 404 that says the
 // capability is not here. Two lines, at the one site where it is possible.
+// addonSignIn is the same closure of the same trap for the sign-in page's read
+// (M69.5). A typed nil is not a nil interface, and the consequence here is that
+// the login handler calls into the host on every render on an instance that has
+// no add-ons — the page it draws is identical either way, which is exactly why
+// this would never have been noticed.
+func addonSignIn(h *addon.Host) httpx.AddonSignIn {
+	if h == nil {
+		return nil
+	}
+	return h
+}
+
 func addonAdmin(h *addon.Host) httpx.AddonManager {
 	if h == nil {
 		return nil

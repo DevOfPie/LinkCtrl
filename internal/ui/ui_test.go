@@ -1783,6 +1783,11 @@ type addonSettingStub struct {
 	// configuring a value, and a page that read like a URL box would be the whole
 	// of what went wrong.
 	Origin bool
+	// SignIn marks the one setting on this page the host declares rather than the
+	// add-on (M69.5): the operator's consent to that add-on's link appearing on
+	// the sign-in page. Same reason Origin above earns a flag — what changes is
+	// the consequence rather than the input, and the page has to say so.
+	SignIn bool
 }
 
 func (s addonSettingStub) Editable() bool { return s.EnvVar == "" }
@@ -1792,6 +1797,7 @@ func (s addonSettingStub) IsSelect() bool { return s.Kind == "select" }
 func (s addonSettingStub) IsToggle() bool { return s.Kind == "toggle" }
 func (s addonSettingStub) On() bool       { return s.IsToggle() && s.Value == "true" }
 func (s addonSettingStub) IsOrigin() bool { return s.Origin }
+func (s addonSettingStub) IsSignIn() bool { return s.SignIn }
 
 // addonSettingViews is the manager detail page's settings fixture: all four
 // declared types at once, plus one the environment answers.
@@ -1813,5 +1819,10 @@ func addonSettingViews() []addonSettingStub {
 		// setting like the first one and renders a different sentence beneath it,
 		// which is the whole of what the flag changes on this page.
 		{Name: "provider_origins", Kind: "text", Origin: true},
+		// The host's own consent toggle (M69.5), off — which is the state that
+		// matters, because it is the state every add-on that asks for a sign-in link
+		// starts in. It is a toggle like `pkce` above and draws a warning beneath it,
+		// which is the whole of what the flag changes on this page.
+		{Name: "sign_in_link", Kind: "toggle", Default: "false", SignIn: true},
 	}
 }

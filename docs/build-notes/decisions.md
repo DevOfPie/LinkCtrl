@@ -503,6 +503,7 @@ file. Append a row when you append an entry.
 | [M69, the acceptance test's own amendment](#2026-08-27--m69-the-acceptance-tests-own-amendment) | D395: the *minor bump* clause amended to *patch* — under M61's policy the minor is the generation, and F346 moved the patch exactly as written |
 | [M69, the release arrives and the fixture becomes it](#2026-08-28--m69-the-release-arrives-and-the-fixture-becomes-it) | D396: the fixture is the artifact `LinkCtrl-OIDC` v0.1.0 published, downloaded and checked against that release's own `SHA256SUMS`, with the rebuild from the same tag as what earns the right to install it — why the pin moves off D393's pseudo-version, why both digests are transcribed rather than fetched, why the bundle is downloaded rather than reconstructed, and why the provenance attestation is the operator's question rather than the suite's |
 | [M69 reopened: the digest was a property of this machine](#2026-08-28--m69-reopened-the-digest-was-a-property-of-this-machine) | D397: the fixture pins the Go toolchain the release was cut with, and reads it from that release's own go.mod rather than transcribing it — why the pin goes in the fixture and not in the CI workflow, why a derived value is as immutable as the tag, what the two measured digests were, and why the digest check being the backstop is what makes deriving safe |
+| [M69.5, the last inch: an add-on asks, an operator agrees](#2026-08-28--m695-the-last-inch-an-add-on-asks-an-operator-agrees) | D398: the operator's consent is a toggle the **host** declares, riding M68's settings mechanism — which limb of the *every UI feature has API support* rule applies and why no operation was added and why `api/openapi.yaml` still gained a field, why a manifest-declared toggle would let an author answer for the operator through its default, why `config_get` cannot read it, and the counting cost that names. D399: the link is drawn from what **loaded** rather than what a directory claims — the opposite of M67's D346 and right for the opposite reason — plus the composition asserted on the result, the label bound as a constant, the order **sorted by name** rather than taken from a loaded set a runtime install appends to, and the byte-identical stock page. D400: the demo **states the exemption**, owner-answered, with the two declined alternatives named D401: M68's *manifest-declared* exclusion amended to *declared* — the page now renders one setting no manifest may declare, and why that is a fact rather than an assertion, so M68 is not reopened |
 
 ---
 
@@ -41097,3 +41098,203 @@ about four seconds and happens once per machine.
 digests, the bundle download and the end-to-end comparison are all as D396 left
 them. The only new thing installed is a toolchain, and the only new refusal is a
 tag whose go.mod names no exact one.
+
+
+## 2026-08-28 — M69.5, the last inch: an add-on asks, an operator agrees
+
+[F345](deferred-findings.md#closed) closes here.
+[D389](#2026-08-27--m695-added-the-acceptance-tests-last-inch) decided that the
+gap was worth the phase's last slot and
+[D390](#d390--what-the-manifest-gains-and-why-its-version-does-not-move) decided
+what the manifest gains — two fields, joined by the host, and `schema_version`
+staying `1`. Both hold as built and neither is re-argued here: the condition D390
+turns on is still true, 0.4.0 is still untagged, and the format has still never
+shipped in a release. What follows is what building it decided.
+
+### D398 — the operator's consent is a setting the *host* declares, riding M68's mechanism
+
+m69.5.md asks which mechanism carries the operator's agreement and says the answer
+is not optional, because it decides whether the inherited *every UI feature has API
+support* rule binds here: an add-on-declared setting riding M68's page discharges
+it through M68, while a new host operation would have to land in
+`api/openapi.yaml` and be replayed by the contract test, the way M67, M68 and
+M68.6 each did.
+
+**The first limb applies, and this entry is the milestone saying so.** M68 shipped
+the whole mechanism — `internal/addon/settings.go`, the migration
+`internal/store/migrations/04800_addon_settings.sql`, the stored answers, the
+manager's form. The consent is a toggle in that table, written by
+`Host.SaveSettings`, rendered by the form that already exists, and reachable over
+`PUT /api/v1/addons/{name}/settings`. **No operation was added.**
+
+`api/openapi.yaml` still changed, and the distinction is worth stating rather than
+glossing: `AddonSetting` is `additionalProperties: false`, so the `sign_in` flag
+the render model carries has to be described there or the contract test refuses
+the response. That is a **field on an existing response**, not an operation — the
+limb turns on whether a new *operation* was needed, and none was. `make openapi`
+passes.
+
+**What it is not is a setting the manifest declares, and that is the load-bearing
+part.** A manifest-declared toggle carries a manifest-declared *default*, so an
+author could ship `"default": "true"` and put themselves on the front door of
+every instance that installed them — the exact thing
+[D364](#d364--an-add-on-declares-that-it-needs-egress-the-operator-decides-where)'s
+shape exists to prevent, one surface over. So `internal/addon/signin.go` declares
+`sign_in_link` on behalf of every add-on that asked, its default is `"false"`, and
+`Manifest.Validate` refuses an add-on that tries to take the name. `managedSettings`
+is the one function that adds it, and it is used by the manager's read and write
+and by nothing else.
+
+It is deliberately kept out of `Host.resolveSettings`, so `config_get` cannot read
+it. Whether this product draws a link on its own sign-in page is not the add-on's
+business, and a module that could read the operator's answer would be a module that
+could behave differently depending on it. The cost is named: `Managed.DeclaredSettings`
+still counts the manifest's own list, so the detail page renders one row more than
+the list page's *N of M* describes — each figure stays true to what it says it is,
+and making them agree would mean calling the host's question the add-on's.
+
+The environment route is not extended to it either. `LINKCTRL_ADDON_<NAME>_<X>`
+answers a *setting the module reads* (D263) or an *operator override* read at load
+(D347's two sources); this is neither, and adding a third meaning to that namespace
+to save an operator one click on a page they are already on is not a trade worth
+making. If it is ever wanted, it is an override name and not a setting name.
+
+### D399 — the link is drawn from what loaded, and ordered by name
+
+**From what loaded, which is the opposite of M67's answer and right for the
+opposite reason.** `Host.SignInLinks` walks the loaded set and asks `Host.routed`
+— the same predicate the router itself uses, so the two cannot drift — and a
+module that did not compile, or that never held `routes.own_prefix`, offers
+nothing. M67's collision check runs over what a directory *claims*
+([D346](#d346--the-runtime-collision-check-reads-the-boot-checks-set)), because the
+harm there is a boot that refuses both add-ons; the harm here is a dead link on the
+sign-in page, and only a running module rules it out.
+
+**The composition is asserted on the result, not only on the declaration.**
+`Loaded.SignInHref` joins `RoutePrefix`, the add-on's name and the declared path,
+then asks whether what came out is still under the prefix it started from.
+`Manifest.Validate` separately refuses a leading `/`, a `..` or `.` segment, a
+`//`, a backslash, a scheme, a query, a fragment and a percent escape. Neither
+layer is trusted alone — validation is what a publisher hears at load, the
+composition is what a visitor gets — and the second is tested against a `Loaded`
+built by hand, because a hand-built one is the only thing that could ever get past
+the first.
+
+**The label is bounded by a constant with a test on both sides.**
+`MaxSignInLabelBytes` is 64, control characters are refused, and it renders through
+`html/template` like every other value on every other page. The CSP is untouched,
+because there is nothing here for it to permit: no add-on gets script, style, an
+icon or a position on this page. An empty or absent label draws nothing.
+
+**Ordered by name, sorted here rather than taken from the loaded set.** m69.5.md
+allows installation order or name, and the two come apart at exactly one point:
+discovery order is `os.ReadDir`'s, which is sorted, and an add-on's directory *is*
+its name — but M67's runtime install **appends**, so an add-on installed without a
+restart sits last and then moves at the next boot. Both are orders the host
+controls and neither is stable, and a sign-in link changing position for a reason
+nobody can connect to it is the thing worth avoiding. Sorting by name is the same
+order at boot and the only one that survives an install. *Which sign-in method is
+listed first* is worth gaming, so it is deliberately nothing a manifest can
+influence. The integration test makes `alpha` arrive last by both routes at once —
+installed at runtime after `zeta` was loaded at boot, and consented to second —
+and asserts it is drawn first.
+
+**A stock instance renders `login.html` byte for byte as before.**
+`internal/ui/testdata/login_stock.html` was captured from the template as it stood
+before this milestone touched it, and `TestAStockSignInPageIsUnchanged` holds three
+shapes of *nothing offered* against it. The local form does not move — the links
+are additive and drawn below it, asserted over the form's fields and their order —
+so an instance whose add-on is broken still lets its operator in.
+
+### D400 — the demo states the exemption rather than seeding a module that mints
+
+**Owner-answered 2026-08-28.** The inherited *a new feature somebody can see* rule
+obliges a milestone to extend the demo seeder or to narrow what the list covers in
+writing. This one narrows it, and `demoCoverage()` in
+`cmd/lctl/demo_coverage_test.go` gains the written row rather than leaving the gate
+to pass because nobody added one.
+
+**What an evaluator sees instead** is the demo's sign-in page exactly as it has
+always been. The demo's sample module is `pageviews`, which holds no
+`session.mint`, so no link is offered. The operator's half is visible in the tree
+— the consent toggle on the Add-on manager's detail page — and a rendered control
+is not a count, so what asserts it is a template test in `internal/ui`, the same
+shape M68.6's install-control row already takes.
+
+**Two alternatives were declined, each for its own reason.** Seeding a sample
+module that mints: a public demo running a session-minting module is a sign-in
+anybody may start, and a link going nowhere in particular reads as broken rather
+than as a demonstration. Installing the OIDC add-on on the demo: m69.md ships an
+exception saying the demo does not run it — there is no identity provider behind
+it — and reversing a shipped milestone's decision is not this one's to make.
+
+The row is therefore the zero row M65's own paragraph in that file predicted, for
+M65's reason and not a new one: `addon_identity_links` must stay empty, because a
+row in it would mean the demo showed an account's connection to a provider it does
+not talk to.
+
+### The `LinkCtrl-OIDC` change this milestone requires, stated here for whoever lands it
+
+m69.5.md's last bullet: the manifest change is the observable end of this milestone
+and this tree cannot commit it. The same shape as
+[M70](phase-details/m70.md)'s obligation to bump that repository's `go.mod`.
+
+Two edits, and neither is optional if the link is to render:
+
+1. **`addon.json` gains two keys**, beside the ones it already carries and inside
+   the same `schema_version: 1`:
+
+   ```json
+   "sign_in_label": "Sign in with your provider",
+   "sign_in_path": "start"
+   ```
+
+   `sign_in_path` names the module's **own** page that begins the flow, as it is
+   spelled under `/addons/<name>/` — for `v0.1.0` that is the path its README
+   currently tells an operator to paste, with the prefix and the leading separator
+   removed. The host refuses a leading `/`, a `..`, a scheme, a query and a
+   fragment at load, so the value is the bare relative path and nothing else. The
+   label is at most 64 bytes and carries no control characters. Both keys are
+   optional in the schema, so a manifest without them still loads on this host —
+   what it does not do is render a link.
+
+2. **The README stops telling an operator to paste a URL.** What replaces it is two
+   sentences: this add-on declares a sign-in link, and it appears on the instance's
+   sign-in page once the operator turns on `sign_in_link` on the add-on's page in
+   the Add-on manager. The URL stays documented as what the link *is* — an operator
+   debugging a flow still needs it — but it stops being the instructions.
+
+Until both land, no link renders on an instance running `v0.1.0`, and this
+milestone is provable only against the fixtures in this tree. That is the honest
+statement of what is and is not done here.
+
+### D401 — M68's *manifest-declared* exclusion, amended
+
+**The bullet as it stood** (`phase-details/m68.md`, *Deliberately not done*):
+*"editing the operator's **environment** config from the page — the env keys M64
+reads stay the operator's, and only manifest-**declared** settings are editable
+here."*
+
+**As amended:** the same, with *only **declared** settings are editable here*.
+
+**The tree fact:** `internal/addon/manifest.go` refuses a manifest that declares
+`sign_in_link` as a setting name, and the host declares that setting itself for
+every add-on that asked for a link — so the manager's detail page now renders one
+setting no manifest may declare. Raised by M69.5's reviewer against m68.md:44 and
+:69, reading the diff rather than the milestone.
+
+A **fact** and not an assertion, which is why it is amended rather than prompted
+and why M68 is not reopened. What the sentence was drawn to exclude is the
+operator's environment, and that is untouched: `sign_in_link` is stored in
+`addon_settings` like every other answer, no env key became editable, and M68's
+own description of what M68 built is correct as it stands. The word that went
+stale is *manifest*, and only because a later milestone gave the page a second
+source of declarations. Nobody could have decided this differently — M69.5's
+owner-approved scope requires the consent to sit under `addons.manage`, and that
+is this page.
+
+**Why it is logged at all**, given how small it is: a shipped milestone's file is
+what its `done` row asserts, and this project's rule is that plan drift is allowed
+and silent plan drift is not. The count discrepancy D398 already names — the list
+page's *N of M* against the detail page's N+1 rows — is the same fact seen from
+the other side, and the two entries should be read together.

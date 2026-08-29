@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -81,6 +83,16 @@ type Web struct {
 	// all — and it leaves the `/addons/` pattern unregistered, which is what keeps
 	// m60.md's "no route is mounted" true for every operator who installs none.
 	Addons AddonRouter
+	// AddonSignIn is what the sign-in page asks for an installed add-on's link
+	// (M69.5). Nil is the ordinary state — an instance with no add-ons host — and
+	// it draws nothing, which is byte-identical to the page every instance
+	// rendered before this existed.
+	//
+	// A field of its own rather than a method on [AddonRouter], because the two
+	// are asked at different moments by different visitors: the router answers a
+	// request *to* an add-on, and this answers what to offer somebody who has not
+	// signed in yet.
+	AddonSignIn AddonSignIn
 	// AddonAdmin backs the Add-on manager (M68) — the same interface the JSON API
 	// holds, so the page and the API cannot diverge. Nil leaves the manager's
 	// pages unregistered and its nav entry undrawn, which is the state of every
@@ -414,6 +426,32 @@ type loginPageData struct {
 	// and for the same reason: recovery is delivered by mail, so an instance with
 	// no relay has no recovery to offer and must not appear to.
 	RecoveryAvailable bool
+	// SignInLinks is what installed add-ons offer (M69.5), and it follows the same
+	// rule the two above do: a link is here only when this instance can actually
+	// honour it — the module is loaded and serving routes, and the operator turned
+	// it on. Empty on every instance that runs no add-ons, which draws nothing.
+	//
+	// Each label is an add-on author's string and is rendered through
+	// html/template like every other value on every other page. Each href is the
+	// **host's** composition, asserted to be inside the add-on's own route prefix
+	// before it reaches here — internal/addon/signin.go.
+	SignInLinks []addon.SignInLink
+}
+
+// AddonSignIn is what this package needs from the add-on host in order to draw
+// the sign-in page. An interface for the reason [AddonRouter] is: the tests that
+// assert what reaches a browser do not construct a wasm runtime.
+type AddonSignIn interface {
+	SignInLinks(ctx context.Context) []addon.SignInLink
+}
+
+// signInLinks is the nil-safe read. An instance with no add-ons host has none,
+// and the page it renders is the one it rendered before add-ons existed.
+func (h *Web) signInLinks(ctx context.Context) []addon.SignInLink {
+	if h.AddonSignIn == nil {
+		return nil
+	}
+	return h.AddonSignIn.SignInLinks(ctx)
 }
 
 func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
@@ -432,6 +470,7 @@ func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
 		shell:             h.shell(r, "Sign in", ""),
 		SignupOpen:        h.signupOpen(),
 		RecoveryAvailable: h.recoveryAvailable(),
+		SignInLinks:       h.signInLinks(r.Context()),
 	}
 	if r.URL.Query().Get("next") != "" {
 		data.Next = safeNext(r.URL.Query().Get("next"))
@@ -475,6 +514,9 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 			Next:              safeNext(r.PostFormValue("next")),
 			SignupOpen:        h.signupOpen(),
 			RecoveryAvailable: h.recoveryAvailable(),
+			// Also on the refusal, because a failed password is exactly the moment
+			// somebody remembers they sign in with their provider.
+			SignInLinks: h.signInLinks(r.Context()),
 		}
 		switch {
 		case isCredentialFailure(err):

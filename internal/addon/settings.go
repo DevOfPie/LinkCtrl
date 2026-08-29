@@ -183,6 +183,14 @@ type SettingView struct {
 	// declaration is the manifest's and the page must not be guessing which of an
 	// add-on's fields is the dangerous one.
 	Origin bool `json:"origin,omitempty"`
+
+	// SignIn marks the one setting on this page the host declares rather than the
+	// add-on: the operator's consent to that add-on's link appearing on the
+	// sign-in page (M69.5). The page renders it differently for the reason
+	// [SettingView.Origin] does — turning it on changes what every visitor to this
+	// instance sees before they have authenticated, which is not a consequence a
+	// bare checkbox conveys.
+	SignIn bool `json:"sign_in,omitempty"`
 }
 
 // Editable reports whether the manager may write this setting. False for one the
@@ -207,6 +215,10 @@ func (v SettingView) IsSelect() bool { return v.Type == SettingSelect }
 
 // IsToggle reports whether this setting is a boolean. See [SettingView.IsText].
 func (v SettingView) IsToggle() bool { return v.Type == SettingToggle }
+
+// IsSignIn reports whether this setting is the operator's consent to an add-on's
+// sign-in link. See [SettingView.IsText] for why these are methods.
+func (v SettingView) IsSignIn() bool { return v.SignIn }
 
 // IsOrigin reports whether this setting names where the add-on may reach. See
 // [SettingView.IsText] for why these are methods.
@@ -299,8 +311,13 @@ func mergeSettings(
 func (h *Host) settingViews(ctx context.Context, l Loaded) []SettingView {
 	stored := h.storedSettings(ctx, l.Manifest.Name)
 	env := h.envSettings(l.Manifest.Name, settingNames(l.Manifest))
-	out := make([]SettingView, 0, len(l.Manifest.Settings))
-	for _, s := range l.Manifest.Settings {
+	// The manifest's own list plus the host's sign-in consent toggle, when the
+	// add-on asked for a link (M69.5). The manager is the one surface that renders
+	// and saves both; what the *module* reads is [Host.resolveSettings], which
+	// stays on the manifest's list alone.
+	declared := managedSettings(l.Manifest)
+	out := make([]SettingView, 0, len(declared))
+	for _, s := range declared {
 		v := SettingView{
 			Name: s.Name, Type: s.Type, Options: slices.Clone(s.Options),
 			Default: s.Default, Source: SourceUnset,
@@ -309,6 +326,10 @@ func (h *Host) settingViews(ctx context.Context, l Loaded) []SettingView {
 			// value written under an older manifest that did not mark it names no
 			// origin the host will dial anyway.
 			Origin: s.Origin,
+			// Read off the name, because this one setting is not the manifest's: it is
+			// the host's, added by managedSettings, and no manifest may declare the
+			// name (Manifest.Validate).
+			SignIn: s.Name == SignInConsentSetting,
 		}
 		switch row, hasStored := stored[s.Name]; {
 		case env[s.Name] != "":
@@ -401,8 +422,9 @@ func (h *Host) SaveSettings(
 	if l == nil {
 		return nil, domain.ErrNotFound
 	}
-	declared := make(map[string]Setting, len(l.Manifest.Settings))
-	for _, s := range l.Manifest.Settings {
+	managed := managedSettings(l.Manifest)
+	declared := make(map[string]Setting, len(managed))
+	for _, s := range managed {
 		declared[s.Name] = s
 	}
 	env := h.envSettings(l.Manifest.Name, settingNames(l.Manifest))

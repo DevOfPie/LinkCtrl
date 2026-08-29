@@ -120,6 +120,13 @@ type Managed struct {
 	// DeclaredSettings is how many settings the manifest declares and Configured is
 	// how many have a value. The pair is what the list needs to say *3 of 5 set*
 	// without reading a value it may not echo.
+	//
+	// **The manifest's own list, which since M69.5 is not all of [Settings].** An
+	// add-on that asked for a sign-in link gets one more row on the detail page —
+	// the host's consent toggle — and it is deliberately not counted here: this
+	// figure answers *what did this add-on ask to be configured with*, and the
+	// consent is this instance's question rather than the add-on's. Making the two
+	// agree would mean calling the host's question the add-on's.
 	DeclaredSettings int `json:"declared_settings"`
 	ConfiguredCount  int `json:"configured_settings"`
 	// Settings is the detail page's render model, and is nil on the list. Two

@@ -1,11 +1,14 @@
 package httpx
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 )
 
 // maximalDeps returns a Deps with every optional dependency present, so that
@@ -38,8 +41,21 @@ func maximalDeps() Deps {
 	// two surfaces, and a nil on either takes its half out of both guards below.
 	d.AddonAdmin = nopAddonLifecycle{}
 	d.Web.AddonAdmin = nopAddonLifecycle{}
+	// The third, and it is the one that gates no *pattern* (M69.5): it decides
+	// what `/login` renders rather than whether a route exists. Filled anyway
+	// rather than exempted the way Authenticator is, because an exemption is a
+	// standing hole and this one is cheap to close — and because a nil here would
+	// mean the sign-in page is rendered without it in every guard below, which is
+	// the one page that must be checked *with* an add-on offering something.
+	d.Web.AddonSignIn = nopAddonSignIn{}
 	return d
 }
+
+// nopAddonSignIn is a host that offers nothing, which is what every instance
+// running no add-ons has.
+type nopAddonSignIn struct{}
+
+func (nopAddonSignIn) SignInLinks(context.Context) []addon.SignInLink { return nil }
 
 // fillPointers allocates every nil pointer field of a struct, recursing into
 // the ones whose type this package declares. Deps.Web is why the recursion

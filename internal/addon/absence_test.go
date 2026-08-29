@@ -221,6 +221,24 @@ var httpSurfaceMentioningAddOns = []string{
 	// a rendered page — a scan of the template passes on a sentence drawn inside a
 	// branch that a zero count never enters.
 	"internal/ui/addons_test.go",
+	// The sign-in page (M69.5), which is the **fourth** deliberate change this
+	// list has taken and the one that costs the most to admit: every file above
+	// is behind a session or behind an add-on's own prefix, and this one is the
+	// page an anonymous visitor meets. So the widening is three files and is
+	// exactly the widening — the template that draws what an installed add-on
+	// offered, the test that holds it, and the captured render the test holds it
+	// against. Nothing else on the unauthenticated surface knows add-ons exist:
+	// not signup, not verify, not forgot, not reset, not the error page.
+	//
+	// `testdata/login_stock.html` is here for a duller reason than the other two
+	// and is listed rather than exempted, because an exemption is a hole. It is
+	// the *pre-M69.5* render, and what makes it match this sweep is the layout's
+	// `addon-select.js` tag, which was already on every page. Listing it says the
+	// file is allowed to contain the word; it is the byte-comparison in
+	// `login_test.go` that says the page draws no add-on.
+	"internal/ui/templates/pages/login.html",
+	"internal/ui/login_test.go",
+	"internal/ui/testdata/login_stock.html",
 }
 
 // The HTTP surface knows about add-ons in the files M64 gave it and in no

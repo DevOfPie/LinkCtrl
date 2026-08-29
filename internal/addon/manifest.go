@@ -189,6 +189,30 @@ type Manifest struct {
 	// declarations live; consumed at M64, which is where a request first reaches
 	// an add-on.
 	CookiePrefixes []string `json:"cookie_prefixes,omitempty"`
+
+	// SignInLabel is the words this add-on asks the sign-in page to draw, and
+	// SignInPath is where inside its own M64 prefix that link should go (M69.5).
+	//
+	// **Two fields rather than one**, and the second is what keeps D364's rule —
+	// the manifest names a need and never a destination — true on a second
+	// surface. A label alone would have meant *link to my prefix root*, which is
+	// a reserved meaning the ABI never gave that path: an add-on serving
+	// `/addons/oidc/` at all is not thereby serving a sign-in there. Owner-
+	// answered 2026-08-27.
+	//
+	// **Neither is a URL and neither is the target.** The host composes the href
+	// from [RoutePrefix], this add-on's own name and this path, and then asserts
+	// the result is still under the prefix it gave the add-on — see
+	// [Loaded.SignInHref]. Validation below refuses the shapes that would try to
+	// leave it (`..`, a leading `/`, a scheme, a host), so a manifest cannot name
+	// a destination even before the composition is checked.
+	//
+	// **A label is not consent.** Declaring one is the add-on asking; the operator
+	// agrees by turning on the [SignInConsentSetting] toggle on the Add-on
+	// manager's detail page, and it is off until they do. An empty or absent label
+	// draws nothing, so no add-on puts itself on the front door by omission.
+	SignInLabel string `json:"sign_in_label,omitempty"`
+	SignInPath  string `json:"sign_in_path,omitempty"`
 }
 
 // nameRe bounds an add-on's name to what can be three things at once: a
@@ -690,6 +714,14 @@ func (m Manifest) Validate() error {
 			add("settings: %q is reserved; it is how an operator answers about this "+
 				"add-on rather than a value the add-on reads, and the reserved names "+
 				"are %s", s.Name, strings.Join(config.AddonOverrideNames, ", "))
+		case s.Name == SignInConsentSetting:
+			// The host declares this one, for every add-on that asks for a sign-in
+			// link, and its default is off (M69.5). A manifest declaring it would be an
+			// author choosing the operator's answer — including choosing `"true"` — for
+			// a control over what every visitor sees before they authenticate.
+			add("settings: %q is this host's own: it is how an operator agrees to your "+
+				"sign-in link appearing, and an add-on that declared it could answer "+
+				"for them. Declare %q and %q instead", s.Name, "sign_in_label", "sign_in_path")
 		case seenSetting[s.Name]:
 			add("settings: %q is declared twice", s.Name)
 		}
@@ -722,7 +754,120 @@ func (m Manifest) Validate() error {
 			abi.PermissionNetworkFetch)
 	}
 
+	errs = append(errs, m.validateSignIn(seenPerm)...)
+
 	return errors.Join(errs...)
+}
+
+// MaxSignInLabelBytes bounds the words an add-on may put on the sign-in page.
+//
+// A constant rather than a number in a template, because the bound is a rule
+// about hostile input and a template is not where a rule lives — the label is an
+// add-on author's string rendered on the one page every visitor with an account
+// meets. 64 bytes is comfortably more than the longest honest label
+// (*Sign in with Contoso SSO* is 24) and far short of anything that could push
+// the local form off a phone screen.
+//
+// Bytes rather than runes, the same unit [MaxSettingValueBytes] uses, because the
+// manifest is a file with a size and a publisher counting characters in a
+// non-Latin script would still be told the byte figure by the refusal.
+const MaxSignInLabelBytes = 64
+
+// MaxSignInPathBytes bounds the declared path. It is not a security bound —
+// [Loaded.SignInHref] is — only a refusal of a manifest carrying something that
+// is not a path to a page.
+const MaxSignInPathBytes = 128
+
+// signInPathRe is the alphabet a declared sign-in path may use: unreserved URL
+// characters and the separator. Deliberately narrow — no percent escape, no
+// query, no fragment — because the host composes the target and an add-on that
+// needs to say more than *which of my pages* is asking for a destination.
+var signInPathRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~/-]*$`)
+
+// validateSignIn holds the two sign-in fields (M69.5) against what the host can
+// honour.
+//
+// Refusals rather than a silently undrawn link, for everything except an absent
+// label: a publisher who declared a path this host will not compose has shipped a
+// sign-in button that does not exist, and finding that out from a boot refusal is
+// cheaper than finding it out from an operator who cannot sign in. The one thing
+// that is *not* an error is declaring neither field, which is every add-on that
+// has ever been published against this schema.
+func (m Manifest) validateSignIn(seenPerm map[string]bool) []error {
+	var errs []error
+	add := func(format string, args ...any) {
+		errs = append(errs, fmt.Errorf(format, args...))
+	}
+
+	if m.SignInLabel == "" {
+		if m.SignInPath != "" {
+			// The label is what draws the link, so a path without one describes a
+			// destination nothing will ever point at. Refused rather than ignored,
+			// because the two shapes it comes from — a typo in the key, and a label
+			// deleted from a working manifest — are both things the publisher wants
+			// to hear about.
+			add("sign_in_path %q is declared and sign_in_label is empty: the label is "+
+				"what draws the link, so this path would never be reached", m.SignInPath)
+		}
+		return errs
+	}
+
+	if len(m.SignInLabel) > MaxSignInLabelBytes {
+		add("sign_in_label is %d bytes: at most %d, because it is drawn on this "+
+			"product's sign-in page beside its own form", len(m.SignInLabel), MaxSignInLabelBytes)
+	}
+	if strings.ContainsFunc(m.SignInLabel, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		// Escaping is html/template's and is not in question. This refuses a label
+		// nobody can *read* — a newline or a NUL in the middle of a button.
+		add("sign_in_label carries a control character: it is a line of text on a page")
+	}
+	if !seenPerm[PermissionSessionMint] {
+		// The whole premise of the link. An add-on that cannot mint a session has no
+		// sign-in to start, so a label from one is a button leading to a page that
+		// cannot finish what it offers.
+		add("sign_in_label is declared and %q is not: only an add-on that can sign "+
+			"somebody in may offer to", PermissionSessionMint)
+	}
+	if !seenPerm[PermissionRoutes] {
+		// The target is composed inside this add-on's own route prefix, and an
+		// add-on without the routes grant serves nothing there — the link would 404
+		// on the sign-in page, which is the outcome m69.5.md's second risk names as
+		// worse than no link at all.
+		add("sign_in_label is declared and %q is not: the link points inside this "+
+			"add-on's own prefix, which it does not serve", PermissionRoutes)
+	}
+
+	switch {
+	case m.SignInPath == "":
+		add("sign_in_path: must name the page inside this add-on's own prefix that " +
+			"starts the sign-in — a label alone would mean the prefix root, which is " +
+			"not a meaning this host gives it")
+	case strings.HasPrefix(m.SignInPath, "/"):
+		add("sign_in_path %q: must be relative to this add-on's own prefix, so it "+
+			"cannot begin with %q — the host composes the target and an add-on names "+
+			"a place inside the one it was given", m.SignInPath, "/")
+	case strings.Contains(m.SignInPath, ":"):
+		add("sign_in_path %q: must be a path and not a URL; a scheme names a "+
+			"destination, and a manifest names a need", m.SignInPath)
+	case strings.Contains(m.SignInPath, `\`), strings.Contains(m.SignInPath, "//"):
+		add("sign_in_path %q: must be a single rooted path inside this add-on's "+
+			"prefix", m.SignInPath)
+	case slices.Contains(strings.Split(m.SignInPath, "/"), ".."),
+		slices.Contains(strings.Split(m.SignInPath, "/"), "."):
+		// The same refusal `module` and a migration filename get, and for the same
+		// reason: a path with a dot segment in it is not a path with a fix.
+		// [Loaded.SignInHref] would refuse the composed result anyway; this is what
+		// makes the publisher hear about it at load rather than at render.
+		add("sign_in_path %q: must not contain %q or %q as a segment", m.SignInPath, "..", ".")
+	case len(m.SignInPath) > MaxSignInPathBytes:
+		add("sign_in_path is %d bytes: at most %d", len(m.SignInPath), MaxSignInPathBytes)
+	case !signInPathRe.MatchString(m.SignInPath):
+		add("sign_in_path %q: letters, digits, dot, underscore, tilde, hyphen and "+
+			"the separator, starting with a letter or a digit — no query, no "+
+			"fragment, no escape", m.SignInPath)
+	}
+
+	return errs
 }
 
 func (s Setting) validate() []error {

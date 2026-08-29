@@ -40,7 +40,7 @@ M69's validation found the foundation cannot make an outbound request at all
 ([F334](../deferred-findings.md#closed)) and the owner corrected a constraint M67
 had shipped on nobody's decision. [M69.5](m69.5.md) on 2026-08-27, when
 building the OIDC add-on found that the flow it proves is reachable only by
-being handed a URL ([F345](../deferred-findings.md#open)). All four are
+being handed a URL ([F345](../deferred-findings.md#closed)). All four are
 milestones the build turned out to need rather than optimistic planning, which
 is the case
 [planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
@@ -65,7 +65,7 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 | [M68.5](m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | done |
 | [M68.6](m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | done |
 | [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | done |
-| [M69.5](m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | not started |
+| [M69.5](m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | done |
 | [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | not started |
 | [M70](m70.md) | Deferred findings, documentation pass, 0.4.0 | all | not started |
 

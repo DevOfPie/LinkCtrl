@@ -1006,6 +1006,8 @@ description of an add-on.
 | `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. The names are the add-on's; the cookies a browser holds are not — LinkCtrl carries the whole set inside one cookie of its own, described [below](#the-pages-an-add-on-serves). An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is what stops an add-on being denied its own by whichever installed first; it does not on its own stop `oidc` declaring `oidc_x`, so the other half of the rule is at load — two installed add-ons whose names stand in a `name + "_"` prefix relation are **both refused**, counted as `name_collision`, and the boot log names the pair. Rename one directory and its manifest. |
 | `migrations` | Optional, and **required in practice for any add-on that declares `storage.own_schema`** — the host applies only what this list names. Each entry is a `file` inside the `migrations/` directory beside the manifest and the `sha256` of its bytes, verified before a schema exists. A file listed but absent, present but unlisted, or whose digest disagrees each refuse the add-on. Filenames follow goose's convention. Declaring migrations without `storage.own_schema` is refused. **This row was missing until 2026-08-20**, so a publisher following this page shipped no `migrations` key and their DDL never ran, while the sentence above told them the field they needed was illegal (F285's review, M64.9) |
 | `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. |
+| `sign_in_label` | Optional, and only for an add-on declaring **both** `session.mint` and `routes.own_prefix`. The words this add-on asks to have drawn on this instance's sign-in page — *Sign in with Contoso*, at most 64 bytes and no control characters. Declaring it is the add-on **asking**; nothing is drawn until an operator turns on the `sign_in_link` setting the host adds for it, which is off until they do. An empty or absent label draws nothing, so no add-on can put itself on the sign-in page by omission. |
+| `sign_in_path` | Required when `sign_in_label` is set, refused without it. The page **inside your own `/addons/<name>/` prefix** the link should reach — `start`, or `auth/begin`. It is a path and never a target: the host composes the href from your prefix and this value and refuses the result if it is no longer under that prefix, so a leading `/`, a `..`, a `//`, a scheme, a query and a fragment are each refused at load. A label alone was declined deliberately, because it would have made the prefix root mean *sign in here*, which is a meaning nothing else in this contract gives it. |
 
 #### The permissions an add-on may declare
 
@@ -1246,6 +1248,31 @@ off has to be unambiguous.
 `LINKCTRL_ADDON_<NAME>_<X>` namespace as an add-on's settings, so a manifest
 declaring a setting called `failure_class` or `mfa_satisfied` is refused at load —
 one variable cannot be your answer and the add-on's value at the same time.
+
+**Somebody can start it from the sign-in page — once you say so.** An
+authentication add-on's flow is reachable at a URL under its own prefix, and
+until you agree that is the only way to reach it. An add-on asks for a link by
+declaring `sign_in_label` and `sign_in_path` in its manifest; you agree by
+turning on **`sign_in_link`** on its detail page in the Add-on manager, and it is
+**off until you do**. Then this instance's sign-in page draws that add-on's words
+as a link, below its own form and never in place of it.
+
+Three things about that link are this instance's rather than the publisher's, and
+each is a refusal rather than a promise:
+
+- **Where it goes.** The href is composed here — your prefix, plus the path the
+  manifest named — and held against that prefix afterwards. A manifest cannot
+  name a host, a scheme, or a path that climbs out.
+- **Whether it appears at all.** The toggle is yours, it is off by default, and
+  an add-on cannot declare a setting by that name to answer it for you. A new
+  version of an add-on cannot change what your visitors see.
+- **Whether it points anywhere real.** The link is drawn from what this instance
+  **loaded**, not from what a directory claims — an add-on that failed to load
+  draws no link rather than a link that 404s.
+
+The words themselves are the add-on's, and they are the only thing about that
+page an add-on decides: no icon, no colour, no position, and no say in the order
+when two add-ons offer one. The order is this instance's, by add-on name.
 
 **Signing in is not the same as connecting.** An assertion for an external
 identity nobody has connected signs nobody in. The mapping from a provider's

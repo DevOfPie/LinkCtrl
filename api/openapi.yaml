@@ -8336,7 +8336,10 @@ components:
       additionalProperties: false
       required: [name, type, source, configured]
       description: |
-        One setting an add-on's manifest declares, and where its value came from.
+        One setting on an add-on's configuration surface, and where its value
+        came from. Every one is declared by the add-on's manifest except
+        `sign_in_link`, which this server declares on behalf of an add-on that
+        asked for a link on the sign-in page — see `sign_in` below.
 
         **`value` is never populated for a `secret`**, whatever answered it. That
         is the whole of the treatment a secret gets on this surface, and it is
@@ -8395,6 +8398,22 @@ components:
             request from this instance** to it. The value is one origin or several
             separated by spaces: scheme, host and port, and no path. Empty means
             the add-on reaches nothing at all.
+        sign_in:
+          type: boolean
+          description: >
+            Whether this setting is the operator's consent to this add-on's link
+            appearing on the instance's sign-in page. Present and `true` only for
+            that one setting, which is named `sign_in_link`; absent otherwise.
+
+            It is the one setting on this surface **this server** declares rather
+            than the add-on, and that is deliberate: a manifest-declared toggle
+            would carry a manifest-declared default, so an add-on's author could
+            turn it on for every instance that installed them. A manifest
+            declaring a setting by that name is refused at load. It is a `toggle`
+            whose default is `"false"`, and turning it on draws the add-on's
+            declared label as a link on `/login`, below this server's own sign-in
+            form and never in place of it. The destination is composed by this
+            server from the add-on's own route prefix and cannot leave it.
 
     AddonOrphan:
       type: object

@@ -977,6 +977,25 @@ above.
   page. And every save is in the instance-wide audit log as
   `addon.settings_saved`, naming which settings the save wrote and never their
   values.
+- **An add-on's words can reach your sign-in page, and only because you said so.**
+  Since 0.4.0 a module holding `session.mint` may declare a label and a path in
+  its manifest, and this instance draws that label as a link on `/login` — the
+  first and only place an add-on's data appears on a page rendered **before**
+  anybody has authenticated. Four bounds, and each is a refusal rather than a
+  promise. **It is off until you turn it on**, on that add-on's page under
+  `addons.manage`, and no manifest may declare a setting by that name to answer
+  for you — so publishing a new version cannot change what your visitors see.
+  **The destination is composed here**: your prefix plus the path the manifest
+  named, held against that prefix afterwards, so no manifest can name a host, a
+  scheme, or a path that climbs out of `/addons/<name>/`. **The label is escaped
+  and bounded** — 64 bytes, no control characters, through the same
+  `html/template` every other value on every page goes through, and the CSP is
+  unchanged because there is nothing here to permit: no add-on gets script,
+  style, an icon or a position on that page. **The link follows what loaded**, not
+  what a directory claims, so an add-on that failed to load offers nothing rather
+  than a link to a 404. What none of this bounds is the words themselves: a label
+  is an add-on author's string, and *Sign in with your company account* is
+  something you agreed to display when you turned the toggle on.
 - **An add-on that asks for `storage.own_schema` needs your database user to hold
   `CREATEROLE`**, because the host creates a role per add-on and that role is what
   confines it. Superuser satisfies it and so does an explicit `CREATEROLE` grant;

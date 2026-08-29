@@ -161,7 +161,7 @@ rather than rendering a world uniformly colored "unknown".
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |
-| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. **OIDC built in 4** ([M69](docs/build-notes/phase-details/m69.md), D211), as a first-party add-on rather than in core: [`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC), which an operator installs and configures. Somebody still has to be handed the sign-in URL — a control on the sign-in page is [M69.5](docs/build-notes/phase-details/m69.5.md)'s. OAuth, SSO and SCIM stay unscheduled (D109) |
+| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. **OIDC built in 4** ([M69](docs/build-notes/phase-details/m69.md), D211), as a first-party add-on rather than in core: [`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC), which an operator installs and configures. A sign-in control is [M69.5](docs/build-notes/phase-details/m69.5.md)'s and is built: an add-on holding `session.mint` declares a label and a relative path, and the link appears on `/login` once an operator turns it on in the Add-on manager. The add-on's own manifest has to declare the two fields for a link to render. OAuth, SSO and SCIM stay unscheduled (D109) |
 
 Destination blocking is two threat models wearing one name, and the *Abuse
 prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`
@@ -688,7 +688,7 @@ consumer that proves it.
 | [M68.5](docs/build-notes/phase-details/m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | [F334](docs/build-notes/deferred-findings.md#closed) — the gap M69's validation found; owner-answered scope 2026-08-25 |
 | [M68.6](docs/build-notes/phase-details/m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | Owner-added scope 2026-08-25 — corrects M67's *never a fetch*, which no decision backed |
 | [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
-| [M69.5](docs/build-notes/phase-details/m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | [F345](docs/build-notes/deferred-findings.md#open) — the last inch the acceptance test found; owner-answered scope 2026-08-27 |
+| [M69.5](docs/build-notes/phase-details/m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | [F345](docs/build-notes/deferred-findings.md#closed) — the last inch the acceptance test found; owner-answered scope 2026-08-27 |
 | [M69.9](docs/build-notes/phase-details/m69.9.md) | **Pre-release adversarial review** | everything below it | — |
 | [M70](docs/build-notes/phase-details/m70.md) | Deferred findings, documentation pass, 0.4.0 | all | Phase close · owed-work #3 (the 1.0 sentence) |
 

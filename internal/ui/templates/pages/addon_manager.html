@@ -119,7 +119,7 @@
 {{if .Settings}}
 <section class="mb-6 rounded-lg border border-line bg-raised p-6">
   <h2 class="text-sm font-medium text-ink">Settings</h2>
-  <p class="mt-1 text-sm text-muted">What this add-on's manifest declares. Saved values are stored by this instance and read by the module on its next invocation.</p>
+  <p class="mt-1 text-sm text-muted">What this add-on's manifest declares, and — where it asked for a sign-in link — this instance's own question about whether to draw it. Saved values are stored by this instance and read by the module on its next invocation.</p>
   <form method="post" action="/instance/addons/{{.Row.Name}}/settings" class="mt-4 grid gap-5">
     {{range .Settings}}
     <div>
@@ -141,6 +141,15 @@
                class="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent">
         <span class="text-muted">on</span>
       </label>
+      {{if .IsSignIn}}
+      {{/* M69.5. The one setting on this page this host declares rather than the
+           add-on, and the only one whose consequence is visible to somebody who
+           has not signed in: turning it on draws this add-on's link on the
+           sign-in page, for every visitor. The add-on asked by declaring a label
+           in its manifest; this is where an operator agrees, and it is off until
+           they do. */}}
+      <p class="mt-1 text-xs text-warn-ink">Turning this on draws this add-on's link on this instance's <strong>sign-in page</strong>, where everybody sees it. The words are the add-on's; where the link goes is this instance's, and it stays inside <code class="rounded bg-sunken px-1 py-0.5">/addons/{{$.Row.Name}}/</code>.</p>
+      {{end}}
       {{else if .IsSelect}}
       <input type="hidden" name="field" value="{{.Name}}">
       {{/* The empty option is not decoration. A `select` with no empty option

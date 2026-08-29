@@ -1386,6 +1386,40 @@ func demoCoverage() []demoFeature {
 				"somebody's server, or that somebody wrote a record of an install " +
 				"that never happened",
 		},
+		{
+			// M69.5's sign-in link, and this row is the **written exemption** the
+			// milestone's demo bullet asks for rather than a feature the seeder shows.
+			// Owner-answered 2026-08-28.
+			//
+			// The demo's sample module is `pageviews`, which holds no `session.mint`,
+			// so no link is offered on the demo's sign-in page and an evaluator sees
+			// that page exactly as it has always been. What they *can* see is the
+			// operator's half: the Add-on manager's detail page for an add-on that
+			// asked would carry the consent toggle, and `TestTheSignInConsentSaysWhat
+			// TurningItOnDoes` in internal/ui is what asserts it — a rendered control
+			// is not a count, the same reason M68.6's row above gives.
+			//
+			// **Two alternatives were declined, and each for its own reason.** Seeding
+			// a sample module that mints: a public demo running a session-minting
+			// module is a sign-in anybody may start, and a link that goes nowhere in
+			// particular reads as broken rather than as a demonstration. Installing
+			// the OIDC add-on on the demo: m69.md ships an exception saying the demo
+			// does not run it, and reversing a shipped milestone's decision is not
+			// this one's to make.
+			//
+			// So what a count can say is that no add-on has minted anything here, and
+			// that must stay true — a row in either table would mean the demo showed a
+			// connection to a provider that is not there, which is M65's paragraph
+			// above and is why this is the zero row it predicted rather than a new
+			// argument.
+			Milestone: "M69.5", Feature: "No add-on sign-in on the demo, by exemption",
+			Query:     `SELECT count(*) FROM addon_identity_links`,
+			MaxIsZero: true,
+			Shows: "a sign-in page with nothing on it but this product's own form, " +
+				"which is what the demo's add-on — holding no session.mint — offers. " +
+				"A row here would mean somebody seeded an account's connection to a " +
+				"provider the demo does not talk to",
+		},
 	}
 }
 

@@ -29,6 +29,34 @@ migrations run at boot.
 
 ### Added
 
+- **A sign-in page that can offer what an installed add-on made possible.**
+
+  An authentication add-on could sign somebody in and serve its own pages, and
+  there was still no way to *start* the flow except by being handed a URL. Now an
+  add-on may ask for a link on this server's sign-in page, and you decide whether
+  it appears.
+
+  **Asking is the manifest's; agreeing is yours.** The add-on declares two fields
+  — the words to draw, and which of its own pages the link should reach. Nothing
+  appears until you turn on **`sign_in_link`** on that add-on's page in the Add-on
+  manager, and it is off until you do. A new version of an add-on cannot change
+  what your visitors see, and an add-on cannot declare a setting by that name to
+  answer for you.
+
+  **The link's destination is this server's.** The manifest names a page inside
+  the prefix the add-on already has — never a host, never a scheme, never a path
+  that climbs out — and the address is composed here and checked afterwards
+  against that same prefix. The words are the add-on's and are escaped like every
+  other value on every page; the icon, the colour, the position and the order when
+  two add-ons offer are not an add-on's to decide.
+
+  **Nothing changes for an instance that runs no add-ons.** The sign-in page is
+  byte for byte the page it was, and the password form does not move on any
+  instance: an add-on's link is drawn below it, never in place of it, so an
+  instance whose add-on is broken still lets its operator in. A link is drawn from
+  a module this server actually **loaded** — a failed add-on offers nothing rather
+  than a link that 404s.
+
 - **OIDC sign-in, as a first-party add-on rather than as a feature of this
   server.**
 

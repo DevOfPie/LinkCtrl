@@ -21,6 +21,23 @@
       </div>
       <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover">Sign in</button>
     </form>
+    {{- /* What an installed add-on offers (M69.5). Drawn only for a module this
+         instance actually loaded and whose operator turned the offer on, so a
+         stock instance renders this page byte for byte as it did before add-ons
+         existed. The label is the add-on author's text and is escaped like every
+         other value here; the href is the host's own composition, asserted to be
+         inside that add-on's route prefix before it reached this page. No icon,
+         no colour and no order the add-on controls: the sign-in page's
+         appearance is not an add-on's to decide, and the local form below is
+         where it has always been. */}}
+    {{- if .SignInLinks}}
+    <div class="mt-5 border-t border-line pt-5">
+      <p class="text-center text-xs text-muted">Or sign in with</p>
+      <ul class="mt-3 space-y-2">
+        {{range .SignInLinks}}<li><a href="{{.Href}}" class="block w-full rounded-md border border-line-strong px-3 py-2 text-center text-sm font-medium text-ink hover:bg-sunken">{{.Label}}</a></li>{{end}}
+      </ul>
+    </div>
+    {{- end}}
     {{/* Drawn only when the instance can actually send the mail (M51). The link
          leads to a page that refuses when no relay is configured, and an offer
          of recovery that cannot be honoured is what F141 called worse than an
