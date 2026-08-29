@@ -21,6 +21,41 @@ type signInLink struct {
 	Href  string
 }
 
+// builtStylesheetURL matches the one URL on this page whose fingerprint hashes a
+// file that is not in the tree.
+//
+// F349, M69.5. `internal/ui/static/css/app.css` is built by `make css` and
+// gitignored (.gitignore:25), so the `?v=` token the layout emits for it is a
+// property of a build rather than of this template: the golden was captured
+// against one machine's stylesheet and CI, building its own, disagreed on a page
+// that was byte-identical in every other respect. This one token is normalized
+// out of the comparison below and nothing else is — every other `?v=` on the
+// page hashes a committed file, so a change to any of them still fails here.
+var builtStylesheetURL = regexp.MustCompile(`/static/css/app\.css\?v=[A-Za-z0-9_-]+`)
+
+// normalizedStylesheetURL is what the golden carries in that position, so a
+// reader of testdata/login_stock.html can see the substitution rather than
+// having to infer it from a hash that looks real and is not compared.
+const normalizedStylesheetURL = "/static/css/app.css?v=FINGERPRINT"
+
+// withoutStylesheetFingerprint normalizes that token, and fails unless there was
+// exactly one to normalize.
+//
+// The count is the guard on the loosening. A comparison that skips part of a page
+// is only as good as its certainty about which part: if the layout stopped
+// emitting a fingerprinted stylesheet, or this pattern stopped matching the one it
+// emits, the substitution would become a no-op on both sides and the test would go
+// on passing while asserting something narrower than it claims. Counting turns
+// that into a failure.
+func withoutStylesheetFingerprint(t *testing.T, page string) string {
+	t.Helper()
+	if n := len(builtStylesheetURL.FindAllString(page, -1)); n != 1 {
+		t.Fatalf("the page carries %d fingerprinted stylesheet URLs, want exactly 1 "+
+			"— the normalization below would assert less than it says", n)
+	}
+	return builtStylesheetURL.ReplaceAllString(page, normalizedStylesheetURL)
+}
+
 // TestAStockSignInPageIsUnchanged is the milestone's no-op claim, held against
 // the bytes.
 //
@@ -29,11 +64,17 @@ type signInLink struct {
 // `session.mint`, hands this page an empty list — and the cost of getting this
 // page wrong is the whole product's front door, so the assertion is byte equality
 // rather than a search for what should be absent.
+//
+// Byte equality with one stated exception: the built stylesheet's fingerprint,
+// for the reason on builtStylesheetURL above. Everything an add-on could put on
+// this page is still compared, because everything an add-on could put on it is a
+// byte the template writes.
 func TestAStockSignInPageIsUnchanged(t *testing.T) {
-	want, err := os.ReadFile("testdata/login_stock.html")
+	raw, err := os.ReadFile("testdata/login_stock.html")
 	if err != nil {
 		t.Fatal(err)
 	}
+	want := withoutStylesheetFingerprint(t, string(raw))
 	for _, tc := range []struct {
 		name string
 		data map[string]any
@@ -43,9 +84,10 @@ func TestAStockSignInPageIsUnchanged(t *testing.T) {
 		{"a nil slice", map[string]any{"SignInLinks": []signInLink(nil)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := renderPage(t, "login", tc.data); got != string(want) {
+			got := withoutStylesheetFingerprint(t, renderPage(t, "login", tc.data))
+			if got != want {
 				t.Errorf("the sign-in page changed for an instance that runs no "+
-					"add-ons\n got: %q\nwant: %q", got, string(want))
+					"add-ons\n got: %q\nwant: %q", got, want)
 			}
 		})
 	}

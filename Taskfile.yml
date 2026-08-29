@@ -297,9 +297,14 @@ tasks:
     cmds:
       - bash scripts/check-version-stamp.sh {{.BIN}}/linkctrl {{.BIN}}/lctl
 
+  # verify-assets and css lead, for the reason the Makefile's `check` target
+  # spells out (F350, M69.5): without them this task measures whatever assets
+  # happen to be on disk, and `app.css` is gitignored and built.
   check:
     desc: Everything CI runs, short of integration tests
     cmds:
+      - task: verify-assets
+      - task: css
       - task: tidy
       - task: lint
       - task: shellcheck

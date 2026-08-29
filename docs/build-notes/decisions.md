@@ -504,6 +504,7 @@ file. Append a row when you append an entry.
 | [M69, the release arrives and the fixture becomes it](#2026-08-28--m69-the-release-arrives-and-the-fixture-becomes-it) | D396: the fixture is the artifact `LinkCtrl-OIDC` v0.1.0 published, downloaded and checked against that release's own `SHA256SUMS`, with the rebuild from the same tag as what earns the right to install it — why the pin moves off D393's pseudo-version, why both digests are transcribed rather than fetched, why the bundle is downloaded rather than reconstructed, and why the provenance attestation is the operator's question rather than the suite's |
 | [M69 reopened: the digest was a property of this machine](#2026-08-28--m69-reopened-the-digest-was-a-property-of-this-machine) | D397: the fixture pins the Go toolchain the release was cut with, and reads it from that release's own go.mod rather than transcribing it — why the pin goes in the fixture and not in the CI workflow, why a derived value is as immutable as the tag, what the two measured digests were, and why the digest check being the backstop is what makes deriving safe |
 | [M69.5, the last inch: an add-on asks, an operator agrees](#2026-08-28--m695-the-last-inch-an-add-on-asks-an-operator-agrees) | D398: the operator's consent is a toggle the **host** declares, riding M68's settings mechanism — which limb of the *every UI feature has API support* rule applies and why no operation was added and why `api/openapi.yaml` still gained a field, why a manifest-declared toggle would let an author answer for the operator through its default, why `config_get` cannot read it, and the counting cost that names. D399: the link is drawn from what **loaded** rather than what a directory claims — the opposite of M67's D346 and right for the opposite reason — plus the composition asserted on the result, the label bound as a constant, the order **sorted by name** rather than taken from a loaded set a runtime install appends to, and the byte-identical stock page. D400: the demo **states the exemption**, owner-answered, with the two declined alternatives named D401: M68's *manifest-declared* exclusion amended to *declared* — the page now renders one setting no manifest may declare, and why that is a fact rather than an assertion, so M68 is not reopened |
+| [M69.5 reopened: two greens that measured this machine](#2026-08-29--m695-reopened-two-greens-that-measured-this-machine) | D402: the stock sign-in page's golden compares everything except the built stylesheet's fingerprint — why the exception is one token rather than the whole `<head>`, why rebuilding before capturing was declined, and why the *exactly one match* count rather than the pattern is what stops the loosening from becoming a hole. D403: `make check` builds the assets it tests against, mirroring the CI **build** job's `verify-assets css` rather than the lint job's repairing `assets` — and the rule the two red branches share with [D397](#d397--the-fixture-pins-the-toolchain-the-release-was-cut-with-read-from-that-releases-own-gomod): a gate whose inputs are not in the repository measures the machine it runs on. D404: M69.5's *byte-identical* bullet amended to name that one token, a fact rather than an assertion because the page it describes could never have been byte-identical on any machine |
 
 ---
 
@@ -41298,3 +41299,130 @@ what its `done` row asserts, and this project's rule is that plan drift is allow
 and silent plan drift is not. The count discrepancy D398 already names — the list
 page's *N of M* against the detail page's N+1 rows — is the same fact seen from
 the other side, and the two entries should be read together.
+
+## 2026-08-29 — M69.5 reopened: two greens that measured this machine
+
+M69.5 landed, and CI was red on the commit that landed it. Three actors had run
+`make check` on that tree — the worker, the reviewer independently, the
+orchestrator again at acceptance — and all three got green. The branch was red
+for one reason: the golden the milestone's own no-op bullet rests on compares a
+page containing a hash of a file that is not in the repository.
+
+Both halves are fixed here, under M69.5's own number, because a reopening keeps
+its number and the trail is worth more in one place than the numbering is.
+
+### D402 — the stock sign-in page's golden compares everything except the built stylesheet's fingerprint
+
+**The defect** ([F349](deferred-findings.md#closed)).
+`internal/ui/testdata/login_stock.html` carried
+`/static/css/app.css?v=pnpIg4DzEwg`. `app.css` is gitignored (`.gitignore:25`)
+and built by `make css`, so that token hashes a build artifact rather than
+anything the template writes. The capture was made against an `app.css` four days
+old; CI built its own and got `?v=_1USZKa0dtQ`, failing all three subtests on a
+page that was **byte-identical in every other position**. Reproduced here before
+touching anything: `make css`, then
+`go test ./internal/ui/ -run TestAStockSignInPageIsUnchanged`, red with CI's exact
+hash.
+
+**The answer: normalize that one token, on both sides, and count it.**
+`builtStylesheetURL` in `internal/ui/login_test.go` matches
+`/static/css/app.css?v=…` and nothing else; the golden carries the literal
+`?v=FINGERPRINT` in that position so a reader of the testdata file sees the
+substitution instead of inferring it from a hash that looks real and is not
+compared. Every other `?v=` on that page — the favicon, htmx, `qr-size.js`,
+`addon-select.js` — hashes a **committed** file, so those stay compared byte for
+byte and a change to any of them still fails here.
+
+**The count is the load-bearing part, not the regexp.** A comparison that skips
+part of a page is only as good as its certainty about which part.
+`withoutStylesheetFingerprint` fails unless it finds exactly one match, on the
+rendered page and on the golden alike: a layout that stopped emitting a
+fingerprinted stylesheet, or a pattern that stopped matching the one it emits,
+would otherwise turn the substitution into a no-op on both sides and leave the
+test passing while asserting something narrower than its name. Sabotaged by
+deleting `layout.html`'s stylesheet link — *the page carries 0 fingerprinted
+stylesheet URLs, want exactly 1* — and restored by counter-edit.
+
+**The two declined answers.** *Compare the body only* was declined because it
+throws away the whole `<head>`, including four fingerprints that are genuinely
+deterministic and one `<meta name="htmx-config">` an add-on-adjacent change could
+plausibly reach; the exception should be the size of the defect. *Rebuild the
+stylesheet before capturing* was declined by the owner in the reopening itself,
+and rightly: it makes the golden pass today and red again at the next UI
+milestone, which is every milestone that touches a template.
+
+**What was proved, rather than argued.** The bound on this fix was that it must
+not become a test the add-on block could pass through, so it was driven from the
+other side twice. Making `login.html`'s guard unconditional (`{{- if true}}`) so
+the empty offer block renders on a stock page: red, all three subtests. Adding a
+literal `<li><a href="/addons/oidc/start">Sign in with Contoso</a></li>` to the
+stock page: red, all three subtests. Both restored by counter-edit and diffed
+back to byte-identical. And the fix's own claim, driven forwards: appending a
+comment to `app.css` so it hashes differently leaves the test green, which is the
+property that was missing.
+
+### D403 — `make check` builds the assets it tests against
+
+**The defect** ([F350](deferred-findings.md#closed)). `check` was
+`tidy lint shellcheck check-links test`. CI's build job is
+`verify-assets css build … ci-test`, and its lint job runs `htmx swagger-ui css`
+first. So the gate this repository names before every commit ran against whatever
+`app.css` happened to be on disk, and CI ran against one built moments earlier.
+A local green and a CI red could disagree **by construction** on any test that
+reads a built asset — and did.
+
+**The answer:** `check: verify-assets css tidy lint shellcheck check-links test`,
+and the same two steps at the head of `Taskfile.yml`'s mirror.
+
+**`verify-assets` rather than the `assets` target**, though `assets` is the
+literal set the CI lint job builds. The Makefile already argues this against
+itself, in the comment above `verify-assets`: `htmx` and `swagger-ui` *repair* a
+stale copy, which is right for a developer and wrong for a gate, because a gate
+that fixes what it finds reports success on a tampered blob. `check` is a gate.
+The CI **build** job is therefore the path to mirror, not the lint job, and its
+order is exactly the order taken.
+
+**Driven.** `make -n check` now runs the three `VERIFY_ONLY=1` scripts and
+`tailwindcss` before `go test`. Sabotaged by appending five bytes to
+`internal/ui/static/js/htmx.min.js`: `make check` refuses at `verify-assets`
+naming both digests, where before it would have run the full suite green.
+Restored and compared.
+
+**This is [F348](deferred-findings.md#closed)'s shape one milestone later**, and
+saying so is most of the value of the entry. F348 was a fixture that reproduced
+on this machine and not on the runner; this is a gate that measured this machine
+and not the code. Both were found by CI rather than by anything in the loop, and
+both were invisible to every local gate the contract names. What generalizes is
+narrow and worth writing down: **a gate whose inputs are not in the repository is
+measuring the machine it runs on**, and the two inputs of that kind this
+repository has — a gitignored build artifact and a toolchain version — have now
+each cost a red branch.
+
+`.github/workflows/` is not committable from this tree and needed no change: the
+workflow already built the assets. What was wrong was the local gate claiming to
+be *everything CI runs, short of integration tests* while running less.
+
+### D404 — M69.5's byte-identical bullet, amended
+
+**The bullet as it stood** (`phase-details/m69.5.md`, *Nothing appears on a stock
+instance*): *"`login.html` is byte-identical to what it renders today — asserted
+by a template test, because this is the one page every visitor with an account
+meets and the cost of getting it wrong is the whole product's front door."*
+
+**As amended:** the same, with *byte-identical to what it renders today, save the
+built stylesheet's cache-busting fingerprint, which hashes a gitignored artifact
+rather than anything this template writes (D402)*.
+
+**The tree fact:** `internal/ui/templates/layout.html:7` emits
+`{{asset "css/app.css"}}`, and `.gitignore:25` ignores the file that URL
+fingerprints. The page rendered on this machine and the page rendered in CI
+differ in that one token and in no other, which the CI failure and the local
+reproduction both show byte for byte.
+
+A **fact** and not an assertion, which is why it is amended rather than prompted:
+the bullet's purpose is that no add-on's data reaches a stock sign-in page, and
+the amended test asserts that undiminished — proved from the other side twice,
+above. What the original sentence got wrong is that *byte-identical* was never
+achievable for a page carrying a hash of an unversioned file, on any machine,
+including the one that wrote the sentence. Nobody could have decided that
+differently.

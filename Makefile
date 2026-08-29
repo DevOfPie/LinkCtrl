@@ -158,9 +158,12 @@ lint: ## Run golangci-lint
 check-links: ## Verify tracked markdown: links and anchors resolve, rows match their headers, row-table links land on their row
 	@scripts/check-links.sh
 
-# Deliberately not in `check` below. Every other gate there runs offline and
-# answers a question about this working tree; this one asks GitHub about a push
-# that already happened, so it belongs where the answer can change a decision —
+# Deliberately not in `check` below. Every other gate there answers a question
+# about this working tree — including `css`, which reaches the network only to
+# fetch the pinned Tailwind CLI it does not already have, and `verify-assets`,
+# which under VERIFY_ONLY refuses rather than downloads. This one asks GitHub
+# about a push that already happened, so it belongs where the answer can change
+# a decision —
 # release-check, and the phase loop's land sequence — rather than in front of
 # every local test run. Exit 2 is "could not ask" and is not a red build. See
 # F255: nine days of red CI that no gate anywhere was looking at.
@@ -240,8 +243,21 @@ check-generate: ## Fail if committed generated code does not match its source
 check-version-stamp: build ## Fail if a built binary does not report its version stamp
 	@scripts/check-version-stamp.sh $(BIN)/linkctrl $(BIN)/lctl
 
+# verify-assets and css lead, because without them this target measures the
+# machine rather than the code (F350, M69.5). `app.css` is gitignored and built
+# by `make css`, so a test that reads a built asset runs here against whatever
+# happens to be on disk and in CI against a stylesheet built moments earlier.
+# That is how F349 shipped: worker, reviewer and orchestrator each ran this
+# target and each got green on a four-day-old stylesheet while CI was red on the
+# same commit. The CI build job's own order is `verify-assets css build ...`, and
+# this is that order.
+#
+# verify-assets rather than the `assets` target, which the comment above that
+# target already explains: `htmx` and `swagger-ui` repair a stale copy, which is
+# right for a developer and wrong for a gate, because a gate that fixes what it
+# finds reports success on a tampered blob.
 .PHONY: check
-check: tidy lint shellcheck check-links test ## Everything CI runs, short of integration tests
+check: verify-assets css tidy lint shellcheck check-links test ## Everything CI runs, short of integration tests
 
 # Deliberately NOT a prerequisite of `check` above, of any ci- target, or of
 # release-check — and this comment sits here because directly above is where

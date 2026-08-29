@@ -150,7 +150,7 @@ unrecognised argument stops **nothing** and says so.
 All must pass. Failure means the commit does not happen.
 
 ```sh
-make check              # tidy + lint + unit tests, race enabled
+make check              # assets + tidy + lint + unit tests, race enabled
 make test-integration   # needs the stack up: make up
 ```
 
@@ -343,7 +343,7 @@ not a thing to leave out quietly.
 
 ```sh
 make up                 # start Postgres, Redis, app — the test instance
-make check              # tidy + lint + unit tests (race)
+make check              # assets + tidy + lint + unit tests (race)
 make test-integration   # integration tests (needs the stack)
 make generate           # sqlc + openapi
 make check-ci           # is the branch's latest CI run green? (asks GitHub)
