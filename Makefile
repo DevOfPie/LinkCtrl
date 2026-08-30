@@ -144,6 +144,7 @@ test: addon-fixtures ## Unit tests with the race detector
 .PHONY: test-integration
 test-integration: require-db-password guard-test-integration require-stack oidc-fixture idp-up ## Integration tests (needs Postgres, Redis and the test IdP)
 	@TEST_DATABASE_URL="$(DEV_DATABASE_URL)" LINKCTRL_REDIS_URL="$(DEV_REDIS_URL)" \
+		TEST_OIDC_FIXTURE=required \
 		go test -race -tags=integration -timeout 30m ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
 .PHONY: cover
@@ -435,7 +436,13 @@ ci-integration: addon-fixtures oidc-fixture idp-up ## Integration tests against 
 	@# whole claim is that it runs without leadership. Neither can live in
 	@# `test/integration`, because that package cannot import package main —
 	@# which is exactly why they were easy to leave out of CI and hard to notice.
-	go test -tags=integration -race -count=1 -timeout 30m ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
+	@# TEST_OIDC_FIXTURE=required because this target takes `oidc-fixture` above.
+	@# The suite skips the OIDC acceptance test when that other project's artifact
+	@# is absent, so that a bare `go test` — release.yml, release-check.sh — is not
+	@# red for a fixture no checkout carries. A run that *built* it may not then
+	@# lose it quietly, which is what this turns back into a failure.
+	TEST_OIDC_FIXTURE=required \
+		go test -tags=integration -race -count=1 -timeout 30m ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
 IMAGE         ?= linkctrl:ci
 IMAGE_VERSION ?= ci

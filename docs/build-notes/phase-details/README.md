@@ -66,7 +66,7 @@ released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
 | [M68.6](m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | done |
 | [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | done |
 | [M69.5](m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | done |
-| [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | not started |
+| [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | done |
 | [M70](m70.md) | Deferred findings, documentation pass, 0.4.0 | all | not started |
 
 **Phase 4 inherits all fourteen rules below, as written — owner-confirmed

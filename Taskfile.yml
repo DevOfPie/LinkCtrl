@@ -211,6 +211,7 @@ tasks:
     env:
       TEST_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
       LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"
+      TEST_OIDC_FIXTURE: "required"
 
   cover:
     desc: Open the coverage report
@@ -402,7 +403,7 @@ tasks:
       # scheduler's tests in cmd/linkctrl never ran on a runner — neither can
       # live in test/integration, because that package cannot import package
       # main, which is why they were easy to leave out and hard to notice.
-      - go test -tags=integration -race -count=1 ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
+      - TEST_OIDC_FIXTURE=required go test -tags=integration -race -count=1 ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
   ci-image-smoke:
     desc: Check a built image reports its version and serves everything on Postgres alone

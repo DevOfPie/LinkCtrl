@@ -33,10 +33,11 @@ import (
 // it. M61's privacy argument does not cover this — it is about what a module is
 // **given**, not about what it **keeps**.
 //
-// So the host resets it, and the reset is not the guest's to cooperate with. The
-// whole of an instance's mutable state lives in one linear memory; this file
-// copies that memory the moment package initialization finishes and writes the
-// copy back over it before the instance is handed out again. A module that stored
+// So the host resets it, and the reset is not the guest's to cooperate with.
+// **The reset covers linear memory and nothing else** — see the globals and
+// tables note below, which is a bound rather than a completeness claim; this
+// file copies that memory the moment package initialization finishes and writes
+// the copy back over it before the instance is handed out again. A module that stored
 // the last visitor's destination in a package-level variable reads an empty one,
 // because the bytes that held it are the bytes `_initialize` left there.
 // TestAPooledInstanceCannotSeeTheLastRedirect drives two redirects through one
@@ -61,14 +62,29 @@ import (
 //     memory it is supposed to restore, and the restore would be a no-op that
 //     looked like a reset.
 //
-// What is *not* reset is the eight mutable WebAssembly globals a Go module
-// carries — the stack pointer, the goroutine register and six scratch slots.
-// Nothing here can write them: wazero exposes globals through the module's export
-// section and this toolchain exports none. They are safe to leave because the
-// only state they hold between calls is the resting stack pointer, which is the
-// same value after a clean return from any exported function as it is after
-// `_initialize` — and *after a clean return* is the only state an entry is ever
-// pooled in, per the first bullet above.
+// What is *not* reset is every mutable WebAssembly global and every table the
+// module carries. A Go module carries eight globals — the stack pointer, the
+// goroutine register and six scratch slots — and for *that* toolchain leaving
+// them is safe: the only state they hold between calls is the resting stack
+// pointer, which is the same value after a clean return from any exported
+// function as it is after `_initialize`, and *after a clean return* is the only
+// state an entry is ever pooled in, per the first bullet above.
+//
+// **That is a fact about Go, not about WebAssembly, and this host runs modules
+// it did not build** — M68.6 installs one from a URL on an operator's digest.
+// A module that keeps its state in a mutable global, or in a funcref table,
+// carries it from one visitor's invocation into the next, across workspaces:
+// the pool is keyed `(addon, class)` and by nothing else. Measured at M69.9 by
+// driving hand-assembled modules through `Host.Inline`, reported out through
+// `redirect_answer_write`'s query rewrite — which lands in the destination the
+// visitor's browser is sent to — and through `log`.
+//
+// The host cannot close it here. wazero exposes globals through the module's
+// export section, this toolchain exports none, and `CompiledModule` cannot
+// enumerate them, so there is nothing to write back. Closing it means rewriting
+// the module's bytes at load to export its globals, or refusing to *pool* a
+// module whose shape the host cannot prove inert. Neither is built; the finding
+// carries the options.
 //
 // # What is pooled, and what is not
 //

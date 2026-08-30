@@ -54,7 +54,7 @@ const (
 // function hands a module that asks. Asserted against the three integers above
 // by test, because two spellings of one number is how they come to differ.
 //
-// The patch moved at M65, at M66 and again at M68, and which component moved is
+// The patch moved at M65, at M66, at M68 and again at M68.5, and which moved is
 // the whole of what docs/addon-abi.md's table decides. Adding a function is
 // **additive**, and while the major is zero the *minor* is the breaking axis — so
 // additive is the patch, and [Generation] does not move. `redirect_decision_read`

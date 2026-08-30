@@ -1272,9 +1272,10 @@ func TestEveryDocumentedNumberIsTied(t *testing.T) {
 // per file, every other occurrence of one of those numbers, with what it is
 // about instead.
 //
-// Six of the eight files give an operator a number to size a host by; two —
+// Seven of the nine files give an operator a number to size a host by; two —
 // docs/addon-abi.md and sdk/doc.go — give a publisher the per-instance bound and
-// neither of the others.
+// neither of the others. Counted at M69.9 rather than trusted: it read six and
+// eight against a table that had grown.
 var documentedNumberSites = []struct {
 	path      string
 	sentences []string
@@ -1340,6 +1341,10 @@ var documentedNumberSites = []struct {
 			"the {n} are shared with the redirect path",
 			// The rate-limited row, where the redirect path's own skip is read.
 			"all {n} instance slots were busy",
+			// M69.9 added the other direction to the same 503 row: a page holding
+			// its slot for the route deadline is what starves the redirect path,
+			// and it was stated only in slo.md until then.
+			"so {n} concurrent sign-ins through an add-on hold all {n} for seconds",
 		}},
 	{path: "CHANGELOG.md",
 		sentences: []string{

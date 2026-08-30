@@ -512,7 +512,7 @@ Four failures reach a reader as a page, and each names a different fix:
 | Status | Means | Where to look |
 | --- | --- | --- |
 | **404** | No add-on of that name is loaded, or the one loaded did not declare `routes.own_prefix`. The two are deliberately one answer — which add-ons an instance runs is not something an anonymous visitor is told | The boot log's `add-on loaded` lines, and the manifest's `permissions` |
-| **503** | Sixteen add-on invocations are already in flight across the instance and this one waited out the request timeout. Each holds a module instance — a page request's is built for it and thrown away, a redirect's comes from the pool `LINKCTRL_ADDON_POOL_SIZE` bounds — so this is capacity rather than an error — and the sixteen are shared with the redirect path, so an inline add-on under load can be what filled them | `linkctrl_http_requests_total` for the shape of the traffic; if it is not a burst, the add-on is slow and its own log will say why |
+| **503** | Sixteen add-on invocations are already in flight across the instance and this one waited out the request timeout. Each holds a module instance — a page request's is built for it and thrown away, a redirect's comes from the pool `LINKCTRL_ADDON_POOL_SIZE` bounds — so this is capacity rather than an error — and the sixteen are shared with the redirect path, so an inline add-on under load can be what filled them — **and it runs the other way too**: an add-on page that makes an outbound request holds its slot for up to `LINKCTRL_ADDON_ROUTE_DEADLINE` (10s), so sixteen concurrent sign-ins through an add-on hold all sixteen for seconds, and inline redirect add-ons are skipped for the duration. An add-on holding both `routes.own_prefix` and `network.fetch` — which is the OIDC add-on's shape — is the case to watch | `linkctrl_http_requests_total` for the shape of the traffic; if it is not a burst, the add-on is slow and its own log will say why |
 | **502** | The module answered nothing usable: it exports no handler, it wrote no response, it trapped, or it refused its own route | The instance log — the host writes the add-on's name and the reason, and nothing of it reaches the page |
 | **413** | The request is larger than an add-on may be handed. The bound is on the *record* the host builds, not on the body alone: the ABI carries one value at up to 64 KiB, and the body shares that with the method, path, query, content type, language and declared cookies — a body that is not UTF-8 is base64 first, and a control character costs six bytes inside the encoding. So there is no single body size to quote, and the module never ran | Whatever is posting to the add-on |
 
@@ -855,8 +855,10 @@ Deliberate gaps, so they are not discovered during an incident:
   required. Everything else in flight survives — see
   [what happens when a replica dies](#what-happens-when-a-replica-dies).
 - **The dimension rollup is expensive and gets worse.** It recomputes whole days
-  every 60 seconds; at 5.7M click events that measured 16–21 seconds per run, and
-  it will eventually exceed its own interval. Redirects are unaffected — the
+  every fifteen minutes; at 5.7M click events that measured 4.8–6.3 seconds per
+  run. It ran on a 60-second clock at 16–21 seconds per run until
+  [M37](build-notes/phase-details/m37.md) split the cadences, and this paragraph
+  described that until M69.9 counted it. Redirects are unaffected — the
   measured SLO held throughout — but dashboards go stale when it falls behind.
   Watch `linkctrl_job_last_success_timestamp_seconds{job="rollup"}`. Details and
   the `EXPLAIN` output: [slo.md](slo.md).

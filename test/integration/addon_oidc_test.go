@@ -304,12 +304,20 @@ func stockDeps(t *testing.T, pool *pgxpool.Pool, authSvc *auth.Service, host *ad
 
 // --- the fixture's two artifacts --------------------------------------------
 
-// oidcRelease reads the published add-on, and refuses to skip when it is absent.
+// oidcRelease reads the published add-on.
 //
-// A skip would be a green run of the one test whose subject is whether this
-// product's add-on foundation works, which is the failure mode
-// `make ci-integration` refuses for the Redis tier and refuses here for the same
-// reason. Both make targets that run this suite take `oidc-fixture` first.
+// The add-on is another project — `DevOfPie/LinkCtrl-OIDC`, with its own CI and
+// its own release workflow — and its artifacts are gitignored, so a checkout of
+// *this* repository does not carry them. A gate here that *requires* them
+// therefore measures whether somebody ran a make target on this machine rather
+// than whether this product works, which is F348 and F350's class and is what
+// made `release.yml` unable to cut a tag at all.
+//
+// So absence skips, and the run that promised the fixture says so: the two make
+// targets taking `oidc-fixture` set TEST_OIDC_FIXTURE=required, and under it
+// absence is fatal. A skip is invisible and that is the risk being taken here —
+// the opt-in is what stops it becoming one, because the context that builds the
+// fixture is the context that cannot silently lose it.
 func oidcRelease(t *testing.T) (manifest, module []byte) {
 	t.Helper()
 	manifest = mustFixtureFile(t, filepath.Join(oidcFixtureDir, addon.ManifestFile))
@@ -335,16 +343,28 @@ func providerTLS(t *testing.T, ca []byte) *tls.Config {
 	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
 }
 
+// oidcFixtureRequired reports whether this run promised the OIDC fixture. Set by
+// `make test-integration` and `make ci-integration`, which build it first;
+// unset for a bare `go test`, which is what `release.yml` and
+// `scripts/release-check.sh` run.
+func oidcFixtureRequired() bool { return os.Getenv("TEST_OIDC_FIXTURE") == "required" }
+
 func mustFixtureFile(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%v\n\n"+
-			"M69's acceptance test needs the published OIDC add-on and a running "+
-			"identity provider. Both are make targets:\n"+
-			"  make oidc-fixture   # fetches and rebuilds github.com/DevOfPie/LinkCtrl-OIDC\n"+
-			"  make idp-up         # starts dex and waits for its discovery document\n"+
-			"`make test-integration` and `make ci-integration` take both.", err)
+		const how = "M69's acceptance test needs the published OIDC add-on and a running " +
+			"identity provider. Both are make targets:\n" +
+			"  make oidc-fixture   # fetches and rebuilds github.com/DevOfPie/LinkCtrl-OIDC\n" +
+			"  make idp-up         # starts dex and waits for its discovery document\n" +
+			"`make test-integration` and `make ci-integration` take both."
+		if oidcFixtureRequired() {
+			t.Fatalf("%v\n\nTEST_OIDC_FIXTURE=required, so this is a failure and not a "+
+				"skip: the run that builds the fixture is not allowed to lose it.\n\n%s", err, how)
+		}
+		t.Skipf("%v\n\nSkipped rather than failed: the OIDC add-on is another "+
+			"project's artifact and is not in this checkout. Set TEST_OIDC_FIXTURE=required "+
+			"to make its absence fatal.\n\n%s", err, how)
 	}
 	return b
 }

@@ -505,6 +505,8 @@ file. Append a row when you append an entry.
 | [M69 reopened: the digest was a property of this machine](#2026-08-28--m69-reopened-the-digest-was-a-property-of-this-machine) | D397: the fixture pins the Go toolchain the release was cut with, and reads it from that release's own go.mod rather than transcribing it — why the pin goes in the fixture and not in the CI workflow, why a derived value is as immutable as the tag, what the two measured digests were, and why the digest check being the backstop is what makes deriving safe |
 | [M69.5, the last inch: an add-on asks, an operator agrees](#2026-08-28--m695-the-last-inch-an-add-on-asks-an-operator-agrees) | D398: the operator's consent is a toggle the **host** declares, riding M68's settings mechanism — which limb of the *every UI feature has API support* rule applies and why no operation was added and why `api/openapi.yaml` still gained a field, why a manifest-declared toggle would let an author answer for the operator through its default, why `config_get` cannot read it, and the counting cost that names. D399: the link is drawn from what **loaded** rather than what a directory claims — the opposite of M67's D346 and right for the opposite reason — plus the composition asserted on the result, the label bound as a constant, the order **sorted by name** rather than taken from a loaded set a runtime install appends to, and the byte-identical stock page. D400: the demo **states the exemption**, owner-answered, with the two declined alternatives named D401: M68's *manifest-declared* exclusion amended to *declared* — the page now renders one setting no manifest may declare, and why that is a fact rather than an assertion, so M68 is not reopened |
 | [M69.5 reopened: two greens that measured this machine](#2026-08-29--m695-reopened-two-greens-that-measured-this-machine) | D402: the stock sign-in page's golden compares everything except the built stylesheet's fingerprint — why the exception is one token rather than the whole `<head>`, why rebuilding before capturing was declined, and why the *exactly one match* count rather than the pattern is what stops the loosening from becoming a hole. D403: `make check` builds the assets it tests against, mirroring the CI **build** job's `verify-assets css` rather than the lint job's repairing `assets` — and the rule the two red branches share with [D397](#d397--the-fixture-pins-the-toolchain-the-release-was-cut-with-read-from-that-releases-own-gomod): a gate whose inputs are not in the repository measures the machine it runs on. D404: M69.5's *byte-identical* bullet amended to name that one token, a fact rather than an assertion because the page it describes could never have been byte-identical on any machine |
+| [M69.9, the pre-release adversarial review: what it checked, what it found, and what it refuted](#2026-08-30--m699-the-pre-release-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted) | Eight readers in fresh contexts over the whole phase, ten adversarial refuters, ~36 raw findings. Both claimed reopenings refuted to amendments; a finder's new row established as F281 and another folded into F336; one of four false digest sentences shown true; the wasm leak's headline figure shown to be the race detector's shadow. Two findings the attack made worse. The browser check on a rebuilt image with a sign-in add-on installed |
+| [M69.9's triage: the owner's five answers](#2026-08-30--m699s-triage-the-owners-five-answers) | D405, owner-answered: nothing in this repository's gates may *require* another project's artifact, so the OIDC acceptance test skips and the two make targets that build it opt back in. D406: the pool's non-memory leak is disclosed and filed, not patched, because every remedy is a design choice. D407: the add-on mint's audit surface is documented rather than moved. D408: everything documentation-shaped is corrected now. D409: four shipped bullets amended, none reopened. D410: the always-read contract grew 1433 bytes over five milestones and is defended, with the trim named — Phase 4's status table leaves this file at the phase close |
 
 ---
 
@@ -41426,3 +41428,333 @@ above. What the original sentence got wrong is that *byte-identical* was never
 achievable for a page carrying a hash of an unversioned file, on any machine,
 including the one that wrote the sentence. Nobody could have decided that
 differently.
+
+
+## 2026-08-30 — M69.9, the pre-release adversarial review: what it checked, what it found, and what it refuted
+
+Eighteen milestones, `b9886f5..66edf10`, 219 files and +72853/-513 against
+`v0.3.0`. [M64.9](phase-details/m64.9.md) had already read M59–M64 at `00d4ed5`,
+so the second half — `00d4ed5..66edf10`, 181 files — is what this review weighted,
+with the whole phase in range. Run to [M32.9](phase-details/m32.9.md)'s
+specification, as every `X.9` since.
+
+**How independence was bought.** The same way M64.9 bought it, and for the same
+stated reason: no more capable model exists, so the rule degrades to fresh
+contexts that had never seen the workers' reasoning. **Eight readers**, each
+pointed at one dimension and given the standards as files, no conclusions and no
+hint of which parts anybody thought were weak — M65 attacked as account takeover;
+M66 and M66.5 under adversarial modules; M67 and M68; M68.5 and M68.6; M69 and
+M69.5; the standing question re-read over the foundation; the published claims
+against measurement; and the cross-repo release chain. M64.9 used six for six
+milestones; this range is eleven.
+
+**~36 raw findings, and every one was put to something that tried to kill it** —
+**ten adversarial refuters** for the behavioural claims, and counting for the
+enumerations, because counting *is* the refutation for a count claim. Eight
+counts were settled that way by the orchestrator rather than by an agent.
+
+**The refutation pass killed or corrected as much as it confirmed, which is the
+point.** In order of what it saved:
+
+- **Both claimed reopenings fell.** A reader argued that M64 must reopen — its
+  *cannot mint* bullet cites a declared-but-refused list that no longer holds a
+  session function — and that M60 must reopen, its *no table* absence having
+  become a bound. Neither survived. `git show c0d0025:internal/addon/abi/functions.go`
+  has `session_mint` with **no `Live` field**: the bullet was true of M64's own
+  tree and said so in two words, *here* and *yet*. M60's four runtime absences
+  still assert and their tests are green; *no table* was narrowed in writing at
+  the time, in `internal/addon/absence_test.go` and in D342. [D304](#2026-08-21--m65-amending-m62s-ungated-count-rather-than-reopening-it)
+  had already ruled on this exact shape — *that is the mechanism working, not a
+  defect* — over a sentence carrying no temporal hedge at all. Both became dated
+  amendment parentheses. Reopening a shipped milestone is the most expensive
+  outcome this review can produce and it produced none.
+- **A finding reported as new was established as [F281](deferred-findings.md#open).**
+  The orphaned-data surface really does offer a still-installed add-on's data for
+  permanent deletion — driven end to end, `PURGE SUCCEEDED for a still-installed
+  add-on` — but F281 named this consequence in August, prescribed the same fix,
+  and is still `Unreviewed`. The refuter also broke the finder's hook: m68.md uses
+  *installed* for the loaded set in its own first bullet, so the word draws no
+  distinction. The outcome is F281 raised to High rather than a second row.
+- **A second was folded into [F336](deferred-findings.md#open)** as one further
+  consequence — a stored secret reaching the log — rather than filed as its own.
+- **One of four claimed-false digest sentences is true.** `CHANGELOG.md:85-90`
+  says the release is verifiable without trusting the page you found it on, and
+  it is: the attestation covers the **bundle** as well as the module, resolving
+  through `gh api` with Rekor `logIndex 2623837353`. Its only defect is
+  understatement.
+- **The `config.read` + `network.fetch` "exfiltration" is the shipped feature.**
+  `docs/addon-abi.md:800-805` says a token endpoint is reached with
+  `client_secret_post` and there is no other way, and
+  [D359](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) declined withholding it
+  at the ABI on the merits. The composition is disclosed twice more in
+  SECURITY.md, ~600 lines from the paragraph the finder read. What survived is
+  one clause: *the first time two grants compose* read as exhaustive.
+- **The wasm leak lost its headline number and its framing.** A refuter changed
+  instrument — anonymous `r-xp` mappings from `/proc/self/maps`, immune to page
+  reclaim and to the seven other agents on the box — and got 6844 KiB/cycle of
+  mapped executable, ~10 MiB RSS. The finder's 26 MiB was the race detector's
+  shadow memory. Only the instance principal can reach it, and that principal can
+  already put working code in the process, so it is robustness rather than
+  security.
+
+**Two findings the attempt to kill them made worse**, which is the outcome the
+refutation pass exists to produce:
+
+- **The `PurgeData` race**, filed Low, reproduced 3/3 and raised to Medium: the
+  install returns **success**, names the schema it created, and the schema is
+  gone. No database guard either — dropping a schema whose add-on holds an open
+  pooled connection returned `err=<nil>` in 1.44ms. The 13ms window is the floor,
+  since `MigrateAddon` runs inside it.
+- **The mint audit surface.** The claim survived a probe against a real database
+  — `organization_id` non-NULL, `rows visible to ListInstanceAuditLogs: 0` — and
+  the refuter then found what the reader had missed: the **pending** second-factor
+  record *is* instance-wide, because no workspace has resolved yet. So for an MFA
+  account the two halves of one sign-in land in two different logs, which is the
+  inversion of what `CHANGELOG.md:571-577` emphasises.
+
+**The largest finding is [F351](deferred-findings.md#open), and it is the one the
+mid-phase review could not have found**, because M66.5 did not exist yet. A
+pooled instance restores the guest's linear memory and nothing else, so a mutable
+WebAssembly global — or a funcref table, which the refuter found and the finder
+had not — carries state from one visitor's invocation into the next, across
+workspaces. Reproduced through `Host.Inline`, the production entry point:
+`visitor-a -> ?g=0&m=0`, `visitor-b -> ?g=1&m=0`, `visitor-c -> ?g=2&m=0`, and
+across three workspaces carrying a byte of the previous invocation's
+`RedirectDecision`. Readable through the shipped ABI, into the destination the
+visitor's browser is sent to. `pool.go:64-71`'s argument — that wazero exposes
+globals only through the export section and this toolchain exports none — is
+**factually true and does not bound the problem**, because M68.6 installs
+arbitrary bytes from a URL. No module this product's SDK can build reaches it.
+Both remedies the finder proposed are unusable as stated: re-instantiating
+reverses M66.5 entirely, and refusing modules with mutable globals refuses every
+add-on the SDK produces, which emit eight apiece.
+
+**Two readers reached the same defect independently, neither told about the
+other** — the signal M64.9 recorded as the strongest a review produces. The
+reader pointed at M67 and M68 and the reader pointed at M69 and M69.5 both filed
+the sign-in consent surviving its add-on and being inherited by whatever takes
+the name next. Its refuter then established that it is *not* an escalation and
+that `Remove` is the wrong defendant — remove-then-install is the only upgrade
+path this product has, so clearing consent on removal would drop the link off
+`/login` on every legitimate upgrade. What survives is the **label**: nothing
+records the words the operator agreed to and no page shows them.
+
+**CI, asked mechanically.** `make check-ci` — green on `phase-4` at `66edf10`.
+That is M59's gate exercised as a gate, which is the check F255 existed to
+create, and it is the bullet this review is obliged to answer rather than assume.
+
+**The browser check, which [M46.5](phase-details/m46.5.md) obliges every `X.9` to
+answer.** Against an image rebuilt for it at 23:09:38Z — `make up` does not
+rebuild and a check against stale code passes for the wrong reason. `make
+verify-ui`: **20 passed**. Then the phase's own surface, which the kept suite
+could not reach: the test instance ships only the `pageviews` fixture, which
+declares no routes and no sign-in link, so an add-on holding `routes.own_prefix`
+and `session.mint` was installed the way an operator would and driven. Five
+checks, all green — anonymous `/login` carries no add-on link while consent is
+ungranted; the operator grants it through the real manager form, which renders it
+as `setting_sign_in_link` carrying the sentence no ordinary toggle carries; the
+anonymous page then carries exactly one link, `Sign in with sso` →
+`/addons/sso/start`; **the CSP header is byte-identical across the add-on link
+appearing**, and every `<script>` on the page is the host's; both themes; and
+revoking removes it again. Console was asserted **empty** — `console`,
+`pageerror` and `requestfailed` collected and compared to `[]` — on every page
+walked, rather than observed. Noted while installing, and it is the rule holding
+rather than a finding: `sso` declares `failure_class: degrade` and the host
+loaded it `required`, which is M65's rule visible in the host's own log line.
+
+**What was checked and found sound** is in the review's own record and is not
+repeated here, but the shape is worth keeping: a 40-address battery against
+`refuseAddress` (loopback, `169.254.169.254`, `fe80::/10`, CGNAT edges, 6to4,
+`::ffff:127.0.0.1`) all refused with the right rule token; redirects measured on
+the wire, with a same-origin chain stopping after exactly four requests; M68.6's
+digest compared **before** any parser touches the bytes; and **no second door
+into [F347](deferred-findings.md#open)'s shape** — the reviewer looked for one
+and said so.
+
+**Coverage is scoped to what was drivable**, as m69.9.md's risk requires rather
+than implies. The consumers that exist are this repository's own WASM fixtures,
+purpose-built hostile modules, and `DevOfPie/LinkCtrl-OIDC` at `v0.1.0` — which,
+unlike at M64.9, **is** checkable and was checked: both attestations resolve, and
+CI run `33254142963` logs the fixture building with `go1.26.5` on a runner. Claims
+about "any add-on" are claims about the contract. TinyGo, clang and rustc are not
+on this machine, so F351's reachability is established for hand-assembled wasm and
+excluded for Go, and is **unverified** for the toolchains in between.
+
+## 2026-08-30 — M69.9's triage: the owner's five answers
+
+### D405 — nothing in this repository's gates may *require* another project's artifact
+
+Owner-answered, in their own words: *CI should only run for this project, not
+related projects that should have their own ci.* The finding that prompted it is
+the sharpest thing this review found — `.github/workflows/release.yml:133-137`
+runs a bare `go test -tags=integration ./test/integration/` with postgres and
+redis and no dex, against fixtures `.gitignore:84` keeps out of the repository,
+and `mustFixtureFile` **fatals**. So a `v*.*.*` tag push fails at `verify`, and
+image, binaries and notes all `needs: verify`: **0.4.0 could not have been cut.**
+`scripts/release-check.sh:359` carries the identical bare form and is green here
+only because a make target already wrote the fixture on this machine — F348 and
+F350's class, one gate later.
+
+The answer is not "add `oidc-fixture` to the release workflow". It is that
+`DevOfPie/LinkCtrl-OIDC` has its own CI and its own release workflow, and this
+repository's gates test this repository. So **absence skips**: `mustFixtureFile`
+skips rather than fatals, and no gate anywhere can go red because another
+project's artifact is not in a checkout.
+
+The cost was named before the answer was given and the owner took it anyway: **a
+skip is invisible**, and a suite that quietly stops running is F291's shape. What
+stops it is an opt-in — `make test-integration` and `make ci-integration` both
+already take `oidc-fixture`, so both set `TEST_OIDC_FIXTURE=required`, under which
+absence is fatal again. The context that builds the fixture is the context that
+may not silently lose it; the context that never promised it skips. `ci.yml` runs
+`make ci-integration` and so keeps every bit of the coverage that exists today —
+which matters, because the add-on surfaces executed on a runner for the first time
+this phase and F348 is what achieved it.
+
+Driven both ways, with the fixture moved aside: bare `go test` gives
+`--- SKIP: TestTheOIDCAddonMayBeUsed`, and `TEST_OIDC_FIXTURE=required` gives
+`FAIL` carrying the message naming the two make targets. Restored by moving it
+back.
+
+The declined answer, for the record: *cut the OIDC acceptance tests out of CI
+entirely* is the strictest reading of the same principle and throws away coverage
+that works today, which would also have made m69.md's *the acceptance test
+therefore runs in CI as well as here* something to amend rather than something to
+keep true.
+
+### D406 — the pool's non-memory leak is disclosed and filed, not patched
+
+The four false sentences are corrected now, because that half is cheap and
+independent of the code. The code is [F351](deferred-findings.md#open) and stays a
+row, because **every remedy is a design choice and two of the three obvious ones
+are wrong**: re-instantiating per invocation reverses M66.5 outright — 11.05ms of
+startup back onto a 20ms path, p99 44.89ms — and refusing modules that carry
+mutable globals refuses every add-on this product's own SDK builds, since Go emits
+eight, and would still miss tables. What is left is rewriting a module's bytes at
+load so its globals can be exported, snapshotted and restored beside the memory
+image, or refusing to **pool** a module whose shape the host cannot prove inert.
+Both are M70-or-later work and neither is a patch.
+
+Shipping 0.4.0 with this disclosed rather than closed is the accepted cost, and
+the disclosure is written where an operator reads it rather than only here.
+
+### D407 — the add-on mint's audit surface is documented, not moved
+
+The tree's own reasoning points the other way and the owner chose the documents
+anyway, which is worth recording as a choice rather than an oversight:
+`internal/addon/lifecycle.go:721` says *`InstanceWide` because an add-on belongs
+to no organization*, and D297 argues a mint's authority is not this product's. Ten
+other sites in the tree set `InstanceWide: true`.
+
+Against that: the record is not lost, it is in the tenant's log, where that
+organization's `audit.read` holders can see one of their own members signed in
+through an add-on — arguably the more useful place, and making it instance-wide
+would hide it from them. No decision ever specified the surface, so there was
+nothing to restore.
+
+What the documents now say is what the tree does, including the part nobody chose:
+for an account with a second factor, the record that an assertion arrived is
+instance-wide and the record of the session that exists is not, so one sign-in
+lands in two logs. `docs/SECURITY.md` and `CHANGELOG.md` both say where to look.
+
+### D408 — everything documentation-shaped is corrected in this milestone
+
+Rather than filed for M70. The set is larger than a review usually carries because
+this review counted rather than trusted: `Plan.md`'s redirect target gained the
+add-on clause it never had — the definition is the scope contract's and `slo.md`'s
+emphatic exclusion was an appendix a reader might not reach; `docs/usage.md` gained
+the host-declared `sign_in_link` toggle it omitted while describing settings as
+manifest-declared; `docs/operations.md`'s dimension-rollup paragraph moved from
+*every 60 seconds, 16–21 seconds per run* to the truth since M37, and gained the
+pages→redirect starvation direction that existed only in `slo.md`; the digest
+instructions in `docs/configuration.md` and `docs/SECURITY.md` stopped telling an
+operator to read a digest off the page the URL came from, which is what the
+install form in front of them says proves nothing, and now point at the
+attestation, which is the channel that works; `docs/SECURITY.md`'s *first time two
+grants compose* stopped reading as exhaustive; and two `CHANGELOG.md`
+`[Unreleased]` entries stopped saying the Add-on manager "is not built yet" in the
+section that ships it — which D104 makes load-bearing, since `[Unreleased]` is what
+README is written from at the documentation pass.
+
+Four counts were corrected by counting: `internal/addon/abi/permissions.go` read
+*Eight entries* against nine and against `functions.go` one file over;
+`internal/addon/http_test.go` read *six of the eight files* against a table of
+nine; `internal/addon/abi/abi.go` named three ABI patch moves out of four; and
+`docs/configuration.md`'s manifest table omitted the `origin` setting key, which
+the host accepts — the very divergence F286's repair asserts cannot exist, and
+which m69.5.md leaned on.
+
+**README is untouched**, per D104: it describes the released product, and the tag
+is what releases it. Its *thirty-nine actions* (now forty-four) and its
+*no telemetry leaving the box* both wait for M70's documentation pass, where they
+are written against what the tag will ship.
+
+### D409 — four shipped bullets amended, none reopened
+
+`m64.md`, `m60.md`, `m66.5.md` and `m69.5.md` each carry a dated amendment
+parenthesis naming the bullet as it stood, the bullet as amended and the tree fact
+that forced it. Three are facts a reader could not have decided differently — a
+stale cross-reference, a narrowing recorded in the wrong file, a coupling that
+does not exist. **`m66.5.md`'s is not**, and is marked as such: its bullet asserts
+that either the guest's state is reset or the pool is per-something safe, and
+neither limb holds. It is amended rather than reopened because the tree is not
+broken in a way M66.5 could have delivered differently — the channel is
+unreachable to every module the SDK can build — and because the work that closes
+it is F351's, which is scheduling and therefore the owner's.
+
+### D410 — the always-read contract grew 1433 bytes, and it is defended because the phase close removes most of it
+
+The `/work phase` resume floor reads **67066 → 68499**. Regenerated *after* this
+review's own edits, not before, for the reason [D268](#2026-08-20--m649-the-mid-phase-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted)
+gives: a review that measures first is measuring the tree it walked in on.
+
+The number spans five milestones, not one. `doc-cost.md` was last regenerated at
+`e63c955` — M64.9's own commit — so this delta is M65 through M69.5 inclusive,
+with their reopenings.
+
+- **`workflow.md` +18 bytes**, and they are two identical corrections: the quick
+  reference read `make check # tidy + lint + unit tests` in both places, and
+  F350's fix put `assets` at the head of that target. A gate's description
+  matching the gate. Realized read ratio **0.92**, the highest in the tree.
+- **`phase-details/README.md` +1415 bytes** — four status rows for the four
+  milestones the phase inserted, and the paragraph that **names** those four
+  rather than counting them. That paragraph exists because of this repository's
+  own rule about numbers beside rules: a count nothing keeps true is the defect,
+  which the `demoCoverage` row records being bitten by. Naming costs bytes and
+  stays true.
+
+**The honest half.** That file's realized ratio fell **0.80 → 0.72**, which is
+the same signal that moved the *Phase 3 inherits all fourteen* table out to
+`phase-3-candidates.md` at M51.9 — evidence that a part of the file is being paid
+for on every resume and skipped. About 3900 bytes a read are not being used.
+
+**Trimmed anyway? No, and the reason is the calendar rather than the argument.**
+The whole Phase 4 status table — rows and planning paragraph together — leaves
+this file at the phase close: a released phase's rows move to its own
+`phase-N.md`, which is what `phase-1.md`, `phase-2.md` and `phase-3.md` already
+are. [M70](phase-details/m70.md) is the next milestone. Trimming now is work
+undone within one milestone, and it would take the paragraph a reader of *this*
+phase still needs. So: defended, with the trim named rather than deferred
+silently — **M70's documentation pass moves the table, and the ratio is the thing
+to re-read afterwards.** If it has not recovered past 0.80 with Phase 4's rows
+gone, the remaining growth is structural and the next review should trim rather
+than defend.
+
+**One thing that did not happen, and is worth recording because it did last
+time.** D268 filed the charging artefact where `Plan.md` swings ~68 KB depending
+on whether it happens to carry an ordering table. It carries one now and is
+charged at its longest matching row — **322 bytes** against a 100647-byte file,
+realized ratio 0.09. So this regeneration and the last are comparable, and the
+1433 is a real delta rather than an artefact. That is the first time two
+consecutive regenerations in this phase can be compared at all.
+
+### The correction this review owes to D392
+
+[D392](#2026-08-28--m69-the-release-arrives-and-the-fixture-becomes-it)
+says, of the OIDC fixture's digests, that fetching the sums file beside the bundle
+*authenticates nothing — it is the same page — which is exactly what
+`docs/configuration.md` tells an operator*. The conclusion is right and the
+attribution is backwards: `docs/configuration.md` told an operator to *read the
+digest from the release's own `SHA256SUMS`*, which is the opposite. Corrected in
+that file under D408, and recorded here rather than edited there, because
+decisions.md is append-only and a later entry is how an earlier one is corrected.

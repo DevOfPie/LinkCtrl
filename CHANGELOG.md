@@ -73,8 +73,9 @@ migrations run at boot.
   nobody has connected signs nobody in. You sign in with a password, visit the
   add-on's linking page, and from then on that provider identity reaches your
   account. There is deliberately no matching on the email address an assertion
-  carries. Every session minted this way is in the instance audit log as
-  `session.minted_by_addon`, naming the add-on and the provider.
+  carries. Every session minted this way is recorded as
+  `session.minted_by_addon`, naming the add-on and the provider, in the audit log
+  of the organization the session resolved to rather than the instance-wide one.
 
   **What running it costs you** is in
   [docs/configuration.md](docs/configuration.md) — the two parties you trust, what
@@ -506,8 +507,9 @@ migrations run at boot.
   operator tell core's latency from each add-on's and take the problem to the right
   team. An invocation skipped because all sixteen instance slots were busy is on
   `linkctrl_rate_limited_total{limit="addon_inline"}`, and an observation dropped
-  the same way on `{limit="addon_observe"}`. Rendering that is the
-  Add-on manager's, which is not built yet.
+  the same way on `{limit="addon_observe"}`. The Add-on manager deliberately does
+  not render either: a saturation count shown against one add-on blames whichever
+  module was asked, not whichever filled the slots.
 
   An inline invocation reaches only a **redirect-safe subset** of the ABI — the
   ungated host facts, its own settings and the two functions the class exists for.
@@ -707,9 +709,9 @@ migrations run at boot.
 
   An add-on's configured secret is held in the type that refuses to print itself,
   whatever the manifest called the setting, so it cannot reach a log through a
-  line about the add-on. Editing settings from the dashboard is the Add-on
-  manager's job and is not built yet; until then the environment is the whole of
-  it, and changing one takes a restart.
+  line about the add-on. Settings are edited from the Add-on manager's
+  detail page, which is in this release; an environment variable still wins over
+  a stored value, and changing *that* takes a restart.
 
   **Two add-ons cannot both load when one's name plus an underscore begins the
   other's** — `oidc` and `oidc_x`. Both are refused, counted as

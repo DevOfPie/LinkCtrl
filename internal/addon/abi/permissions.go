@@ -32,11 +32,18 @@ const PermissionNetworkFetch = "network.fetch"
 // the set edited in the same commit and D258 saying what riding on
 // `routes.own_prefix` would have cost instead.
 //
-// Eight entries, one per limb this phase lands plus that one and the one M66
-// added, because the enforcement (M62) had to be built before any capability
-// worth abusing existed — a grant declared here and implemented later is refused
+// Nine entries, one per limb this phase lands plus that one, the one M66 added
+// and the one M68.5 did, because the enforcement (M62) had to be built before any
+// capability worth abusing existed — a grant declared here and implemented later is refused
 // by an already-enforced permission rather than by a check somebody remembers to
 // add.
+//
+// The count is stated here and tied by test nowhere: M66 edited it to `Eight`
+// and M68.5 appended `network.fetch` without touching it, so it read `Eight`
+// against nine for a milestone and a half, disagreeing with functions.go one
+// file over. Corrected at M69.9. `TestEveryDocumentedPermissionCountIsTied`
+// anchors the documents and says in its own comment that a sentence not named
+// there is one it does not protect; this is one of those.
 //
 // It lives in this package and not in the host, for the reason [Functions] does:
 // this is the ABI's authoring point, the SDK and the published table are

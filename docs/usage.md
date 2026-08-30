@@ -2290,6 +2290,10 @@ statements for the cases the page deliberately does not cover.
 
 An add-on's manifest can declare settings, each with a type, and its detail page
 renders the matching input: a text box, a password field, a dropdown or a switch.
+One setting is not the manifest's. An add-on that asks for a link on the sign-in
+page gets a `sign_in_link` toggle the *host* declares on its behalf, off until
+you turn it on — no manifest may declare a setting by that name, because the
+answer is yours and not its author's.
 Saving them takes effect on the add-on's **next** invocation; one already running
 finishes with what it had.
 

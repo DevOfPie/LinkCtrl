@@ -498,7 +498,13 @@ Invariants:
 The redirect target is defined as: **server-side p99, cache hits only, measured
 from a load generator on the same Docker network, excluding client RTT and TLS,
 at 2,000 rps sustained for 2 minutes, with 100k links and 5M click events
-seeded.** Both the generator's number and the server histogram are reported.
+seeded, and with no add-on on the redirect path.** Both the generator's number
+and the server histogram are reported. The last clause is not decoration: since
+[M66](docs/build-notes/phase-details/m66.md) an add-on may run inline on that
+path, and every figure against this target is core's — measured with nothing
+inline, and reported on a separate curve from the add-on's. Latency on that path
+stops being this product's the moment an operator installs a module there;
+availability does not.
 The measurement, how to reproduce it and what it found: [docs/slo.md](docs/slo.md).
 
 Measured on one developer machine, so the shape transfers and the absolute values
