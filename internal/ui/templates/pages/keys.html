@@ -2,7 +2,13 @@
 <div class="mb-6">
   <h1 class="text-xl font-semibold tracking-tight">API keys</h1>
   <p class="mt-1 text-sm text-muted">Keys act as you, limited to the scopes you grant. Send one as <code class="rounded bg-sunken px-1 py-0.5 text-xs">Authorization: Bearer lk_live_…</code></p>
-  <p class="mt-1 text-sm text-muted">A key can replace itself without anybody signing in: <code class="rounded bg-sunken px-1 py-0.5 text-xs">POST /api/v1/api-keys/rotate</code>, sent with the key's own token, returns a successor with the same reach or less. The key it replaces keeps working for a short window and then stops. Rotation is not offered here, because this page is a session and a session cannot rotate somebody's key — it can only revoke it.</p>
+  {{- /* The endpoint and the boundary, and nothing past them. What a successor
+       inherits and how long the replaced key serves out are written in
+       docs/usage.md's *Rotating a key* and again in docs/cli.md's `apikey`
+       section; this page carried a third copy, which is what M69.9's review
+       found. There is no documentation route in this product to link to, so
+       the pointer is the name of the operation rather than an href. */ -}}
+  <p class="mt-1 text-sm text-muted">Rotation is an API operation, not a page one: <code class="rounded bg-sunken px-1 py-0.5 text-xs">POST /api/v1/api-keys/rotate</code>, sent with the key's own token. This page can only revoke.</p>
 </div>
 
 {{template "flash_ok" .Notice}}

@@ -32,11 +32,9 @@
         </label>
         <p class="mt-2 text-xs text-subtle">
           Once a day this instance asks GitHub whether a newer version exists, and
-          puts a notification in your inbox if there is one. The request carries
-          this server's address and the version it is running, in the
-          <code>User-Agent</code>. Nothing else &mdash; no instance identifier, no
-          link counts, no configuration, and nothing about the people using it.
-          Your answer is recorded now and can be overridden later by setting
+          puts a notification in your inbox if there is one.
+          {{template "update_check_disclosure" .}} Your answer is recorded now and
+          can be overridden later by setting
           <code>LINKCTRL_UPDATE_CHECK=false</code> on the deployment.
         </p>
         {{else}}

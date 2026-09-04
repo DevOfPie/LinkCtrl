@@ -102,7 +102,15 @@
 {{if .Orphans}}
 <div class="mt-6 rounded-lg border border-warn-line bg-warn-soft p-6">
   <h2 class="text-sm font-medium text-warn-ink">Orphaned data</h2>
-  <p class="mt-1 text-sm text-warn-ink">A schema whose add-on is not installed. Removing an add-on never deletes its data, so this is where what it left is named &mdash; and where it can be dropped, at the point you are looking at its size.</p>
+  {{- /* No sentence under the heading: *orphaned data* is the whole of what the
+       list below is, and a paragraph restating it was the first thing a reader
+       had to skip to reach the rows.
+
+       The control is the icon-only idiom the QR list established (M50.8): an
+       empty dot so the glyph is decorative, the button naming itself with
+       `aria-label`, and the page drawing the tooltip rather than the glyph's
+       own <title> — D192's ruling, which is why `icon_trash` is passed "" here
+       and not its label. */ -}}
   <ul class="mt-4 space-y-2">
     {{range .Orphans}}
     <li class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn-line bg-raised px-3 py-2">
@@ -110,13 +118,40 @@
         <code class="text-sm text-ink">{{.Schema}}</code>
         <span class="ml-2 text-sm text-muted">{{.Size}}</span>
         <span class="ml-2 text-xs text-subtle">left by the add-on <code>{{.Name}}</code></span>
-        {{if .LargeObjects}}<span class="mt-1 block text-xs text-warn-ink">{{.LargeObjects}} large object(s) belong to this add-on's role and live outside the schema. A purge does not delete them.</span>{{end}}
       </span>
       <form method="post" action="/instance/addons/purge-data">
         <input type="hidden" name="name" value="{{.Name}}">
-        <button type="submit" class="cursor-pointer rounded-md border border-danger-line px-3 py-1.5 text-sm font-medium text-danger-ink hover:bg-danger-soft">Purge&hellip;</button>
+        <span class="qr-tip-host relative inline-flex" tabindex="0">
+          <button type="submit" aria-label="Delete this add-on's data" aria-describedby="orphan-tip-{{.Name}}"
+                  class="cursor-pointer rounded-md border border-danger-line p-1.5 text-danger-ink hover:bg-danger-soft">
+            {{template "icon_trash" ""}}
+          </button>
+          <span id="orphan-tip-{{.Name}}" role="tooltip" class="qr-tip">Delete this add-on's data</span>
+        </span>
       </form>
     </li>
+    {{- /* Large objects are the add-on's role's, not the schema's, so dropping
+         the schema does not touch them. They were a sentence inside the row
+         above until M69.9's review: a footnote under a live control described
+         something that control could not do. A row of their own with the
+         control disabled says the same thing in the place a reader looks. */ -}}
+    {{if .LargeObjects}}
+    <li class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn-line bg-raised px-3 py-2 opacity-70">
+      <span class="min-w-0">
+        <code class="text-sm text-ink">{{.Name}}</code>
+        <span class="ml-2 text-sm text-muted">{{.LargeObjects}} large object(s)</span>
+        <span class="ml-2 text-xs text-subtle">owned by the add-on's database role, outside the schema</span>
+      </span>
+      <span class="qr-tip-host relative inline-flex" tabindex="0">
+        <button type="button" disabled aria-disabled="true" aria-label="Delete this add-on's data"
+                aria-describedby="largeobj-tip-{{.Name}}"
+                class="cursor-default rounded-md border border-dashed border-line p-1.5 text-subtle">
+          {{template "icon_trash" ""}}
+        </button>
+        <span id="largeobj-tip-{{.Name}}" role="tooltip" class="qr-tip">Owned by the add-on's database role rather than the schema, so deleting here does not remove them</span>
+      </span>
+    </li>
+    {{end}}
     {{end}}
   </ul>
 </div>

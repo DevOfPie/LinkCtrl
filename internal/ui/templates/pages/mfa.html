@@ -44,15 +44,14 @@
     <p class="mt-2 text-sm text-muted">Signing in to this account needs a code from your authenticator app.{{if .Status.EnabledAt}} On since {{.Status.EnabledAt.Format "2 January 2006"}}.{{end}}</p>
     <p class="mt-2 text-sm text-muted">
       {{if eq .Status.RecoveryCodesRemaining 0}}
-      <strong class="font-medium text-ink">You have no recovery codes left.</strong> If you lose your phone now, only whoever runs this instance can help. Issue a new set.
+      <strong class="font-medium text-ink">You have no recovery codes left.</strong> If you lose your phone now, only whoever runs this instance can help. Replace them.
       {{else}}
       You have {{.Status.RecoveryCodesRemaining}} unused recovery {{if eq .Status.RecoveryCodesRemaining 1}}code{{else}}codes{{end}}.
       {{end}}
     </p>
     <form method="post" action="/account/mfa/recovery-codes" class="mt-4">
-      <button type="submit" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">Issue new recovery codes</button>
+      <button type="submit" class="rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">Replace my recovery codes</button>
     </form>
-    <p class="mt-2 text-xs text-subtle">Issuing a new set stops every code in the old one from working.</p>
   </section>
 
   <section class="rounded-lg border border-line bg-raised p-6 shadow-sm">

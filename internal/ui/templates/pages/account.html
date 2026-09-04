@@ -140,7 +140,7 @@
 
 <div class="mt-6 max-w-md rounded-lg border border-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-ink">Change password</h2>
-  <p class="mb-4 text-sm text-muted">Every other session is signed out; this browser stays signed in.</p>
+  <p class="mb-4 text-sm text-muted">Signs out every other session; this browser stays signed in. API keys are not affected.</p>
   <form method="post" action="/account/password" class="space-y-4">
     <div>
       <label for="current_password" class="block text-sm font-medium text-ink">Current password</label>
@@ -170,15 +170,22 @@
 {{if .ShowMFA}}
 <div class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-ink">Two-factor authentication</h2>
+  {{- /* Status and a way in, and nothing else. What a second factor is, what
+       the missing key means, and what running out of recovery codes costs are
+       all said on /account/mfa, which the control below leads to — this card
+       said them a second time, in its own wording, and the two drifted. The
+       one thing kept beyond bare status is *no recovery codes left*, because
+       it is a state to act on rather than an explanation of the feature. */ -}}
   {{if not .MFA.Available}}
-  <p class="mb-4 text-sm text-muted">Not available on this instance: no <code class="font-mono text-xs">LINKCTRL_MFA_SECRET_KEY</code> is configured, so a second factor has nowhere safe to keep its secret.{{if .MFA.Enabled}} This account is enrolled, so sign in with a recovery code until the key is restored.{{end}}</p>
+  <p class="mb-4 text-sm text-muted">Not available on this instance.{{if .MFA.Enabled}} This account is enrolled &mdash; sign in with a recovery code.{{end}}</p>
   {{else if .MFA.Enabled}}
-  <p class="mb-4 text-sm text-muted">
-    On. Signing in needs a code from your authenticator app.
-    {{if eq .MFA.RecoveryCodesRemaining 0}}<span class="font-medium text-danger-ink">No recovery codes left</span> &mdash; issue a new set before you lose your phone.{{else}}{{.MFA.RecoveryCodesRemaining}} unused recovery {{if eq .MFA.RecoveryCodesRemaining 1}}code{{else}}codes{{end}}.{{end}}
+  <p class="mb-4 text-sm text-muted">On &middot;
+    {{- if eq .MFA.RecoveryCodesRemaining 0}} <span class="font-medium text-danger-ink">no recovery codes left</span>
+    {{- else}} {{.MFA.RecoveryCodesRemaining}} unused recovery {{if eq .MFA.RecoveryCodesRemaining 1}}code{{else}}codes{{end}}
+    {{- end}}
   </p>
   {{else}}
-  <p class="mb-4 text-sm text-muted">Off. Add a code from an authenticator app on top of your password, so a stolen password is not enough on its own.</p>
+  <p class="mb-4 text-sm text-muted">Off</p>
   {{end}}
   <a href="/account/mfa" class="inline-block rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-ink hover:bg-sunken">{{if .MFA.Enabled}}Manage{{else}}Set it up{{end}}</a>
 </div>

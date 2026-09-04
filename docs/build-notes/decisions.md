@@ -507,6 +507,7 @@ file. Append a row when you append an entry.
 | [M69.5 reopened: two greens that measured this machine](#2026-08-29--m695-reopened-two-greens-that-measured-this-machine) | D402: the stock sign-in page's golden compares everything except the built stylesheet's fingerprint — why the exception is one token rather than the whole `<head>`, why rebuilding before capturing was declined, and why the *exactly one match* count rather than the pattern is what stops the loosening from becoming a hole. D403: `make check` builds the assets it tests against, mirroring the CI **build** job's `verify-assets css` rather than the lint job's repairing `assets` — and the rule the two red branches share with [D397](#d397--the-fixture-pins-the-toolchain-the-release-was-cut-with-read-from-that-releases-own-gomod): a gate whose inputs are not in the repository measures the machine it runs on. D404: M69.5's *byte-identical* bullet amended to name that one token, a fact rather than an assertion because the page it describes could never have been byte-identical on any machine |
 | [M69.9, the pre-release adversarial review: what it checked, what it found, and what it refuted](#2026-08-30--m699-the-pre-release-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted) | Eight readers in fresh contexts over the whole phase, ten adversarial refuters, ~36 raw findings. Both claimed reopenings refuted to amendments; a finder's new row established as F281 and another folded into F336; one of four false digest sentences shown true; the wasm leak's headline figure shown to be the race detector's shadow. Two findings the attack made worse. The browser check on a rebuilt image with a sign-in add-on installed |
 | [M69.9's triage: the owner's five answers](#2026-08-30--m699s-triage-the-owners-five-answers) | D405, owner-answered: nothing in this repository's gates may *require* another project's artifact, so the OIDC acceptance test skips and the two make targets that build it opt back in. D406: the pool's non-memory leak is disclosed and filed, not patched, because every remedy is a design choice. D407: the add-on mint's audit surface is documented rather than moved. D408: everything documentation-shaped is corrected now. D409: four shipped bullets amended, none reopened. D410: the always-read contract grew 1433 bytes over five milestones and is defended, with the trim named — Phase 4's status table leaves this file at the phase close |
+| [The UI copy review's changes, approved and applied](#2026-09-04--the-ui-copy-reviews-changes-approved-and-applied) | D411: `domains.html`'s button renames a hostname, so the approved label was wrong and `Rename` shipped instead. D412: the rotation paragraph loses its detail but gains no link, because this product serves no documentation route. D413: `icons.html` describes a glyph by what it does rather than by which page calls it, because naming the caller widened a bound M60 asserts by test |
 
 ---
 
@@ -41758,3 +41759,100 @@ attribution is backwards: `docs/configuration.md` told an operator to *read the
 digest from the release's own `SHA256SUMS`*, which is the opposite. Corrected in
 that file under D408, and recorded here rather than edited there, because
 decisions.md is append-only and a later entry is how an earlier one is corrected.
+
+
+## 2026-09-04 — The UI copy review's changes, approved and applied
+
+Prompted by a review of every page and partial in `internal/ui/templates` for
+prose that repeats itself and prose that exists because a button label is vague —
+438 lines of on-screen text across 52 templates, with duplicates found by
+matching shared phrasing rather than by eye. The owner approved the resulting
+plan in full. No milestone produced this, which is why the entry carries no
+number: it is smaller than a milestone and Phase 4 is at its cap of eighteen.
+
+Most of it needs no explanation — a shorter sentence is its own argument. Three
+calls do, and two of them changed what was approved.
+
+### D411 — `domains.html`'s bare `Change` renames a hostname, so the approved label was wrong
+
+The plan proposed `Change root redirect`. The button posts to
+`/domains/{{.ID}}` beside an input named `hostname`, under an `sr-only` label
+reading *Change {{.Hostname}}* — it renames the domain and has nothing to do
+with the root redirect. Shipping the approved words would have replaced a vague
+label with a false one, which is worse: vague costs a reader a moment, false
+costs them a wrong click.
+
+It ships as **`Rename`**, which is what `folders.html` and `workspaces.html`
+already call the same act. `members.html`'s identically bare `Change` was checked
+the same way, is genuinely a role change, and ships as `Change role` as approved.
+
+The general point, because this is the second time in two milestones a proposal
+described a tree nobody had re-read: a label proposal is a claim about what a
+control does, and it is checked against the handler, not against the surrounding
+prose.
+
+### D412 — the rotation paragraph loses its detail and gains no link, because there is nowhere to link to
+
+`keys.html` carried sixty words explaining that key rotation is deliberately
+*not* on the page. The plan moved that to `docs/cli.md` and left a link behind.
+
+Two things were wrong with the second half. The explanation is **already** in
+`docs/cli.md`'s `apikey` section and again in `docs/usage.md`'s *Rotating a key*,
+so the page held a third copy rather than the only one — no documentation needed
+writing. And **this product serves no documentation route**: there is no `/docs`
+handler and no template anywhere links to a document, so the planned
+`<a href="/docs/cli#api-key-rotation">` would have been a 404 on every click.
+
+What ships is the endpoint and the boundary in one sentence — *Rotation is an API
+operation, not a page one … This page can only revoke* — and no href. A pointer
+that cannot be followed is worse than no pointer; the operator who wants the rest
+has two documents that already carry it.
+
+### D413 — a glyph is described by what it does, never by which page calls it
+
+The tenth icon is a trash can, added because the orphaned-data rows lost their
+words. Its first comment said so in those terms — and
+`TestOnlyTheNamedHTTPFilesMentionAddOns` refused the file, because
+`internal/ui/templates/partials/icons.html` is not on the list of HTTP-surface
+files permitted to know about add-ons.
+
+The test offered two doors and only one is honest. Adding `icons.html` to that
+list widens a bound M60 asserts, permanently, to accommodate a *comment* — the
+file draws a shape and serves no add-on. So the comment changed instead: the
+glyph is described by its job, and the header now records the habit and its
+reason. The rule generalises past this instance, which is why it is written into
+the file rather than only here.
+
+Worth stating plainly: the guard caught the same mistake twice, the second time
+in the sentence explaining why not to make it. That is the guard working, and it
+is the third time this phase that an enumeration or a bound has been kept true by
+a test rather than by care.
+
+### What was proposed and deliberately not done
+
+- **`account.html`'s two-factor link was already correct.** The plan proposed
+  making it read `Manage` and look like a control; it already reads `Manage` and
+  already carries the bordered control styling. The proposal came from a
+  wireframe that drew the current state wrongly, so the template needed no edit.
+  Recorded because a plan row with no diff behind it otherwise reads as an
+  omission.
+- **The two *stores nothing of its own* sentences stay different.**
+  `addon_manager.html`'s is a fact on a detail page; `addons.html`'s explains why
+  a delete checkbox is absent from a removal confirmation. They share a clause
+  and serve different purposes, and unifying them would make one worse. A
+  duplicate that is really one fact stated twice for two reasons is not a
+  duplicate.
+
+### What the update-check partial fixes
+
+`internal/ui/templates/partials/update_check.html` is new and holds one sentence:
+what the update check's request carries. It lived on both `setup.html` and
+`dashboard.html`, and the two had already drifted — the dashboard's list said
+*no deployment size* and the setup page's did not, so one of the two was an
+incomplete account of the same request and which one a reader believed depended
+on where they were standing. Only the disclosure is shared; what surrounds it
+differs by page and stays local.
+
+`partials/dispute_reviewers.html` gets the same treatment for *This queue is
+instance-wide…*, which had drifted to *a decision in it* against *a decision
+here*.

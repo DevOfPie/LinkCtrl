@@ -1,0 +1,18 @@
+{{- /* What the update check sends, written once (M69.9).
+
+     This paragraph lived twice — on the setup page, where a first operator
+     answers it, and on the dashboard, where an upgraded instance asks somebody
+     who never was. The two had already drifted: the dashboard's list said *no
+     deployment size* and the setup page's did not, so one of the two was an
+     incomplete account of the same request. Which one a reader believed
+     depended on where they happened to be standing.
+
+     Only the disclosure is shared. What surrounds it is genuinely different —
+     setup records an answer, the dashboard asks once and never again — and
+     those sentences stay on their own pages. */ -}}
+{{define "update_check_disclosure" -}}
+The request carries this server&rsquo;s address and the version it is running, in
+the <code>User-Agent</code>. Nothing else &mdash; no instance identifier, no
+deployment size, no link counts, no configuration, and nothing about the people
+using it. The reply is read for a version number and discarded.
+{{- end}}

@@ -27,6 +27,24 @@ migrations run at boot.
 
 ## [Unreleased]
 
+### Changed
+
+- **Some dashboard controls say what they do, and some paragraphs stopped saying
+  it for them.** Deleting an add-on's leftover data is a trash-can control on the
+  row rather than a button labelled *Purge*, which is the word the confirmation
+  page never used. Replacing your recovery codes is *Replace my recovery codes*
+  rather than *Issue new recovery codes* followed by a sentence explaining that
+  the old ones stop. The bare *Change* beside a domain now says *Rename*, and the
+  one beside a member's role says *Change role*.
+
+  **Large objects an add-on's database role owns are a row of their own**, listed
+  with the delete control disabled, instead of a footnote under a control that
+  could not delete them. Dropping the schema does not remove them, and a dead
+  control in the place you look says that better than a sentence somewhere else
+  did.
+
+  Nothing about what any of these operations do has changed.
+
 ### Added
 
 - **A sign-in page that can offer what an installed add-on made possible.**
