@@ -914,6 +914,23 @@ func (f *ruleFixture) putJSON(path, body string) *http.Response {
 	return resp
 }
 
+// patchJSON is putJSON's twin for the one method a link update takes. Added at
+// M70 for F228's rename; the bot fixture has its own copy for the same reason.
+func (f *ruleFixture) patchJSON(path, body string) *http.Response {
+	f.t.Helper()
+	req, err := http.NewRequestWithContext(f.t.Context(), http.MethodPatch,
+		f.server.URL+path, strings.NewReader(body))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := f.client.Do(req)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return resp
+}
+
 func (f *ruleFixture) postQRForm(t *testing.T, path string, vals url.Values) {
 	t.Helper()
 	resp := f.postForm(path, vals)
@@ -2422,5 +2439,98 @@ func TestTheUntaggedBucketFollowsTheFlagWhereverItSorts(t *testing.T) {
 		t.Errorf("the breakdown reports %d scans over one scan. A second untagged "+
 			"bucket beside the flag-holder's is the same click counted twice, which "+
 			"is what reading position 0 as the default would have produced", total)
+	}
+}
+
+// TestARenameRefitsThisLinksQRCodes is F228, driven end to end.
+//
+// M49's third reopening re-fits wherever a *slug* is written, which is
+// CreateQRCode. Renaming the link is the other payload change and goes through a
+// different door entirely: a longer alias is a longer short URL, which is more
+// bytes in the picture, which can be a larger grid of squares than the stored size
+// holds. The drawing then falls back to margin-and-scale, so a code stored at its
+// own floor came out *larger* than the number the reader set — on a link they
+// renamed for unrelated reasons, with nothing said.
+//
+// That makes M49's *the requested size is the size stored and drawn, exactly*
+// false, which is why this is a fix rather than a note.
+//
+// The alias grows by twelve characters, which is the arithmetic F226 used and F228
+// repeated: enough to cross a version boundary for a code sitting on its floor.
+func TestARenameRefitsThisLinksQRCodes(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("summer", "https://example.com/x")
+
+	// Store the code at its own floor, which is the state this defect needs: a row
+	// with any headroom absorbs a longer payload without moving.
+	defaults, _ := qr.Style{}.Normalize()
+	before, err := qr.Encode(f.qrContent(id), defaults.Level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two writes, because the floor depends on the scale the row ends up holding
+	// and that is not knowable until something is stored. The first write puts a
+	// style on the row; the second pins it to the floor of *that* style. A row with
+	// headroom absorbs a longer payload without moving, which is a code this defect
+	// cannot reach — the first attempt at this test measured exactly that and
+	// passed against the unfixed tree.
+	resp := f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		`{"style":{"size":`+strconv.Itoa(qr.MinSizeForStyle(before.Size, defaults))+`}}`)
+	status := resp.StatusCode
+	_ = resp.Body.Close()
+	if status != http.StatusOK {
+		t.Fatalf("storing a style answered %d", status)
+	}
+	floor := qr.MinSizeForStyle(before.Size, f.qrCode(id).Style)
+	resp = f.putJSON("/api/v1/links/"+id.String()+"/qr",
+		`{"style":{"size":`+strconv.Itoa(floor)+`}}`)
+	status = resp.StatusCode
+	_ = resp.Body.Close()
+	if status != http.StatusOK {
+		t.Fatalf("storing the code at its own floor of %dpx answered %d", floor, status)
+	}
+	if got := f.qrCode(id); got.Style.Size != floor {
+		t.Fatalf("the row stores %dpx and this test needs it at its floor of %dpx; "+
+			"without that there is headroom and the defect cannot be reached",
+			got.Style.Size, floor)
+	}
+
+	// The rename. Long enough that the payload needs a bigger symbol.
+	resp = f.patchJSON("/api/v1/links/"+id.String(),
+		`{"alias":"summer-promotion-2026"}`)
+	status = resp.StatusCode
+	_ = resp.Body.Close()
+	if status != http.StatusOK {
+		t.Fatalf("renaming the link answered %d", status)
+	}
+
+	after, err := qr.Encode(f.qrContent(id), defaults.Level)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Size <= before.Size {
+		t.Fatalf("the rename did not grow the symbol — %d modules before and %d "+
+			"after — so there is nothing for a re-fit to do and this test asserts "+
+			"nothing. Lengthen the alias", before.Size, after.Size)
+	}
+
+	// **The stored number against the drawn one**, which is the whole of M49's
+	// claim: *the requested size is the size stored and drawn, exactly*. `QRCode`
+	// reports `Size` from `qr.Drawn`, so it is the size the picture measures and
+	// says nothing about the row — comparing it against a floor would be comparing
+	// a value against itself. The row is `Style.Size`.
+	got := f.qrCode(id)
+	if got.Style.Size != got.Size {
+		t.Errorf("the row stores %dpx and the picture draws %dpx after the rename. "+
+			"A longer alias is more bytes in the code, which needs a bigger grid than "+
+			"the stored size holds, so the drawing falls back to margin-and-scale and "+
+			"comes out larger than the number the reader set — with nothing said "+
+			"(F228)", got.Style.Size, got.Size)
+	}
+	if got.Style.Size == floor && qr.MinSizeForStyle(after.Size, got.Style) > floor {
+		t.Errorf("the stored size is still the pre-rename floor of %dpx and the new "+
+			"symbol needs %dpx at this row's scale; nothing re-fitted it",
+			floor, qr.MinSizeForStyle(after.Size, got.Style))
 	}
 }

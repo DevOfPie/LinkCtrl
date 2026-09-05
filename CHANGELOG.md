@@ -79,6 +79,32 @@ changed what a release is checked against.
   layer only, so a tag could be cut from a tree whose committed SDK did not match
   the ABI it is generated from.
 
+### Fixed
+
+- **A refusal on a control that acts in place is now shown.** Deleting a routing
+  rule, a split variant, an invitation, a member or a dispute reviewer — or a
+  link from its danger zone — and being refused dismissed the confirmation and
+  left the page unchanged. The reason had been written and thrown away. It
+  appears where you are looking now.
+
+- **Renaming a link re-fits its QR codes.** A longer alias is more bytes in the
+  picture, which can need a bigger grid of squares than the stored size holds —
+  so a code set to its smallest size came out larger than the number you chose,
+  on a link renamed for unrelated reasons, with nothing said.
+
+- **Restore defaults on a code carrying a logo leaves the row saying `H`.** The
+  picture was always drawn at H; the row disagreed with it.
+
+- **The QR panel stops offering a style form for a code it could not read.** It
+  showed a size slider with no stops and a size box holding `0`, which the form's
+  own minimum forbids, under a message saying the code could not be read.
+
+- **The message shown when no country can be resolved says what it is about.** It
+  read as a fact about the whole instance and is decided for one link over one
+  window — so two links side by side could disagree, and widening the window
+  could replace the sentence with a map. Nothing about which clicks resolve has
+  changed.
+
 ### Documentation
 
 Corrections to claims this project had made and could not support. Each is a

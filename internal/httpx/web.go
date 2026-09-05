@@ -280,6 +280,40 @@ type errorPageData struct {
 }
 
 func (h *Web) errorPage(w http.ResponseWriter, r *http.Request, code int, heading, message string) {
+	// **An htmx request gets a fragment, not a page** (F218, D430).
+	//
+	// htmx's default `responseHandling` is `[{204,false},{"[23]..",true},{"[45]..",false}]`
+	// — a 4xx is read, an error event fires, and **no swap happens**. Every refusal
+	// this function writes is a 4xx error *page*, so a reader who clicked Delete on
+	// a routing rule, a split variant, the link's danger zone, an invitation
+	// revoke, a member removal or a dispute reviewer revoke, and was refused with a
+	// 403 or a 409, saw the confirmation dismissed and the page unchanged. The
+	// refusal was rendered and thrown away.
+	//
+	// Answered `200` with the flash as the body, because htmx swaps a 2xx and the
+	// status is not what the reader is owed — the sentence is. The refusal already
+	// happened: nothing was written, and this is the report. A 4xx with
+	// `HX-Reswap` would keep the code honest for a machine and needs every caller
+	// to set a target; this is the one site every refusal passes through, which is
+	// what D430 chose it for.
+	//
+	// The cost is stated rather than hidden: one error path now has two response
+	// shapes. What keeps that manageable is that this is the only place that
+	// decides.
+	//
+	// "error" names the template *set* to render the block from, not what is
+	// rendered: RenderPartial resolves a page and then executes one block inside
+	// it, and `flash_error` is a partial every page's set carries. The error page
+	// is the honest set to take it from here.
+	if isHTMX(r) {
+		w.Header().Set("Cache-Control", "no-store")
+		if err := h.UI.RenderPartial(w, http.StatusOK, "error", "flash_error", message); err != nil {
+			observability.LoggerFrom(r.Context()).Error("render htmx refusal failed",
+				slog.Int("code", code), slog.Any("error", err))
+			http.Error(w, message, code)
+		}
+		return
+	}
 	h.render(w, r, code, "error", errorPageData{
 		shell:   h.shell(r, heading, ""),
 		Code:    code,

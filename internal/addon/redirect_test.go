@@ -542,7 +542,7 @@ func TestAnObservingModuleThisHostCannotStartIsCountedTheSameWay(t *testing.T) {
 //
 // **The number D318 published was best-case** — one invocation at a time on an
 // idle VM — and every entry that rests on it rests on that. This runs
-// [maxConcurrentRoutes] instantiations against each other, which is the state a
+// [addonSlots] instantiations against each other, which is the state a
 // redirect meets when an add-on is installed and the instance is under load, and
 // it is the number [DefaultInstantiateDeadline] is argued from.
 //
@@ -593,10 +593,10 @@ func TestInstantiationCostsWhatItCostsUnderContention(t *testing.T) {
 	instantiate() // Whatever the runtime caches on first use is not what a redirect pays.
 
 	const each = 8
-	took := make([][]time.Duration, maxConcurrentRoutes)
+	took := make([][]time.Duration, addonSlots)
 	var wg sync.WaitGroup
 	start := time.Now()
-	for i := range maxConcurrentRoutes {
+	for i := range addonSlots {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -625,7 +625,7 @@ func TestInstantiationCostsWhatItCostsUnderContention(t *testing.T) {
 	mean := total / time.Duration(n)
 	t.Logf("instantiation with %d in flight costs mean %s, worst of %d %s "+
 		"(%d instantiations in %s of wall clock); the shipped bound is %s",
-		maxConcurrentRoutes, mean.Round(time.Microsecond), n,
+		addonSlots, mean.Round(time.Microsecond), n,
 		worst.Round(time.Microsecond), n, wall.Round(time.Millisecond),
 		DefaultInstantiateDeadline)
 

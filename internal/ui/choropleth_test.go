@@ -92,8 +92,22 @@ func TestTheMapAndTheRankedListUseOneSentence(t *testing.T) {
 	if m.Unavailable != GeoUnavailable {
 		t.Errorf("the map says %q; the constant is %q", m.Unavailable, GeoUnavailable)
 	}
-	if !strings.Contains(GeoUnavailable, "no GeoIP database is configured") {
+	// Two things the sentence has to carry, and they are asserted separately
+	// because F195 was about one of them being wrong while the other was right.
+	//
+	// **The cause**, which is never false where this appears: the predicate that
+	// shows it implies no database is configured. **And the scope**, which is what
+	// this row corrected — it is decided per link and per window, so a sentence
+	// reading as a permanent fact about the instance is wrong about itself while
+	// being true about the database.
+	if !strings.Contains(GeoUnavailable, "no GeoIP database") {
 		t.Errorf("the shared sentence no longer names the cause: %q", GeoUnavailable)
+	}
+	if !strings.Contains(GeoUnavailable, "this window") {
+		t.Errorf("the shared sentence no longer says what it is about. It is decided "+
+			"over one link's selected window, and a reader who takes it for a fact "+
+			"about the instance is contradicted by the link beside it: %q",
+			GeoUnavailable)
 	}
 }
 

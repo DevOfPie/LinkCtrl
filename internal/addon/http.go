@@ -81,7 +81,7 @@ import (
 //
 // The cost of an instance is that memory: a fixture holds about 2.4 MB of it at
 // load, the host allows one instance [maxGuestMemoryPages], and
-// [maxConcurrentRoutes] bounds how many are alive at once *in flight* —
+// [addonSlots] bounds how many are alive at once *in flight* —
 // [DefaultPoolSize] is what may additionally be held at rest since the redirect
 // path started keeping them. The three bounds add into the ceiling an operator
 // sizes a host by; the 2.4 MB is a measurement of one fixture, which is a
@@ -107,17 +107,23 @@ const PermissionRoutes = "routes.own_prefix"
 // separate from PermissionRoutes on purpose — D258.
 const PermissionSessionContext = "session.context"
 
-// maxConcurrentRoutes bounds how many add-on invocations are in flight at once,
+// addonSlots bounds how many add-on invocations are in flight at once,
 // across every add-on and every reason for invoking one.
+//
+// **Named `maxConcurrentRoutes` until M70** (F324), by which point it bounded
+// three things and only one of them was a route: M66 gave it an inline redirect
+// invocation and an out-of-band observation as consumers, and the comment below
+// was corrected to name all three while the identifier went on claiming one. A
+// rename with no behaviour in it, on the one bound four operator-facing documents
+// quote — which is why the documents say a number and not this word.
 //
 // It exists because add-on routes are reachable without a session (D261) and
 // each in-flight instance holds linear memory. Unbounded, a flood of anonymous
 // requests to an add-on's prefix is a memory exhaustion with no session to
 // rate-limit against; bounded, it is a queue.
 //
-// **Three callers draw on it and they do not wait alike** — the name predates
-// two of them and is kept because renaming a constant is not what makes the
-// bound true. Each is documented where an operator meets its symptom:
+// **Three callers draw on it and they do not wait alike.** Each is documented
+// where an operator meets its symptom:
 //
 //   - A **page request** waits, on the request's own context, so what bounds the
 //     wait is the deadline every application request already carries
@@ -135,11 +141,11 @@ const PermissionSessionContext = "session.context"
 // So an instance running an inline add-on and serving no add-on pages still
 // spends this budget, which is why docs/deployment.md sizes a host by it whatever
 // the add-on is for.
-const maxConcurrentRoutes = 16
+const addonSlots = 16
 
 // maxGuestMemoryPages is how much linear memory one instance may hold, in
 // WebAssembly pages of 64 KiB — 8 MiB, and it is the other half of the price
-// [maxConcurrentRoutes] was chosen to bound.
+// [addonSlots] was chosen to bound.
 //
 // **This is the bound F289's sibling F290 found missing.** Until it existed the
 // runtime carried wazero's default of 65536 pages, so the "about 2.4 MB per
@@ -206,7 +212,7 @@ var (
 	ErrNoHandler = errors.New("the add-on exports no request handler")
 	// ErrNoResponse is a handler that returned without writing one.
 	ErrNoResponse = errors.New("the add-on's handler wrote no response")
-	// ErrBusy is maxConcurrentRoutes, reached.
+	// ErrBusy is addonSlots, reached.
 	ErrBusy = errors.New("too many add-on requests are in flight")
 	// ErrRequestTooLarge is a request whose record does not fit one value.
 	//
@@ -473,7 +479,7 @@ func (h *Host) Route(ctx context.Context, name string, in RequestIn) (Response, 
 	// [DefaultRouteDeadline] for what the host does with the margin.
 	//
 	// Outside the slot wait deliberately: a request that spends the deadline
-	// queueing for one of [maxConcurrentRoutes] and is then refused ErrBusy is the
+	// queueing for one of [addonSlots] and is then refused ErrBusy is the
 	// right answer, and starting the clock inside would make a saturated host
 	// answer more slowly rather than sooner.
 	ctx, cancel := context.WithTimeout(ctx, h.deadlineForRoute())

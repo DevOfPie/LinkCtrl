@@ -525,7 +525,7 @@ type Options struct {
 	// LINKCTRL_ADDON_POOL_SIZE.
 	//
 	// It is not a concurrency bound. What bounds invocations in flight is
-	// [maxConcurrentRoutes] and the pool takes nothing from it; this is what may be
+	// [addonSlots] and the pool takes nothing from it; this is what may be
 	// held at rest, which is the term the guest-memory ceiling gained when an
 	// instance stopped being destroyed after every redirect.
 	PoolSize int
@@ -783,7 +783,7 @@ type Host struct {
 	states map[string]*hostState
 
 	// slots bounds how many add-on requests hold an instance at once. See
-	// maxConcurrentRoutes.
+	// addonSlots.
 	slots chan struct{}
 	// instances numbers per-request module names. Monotonic rather than random:
 	// a name that appears in a log is one an operator can order against another.
@@ -819,7 +819,7 @@ type Host struct {
 	// this process holds, not how it is divided between modules.
 	idleInstances atomic.Int64
 	// poolSize is Options.PoolSize with its default applied, and poolTTL is
-	// Options.PoolTTL with its default applied. Neither is [maxConcurrentRoutes]
+	// Options.PoolTTL with its default applied. Neither is [addonSlots]
 	// and neither is derived from it — see pool.go.
 	poolSize int
 	poolTTL  time.Duration
@@ -941,7 +941,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 		overrideFor: overrides,
 		sessions:    opts.Sessions,
 		auditor:     opts.Audit,
-		slots:       make(chan struct{}, maxConcurrentRoutes),
+		slots:       make(chan struct{}, addonSlots),
 
 		loadTimeout:         timeout,
 		inlineDeadline:      deadline,

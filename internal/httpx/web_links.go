@@ -666,6 +666,19 @@ type linkQRView struct {
 	// people who wanted the SVG converting in the other direction.
 	QRDownload    string
 	QRDownloadPNG string
+	// QRUnreadable says the code has no subject at all — the stored row could not
+	// be read, or could not be drawn — as opposed to [linkQRView.QRError], which
+	// also carries a refused save.
+	//
+	// **The two are not the same state and the style section turns on this one**
+	// (F217). A refused save has a code, and the reader is correcting numbers on a
+	// form that has to still be there; a read failure has nothing to style, and
+	// every field the section reads is at its zero value — which is how it came to
+	// offer a slider with no stops and a number box holding `0`. Guarding the
+	// section on the *message* hid the form on a refusal too, which the integration
+	// suite caught immediately.
+	QRUnreadable bool
+
 	// QRError is what went wrong drawing the code, if anything. The page keeps
 	// its analytics and says so, rather than failing over a picture.
 	QRError string
@@ -1211,6 +1224,7 @@ func (h *Web) linkQR(
 	code, err := h.Links.QRCodeBySlug(ctx, actor, l.ID, slug)
 	if err != nil {
 		view.QRError = "The QR code could not be read."
+		view.QRUnreadable = true
 		return view
 	}
 	view.QRContent = code.Content
@@ -1246,6 +1260,7 @@ func (h *Web) linkQR(
 	svg, err := qr.RenderWithLogo(code.Content, code.Style, logo)
 	if err != nil {
 		view.QRError = "The QR code could not be drawn."
+		view.QRUnreadable = true
 		return view
 	}
 	//nolint:gosec // G203: internal/qr emits integers, parsed colours and base64
@@ -1446,7 +1461,7 @@ func fillLinkAnalytics(r *http.Request, data *linkDetailPageData, from, to time.
 	//
 	// Both surfaces used to be suppressed on `GeoAvailable` alone, so an
 	// instance holding country history with no database configured *today* was
-	// shown "Geographic data is unavailable" over rows that are present and
+	// shown the no-country-resolved sentence over rows that are present and
 	// correct. That is the demo — `.env.demo` sets no GeoIP path while the
 	// database holds 8,123 country rows and two demoCoverage() rows exist to
 	// guarantee the choropleth is worth looking at — and it is not

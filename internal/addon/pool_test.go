@@ -169,7 +169,7 @@ func TestAKilledInstanceIsEvictedAndTheNextRedirectStillWorks(t *testing.T) {
 func TestThePoolKeepsNoMoreThanItsSize(t *testing.T) {
 	h := poolHost(t, 2, DefaultPoolTTL, PermissionRedirectInline)
 	var wg sync.WaitGroup
-	for range maxConcurrentRoutes {
+	for range addonSlots {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -119,7 +119,7 @@ is the one state where it is the whole truth, and it is still that rather than a
 empty chart. The bound is the link and the window, which is narrower than
 *history*: a link whose countries all fall outside the selected window meets the
 sentence until the window is widened
-([F195](docs/build-notes/deferred-findings.md#open)).
+([F195](docs/build-notes/deferred-findings.md#closed)).
 [D65](#phase-2-decisions-taken-after-the-plan-was-finalised) carries the
 reasoning. The country is resolved at ingest, from the address, in
 the same place the visitor hash is derived — there is no stored address to enrich

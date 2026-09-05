@@ -2073,3 +2073,69 @@ func TestTheSizeControlStillWorksWithTheScriptBlocked(t *testing.T) {
 		}
 	}
 }
+
+// TestAReadFailureDrawsNoStyleForm is F217: when the code cannot be read, the
+// panel stops offering controls for it.
+//
+// `linkQRView` returns as soon as `QRCodeBySlug` fails, so every field the style
+// section reads is still at its zero value — the size, the floor and the ceiling
+// all `0`. The section rendered anyway: a slider with no stops, a number box
+// pre-filled with `0`, and a Save that would post it. The flash above it already
+// says the code could not be read.
+//
+// Asserted on the rendered page rather than on the view, because what was wrong
+// was what a reader saw.
+func TestAReadFailureDrawsNoStyleForm(t *testing.T) {
+	body := renderLinkDetail(t, func(data map[string]any) {
+		// The QR tab, which is where the style section lives.
+		data["Tab"] = "qr"
+		data["QRError"] = "The QR code could not be read."
+		data["QRUnreadable"] = true
+		// Exactly what linkQRView leaves behind when it returns early: nothing
+		// assigned, so every number is its zero value.
+		data["QRSize"] = 0
+		data["QRMinSize"] = 0
+		data["QRMaxSize"] = 0
+		data["QRSizeStops"] = []int{}
+	})
+
+	if !strings.Contains(body, "The QR code could not be read.") {
+		t.Fatal("the read failure is not reported at all, so this test is not " +
+			"looking at the state it thinks it is")
+	}
+	for _, absent := range []string{
+		`id="qr_size"`,
+		`name="size_shown"`,
+		`class="qr-slider-marks"`,
+		`id="qr-logo-upload"`,
+	} {
+		if strings.Contains(body, absent) {
+			t.Errorf("the style section still renders %s after a read failure. Every "+
+				"number behind it is zero, so the box offers a size the form's own "+
+				"min forbids and Save would post it", absent)
+		}
+	}
+}
+
+// TestARefusedSaveKeepsTheStyleForm is the other half of F217's guard, and it is
+// here because getting it wrong is exactly what the integration suite caught.
+//
+// `QRError` carries two states: the code could not be read, and *your save was
+// refused*. Only the first has no subject. A guard on the message hid the form on
+// a refusal too — so a reader whose 9px size was refused came back to a page with
+// nothing on it to correct. The view tells them apart with `QRUnreadable`, and
+// this is what keeps that distinction from being re-collapsed.
+func TestARefusedSaveKeepsTheStyleForm(t *testing.T) {
+	body := renderLinkDetail(t, func(data map[string]any) {
+		data["Tab"] = "qr"
+		// A refusal: the message is set and the code is perfectly readable.
+		data["QRError"] = "Size must be at least 64 pixels."
+		data["QRUnreadable"] = false
+	})
+	for _, want := range []string{`id="qr_size"`, `id="qr-logo-upload"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("a refused save came back without %s. The reader is being asked "+
+				"to correct a number on a form that is no longer on the page", want)
+		}
+	}
+}

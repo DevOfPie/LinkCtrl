@@ -1,6 +1,7 @@
 package link
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1275,8 +1276,10 @@ func (s *Service) ResetQRStyleBySlug(
 		return fmt.Errorf("%w: styling a QR code requires %s", domain.ErrForbidden, PermUpdate)
 	}
 	// Through Get, so a link in another workspace is a 404 rather than a silent
-	// no-op that reports success.
-	if _, err := s.Get(ctx, actor, linkID); err != nil {
+	// no-op that reports success. The link is kept rather than discarded because
+	// the re-fit below needs its short URL.
+	l, err := s.Get(ctx, actor, linkID)
+	if err != nil {
 		return err
 	}
 	row, found, err := s.storedQRCode(ctx, actor.WorkspaceID, linkID, slug)
@@ -1289,7 +1292,29 @@ func (s *Service) ResetQRStyleBySlug(
 		}
 		return nil
 	}
-	blob, err := json.Marshal(decodeQRStyle(nil))
+	// `ForLogo` when the row carries one (F234). `decodeQRStyle(nil)` is the
+	// defaults and names no level, so a reset wrote a row saying nothing about the
+	// level while the renderer forces `H` for a logo — `storeQRStyle` has this
+	// branch and this statement did not. The picture was always right, because
+	// `qr.RenderClassWithLogo` forces it whatever the row says and `qrCodeFrom`
+	// applies `ForLogo` on read; what disagreed was the row, and M50.6's contract
+	// is that a logo'd code's **row** holds H, which is why
+	// TestALogoRaisesTheCodeToLevelHAndSaysSo reads `qr_codes` directly.
+	//
+	// It predates M50.6: before that release the same statement wrote
+	// `"level":"M"` onto a logo'd row, which is the same disagreement wearing a
+	// different string.
+	//
+	// The size goes with it. A stored size fitted against `H`'s larger symbol is
+	// not a size the defaults hold, so resetting the style has to re-fit rather
+	// than keep a number that was measured for a different picture — which is
+	// F232's arithmetic reached through a path F232 is not about.
+	reset := decodeQRStyle(nil)
+	if row.HasLogo {
+		reset = reset.ForLogo()
+	}
+	reset, _ = refitForPayload(QRContent(l.ShortURL, slug), reset)
+	blob, err := json.Marshal(reset)
 	if err != nil {
 		return fmt.Errorf("encode qr style: %w", err)
 	}
@@ -2060,4 +2085,48 @@ func QRContent(shortURL, slug string) string {
 		out += "&" + domain.ClickCodeParam + "=" + slug
 	}
 	return out
+}
+
+// RefitQRCodesForPayload re-fits every code a link carries against the payload it
+// now encodes, and answers how many rows moved.
+//
+// **Renaming a link is the other payload change** (F228). M49's third reopening
+// re-fits wherever a *slug* is written, which is CreateQRCode; an alias change
+// grows every one of that link's codes by exactly the same mechanism, because a
+// longer short URL is more bytes in the picture. A code stored at or near its own
+// floor then drew larger than the number the reader set, on a link they renamed
+// for unrelated reasons — which makes M49's *the requested size is the size stored
+// and drawn, exactly* false through a door that fix did not close.
+//
+// Unconditional and cheap for the same reason [Service.refitStoredQRCode] is: a
+// row already fitted to its payload re-fits to itself and no statement runs, so
+// the cost of a rename that changes nothing is one encode per code.
+//
+// It answers a count rather than a QRSizeRise. A rename can move several codes by
+// different amounts, so there is no single pair of numbers to report — and the
+// surfaces that call this are the link edit form and the link PUT, neither of
+// which has anywhere to put the sentence a QRSizeRise exists to word. What the
+// count is for is the caller's log line and this function's own tests.
+func (s *Service) RefitQRCodesForPayload(
+	ctx context.Context, workspaceID, linkID uuid.UUID, shortURL string,
+) (int, error) {
+	rows, err := s.q.ListQRCodes(ctx, dbgen.ListQRCodesParams{
+		LinkID: linkID, WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("list qr codes for %s: %w", linkID, err)
+	}
+	moved := 0
+	for _, r := range rows {
+		row := qrRowFromList(r)
+		before := row.Style
+		out, _, err := s.refitStoredQRCode(ctx, workspaceID, linkID, shortURL, row)
+		if err != nil {
+			return moved, err
+		}
+		if !bytes.Equal(before, out.Style) {
+			moved++
+		}
+	}
+	return moved, nil
 }

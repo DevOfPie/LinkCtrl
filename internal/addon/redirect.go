@@ -82,7 +82,7 @@ import (
 // The cost an add-on puts on a redirect is still the operator's, and it is still
 // visible per module in the histogram this file writes.
 //
-// The instance budget is the host's existing one — [maxConcurrentRoutes] slots,
+// The instance budget is the host's existing one — [addonSlots] slots,
 // shared with add-on pages and with out-of-band observation — and it is taken
 // **without waiting**. A redirect that
 // cannot get a slot is served without the add-on and counted as throttled. That
@@ -174,7 +174,7 @@ const DefaultInlineDeadline = 25 * time.Millisecond
 // measurement and from what it costs when it is reached:
 //
 //   - **Measured**, by TestInstantiationCostsWhatItCostsUnderContention, which
-//     instantiates the redirect fixture with every one of [maxConcurrentRoutes]
+//     instantiates the redirect fixture with every one of [addonSlots]
 //     slots busy — the state a redirect meets under load, not the idle one D318's
 //     numbers came from. On this machine, 2026-08-23: **mean 9.6 ms, worst of 128
 //     62.7 ms**, against the ~1.6 ms M60 measured for one instantiation on an idle

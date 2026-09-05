@@ -92,7 +92,7 @@ import (
 // same slots — F326 was found in both call sites — so serving only the inline
 // class would be a choice, and there is nothing to argue for it: an observing
 // invocation is off the request path but it is not free, and it holds one of the
-// same [maxConcurrentRoutes] slots while it starts.
+// same [addonSlots] slots while it starts.
 //
 // **Add-on pages are not pooled**, and that is this milestone's scope rather than
 // a claim that they should not be. A page request has a 250 ms budget where a
@@ -102,7 +102,7 @@ import (
 //
 // # The two bounds, and why neither is the slot budget
 //
-// [maxConcurrentRoutes] bounds how many invocations are **in flight**. It already
+// [addonSlots] bounds how many invocations are **in flight**. It already
 // bounds three things under a name that says one (F324) and this file does not
 // make it four: the pool takes nothing from it, waits on nothing of it, and an
 // invocation that could not get a slot never reaches this file at all.
@@ -142,7 +142,7 @@ var (
 // add-on, unless an operator says otherwise with LINKCTRL_ADDON_POOL_SIZE.
 //
 // **It is not a concurrency bound and it is deliberately not sixteen.** What
-// bounds invocations in flight is [maxConcurrentRoutes], which this file does not
+// bounds invocations in flight is [addonSlots], which this file does not
 // touch; this bounds only what is held at rest, and the two are added rather than
 // merged — see the file comment.
 //

@@ -483,7 +483,7 @@ func TestRoutingCostsAnInstantiation(t *testing.T) {
 func TestConcurrentRequestsAreBoundedAndAllAnswered(t *testing.T) {
 	h, _ := pagesHost(t, nil)
 
-	const callers = maxConcurrentRoutes * 2
+	const callers = addonSlots * 2
 	var wg sync.WaitGroup
 	errs := make([]error, callers)
 	for i := range callers {
@@ -502,7 +502,7 @@ func TestConcurrentRequestsAreBoundedAndAllAnswered(t *testing.T) {
 	// The slots are all back, or the next request would block for ever.
 	if len(h.slots) != 0 {
 		t.Errorf("%d of %d slots are still held after every caller returned",
-			len(h.slots), maxConcurrentRoutes)
+			len(h.slots), addonSlots)
 	}
 }
 
@@ -512,11 +512,11 @@ func TestABusyHostRefusesRatherThanWaitsForEver(t *testing.T) {
 	h, _ := pagesHost(t, nil)
 	// Every slot held, so the next caller has to wait — and its context is
 	// already done.
-	for range maxConcurrentRoutes {
+	for range addonSlots {
 		h.slots <- struct{}{}
 	}
 	t.Cleanup(func() {
-		for range maxConcurrentRoutes {
+		for range addonSlots {
 			<-h.slots
 		}
 	})
@@ -1196,7 +1196,7 @@ func TestTheGuestMemoryCeilingIsTheOneDocumented(t *testing.T) {
 			if !strings.Contains(flat, want) {
 				t.Errorf("%s does not say %q, so an operator is sizing a host against a "+
 					"sentence this build no longer holds to: %d in flight x %d pages",
-					doc.path, want, maxConcurrentRoutes, maxGuestMemoryPages)
+					doc.path, want, addonSlots, maxGuestMemoryPages)
 			}
 		}
 		// The untied list rots the same way an anchor does, and it rots silently:
@@ -1415,7 +1415,7 @@ var documentedNumberSites = []struct {
 		untied: []string{
 			// M70's WASI paragraph (F298). It counts the WASI imports the OIDC add-on
 			// resolves, measured off the compiled module, and shares a word with
-			// maxConcurrentRoutes by coincidence rather than by meaning. The
+			// addonSlots by coincidence rather than by meaning. The
 			// neighbouring "ten" is the same measurement for the minimal fixture and
 			// is not one of these numbers at all.
 			"sixteen for the oidc add-on",
@@ -1477,11 +1477,11 @@ func documentedNumbers(t *testing.T) (*strings.Replacer, *regexp.Regexp) {
 		4: "four", 8: "eight", 12: "twelve", 16: "sixteen",
 		24: "twenty-four", 32: "thirty-two", 48: "forty-eight", 64: "sixty-four",
 	}
-	n, ok := inWords[maxConcurrentRoutes]
+	n, ok := inWords[addonSlots]
 	if !ok {
-		t.Fatalf("maxConcurrentRoutes is %d, and every document below spells this "+
+		t.Fatalf("addonSlots is %d, and every document below spells this "+
 			"number as a word; add the spelling here, then to each of them",
-			maxConcurrentRoutes)
+			addonSlots)
 	}
 	// The pool's default, spelled the same way, and it is a *fourth* number since
 	// M66.5: an instance is now kept after the invocation that made it, so the
@@ -1494,7 +1494,7 @@ func documentedNumbers(t *testing.T) (*strings.Replacer, *regexp.Regexp) {
 	// 16 pages of 64 KiB to the MiB, which is the only arithmetic in this file
 	// that is not the documentation's own.
 	mem := strconv.Itoa(maxGuestMemoryPages/16) + " MiB"
-	ceiling := strconv.Itoa((maxConcurrentRoutes+DefaultPoolSize)*maxGuestMemoryPages/16) + " MiB"
+	ceiling := strconv.Itoa((addonSlots+DefaultPoolSize)*maxGuestMemoryPages/16) + " MiB"
 	pages := strconv.Itoa(maxGuestMemoryPages)
 	fill := strings.NewReplacer("{n}", n, "{mem}", mem, "{ceiling}", ceiling,
 		"{pages}", pages, "{idle}", idle)
