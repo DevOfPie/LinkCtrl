@@ -376,6 +376,12 @@ start-up itself loading the set.
 
 ## Partitions
 
+**An add-on's own tables are not in any of this.** Retention covers the three
+tables named below and nothing else, and an add-on that declared
+`storage.own_schema` stores what it likes in a schema of its own with no cap and
+no expiry — see `docs/SECURITY.md`, which also says why subject erasure does not
+reach it either.
+
 `click_events`, `visitors` and `audit_logs` are RANGE-partitioned by month,
 created by application code. Rows in a *default* partition mean something arrived
 outside every explicit range — and attaching the partition that should have held

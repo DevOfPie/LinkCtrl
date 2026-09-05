@@ -20,10 +20,16 @@
 -- request body stops at qr.MaxLogoUploadBytes, the decoded pixels at
 -- qr.MaxDecodedLogoPixels, and the *stored* artefact is re-encoded by this
 -- product, fitted to qr.MaxLogoPixels — which since D180 resamples rather than
--- refuses — and refused above qr.MaxLogoStoredBytes. So the worst case a row
--- can carry is 1,049,600 bytes, and the arithmetic behind that number is in
--- internal/qr's logo.go. A constraint here would be a fourth place to keep that
--- number, and the one furthest from the code that computes it.
+-- refuses — and refused above qr.MaxLogoStoredBytes, which is the bound and is
+-- the only number worth sizing anything against. This comment used to state the
+-- worst case as 1,049,600 bytes; that is the filtered-scanline term of the
+-- derivation in internal/qr's logo.go — the first line of its table, not the
+-- total — so it was about 10,400 bytes under what the code actually admits, and
+-- an operator sizing a pg_dump from it was short by roughly 1% per logo (F219).
+-- The number is therefore not repeated here at all. This was the fourth place it
+-- had been written down and the one furthest from the code that computes it,
+-- which is the reason the figure is gone rather than corrected: read
+-- qr.MaxLogoStoredBytes, which TestTheWorstCaseLogoFitsTheStatedBound pins.
 --
 -- **What deletion this buys, and what it does not.** `qr_codes.link_id` and
 -- `qr_codes.workspace_id` are both ON DELETE CASCADE (00600), so removing a

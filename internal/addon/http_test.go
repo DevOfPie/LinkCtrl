@@ -252,6 +252,13 @@ func TestTheStatusVocabularyIsClosed(t *testing.T) {
 		{`{"location":"/x","body":"and a body"}`, 0, true},
 		// A location that reads as a path and behaves as another origin.
 		{`{"location":"//evil.test/x"}`, 0, true},
+		// And the backslash forms, which the `//` test alone does not see (F299).
+		// All three land on another origin in real Chromium; a plain `/landed`
+		// stays put, which is the case below that must keep passing.
+		{`{"location":"/\evil.test/x"}`, 0, true},
+		{`{"location":"/\/evil.test/x"}`, 0, true},
+		{`{"location":"/\\evil.test/x"}`, 0, true},
+		{`{"location":"/landed"}`, http.StatusFound, false},
 		{`{"location":"javascript:alert(1)"}`, 0, true},
 		{"{\"location\":\"/x\\r\\nSet-Cookie: a=b\"}", 0, true},
 		// An add-on's flow legitimately leaves this origin, which is what an
@@ -1403,6 +1410,14 @@ var documentedNumberSites = []struct {
 		sentences: []string{
 			"a module gets {mem} of linear memory — {pages} pages",
 			"{mem} is what your instance gets either way",
+		},
+		untied: []string{
+			// M70's WASI paragraph (F298). It counts the WASI imports the OIDC add-on
+			// resolves, measured off the compiled module, and shares a word with
+			// maxConcurrentRoutes by coincidence rather than by meaning. The
+			// neighbouring "ten" is the same measurement for the minimal fixture and
+			// is not one of these numbers at all.
+			"sixteen for the oidc add-on",
 		}},
 	{path: "sdk/doc.go",
 		sentences: []string{

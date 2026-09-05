@@ -159,6 +159,16 @@ error, not a warning: a pool that cannot get a connection fails requests, and
 finding that out at startup is cheaper than finding it out under load. Raise
 `max_connections` on the server before raising the pools past it.
 
+**Add-ons are not in that sum, and you have to add them yourself.** Each installed
+add-on that declared `storage.own_schema` holds a pool of up to **four**
+connections for as long as it is loaded, plus **one** more at boot while its
+migrations run. The guard runs before any add-on is discovered, so it cannot count
+them — an instance tuned at its ceiling of 90 exceeds 100 with three storage
+add-ons and nothing will say so before the first *sorry, too many clients already*.
+At the defaults of 20 and 6 there is room for several. Budget
+`4 × (storage add-ons)` on top of the two pools, and raise `max_connections`
+accordingly.
+
 ## Cache
 
 Redis is a cache and nothing else — no persistence, LRU eviction, any key may
@@ -1111,8 +1121,20 @@ name is asking for behaviour that will not happen — and the error names every 
 that *is* allowed, which is the fix. A permission this build knows and grants to
 nobody is **not** a refusal: the add-on loads without it, and the boot log says so.
 
-A file that is not a directory is ignored with a warning, so a `README` you left
-in there is not an outage.
+**An entry that is not itself a directory is ignored with a warning**, so a
+`README` you left in there is not an outage — and a **symlink is one of those
+entries**, including a symlink pointing at a perfectly good add-on directory. The
+versioned-install pattern `current -> oidc-1.2.0` therefore loads nothing, and the
+instance boots without that add-on: the entry is skipped before its manifest is
+read, so a manifest saying `required` does not turn the silence into the outage it
+would otherwise be. Install by copying or moving a directory into place.
+
+The asymmetry is worth knowing because it is not obvious: the add-ons directory
+**itself** may be a symlink — that path is followed — and the add-ons inside it may
+not be. Whether an install should be allowed to follow one is not a documentation
+question and is open: following a symlink means loading a module from outside the
+directory this boundary is drawn around, and *who may write to the directory* is
+the whole of that boundary.
 
 ### When an add-on reaches outward
 

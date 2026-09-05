@@ -511,6 +511,7 @@ file. Append a row when you append an entry.
 | [M70's two opening answers](#2026-09-04--m70s-two-opening-answers-the-published-example-and-how-111-rows-get-reviewed) | D414: `LinkCtrl-OIDC` gets a second release in this close, so the published example is built against the released SDK rather than a pseudo-version of an unreleased commit — at the cost of a cross-repository release the owner performs and a re-cut fixture digest. D415: the 111 open findings are triaged as a tiered proposal carrying a recommendation on every row, which is what keeps tier approval a review of rows rather than of tiers |
 | [M70's triage: the tiers, and the eleven answers](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers) | D416: Tiers A and B are both worked into the close and F315 joins them — 62 rows, against a recommendation of A now and B after the release, with the cost stated first. D417: an operator-configurable add-on migration timeout, five minutes by default. D418: role adoption accepted and documented. D419: a byte budget per add-on per minute on the log boundary. D420: `temp_file_limit` becomes a superuser step at install time, against the recommendation. D421: `template_render` deprecated, which is the deprecation machinery's first real exercise. D422: a vetoed redirect gets its own outcome and no prose in the UI. D423: the contrast warning fires on either metric. D424: the QR list sorts on the name that is drawn. D425: the QR shorthand stays API-only and seven view fields go. D426: the row overlay stays and the slug stays unselectable, on the owner's answer. D427: duplicate tooltip descriptions dropped and focusable hosts named, answered on a re-put question |
 | [M70's fix shapes: ten answers, and the picks taken without asking](#2026-09-04--m70s-fix-shapes-ten-answers-and-the-picks-taken-without-asking) | D428: the host records what it discovered separately from what it loaded, which is F281's fix at the source rather than at the page. D429: F315 is built in both halves, operator and person. D430: an htmx 4xx is answered by a shared `webError` limb rather than a global htmx config. D431: `sign_in_label` takes a positive rule, deliberately the shape D285 could not take for the log boundary. D432: `temp_file_limit` is 256 MB. D433: the log budget is 8 MiB per add-on per minute. D434: the SDK's wasm half is vetted under `GOOS=wasip1`, the CI half proposed. D435: the browser suite signs in once and shares the context. D436: the GeoIP sentence is reworded and the predicate untouched — the option not recommended. D437: the fetch hold is keyed to the invocation. Plus eleven picks taken without a prompt, each with what it followed |
+| [M70's documentation batch: what three append-only entries now get wrong](#2026-09-04--m70s-documentation-batch-what-three-append-only-entries-now-get-wrong) | D229's *an add-on cannot store what it is never handed* is a conclusion its own premise does not support — the surface bounds the host, not the module — and the sentence is corrected at five sites and here. D181 and D182's *at every level* went loose when D187 made the level a floor and `L` unreachable. And `LINKCTRL_ADDON_LOAD_TIMEOUT`, which `internal/config` reasoned about, has never existed |
 
 ---
 
@@ -42251,3 +42252,59 @@ record is that unwritten ones get re-taken.
 | F268 | `config_get`'s sentence is narrowed to what the manifest format can carry | The deprecation policy makes changing a status later expensive; narrowing now is free |
 | F216 | One `@source` line **and** the rule that Go files do not name utilities | `funcs.go` and `choropleth.go` are already exceptions, so the rule has to name them |
 | F311 | The scan covers every way to come by a logger, and the packages this one hands one to | The row's own two halves; `internal/store` is where F-1 was found |
+
+## 2026-09-04 — M70's documentation batch: what three append-only entries now get wrong
+
+Corrections to entries this log may not edit. Each names the entry, quotes what
+it said, and says what is true — which is the mechanism this file has always used
+and the reason it is append-only in the first place.
+
+### D229's *an add-on cannot store what it is never handed* does not follow
+
+[D229](decisions.md) argues the add-on privacy stance from the ABI's surface and
+concludes, in those words, that an add-on cannot store what it is never handed.
+The premise is sound and is unchanged: no host function hands a module a client
+address in any spelling, `abi.AddressBearing` and a shape test enumerate what that
+means, and a test reads `click_events`' column list out of the migration rather
+than trusting a copy.
+
+**The conclusion is not the premise.** The surface bounds what the *host* hands
+over; it says nothing about what a module can *obtain*. An add-on holding
+`routes.own_prefix` writes its own `Location`, so it can send a visitor to an
+origin its author controls, observe the address there, and correlate it back
+through a cookie under its own declared prefix — with `storage.own_schema` to hold
+the result. Every leg of that is a shipped capability, and `docs/SECURITY.md`
+already documented the redirect itself as an accepted consequence of installing a
+module without connecting it to this sentence.
+
+F293 found the sentence at six sites. Five are corrected in place —
+`docs/SECURITY.md`, `docs/addon-abi.md`, `Plan.md`, `internal/addon/abi/surface.go`
+and `internal/addon/abi/abi_test.go` — and the sixth is D229 itself, which is
+corrected here rather than edited. Nothing about the boundary changed; the claim
+made about it did.
+
+### D181 and D182's *at every level* stopped being true when D187 landed
+
+Both quote a scan-corpus measurement over the control half — *the whole version
+range at every level*. [D187](decisions.md) then made the error-correction level a
+**floor** rather than a choice, which makes `L` unreachable: the `L` slot draws
+what the `M` slot draws, byte for byte, so the control covers three distinct
+levels with one duplicate a version (F233). The measurements are unaffected —
+1496 of 1496 was read off pictures that were actually rendered — and the phrase
+describing their coverage is what has gone loose.
+
+The corpus is left at 1360 pictures with its 170 duplicates, deliberately, and
+`internal/qr/scancorpus_test.go` states why where the next reader meets it: the
+count is quoted in three shipped documents, and a control that stopped covering a
+version to save a decode would be paying for tidiness with evidence.
+
+### F327's `LINKCTRL_ADDON_LOAD_TIMEOUT` never existed
+
+Not a decision being corrected but a variable being un-invented, recorded here
+because somebody reading `internal/config`'s reasoning acted on it. The comment
+argued that the instantiation deadline could not be borrowed from
+`LINKCTRL_ADDON_LOAD_TIMEOUT`, which has no struct field, no `env` tag, no
+`.env.example` line and no row in `docs/configuration.md`. The 30-second bound is
+real and is `addon.DefaultLoadTimeout`, a constant. Whether it should be an
+operator's is deliberately left open: adding a configuration surface is not a
+comment's to decide, and this correction does not.

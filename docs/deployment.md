@@ -871,7 +871,10 @@ What to know before running several:
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
   their total under the server's `max_connections`; startup refuses to run when
-  the sum exceeds 90, so raise `max_connections` on Postgres first.
+  the sum exceeds 90, so raise `max_connections` on Postgres first. **The refusal
+  does not count add-ons**: each storage add-on holds four connections while
+  loaded and one more at boot, and the guard runs before any add-on is discovered
+  — so the arithmetic is yours, and `docs/configuration.md` states it.
 
 ## When it will not start
 

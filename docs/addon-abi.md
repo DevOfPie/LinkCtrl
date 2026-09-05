@@ -2,9 +2,23 @@
 
 An add-on reaches LinkCtrl through a fixed set of functions it imports from the
 host, and through nothing else. **That set is the ABI.** There is no second
-surface: no socket, no file, no shared table, no environment. Enumerating the
-functions therefore enumerates the whole contract, which is what makes the
-promise below something a publisher can rely on rather than a sentiment.
+surface: no socket, no file, no shared table, no environment — each of those four
+is measured from inside a guest rather than asserted, and each holds.
+
+**What sits beside the ABI, and is not part of it.** The host instantiates the
+whole of `wasi_snapshot_preview1`, because that is what a compiled Go program
+links against. A minimal SDK consumer imports about ten of those functions
+alongside this contract's own — ten exactly for the smallest fixture this
+repository builds, sixteen for the OIDC add-on, both counted off the compiled
+modules rather than estimated. What yours resolves depends on what your toolchain
+emits and is not this project's to pin. Almost all of them are inert under the shipped
+configuration — no preopened directory, no environment, no arguments, discarded
+output — but **two are not empty, they are faked**, and they are the ones with
+behaviour a publisher should know about: the clock and the random source. Both are
+described under *The clock and the entropy are this machine's* below. This page
+therefore enumerates the contract LinkCtrl offers; it is not an enumeration of
+every import your module resolves, and the WASI snapshot version is not covered by
+the breaking-change table.
 
 The host owns the definition and add-ons consume a **generated SDK**, so the
 contract has one author. The definition lives in `internal/addon/abi` — the
@@ -449,7 +463,17 @@ than one, is in
 ## What a storage statement may and may not do
 
 `storage_query` and `storage_exec` are one grant, `storage.own_schema`, and the
-schema boundary is the whole of it. There is no row-level or column-level form, and
+schema boundary is the whole of it.
+
+**Your schema is one per add-on, per database — not one per organization.** It is
+derived from your add-on's name alone, and this product is multi-tenant: an
+operator may run many organizations on one instance, and every one of them shares
+the tables you create. The host cannot enforce tenancy inside your schema, because
+it applies DDL it did not write and does not understand, so this sentence is the
+only control there is. What you are handed to scope by is in the request record —
+it names which organization and workspace the request landed in, and it exists for
+no other purpose. An add-on written for one tenant and deployed on a shared
+instance will mix them, and nothing will say so. There is no row-level or column-level form, and
 nothing here reaches another add-on's schema or this product's tables — unless that
 add-on granted you the reach itself, which it can, because it owns its schema and
 the host reports the grant rather than preventing it.
@@ -624,6 +648,33 @@ declared `cookie_prefixes`, its `max_age` may be at most **400 days** — the li
 RFC 6265bis has a browser reduce a longer one to, so nothing is lost by being
 refused it — and the host applies its own `Path`, `Secure`, `HttpOnly` and
 `SameSite`.
+
+**A cookie element is exactly `{name, value, max_age}`** and unknown keys are
+refused, which is worth spelling out because the two a publisher reaches for
+first are the two that are not there: `path` is the host's and `expires` does not
+exist here — `max_age` is the lifetime, in seconds, with **zero** meaning a
+session cookie the browser drops when it closes and a **negative** value meaning
+delete this cookie now. `secure`, `http_only`, `same_site` and `domain` are the
+host's too and are refused by name rather than ignored, so a response that names
+one is `ErrInvalid` rather than silently missing an attribute you thought you set.
+
+**Four more ways a response is refused**, each `ErrInvalid` at your own call and
+none of them predictable from the sentences above:
+
+- a **3xx status with no `location`** — a redirect to nowhere;
+- a **`location` alongside a body or a `content_type`** — a redirect is not also
+  a page;
+- a status other than `302` or *unset* **when a `location` is present**. Not only
+  the permanent ones: `307` is refused as well, so the sentence about permanent
+  redirects above predicts less than it appears to;
+- a **`location` carrying a backslash**, along with the control characters and
+  the scheme-relative `//host` form. Some browsers read a backslash as a path
+  separator and follow `/\evil.example` to another origin.
+
+**A response record has a size limit and it is 64 KiB**, the same single-value
+bound every other string crossing this boundary is held to. It binds on the
+record, not on the body alone: a module handed a large request and reflecting it
+is refused its own answer.
 
 **Your cookies are carried in one cookie of the host's.** You name them, you read
 them back by name, and their lifetimes are the ones you asked for — but LinkCtrl
@@ -987,8 +1038,9 @@ can verify, and the second is a CSRF carve-out on a route anything holding
   surface. No function in the table below hands a module a client's address in
   any form, and the record that carries redirect data is bound to what
   `click_events` may carry, prefix-derived and country-level, asserted by a test
-  that reads the column list out of the migration. An add-on cannot store what it
-  is never handed. See [SECURITY.md](SECURITY.md).
+  that reads the column list out of the migration. What this bounds is what the
+  host hands over — it is not a bound on what an add-on can learn by other means,
+  and an add-on that also serves routes has one. See [SECURITY.md](SECURITY.md).
 - **A cookie of the host's, ever.** Also a property of the surface. LinkCtrl's
   sessions are server-side and opaque, so the `Cookie` header *is* the
   credential — a record carrying it verbatim would let an add-on act as whoever
@@ -1017,7 +1069,7 @@ The ABI is **0.1.5**, generation **1**, and this host loads generation 1 or newe
 | `log`<br>`sdk.Log(level string, message string)` | 0.1.0 | — | **live** | Log writes one line to the host's logger, attributed to this add-on. It is the only way out: a module's stdout and stderr are discarded, because routing them into an operator's log is a capability and the host grants none it was not asked for. The host adds the add-on's name; a message that repeats it is noise. An unknown level is ErrInvalid rather than a silent default, so a typo does not become a line nobody greps for. The message is neutralized before it is written and bounded at 4 KiB, and the rule is stated as what survives rather than as what is caught: a graphic character reaches the line as itself, in any script, and everything else becomes its escape — a newline, a control character, an ANSI escape, every format and bidirectional control, every unassigned or private-use code point, and the 268 graphic code points this host treats as invisible: the 267 graphic members of Unicode's derived Default_Ignorable_Code_Point, which the host computes rather than reads because Go ships only the residue property the derivation subtracts from, plus U+2800 BRAILLE PATTERN BLANK, the one blank that is not whitespace. One class is deleted rather than escaped, and it is the only one: every variation selector is removed from the message. So a heart written as U+2764 U+FE0F arrives as U+2764 and is still a heart, an emoji that carries no selector is untouched, and a selector hung off a letter, a space, an ideograph or a block element takes nothing with it when it goes. There is no exemption and no base list: a selector after a character the reader's renderer does not vary is invisible, and no property tells the host which those are. That set is a published property and not the set of characters that render as nothing, because Unicode publishes no such property: eight combining marks it annotates as not visibly rendered — U+2D7F, U+17D2, U+10A3F, U+1107F, U+11A47, U+11A99, U+11F42 and U+16FE4 — reach the line as themselves, as do seventeen space characters and the prepended concatenation marks named below. What bounds that residue is that this log is write-only to you: Log declares no out-parameter, no function in this ABI hands log content back, your module gets no preopened file and its stdout and stderr are discarded, and your storage is a schema this log does not live in. So a character that survives is one an operator can still see; it is not a channel you can read back. A code point Unicode adds after the host was built is escaped rather than let through. One graphic character does not reach the line as itself: a backslash is doubled, so that the two characters \ and n cannot be mistaken for an escaped newline, and a module cannot spell the host's own truncation mark. The named exceptions run the other way: Unicode's prepended concatenation marks — the Arabic, Syriac and Kaithi signs that scope the digits after them — are left alone, read from Unicode's property rather than from a list, so a host built against a newer revision carries the marks it added. Nothing is refused for any of it, and a message that needed none arrives as it was written, backslashes aside. |
 | `random_bytes`<br>`sdk.RandomBytes(count int32)` | 0.1.1 | — | **live** | RandomBytes draws bytes from the operating system's entropy source, through the host. It is what a nonce, a `state` parameter or a PKCE verifier is built from. A count outside 1..4096 is ErrInvalid rather than a clamped answer, because a caller that asked for the wrong number of bytes wanted a different number and not a shorter one. Nothing about this function is a permission: every module already reaches the same source through crypto/rand, which the host wires to the same reader, so gating it would buy an operator nothing and cost every manifest a line. |
 | `time_now`<br>`sdk.TimeNow()` | 0.1.1 | — | **live** | TimeNow is the host's wall clock, which is this machine's. It is what an expiry is compared against and what a record's timestamp is stamped from. UTC and RFC 3339, so there is one spelling to parse and no zone to guess. Ungated for the reason random_bytes is: a module already reads the same clock through time.Now, and this is the same value with a documented shape. |
-| `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it, and ErrNotFound only when it declared none. An operator sets a value in the Add-on manager, which stores it host-side, or with LINKCTRL_ADDON_<NAME>_<SETTING>; either outranks the manifest's default, and the environment outranks the stored value. A value saved in the manager is what this function answers on the add-on's next invocation, and one already inside a call reads what it read. |
+| `config_get`<br>`sdk.ConfigGet(key string)` | 0.1.0 | `config.read` | **live** | ConfigGet reads one of this add-on's own settings. The key must be one the add-on's manifest declares; anything else is ErrDenied, which is what scopes the function to the add-on rather than to the instance — there is no way to ask for another add-on's setting or for one of this product's own configuration values. A declared setting with no value yet answers with the default the manifest gave it. ErrNotFound means the setting is not declared, or is declared with no default and has no value — the manifest format cannot tell an empty default from an absent one, so the two are one case here rather than two. An operator sets a value in the Add-on manager, which stores it host-side, or with LINKCTRL_ADDON_<NAME>_<SETTING>; either outranks the manifest's default, and the environment outranks the stored value. A value saved in the manager is what this function answers on the add-on's next invocation, and one already inside a call reads what it read. |
 | `storage_query`<br>`sdk.StorageQuery(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageQuery runs a read against the Postgres schema this add-on owns. The schema boundary is the whole of the permission: an add-on names no database, no connection and no search_path, and a statement that reaches outside its own schema is refused rather than executed — ErrDenied, which is distinguishable from ErrInvalid so that a module can tell confinement from its own mistake. One statement per call: the host parses through the extended protocol, so a payload carrying two is refused. The read is a read at the server, in a READ ONLY transaction, so this function cannot be used to write. Arguments are a JSON array of strings, numbers, booleans and nulls; pass JSON as a string and cast it. Rows come back as a JSON array of objects keyed by column name, and a result with two columns of one name is refused rather than collapsed. |
 | `storage_exec`<br>`sdk.StorageExec(sql string, args []byte)` | 0.1.0 | `storage.own_schema` | **live** | StorageExec runs a write against the Postgres schema this add-on owns. Migrations are not this function: the host runs an add-on's migrations, which is what keeps *DDL is additive within a minor version* a promise somebody can keep — the add-on ships them in its own `migrations/` directory and names each with its digest in the manifest, and the host applies them at load inside the same schema this function writes to. Everything StorageQuery says about the boundary, the single statement and the arguments applies here too; what differs is that the transaction is not read-only. |
 | `http_request_read`<br>`sdk.HTTPRequestRead()` | 0.1.0 | `routes.own_prefix` | **live** | HTTPRequestRead reads the request that reached one of this add-on's routes. It answers ErrNotFound outside a request, which is what a module calling it from package initialization gets — an instance is made per request and its initialization runs before the request is attached, so this is the ordinary answer during init rather than an edge case. Read twice in one request it answers the same record twice: the host holds it, the guest does not consume it. |

@@ -301,14 +301,22 @@ tasks:
   # verify-assets and css lead, for the reason the Makefile's `check` target
   # spells out (F350, M69.5): without them this task measures whatever assets
   # happen to be on disk, and `app.css` is gitignored and built.
+  # check-links rather than nothing (F259) and check-tidy rather than tidy (F360),
+  # both because this task carries the Makefile's name and has to carry its
+  # meaning: W41 wired the link gate into `check` precisely so it would run
+  # without anybody remembering, and the mirror did not follow, so a contributor
+  # without `make` ran a gate one check short under the same name. `tidy` repairs
+  # and reports success; `check-tidy` reports the difference, which is what CI
+  # takes.
   check:
     desc: Everything CI runs, short of integration tests
     cmds:
       - task: verify-assets
       - task: css
-      - task: tidy
+      - task: check-tidy
       - task: lint
       - task: shellcheck
+      - task: check-links
       - task: test
 
   # Deliberately NOT called by `check` above, by any ci- task, or by

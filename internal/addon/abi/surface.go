@@ -463,9 +463,18 @@ type Record struct {
 //
 // A blocklist beside the shape test in abi_test.go, and it exists because the
 // shape test alone would pass a field called `forwarded` or `visitor_addr`. No
-// host function hands an add-on any of these: an add-on cannot store what it is
-// never handed, which is the whole of m61.md's privacy bullet and the fifth
-// inherited-rule collision.
+// host function hands an add-on any of these, which is m61.md's privacy bullet
+// and the fifth inherited-rule collision.
+//
+// **What that is and is not** (F293). It is a property of this surface: the host
+// hands over no client address, in any spelling, and the enumeration is what
+// makes it checkable rather than a promise of restraint. It is **not** a bound on
+// what an add-on can *learn*. A module holding `routes.own_prefix` writes its own
+// `Location`, so it can send a visitor to an origin its author controls, observe
+// the address there, and correlate it back through a cookie under its own
+// declared prefix — and `storage.own_schema` will then hold it. Installing a
+// module is a trust decision an operator makes; this boundary bounds the host,
+// not the module.
 var AddressBearing = []string{
 	"ip", "ips", "ip_address", "ip_prefix", "client_ip", "remote_ip", "remote_addr",
 	"peer_addr", "visitor_ip", "visitor_addr", "addr", "address", "cidr", "subnet",

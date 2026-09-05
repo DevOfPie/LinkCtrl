@@ -104,13 +104,15 @@ func TimeNow() (string, error) {
 // scopes the function to the add-on rather than to the instance — there
 // is no way to ask for another add-on's setting or for one of this
 // product's own configuration values. A declared setting with no value yet
-// answers with the default the manifest gave it, and ErrNotFound only when
-// it declared none. An operator sets a value in the Add-on manager, which
-// stores it host-side, or with LINKCTRL_ADDON_<NAME>_<SETTING>; either
-// outranks the manifest's default, and the environment outranks the stored
-// value. A value saved in the manager is what this function answers on the
-// add-on's next invocation, and one already inside a call reads what it
-// read.
+// answers with the default the manifest gave it. ErrNotFound means the
+// setting is not declared, or is declared with no default and has no value
+// — the manifest format cannot tell an empty default from an absent one,
+// so the two are one case here rather than two. An operator sets a value in
+// the Add-on manager, which stores it host-side, or with
+// LINKCTRL_ADDON_<NAME>_<SETTING>; either outranks the manifest's default,
+// and the environment outranks the stored value. A value saved in the
+// manager is what this function answers on the add-on's next invocation,
+// and one already inside a call reads what it read.
 //
 // key is the name of a setting this add-on's manifest declares.
 //

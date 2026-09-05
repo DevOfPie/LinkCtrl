@@ -115,14 +115,27 @@ somebody:
 
 ### What this collides with, named now rather than discovered
 
-Each of these is an inherited invariant from
-[phase-details/README.md](phase-details/README.md)'s *What every milestone
-inherits*, and a WASM host touches five of them — four named when this file was
-written, the fifth added at the plan's review the same day. **None is a
-blocker; every one is a milestone's argument to make in writing.** And the
-frame was owner-confirmed at that review: **Phase 4 inherits all fourteen
-rules as written**, the collisions staying arguments each milestone must win
-in its own file, never waivers.
+**None is a blocker; every one is a milestone's argument to make in writing.**
+And the frame was owner-confirmed at the plan's review: **Phase 4 inherits all
+fourteen rules as written**, the collisions staying arguments each milestone must
+win in its own file, never waivers.
+
+**This list is a record of what was weighed when the phase was planned, and it
+was wrong in both directions** (F301). It said each entry is an inherited
+invariant from [phase-details/README.md](phase-details/README.md)'s *What every
+milestone inherits*, and **`Single container is a tested configuration` is not
+among those fourteen at all** — it is a real property of this product, gated by
+`scripts/single-instance-check.sh`, and it is not one of the inherited rules the
+sentence claims to be quoting. It also said *five*, and stopped being updated:
+[M64](phase-details/m64.md) engaged a sixth, deferring *every UI feature has API
+support* to M69 and arguing it in its own file, which is exactly where the
+pointer requires such an argument to live.
+
+So this list is not an enumeration of what the phase touched. What it is, and all
+it ever was, is the four collisions somebody could see on 2026-08-18 plus the one
+the review added. The frame above is what was confirmed; the count below was
+never re-counted, and the honest form of that is to say so rather than to keep a
+number nobody maintains.
 
 - **`ui` stays stdlib-only** — no Node, no CDN, CSP unchanged, no `unsafe-`
   waivers. An add-on that renders UI has to reach the page without moving any of

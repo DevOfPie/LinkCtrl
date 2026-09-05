@@ -354,10 +354,20 @@ CRM · email marketing · website builder · advertising system · full CMS.
 `Domain` · `ClickEvent` · `Visitor` · `Webhook` · `APIKey` · `AutomationRule` ·
 `AuditLog` · `Notification`
 
-33 tables: the 31 Phase 1 ones, plus `mail_outbox` ([M26](docs/build-notes/phase-details/m26.md), D23)
-and `invitations` ([M27](docs/build-notes/phase-details/m27.md)). Neither is a new
-entity — one is a delivery queue, the other a grant with a lifetime — and both are
-typed rather than dormant jsonb because the feature reading them shipped with them.
+The entities above are not the table count, and this paragraph no longer states
+one. It said **33 tables** — true when it was written during Phase 2, and left
+alone while Phase 3 and Phase 4 added theirs, so the repository knew 43 and then
+45 while the plan said 33 (F258). A count beside a thing that grows is a
+hand-maintained number, and the fix is not a digit: the tables are counted where
+they are created, in
+[docs/data-model.md](docs/data-model.md), which derives its figure from
+`internal/store/migrations/` and says so.
+
+Two of them are worth naming here because neither is a new *entity* —
+`mail_outbox` ([M26](docs/build-notes/phase-details/m26.md), D23) is a delivery
+queue and `invitations` ([M27](docs/build-notes/phase-details/m27.md)) is a grant
+with a lifetime — and both are typed rather than dormant jsonb, because the
+feature reading them shipped with them.
 
 ERD and per-entity implementation status: [docs/data-model.md](docs/data-model.md),
 written at [M45](docs/build-notes/phase-details/m45.md) after being referenced
@@ -551,7 +561,7 @@ Implementation:
 | Analytics retention | 395 days default, enforced hourly by dropping monthly partitions of `click_events` and `visitors`; a partition goes only once its newest possible row is outside the window, so data survives up to a month longer. |
 | Audit retention | Its own window, `AUDIT_RETENTION_DAYS`, defaulting to 0 — keep forever. Never governed by the analytics number: an upgrade must not silently delete history assumed permanent. Growth is made visible instead, by `linkctrl_audit_log_bytes`. |
 | Geographic detail | Country only. Region and city are resolvable and deliberately not stored. |
-| The add-on boundary | The stance holds at the **ABI** rather than by reviewing add-on code, which this project cannot do for a module it did not write ([M61](docs/build-notes/phase-details/m61.md)). No host function hands a module a client address in any form, and the record carrying redirect data is bound to what `click_events` may carry — country-level, prefix-derived, with region and city refused although the columns exist. An add-on cannot store what it is never handed, and a test over the ABI surface reads the column list out of the migration rather than trusting a copy of it. |
+| The add-on boundary | The stance holds at the **ABI** rather than by reviewing add-on code, which this project cannot do for a module it did not write ([M61](docs/build-notes/phase-details/m61.md)). No host function hands a module a client address in any form, and the record carrying redirect data is bound to what `click_events` may carry — country-level, prefix-derived, with region and city refused although the columns exist. The host hands over no client address, and a test over the ABI surface reads the column list out of the migration rather than trusting a copy of it. That bounds what the host gives, not what a module can learn — an add-on serving its own routes can obtain an address by sending a visitor to an origin its author controls, which `docs/SECURITY.md` states. |
 | Regional storage | One instance per region via `organizations.data_region`; no row-level routing |
 
 Consequence: the largest table holds no personal data and is out of scope for

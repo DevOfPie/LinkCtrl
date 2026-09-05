@@ -1329,8 +1329,15 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 		return fmt.Errorf("demo catalogue has no %q link to style a QR code on", demoQRStyled)
 	}
 	// A dark blue on a pale field, which is a real brand choice and still passes
-	// the contrast a scanner needs. Level Q, so a printed code survives being
-	// scuffed — the reason anybody changes the level at all.
+	// the contrast a scanner needs.
+	//
+	// **No level is named, and that is the change** (F231). This used to set
+	// Level Q with a comment saying a printed code survives being scuffed. Since
+	// D187 the level is a *floor* rather than a choice: this payload resolves to Q
+	// from no floor at all, so the picture was byte-identical either way and the
+	// comment described a choice that bought nothing. Worse, the demo pinned the
+	// one field the release changed, so it showed that field's old shape by
+	// accident — a demo is where somebody looks to see what the product does now.
 	//
 	// **Two writes, because M49 split the surfaces and the demo shows both.**
 	// The level left the dashboard for the API, so it is set here the way a
@@ -1340,7 +1347,7 @@ func (s *demoSeeder) seedCampaigns(ctx context.Context, cat []demoLink, ids map[
 	// margin and a scale nobody chose, which is exactly the vocabulary this
 	// milestone removed.
 	if _, err := s.link.SetQRStyle(ctx, s.owner, styled, qr.Style{
-		Foreground: demoQRForeground, Background: demoQRBackground, Level: qr.LevelQ,
+		Foreground: demoQRForeground, Background: demoQRBackground,
 	}); err != nil {
 		return fmt.Errorf("style the QR code on /%s: %w", demoQRStyled, err)
 	}

@@ -92,7 +92,21 @@ no other target wants.
 | `make verify-ui` | The kept browser spec, against a running test instance — [tools/agent-browser/](../../tools/agent-browser/README.md) | One engine, and `make up` |
 | `make verify-scan` | [M50.6](phase-details/m50.6.md)'s logo cap: every code the product can draw, decoded at simulated distance — [tools/qr-scan/](../../tools/qr-scan/README.md) | Two decoders, and a few minutes |
 
-`Taskfile.yml` mirrors the Makefile for contributors without `make`.
+`Taskfile.yml` carries the Makefile's tasks for contributors without `make`, and
+it is **not** a complete mirror — it said it was until 0.4.0 while two of the
+three browser and scan gates had never been added to it (F220). What it does not
+carry, counted against the tree rather than recalled:
+
+| Missing | Why it is not a gap worth closing by copying |
+| --- | --- |
+| `verify-ui`, `verify-scan` | Both drive a browser or a decoder against a running instance. `verify-render` is in the Taskfile and its own precondition explains what it needs; adding two more would put three heavyweight, environment-dependent tasks in a file whose purpose is the ordinary loop |
+| `oidc-fixture`, `idp-up`, `idp-down` | The integration suite's fixtures. `task test-integration` is not offered either, for the same reason |
+| `browse`, `load-breaking-point` | Tools, not gates |
+| `help`, `require-db-password` | Makefile mechanics with no Taskfile equivalent |
+
+Everything a commit is gated on **is** carried, and `task check` runs the same
+seven steps `make check` does. That is the sentence to keep true: nothing in this
+file mirrors the Makefile's *whole* surface, and nothing needs to.
 
 Everything that connects to the database reads `POSTGRES_PASSWORD` out of
 `.env`, because that is where compose reads it and therefore what the database

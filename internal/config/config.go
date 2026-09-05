@@ -546,9 +546,17 @@ type AddonsConfig struct {
 	// fast the hardware is, which is what F326 found on a CI runner.
 	//
 	// **Wider, and not borrowed from either number that already exists.**
-	// LINKCTRL_ADDON_LOAD_TIMEOUT bounds a module that hangs at boot at 30 seconds
-	// and no redirect may wait that; the inline deadline is the number that proved
-	// too small. 500 ms is eight times instantiation measured under contention on
+	// addon.DefaultLoadTimeout bounds a module that hangs at boot at 30 seconds and
+	// no redirect may wait that; the inline deadline is the number that proved too
+	// small. That first bound is a **constant**, not a variable: this sentence
+	// named a `LINKCTRL_ADDON_LOAD_TIMEOUT` until 0.4.0 and no such variable has
+	// ever existed — there is no struct field, no `env` tag, no `.env.example`
+	// line and no row in docs/configuration.md, and `Options.LoadTimeout` is set by
+	// tests and by nothing else (F327). An operator who read the reasoning and
+	// acted on it set nothing, and the module that hangs at boot still held the
+	// boot for thirty seconds. Whether that bound *should* be an operator's is a
+	// question this correction deliberately does not answer, because adding a
+	// configuration surface is not a comment's to decide. 500 ms is eight times instantiation measured under contention on
 	// the machine the figure was taken on, and it is what a module hanging in
 	// package initialization costs the one redirect it arrived on — see
 	// addon.DefaultInstantiateDeadline for the measurement and the arithmetic. It

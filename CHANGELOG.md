@@ -64,6 +64,48 @@ migrations run at boot.
   when it loads, rather than once per request.** The line is worth having and was
   reachable at whatever rate a module chose to call.
 
+### Documentation
+
+Corrections to claims this project had made and could not support. Each is a
+sentence somebody may have relied on, so they are listed rather than folded into
+a general tidy-up.
+
+- **"An add-on cannot store what it is never handed" was written at six sites and
+  does not follow.** What the ABI guarantees is that *the host* hands a module no
+  client address, in any spelling, and that remains exactly true. It is not a
+  bound on what a module can obtain: an add-on serving its own routes writes its
+  own redirect target, so it can send a visitor to an origin its author controls
+  and observe the address there. Installing a module is a trust decision, and the
+  documents now say which half of it this boundary covers.
+
+- **An add-on's schema spans every organization on the instance**, and no sentence
+  said so. It is derived from the add-on's name alone; the host cannot enforce
+  tenancy inside DDL it did not write. An add-on written for a single tenant and
+  deployed on a shared instance will mix them.
+
+- **Erasure and retention do not reach an add-on's tables**, and the ABI has no
+  way to tell an add-on that a subject was erased. Deleting an account still takes
+  the link that let an add-on sign that account in; an add-on's own schema is
+  outside all of it.
+
+- **The ABI page's completeness argument was too strong.** A module resolves WASI
+  imports beside this contract's own, and two of them — the clock and the random
+  source — are faked rather than inert. The four literal denials it makes (no
+  socket, no file, no shared table, no environment) are measured and hold.
+
+- **Three response refusals a publisher could not have predicted are documented**,
+  including that a `307` beside a location is refused rather than answered as a
+  `302`, and **`set_cookie`'s element shape is stated** — `{name, value, max_age}`,
+  unknown keys refused, with `path` and `expires` among the refused ones.
+
+- **The connection budget an operator plans against does not include add-ons.**
+  Each storage add-on holds four connections while loaded and one more at boot,
+  and the startup guard cannot count them because it runs first.
+
+- **A symlink in the add-ons directory is not an add-on.** The versioned-install
+  pattern loads nothing and says so in a warning, which the previous sentence
+  about ignoring non-directories did not obviously cover.
+
 ### Changed
 
 - **A sign-in label may hold letters, marks, numbers, punctuation, symbols and

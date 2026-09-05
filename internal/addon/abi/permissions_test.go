@@ -298,6 +298,12 @@ func TestEveryDocumentedPermissionCountIsTied(t *testing.T) {
 			"%s today of a %s-token vocabulary", []int{gates, vocabulary}, 1},
 		{"the vocabulary size", "CHANGELOG.md",
 			"The permission vocabulary is %s tokens", []int{vocabulary}, 1},
+		// F339: docs/SECURITY.md was the one statement of this size that nothing
+		// tied, although the same file's *function* counts are anchored by the
+		// sweep next door. It is correct today and drifts the moment a tenth token
+		// lands — which M68.6 did not add and a later add-on capability will.
+		{"the vocabulary size", "docs/SECURITY.md",
+			"closed %s-token vocabulary", []int{vocabulary}, 1},
 	} {
 		words := make([]any, 0, len(tc.counts))
 		for _, n := range tc.counts {

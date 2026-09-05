@@ -262,11 +262,19 @@ var addressish = regexp.MustCompile(`(^|_)(ip|ips|addr|address|cidr|subnet|host_
 // the fifth inherited-rule collision answered at the boundary rather than by
 // auditing somebody else's DDL.
 //
-// The stance is that no client address is stored anywhere. An add-on with storage
-// that is *handed* an address would store it, and nothing in this repository can
-// review the add-on's code. So the answer is that the ABI never hands one over:
-// an add-on cannot store what it is never handed, and this test is what makes
-// that a property of the surface rather than a promise about vigilance.
+// The stance is that this product hands over no client address. An add-on with
+// storage that is *handed* an address would store it, and nothing in this
+// repository can review the add-on's code. So the answer is that the ABI never
+// hands one over, and this test is what makes that a property of the surface
+// rather than a promise about vigilance.
+//
+// **What it is not** (F293). It is not a bound on what an add-on can *learn*. A
+// module holding `routes.own_prefix` writes its own `Location`, so it can send a
+// visitor to an origin its author controls and read the address there, then
+// correlate it back through a cookie under its own prefix. This test says the
+// host does not supply one; it cannot say the add-on has none, and the sentence
+// that used to claim otherwise — *an add-on cannot store what it is never
+// handed* — was written at six sites and is corrected at all of them.
 func TestNoHostFunctionCarriesAClientAddress(t *testing.T) {
 	for _, f := range Functions {
 		for _, p := range f.Params {
@@ -738,6 +746,13 @@ var notThisFunctionCount = map[string][]string{
 	// Pairs, not counts of the list: the two storage functions, the two the
 	// session boundary is split into, the two ungated sources.
 	"docs/addon-abi.md": {
+		// M70's WASI paragraph (F298). It counts the **WASI** imports a minimal SDK
+		// consumer resolves beside this contract's own, which is deliberately a
+		// different set from the one this test anchors — the whole point of the
+		// paragraph is that the two are not the same. It is approximate on purpose
+		// and says *about*: it depends on what the guest's toolchain emits, which is
+		// not this repository's to pin.
+		"imports about ten of those functions alongside this contract's own",
 		"which of the two functions you called is a fact",
 		"the repair is underneath those calls rather than in the two functions below",
 		"So the two functions have opposite requirements",
