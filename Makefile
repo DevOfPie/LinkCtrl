@@ -210,9 +210,39 @@ tidy: ## Tidy and verify modules
 	go mod tidy
 	go mod verify
 
+# Two invocations, because one GOOS cannot see the whole tree (F269).
+#
+# `sdk/runtime_other.go` explains that the package builds for every platform "so
+# that this repository's linters and `go vet ./...` see the SDK at all". They see
+# the **native twins**. Everything under `//go:build wasip1 && wasm` — every
+# `//go:wasmimport` declaration, the whole `unsafe` surface, and the
+# grow-and-retry loop in each wrapper with an out parameter — was outside `make
+# lint`, `make vet`, `go vet ./...` and CI's lint job alike, because none of them
+# names a GOOS and this machine's is not wasip1. `go list` states the exclusion
+# itself: the wasip1 files are in `IgnoredGoFiles`.
+#
+# So the only file in this repository whose subject is a foreign calling
+# convention was the one file no analyser read.
+#
+# **`go vet` rather than a second golangci-lint run** (D434). It catches what
+# actually threatens that file — `unsafe.Pointer` arithmetic, a missing
+# `KeepAlive`, a printf-shaped mistake in a generated wrapper — for one step
+# rather than a full second lint pass on every commit. The cost is stated rather
+# than hidden: vet is a weaker net than golangci-lint, so the SDK's wasm half is
+# held to a lower standard than the rest of the tree rather than to the same one.
+# A build-tag matrix would generalise past this one package and puts a matrix into
+# .github/workflows/, which is not this loop's to commit.
+#
+# **No CI proposal is needed and that was checked rather than assumed**: `vet` is
+# already a prerequisite of `ci-build`, and `.github/workflows/ci.yml` runs
+# `make ci-build`, so this reaches the runner the moment it reaches this target.
+# That is exactly what the *a CI step's behaviour lives in a make target* rule
+# buys — the gate this row is an instance of, F255, was a gate that ran only on
+# this machine.
 .PHONY: vet
-vet: ## Run go vet
+vet: ## Run go vet, including the SDK's wasip1 half
 	go vet ./...
+	GOOS=wasip1 GOARCH=wasm go vet ./sdk/
 
 # `tidy` repairs; this one reports. A gate that fixes what it finds passes on a
 # tree nobody has looked at, which is the same distinction verify-assets draws

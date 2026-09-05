@@ -240,6 +240,35 @@ else
   printf '  skip  sqlc not installed\n'
 fi
 
+# The SDK, which is the third generated artifact and which this step did not know
+# existed (F271). `make check-generate` regenerates it and diffs, so CI covers it;
+# nothing else did — this step checked internal/store/dbgen alone, so a tag could
+# be cut from a tree whose committed sdk/ does not match internal/addon/abi. The
+# residual protection was CI's own job reached through check-ci asking whether the
+# branch is green, which is F255's shape one layer up: a gate holding because a
+# different gate asks a third one.
+#
+# The other two files this row names are not this script's: workflow.md's gate
+# table is a process change that commits on its own, and .github/workflows/ goes
+# to ci/proposed/.
+before=$(git status --porcelain sdk docs/addon-abi.md)
+if make --no-print-directory abi-sdk >/dev/null 2>&1; then
+  if [ "$(git status --porcelain sdk docs/addon-abi.md)" = "$before" ]; then
+    ok "the generated SDK and the published ABI table are current"
+  else
+    bad "make abi-sdk produced a diff — commit it"
+    git --no-pager diff --stat sdk docs/addon-abi.md | sed 's/^/        /'
+  fi
+else
+  bad "make abi-sdk failed; the generated SDK cannot be checked against its source"
+fi
+
+# This step's own comment claimed to cover *sqlc and the OpenAPI document* and has
+# never checked OpenAPI. Pre-existing and named rather than quietly fixed: the
+# check would be `make openapi` and a diff, and whether the pre-tag gate should
+# run it is a question about what that target costs at a tag rather than an
+# oversight to patch inside a findings batch.
+
 # The version sqlc stamps into every file it emits has to match the version CI
 # installs, or CI regenerates, sees only that comment change, and fails with an
 # otherwise empty diff. Checked here rather than left to CI because the developer
@@ -356,7 +385,17 @@ step "integration tests"
 if [ -z "${TEST_DATABASE_URL:-}" ]; then
   bad "no TEST_DATABASE_URL and none could be built from $ENV_FILE (make env INSTANCE=$INSTANCE)"
 elif grep -qx postgres <<<"$(docker compose ps --status running --services 2>/dev/null)"; then
-  require "integration tests (race)" go test -tags=integration -race -count=1 ./test/integration/
+  # The same three package trees `make test-integration` runs (F261). This ran
+  # ./test/integration/ alone, and what that dropped is the one that matters most
+  # at a tag: cmd/lctl's integration test is demoCoverage(), which M33.5 built to
+  # fail when a listed feature has no seeded rows — so the release gate could not
+  # claim the demo shows what this release ships. It was enforced at every commit
+  # through the Makefile and not on the tree being tagged.
+  #
+  # Slower, and deliberately: this seeds a demo database. That cost is what the
+  # divergence was buying, and it is not worth an unasked claim at a release.
+  require "integration tests (race)" go test -tags=integration -race -count=1 \
+    ./test/integration/ ./cmd/lctl/... ./cmd/linkctrl/...
 else
   printf '  skip  Postgres is not running in project %s (docker compose up -d)\n' "$COMPOSE_PROJECT_NAME"
 fi

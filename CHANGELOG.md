@@ -64,6 +64,21 @@ migrations run at boot.
   when it loads, rather than once per request.** The line is worth having and was
   reachable at whatever rate a module chose to call.
 
+### Internal
+
+Gates and tests, with no behaviour behind them. Listed because two of them
+changed what a release is checked against.
+
+- **The pre-tag gate now runs the same integration suite the ordinary one does.**
+  It ran a narrower package list, which dropped the test that fails when a
+  documented feature has no seeded demo data — so a release could not claim the
+  demo shows what it ships. It is slower, and that was the trade being made
+  silently.
+
+- **The pre-tag gate also checks the generated SDK.** It checked the database
+  layer only, so a tag could be cut from a tree whose committed SDK did not match
+  the ABI it is generated from.
+
 ### Documentation
 
 Corrections to claims this project had made and could not support. Each is a

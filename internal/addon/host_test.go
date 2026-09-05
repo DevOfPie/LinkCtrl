@@ -60,11 +60,29 @@ var builds struct {
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
 	path := filepath.Join(fixtureDir, name+".wasm")
-	if code, err := os.ReadFile(path); err == nil && !stale(t, path, name) {
+	// Both reads are under the same lock that serializes the build (F264). They
+	// were outside it, so a caller could read the file while another goroutine's
+	// `go build -o` was truncating and rewriting the same path — and what comes
+	// back from a partial read is a module whose sha256 is not the sha256 of the
+	// bytes addon.Open then hashes, so the load is **refused**. That failure is
+	// indistinguishable from the corrupt-a-byte test doing its job, which is what
+	// makes it worth holding a lock a little longer: the flake reads as the feature
+	// working.
+	//
+	// Unreachable today — nothing in this package calls t.Parallel() — and it goes
+	// live the first time something does, on a cold fixture directory. `-race` will
+	// not flag it then either: the conflict is over a file, not over memory.
+	builds.Lock()
+	code, err := os.ReadFile(path)
+	fresh := err == nil && !stale(t, path, name)
+	builds.Unlock()
+	if fresh {
 		return code
 	}
 	buildFixture(t, name, path)
-	code, err := os.ReadFile(path)
+	builds.Lock()
+	defer builds.Unlock()
+	code, err = os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("the %s test module is still not readable after building it: %v", name, err)
 	}

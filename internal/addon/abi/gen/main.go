@@ -292,6 +292,25 @@ func docComment(b *bytes.Buffer, f abi.Function) {
 	}
 }
 
+// statusFor is the published table's Status cell for one function.
+//
+// Lifted out of [docTable]'s loop so it can be exercised against a function this
+// ABI does not contain (F272). `check-generate` structurally cannot cover the
+// deprecation limb: it diffs committed output against a slice in which nothing is
+// deprecated, so both announcement paths the policy in docs/addon-abi.md requires
+// — this cell and the SDK's `Deprecated:` block — were reached by no test at all,
+// and their first exercise would have been the release that needed them.
+func statusFor(f abi.Function) string {
+	status := "**live**"
+	if !f.Live {
+		status = "declared, refused"
+	}
+	if f.Deprecated != "" {
+		status += " · **deprecated**, removable in " + f.RemovedNotBefore
+	}
+	return status
+}
+
 // comment wraps a paragraph into // lines at 79 columns including the prefix,
 // which is what gofmt leaves alone and what the rest of this repository reads
 // like.
@@ -340,13 +359,7 @@ func docTable(path string) error {
 	b.WriteString("| Function | Since | Requires | Status | What it is |\n" +
 		"| --- | --- | --- | --- | --- |\n")
 	for _, f := range abi.Functions {
-		status := "**live**"
-		if !f.Live {
-			status = "declared, refused"
-		}
-		if f.Deprecated != "" {
-			status += " · **deprecated**, removable in " + f.RemovedNotBefore
-		}
+		status := statusFor(f)
 		requires := "—"
 		if f.Requires != "" {
 			requires = "`" + f.Requires + "`"

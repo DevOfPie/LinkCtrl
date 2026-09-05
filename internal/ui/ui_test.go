@@ -608,8 +608,13 @@ func pageData(t *testing.T) map[string]any {
 			"MaxWeight":         100,
 			"MinPasswordLength": 12,
 			"GeoAvailable":      true,
-			"GeoBase":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30",
-			"GeoList":           "/links/0198c9c5-0000-7000-8000-000000000001?days=30#countries",
+			// tab=analytics, because that is what fillLinkAnalytics emits
+			// unconditionally and a fixture without it is a URL production stopped
+			// producing (F207). Nothing asserts the shape, so this was drift rather
+			// than breakage — and the class it belongs to is the one where a template
+			// starts caring about a parameter the fixture does not carry.
+			"GeoBase": "/links/0198c9c5-0000-7000-8000-000000000001?tab=analytics&days=30",
+			"GeoList": "/links/0198c9c5-0000-7000-8000-000000000001?tab=analytics&days=30#countries",
 			// **Empty, because that is what the handler would have set** (F192).
 			// The fixture carried the sentence *and* GeoAvailable, which since
 			// F160 is a pair production cannot build: the sentence is reached only

@@ -25,6 +25,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
+	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
 // The routes limb, against a real module (M64).
@@ -1634,4 +1635,80 @@ func flattenProse(text string) string {
 	replaced := strings.NewReplacer("*", "", "`", "", "// ", "").
 		Replace(strings.ToLower(text))
 	return strings.Join(strings.Fields(replaced), " ")
+}
+
+// TestEveryDocumentedAddonBoundIsTied is F273 and F275's mechanism: five figures
+// stated in prose and pinned by nothing.
+//
+// Each of the five is asserted *behaviourally* elsewhere — a long message is
+// truncated, an over-length read is refused — and in every case the test computes
+// its expectation **from the constant**, so changing the constant keeps every test
+// green and silently falsifies the sentences. F273 drove that: `maxLogMessage`
+// raised to 8 KiB and `maxStringIn` to 128 KiB left `go test ./internal/addon/`
+// green with four documented figures wrong.
+//
+// M62's own report named the gap and followed the precedent anyway; the second
+// review then pointed out that the precedent **is** the defect, because
+// `maxStringIn` had shipped in M61 with its figure in prose and no binding test.
+// M63 then added three more of the same shape, which is why this is one test over
+// five figures rather than two: whoever closes it should close all of them.
+//
+// Anchored rather than swept. "64 KiB" appears in these documents about the
+// manifest bound and the fetch header cap as well, and those are different numbers
+// that happen to agree today — a sweep would tie them to the wrong constant and
+// look like it was working.
+//
+// It lives here rather than in test/docs/ — which is where F273 proposed it —
+// because two of the five are unexported in this package and a test outside it
+// cannot see them.
+func TestEveryDocumentedAddonBoundIsTied(t *testing.T) {
+	fill := strings.NewReplacer(
+		"{log}", strconv.Itoa(maxLogMessage/1024)+" KiB",
+		"{str}", strconv.Itoa(maxStringIn/1024)+" KiB",
+		"{secs}", store.AddonStatementTimeout.String(),
+		"{conns}", map[int]string{4: "four", 8: "eight"}[store.AddonMaxConns],
+	)
+	for _, doc := range []struct {
+		path      string
+		sentences []string
+	}{
+		{"docs/addon-abi.md", []string{
+			"neutralizes the message before the line is written, and bounds it at {log}",
+			"the message is neutralized before it is written and bounded at {log}",
+			"a statement crossing into the host is bounded at {str} like every other value",
+			"a response record has a size limit and it is {str}",
+			"one statement gets five seconds, a result gets a megabyte, and one add-on gets {conns} connections",
+		}},
+		{"docs/SECURITY.md", []string{
+			"neutralizes the message before the line is written and bounds it at {log}",
+			"a single value crossing into the host is bounded at {str}",
+			"the abi's single-value bound of {str}",
+		}},
+		{"CHANGELOG.md", []string{
+			"neutralizes the message before the line is written and bounds it at {log}",
+			"each storage add-on holds {conns} connections while loaded",
+		}},
+	} {
+		flat := flattenDocument(t, doc.path)
+		for _, s := range doc.sentences {
+			want := strings.ToLower(fill.Replace(s))
+			if !strings.Contains(flat, want) {
+				t.Errorf("%s does not say %q. The constant behind it is what this build "+
+					"enforces, and a publisher or an operator reading that sentence is "+
+					"sizing something against a number it no longer holds to (F273, F275)",
+					doc.path, want)
+			}
+		}
+	}
+	// The two figures the sentences above spell as words rather than as values, so
+	// that changing the constant fails here rather than passing a sentence that has
+	// quietly stopped describing it.
+	if store.AddonStatementTimeout != 5*time.Second {
+		t.Errorf("AddonStatementTimeout is %s and three documents say five seconds; "+
+			"change the word wherever it appears, then this line", store.AddonStatementTimeout)
+	}
+	if store.AddonMaxResultBytes != 1<<20 {
+		t.Errorf("AddonMaxResultBytes is %d and the documents call it a megabyte; "+
+			"change the phrase wherever it appears, then this line", store.AddonMaxResultBytes)
+	}
 }

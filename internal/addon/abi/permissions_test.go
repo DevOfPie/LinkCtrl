@@ -198,6 +198,24 @@ func TestTheUngatedFunctionsAreNamed(t *testing.T) {
 				f.Name, f.Requires)
 		}
 	}
+	// And the direction neither of the two above covers (F317): a name in the list
+	// that matches no function at all. A function removed or renamed leaves its
+	// permission-free licence behind, and a typo grants one to nothing — both
+	// silently, because the loops above only ever look at functions that exist.
+	//
+	// **D304 named the wrong direction as the open one.** It said the guard checks
+	// only that every ungated function appears in the list, so a listed name that
+	// later acquires a permission never fails it — and that direction has been
+	// checked since M62, by the branch immediately above, verified by giving `log`
+	// a `Requires`. Verified in the other direction too: `ghost_function` appended
+	// to this list was green before these three lines existed.
+	for _, name := range ungated {
+		if !slices.ContainsFunc(Functions, func(f Function) bool { return f.Name == name }) {
+			t.Errorf("%q is named ungated here and is not a function in this ABI; a name "+
+				"that outlives its function is a permission-free licence with nothing "+
+				"to spend it, and a typo is the same thing arriving new", name)
+		}
+	}
 }
 
 func TestGrantableAndPermissionByNameAgreeWithTheSlice(t *testing.T) {

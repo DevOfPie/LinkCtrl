@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -73,9 +74,59 @@ func TestEveryLoggerThisSubsystemHandsOutNeutralizes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(body), "slog.New(") {
-			t.Errorf("%s constructs a logger of its own; every logger in this package "+
-				"comes from neutralizingLogger, or the boundary has a hole in it", name)
+		// Four spellings, not one (F311). The scan matched `slog.New(` alone, and a
+		// logger comes by three other routes that are just as unwrapped:
+		// `slog.Default()`, `slog.With(...)` on the package logger, and
+		// `observability.LoggerFrom(ctx)` — which this package already imports, in
+		// host.go. A boundary enforced against one construction spelling is enforced
+		// against nothing in particular.
+		for _, spelling := range []string{
+			"slog.New(",
+			"slog.Default(",
+			"slog.With(",
+			"observability.LoggerFrom(",
+		} {
+			if strings.Contains(string(body), spelling) {
+				t.Errorf("%s comes by a logger through %s; every logger in this package "+
+					"comes from neutralizingLogger, or the boundary has a hole in it",
+					name, spelling)
+			}
+		}
+	}
+
+	// And the packages this one hands a logger to, which the scan above cannot see
+	// at all because they are not in this directory (F311). `internal/store`'s
+	// exported add-on functions each take a *slog.Logger, and one of them logs a
+	// manifest-derived path on its success path — which is where F-1 was found. The
+	// property holds today only because internal/addon/host.go is their sole
+	// production caller, and nothing asserted that.
+	//
+	// M67 was the milestone predicted to add a second caller and it landed, so this
+	// is checked rather than argued: every call site of those functions, across the
+	// whole tree, must be inside this package. A caller elsewhere would hand them a
+	// logger this package cannot un-neutralize, and the dependency runs the wrong
+	// way for internal/store to protect itself.
+	for _, fn := range []string{"EnsureAddonSchema", "MigrateAddon", "PurgeAddonSchema"} {
+		out, err := exec.Command("git", "-C", "../..", "grep", "-l", "-F",
+			"store."+fn+"(", "--", "*.go").Output()
+		if err != nil && len(out) == 0 {
+			t.Fatalf("asking git for callers of store.%s: %v", fn, err)
+		}
+		for _, f := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if f == "" || strings.HasPrefix(f, "internal/addon/") {
+				continue
+			}
+			// A test builds its own logger and reads its own output; it is not a
+			// production path and neutralizing there would assert nothing. What this
+			// is looking for is a second *serving* caller, which is what M67's runtime
+			// install and removal made plausible.
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			t.Errorf("%s calls store.%s, which takes a *slog.Logger, and it is outside "+
+				"internal/addon — so the logger it hands over has not been through "+
+				"neutralizingLogger and nothing in internal/store can put it through one",
+				f, fn)
 		}
 	}
 }
@@ -472,5 +523,55 @@ func TestAnOperatorsManifestErrorListIsNeitherCutNorRunOn(t *testing.T) {
 	}
 	if len(line) > 2*maxLogMessage {
 		t.Errorf("the log record is %d bytes and the line bound is %d", len(line), maxLogMessage)
+	}
+}
+
+// TestTheJoinDiscriminationHoldsForATwoVerbWrap pins the one invariant standing
+// between a shape heuristic and a forged log record (F314).
+//
+// [neutralizedErrText] tells an [errors.Join] from `fmt.Errorf`'s two-`%w` form by
+// comparing the error's own text against its branches joined by **newlines**. That
+// is a heuristic, and it is correct only because `fmt.Errorf` separates with what
+// the format string says — here `": "` — and never with a newline. If it ever
+// answered *join* for a two-verb wrap, the separator it writes is a raw newline
+// into a log record, which is the record boundary this whole subsystem defends.
+//
+// Nothing drove it before: the handler tests use a single `%w`, and the
+// ErrGuestFailed cases they reach are single-verb sites. `internal/addon/http.go`
+// has three two-verb sites, and this is the shape they produce.
+//
+// The remedy this row asked for is a test rather than a change, because the
+// behaviour is right. What is asserted is that it stays right.
+func TestTheJoinDiscriminationHoldsForATwoVerbWrap(t *testing.T) {
+	inner := errors.New("instantiate: out of memory")
+	wrapped := fmt.Errorf("%w: instantiate: %w", ErrGuestFailed, inner)
+
+	// The premise: a two-%w error unwraps to a slice, exactly like errors.Join, so
+	// the type assertion cannot tell them apart and the text comparison is the
+	// whole of the discrimination.
+	if _, ok := any(wrapped).(interface{ Unwrap() []error }); !ok {
+		t.Fatal("a two-%w error no longer unwraps to a slice; this test's premise is " +
+			"gone and neutralizedErrText's heuristic needs re-reading, not this test")
+	}
+
+	got := neutralizedErrText(wrapped)
+	if strings.Contains(got, "\n") {
+		t.Errorf("neutralizedErrText wrote a raw newline into %q. It took the join "+
+			"branch for a two-%%w wrap, and a newline is a record boundary: the next "+
+			"line of an operator's log is now whatever the module put after it", got)
+	}
+	if got != wrapped.Error() {
+		t.Errorf("neutralizedErrText returned %q for a two-%%w wrap and the error reads "+
+			"%q; the leaf path is the correct one here and it should pass the text "+
+			"through moduleText unchanged", got, wrapped.Error())
+	}
+
+	// And the other side of the discrimination, so this test fails if the branch it
+	// is guarding stops being reachable at all: a real Join must still take the
+	// join path, which is what puts newlines in deliberately.
+	joined := neutralizedErrText(errors.Join(errors.New("one"), errors.New("two")))
+	if !strings.Contains(joined, "\n") {
+		t.Errorf("errors.Join no longer takes the join branch (%q), so the heuristic "+
+			"this test guards has stopped discriminating anything", joined)
 	}
 }
