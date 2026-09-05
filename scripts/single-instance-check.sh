@@ -255,16 +255,16 @@ step "health: liveness never depends on a dependency, readiness says which are t
 ready=$(curl -sS -o /tmp/lc-ready.$$ -w '%{http_code}' "${BASE}/readyz")
 body=$(cat /tmp/lc-ready.$$); rm -f /tmp/lc-ready.$$
 [ "$ready" = 200 ] || fail "/readyz answered $ready with Postgres up and no Redis; want 200 — a 503 here means a cache became load-bearing: $body"
-echo "$body" | grep -q '"redis": *"disabled"' \
+grep -q '"redis": *"disabled"' <<<"$body" \
   || fail "readyz does not report redis as disabled: $body"
-echo "$body" | grep -q '"status": *"ok"' \
+grep -q '"status": *"ok"' <<<"$body" \
   || fail "readyz is not 'ok' on a single instance with no Redis; that is a new required dependency: $body"
 echo "readyz: ok, redis disabled"
 
 step "API: claim the instance, then issue a key and use it"
 setup=$(curl -sS -X POST "${BASE}/api/v1/auth/setup" -H 'Content-Type: application/json' \
   -d "{\"email\":\"${EMAIL}\",\"name\":\"Single\",\"password\":\"${PASSWORD}\",\"update_check\":false}")
-echo "$setup" | grep -q '"user_id"' || fail "could not claim the instance: $setup"
+grep -q '"user_id"' <<<"$setup" || fail "could not claim the instance: $setup"
 
 # lctl out of the same image, against the same database. It is the documented
 # bootstrap path and it is the second binary the image ships.
@@ -282,7 +282,7 @@ esac
 created=$(curl -sS -X POST "${BASE}/api/v1/links" -H "Authorization: Bearer ${KEY}" \
   -H 'Content-Type: application/json' \
   -d '{"alias":"conform","url":"https://example.com/one"}')
-echo "$created" | grep -q '"alias":"conform"' || fail "the API did not create a link: $created"
+grep -q '"alias":"conform"' <<<"$created" || fail "the API did not create a link: $created"
 LINK_ID=$(echo "$created" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
 [ -n "$LINK_ID" ] || fail "no link id in $created"
 echo "API: key issued, link created"
@@ -304,7 +304,7 @@ step "invalidation: an edit reaches the cache with no pub/sub to carry it"
 edited=$(curl -sS -X PATCH "${BASE}/api/v1/links/${LINK_ID}" \
   -H "Authorization: Bearer ${KEY}" -H 'Content-Type: application/json' \
   -d '{"url":"https://example.com/two"}')
-echo "$edited" | grep -q 'example.com/two' || fail "the API did not edit the link: $edited"
+grep -q 'example.com/two' <<<"$edited" || fail "the API did not edit the link: $edited"
 after=$(curl -sS -o /dev/null -w '%{redirect_url}' "${BASE}/conform")
 [ "$after" = "https://example.com/two" ] \
   || fail "the redirect still serves '$after' after an edit; invalidation needs Redis, which is a new required dependency"
@@ -339,8 +339,8 @@ step "jobs: the scheduler is in this process and it ran"
 # half of the advisory-lock design, asserted rather than assumed.
 ok=""
 for _ in $(seq 1 60); do
-  if curl -fsS "${METRICS}/metrics" 2>/dev/null \
-      | grep -q '^linkctrl_job_last_success_timestamp_seconds{'; then ok=1; break; fi
+  scrape=$(curl -fsS "${METRICS}/metrics" 2>/dev/null || true)
+  if grep -q '^linkctrl_job_last_success_timestamp_seconds{' <<<"$scrape"; then ok=1; break; fi
   sleep 1
 done
 [ -n "$ok" ] || fail "no job reported a success; the scheduler is not running on a single instance"
@@ -377,7 +377,7 @@ ready=$(curl -sS -o /tmp/lc-ready2.$$ -w '%{http_code}' "${BASE}/readyz")
 body=$(cat /tmp/lc-ready2.$$); rm -f /tmp/lc-ready2.$$
 [ "$ready" = 200 ] \
   || fail "/readyz answered $ready with only Redis gone; 503 removes every replica from rotation over a cache problem: $body"
-echo "$body" | grep -q '"status": *"degraded"' \
+grep -q '"status": *"degraded"' <<<"$body" \
   || fail "readyz is not 'degraded' with Redis unreachable: $body"
 loc=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "${BASE}/conform")
 [ "${loc% *}" = 302 ] || fail "a redirect answered ${loc} with Redis unreachable"
@@ -492,9 +492,9 @@ if printf '%s' "$core" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
   exit 0
 fi
 
-echo "$scrape" | grep -q '^linkctrl_addon_loads_total{addon="minimal",outcome="loaded"} 1$' \
+grep -q '^linkctrl_addon_loads_total{addon="minimal",outcome="loaded"} 1$' <<<"$scrape" \
   || fail "the add-on did not load, and version ${IMAGE_VERSION} does not predate the add-on host (${ADDON_HOST_SINCE}): $(echo "$scrape" | grep '^linkctrl_addon_' || echo 'no linkctrl_addon_ series at all')"
-echo "$scrape" | grep -q '^linkctrl_addon_info{.*addon="minimal".*} 1$' \
+grep -q '^linkctrl_addon_info{.*addon="minimal".*} 1$' <<<"$scrape" \
   || fail "no identity series for the loaded add-on: $(echo "$scrape" | grep '^linkctrl_addon_info' || echo none)"
 echo "metrics: minimal loaded, identity published"
 
@@ -529,7 +529,7 @@ start_app -e LINKCTRL_BASE_URL="http://localhost:8080" \
 wait_serving
 
 scrape=$(curl -fsS "${METRICS}/metrics")
-echo "$scrape" | grep -q '^linkctrl_addon_loads_total{' \
+grep -q '^linkctrl_addon_loads_total{' <<<"$scrape" \
   && fail "the instance loaded an add-on from an empty directory"
 echo "one container, one Postgres, no add-on: the set starts empty"
 
@@ -556,11 +556,11 @@ installed=$(curl -sS -b "$PRINCIPAL_JAR" -X POST "${BASE}/api/v1/addons" \
   -F "manifest=@${TMPDIR:-/tmp}/lc-addon-$$.json;type=application/json" \
   -F "module=@${ADDON_DIR}/minimal/minimal.wasm;type=application/wasm")
 rm -f "${TMPDIR:-/tmp}/lc-addon-$$.json"
-echo "$installed" | grep -q '"name":"runtime"' \
+grep -q '"name":"runtime"' <<<"$installed" \
   || fail "the install did not answer with the add-on it installed: $installed"
 
 scrape=$(curl -fsS "${METRICS}/metrics")
-echo "$scrape" | grep -q '^linkctrl_addon_loads_total{addon="runtime",outcome="loaded"} 1$' \
+grep -q '^linkctrl_addon_loads_total{addon="runtime",outcome="loaded"} 1$' <<<"$scrape" \
   || fail "the installed add-on is not running: $(echo "$scrape" | grep '^linkctrl_addon_' || echo none)"
 echo "installed: runtime v1.0.0, running in a container nobody restarted"
 
@@ -572,11 +572,11 @@ loc=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "${BASE}/conform")
 
 step "remove it, and the instance keeps serving"
 removed=$(curl -sS -b "$PRINCIPAL_JAR" -X DELETE "${BASE}/api/v1/addons/runtime")
-echo "$removed" | grep -q '"name":"runtime"' \
+grep -q '"name":"runtime"' <<<"$removed" \
   || fail "the removal did not answer with what it removed: $removed"
 
 scrape=$(curl -fsS "${METRICS}/metrics")
-echo "$scrape" | grep -q '^linkctrl_addon_info{.*addon="runtime"' \
+grep -q '^linkctrl_addon_info{.*addon="runtime"' <<<"$scrape" \
   && fail "a removed add-on still publishes an identity: $(echo "$scrape" | grep '^linkctrl_addon_info')"
 [ -e "${LIFECYCLE_DIR}/runtime" ] \
   && fail "a removed add-on's directory is still in the add-ons directory"

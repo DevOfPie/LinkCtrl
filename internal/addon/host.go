@@ -991,6 +991,13 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// field. Open is a writer of the set like Install is, and the set is a value:
 	// there is no half-built one to publish.
 	var started []Loaded
+	// discovered is every directory this loop treated as an add-on, appended
+	// before the outcome is known — which is the whole point, and is D428's answer
+	// to F281. `started` answers *what is running*; this answers *what is
+	// installed*, and an orphan is a schema with no answer to the second question.
+	// A degrade-class add-on that fails to instantiate appears here and not in
+	// `started`, so its schema stops being offered for purge.
+	var discovered []string
 	for _, e := range entries {
 		name := e.Name()
 		if isStaging(name) {
@@ -1011,6 +1018,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 				slog.String("entry", name))
 			continue
 		}
+		// Recorded here, above every branch that can refuse this add-on: a name
+		// collision, an invalid manifest and a module that will not instantiate all
+		// leave the directory exactly where the operator put it. Anything appended
+		// below this line would be recording an outcome rather than an installation.
+		discovered = append(discovered, name)
 		var (
 			loaded Loaded
 			err    error
@@ -1103,7 +1115,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// beside it (M66, M66.5, and newAddonSet since M67): what goes on the redirect
 	// path is a property of the whole set, and a slice appended to while modules
 	// were still being refused would carry an add-on that did not finish loading.
-	set := h.store(newAddonSet(started, nil))
+	set := h.store(newAddonSet(started, discovered, nil))
 	if len(set.inline) > 0 {
 		// Warn, because this is the line that tells an operator their published
 		// redirect latency is no longer this product's alone to answer for. It is
@@ -1140,8 +1152,8 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if orphans, err := h.OrphanSchemas(ctx); err != nil {
 		log.Debug("could not look for orphaned add-on schemas", slog.Any("error", err))
 	} else if len(orphans) > 0 {
-		log.Warn("add-on schemas with no loaded module; their data is still on disk and "+
-			"nothing here deletes it",
+		log.Warn("add-on schemas belonging to no installed add-on; their data is still "+
+			"on disk and nothing here deletes it",
 			slog.Any("schemas", orphans))
 	}
 
@@ -1367,6 +1379,29 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 		return fail(OutcomeInstantiateFailed, class, fmt.Errorf("compile: %w", err))
 	}
 
+	// From here the compiled form exists and every failure return below has to
+	// close it, or it survives for the life of the process (F353).
+	//
+	// Measured by summing anonymous `r-xp` mappings out of /proc/self/maps, which
+	// counts wazevo's compiled code and is immune to page reclaim: two failed
+	// installs of one module cost `+34220 KiB` each, against `+0` on the success
+	// path. Dropping every Go reference frees nothing, because wazevo holds
+	// `e.compiledModules[m.ID]` strongly and only `engine.Close` nils that map —
+	// so the comment further down claiming the runtime owns it is true only of
+	// process shutdown. Identical bytes replayed cost `+0`, since `AssignModuleID`
+	// hashes the binary; an operator rebuilding a module that will not start
+	// produces distinct bytes every time, which is the loop where this is felt.
+	//
+	// A deferred flag rather than a Close on each of the three returns, because
+	// the failure this row records is a *return that forgot*, and a fourth one
+	// added later would forget the same way.
+	loaded := false
+	defer func() {
+		if !loaded {
+			_ = compiled.Close(ctx)
+		}
+	}()
+
 	// Resolved once, here, and never again: from M66 a grant check sits on the
 	// redirect path, so what the check reads has to already exist. See grants.go.
 	grants, withheld := resolveGrants(m)
@@ -1410,8 +1445,11 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	// nothing, traps nothing, and — before this — was waited on for as long as the
 	// instance was allowed to live.
 	//
-	// The compiled form is owned by the runtime and closed with it. Closing it here
-	// would invalidate the instance this makes.
+	// The compiled form is closed by the deferred guard above on every failure
+	// return, and kept on the success path because closing it here would
+	// invalidate the instance this makes. It is *not* owned by the runtime in any
+	// sense that matters before shutdown — F353 measured that, and this comment
+	// used to say otherwise.
 	var mod api.Module
 	expired, err = h.runGuest(ctx, func(ctx context.Context) error {
 		var e error
@@ -1446,6 +1484,9 @@ func loadOne(ctx context.Context, h *Host, dir, entry string) (Loaded, error) {
 	if storage != nil {
 		schema = storage.Schema()
 	}
+	// The one path that keeps the compiled form: it is about to be handed to a
+	// Loaded, and Host.unload closes it from there.
+	loaded = true
 	return Loaded{
 		Manifest: m, Dir: dir, Schema: schema, settings: values, FailureClass: class,
 		module: mod, grants: grants, storage: storage, compiled: compiled,
@@ -1579,7 +1620,22 @@ func (h *Host) OrphanSchemas(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Installed, not loaded. `Schemas()` reads the add-ons that started, and an
+	// add-on can be on disk without having started — a module that fails to
+	// instantiate, or a manifest that stops validating while the schema it created
+	// on an earlier good boot survives. Subtracting the loaded set called those
+	// orphans, and M68's manager offered a still-installed add-on's rows for purge
+	// on the strength of it (F281, driven end to end; D428 is the answer).
+	//
+	// Both sets are subtracted rather than only `discovered`. They are equal for
+	// every add-on that started, so the second loop is belt: if a path ever
+	// publishes a set whose `discovered` has fallen behind its `loaded`, the
+	// failure is an orphan that goes unreported rather than data that gets
+	// deleted, and that is the direction to fail in.
 	live := make(map[string]bool, len(h.current().loaded))
+	for _, name := range h.current().discovered {
+		live[store.AddonSchema(name)] = true
+	}
 	for _, schema := range h.Schemas() {
 		live[schema] = true
 	}

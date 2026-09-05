@@ -508,6 +508,9 @@ file. Append a row when you append an entry.
 | [M69.9, the pre-release adversarial review: what it checked, what it found, and what it refuted](#2026-08-30--m699-the-pre-release-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted) | Eight readers in fresh contexts over the whole phase, ten adversarial refuters, ~36 raw findings. Both claimed reopenings refuted to amendments; a finder's new row established as F281 and another folded into F336; one of four false digest sentences shown true; the wasm leak's headline figure shown to be the race detector's shadow. Two findings the attack made worse. The browser check on a rebuilt image with a sign-in add-on installed |
 | [M69.9's triage: the owner's five answers](#2026-08-30--m699s-triage-the-owners-five-answers) | D405, owner-answered: nothing in this repository's gates may *require* another project's artifact, so the OIDC acceptance test skips and the two make targets that build it opt back in. D406: the pool's non-memory leak is disclosed and filed, not patched, because every remedy is a design choice. D407: the add-on mint's audit surface is documented rather than moved. D408: everything documentation-shaped is corrected now. D409: four shipped bullets amended, none reopened. D410: the always-read contract grew 1433 bytes over five milestones and is defended, with the trim named — Phase 4's status table leaves this file at the phase close |
 | [The UI copy review's changes, approved and applied](#2026-09-04--the-ui-copy-reviews-changes-approved-and-applied) | D411: `domains.html`'s button renames a hostname, so the approved label was wrong and `Rename` shipped instead. D412: the rotation paragraph loses its detail but gains no link, because this product serves no documentation route. D413: `icons.html` describes a glyph by what it does rather than by which page calls it, because naming the caller widened a bound M60 asserts by test |
+| [M70's two opening answers](#2026-09-04--m70s-two-opening-answers-the-published-example-and-how-111-rows-get-reviewed) | D414: `LinkCtrl-OIDC` gets a second release in this close, so the published example is built against the released SDK rather than a pseudo-version of an unreleased commit — at the cost of a cross-repository release the owner performs and a re-cut fixture digest. D415: the 111 open findings are triaged as a tiered proposal carrying a recommendation on every row, which is what keeps tier approval a review of rows rather than of tiers |
+| [M70's triage: the tiers, and the eleven answers](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers) | D416: Tiers A and B are both worked into the close and F315 joins them — 62 rows, against a recommendation of A now and B after the release, with the cost stated first. D417: an operator-configurable add-on migration timeout, five minutes by default. D418: role adoption accepted and documented. D419: a byte budget per add-on per minute on the log boundary. D420: `temp_file_limit` becomes a superuser step at install time, against the recommendation. D421: `template_render` deprecated, which is the deprecation machinery's first real exercise. D422: a vetoed redirect gets its own outcome and no prose in the UI. D423: the contrast warning fires on either metric. D424: the QR list sorts on the name that is drawn. D425: the QR shorthand stays API-only and seven view fields go. D426: the row overlay stays and the slug stays unselectable, on the owner's answer. D427: duplicate tooltip descriptions dropped and focusable hosts named, answered on a re-put question |
+| [M70's fix shapes: ten answers, and the picks taken without asking](#2026-09-04--m70s-fix-shapes-ten-answers-and-the-picks-taken-without-asking) | D428: the host records what it discovered separately from what it loaded, which is F281's fix at the source rather than at the page. D429: F315 is built in both halves, operator and person. D430: an htmx 4xx is answered by a shared `webError` limb rather than a global htmx config. D431: `sign_in_label` takes a positive rule, deliberately the shape D285 could not take for the log boundary. D432: `temp_file_limit` is 256 MB. D433: the log budget is 8 MiB per add-on per minute. D434: the SDK's wasm half is vetted under `GOOS=wasip1`, the CI half proposed. D435: the browser suite signs in once and shares the context. D436: the GeoIP sentence is reworded and the predicate untouched — the option not recommended. D437: the fetch hold is keyed to the invocation. Plus eleven picks taken without a prompt, each with what it followed |
 
 ---
 
@@ -41856,3 +41859,395 @@ differs by page and stays local.
 `partials/dispute_reviewers.html` gets the same treatment for *This queue is
 instance-wide…*, which had drifted to *a decision in it* against *a decision
 here*.
+
+## 2026-09-04 — M70's two opening answers: the published example, and how 111 rows get reviewed
+
+Both were asked at M70's step 1 and answered the same day. The first had been
+waiting in [upcoming-decisions.md](upcoming-decisions.md) since 2026-08-30 and is
+the reason validation stopped; the second is about how the close is *run*, and it
+is written down for the same reason as any other — a phase close that decides its
+own procedure in conversation loses the procedure with the session.
+
+### D414 — the SDK bump reaches the published example, not only its main branch
+
+`LinkCtrl-OIDC` gets a **second release** in this close, so the add-on a reader
+actually downloads is built against the released SDK.
+
+M70's bullet as written is satisfied by bumping that repository's `main` to
+`github.com/DevOfPie/LinkCtrl v0.4.0`. That is not the purpose the bullet states
+for itself: *immutable and publicly resolvable is what the exercise needs;
+tagged is what the worked example needs*. Every operator-facing pointer this
+repository publishes names `LinkCtrl-OIDC v0.1.0`, whose immutable go.mod
+requires `v0.3.1-0.20260827043355-9509158d0e75` — a pseudo-version of an
+unreleased commit. Bumping `main` alone would leave that true and unremarked,
+which is the outcome the upcoming-decisions entry existed to prevent.
+
+The cost was stated when the answer was given and is accepted rather than
+discovered:
+
+- It is a second cross-repository release **inside** the phase close, in a tree
+  this one cannot commit to. It is therefore the owner's hands, and M70 stalls
+  on it rather than working around it.
+- It re-cuts the fixture digest [F348](deferred-findings.md#closed) had just
+  stabilised, so `scripts/oidc-fixture.sh`'s four pins and
+  `test/integration/addon_oidc_test.go`'s literals move together or the
+  integration suite goes red.
+- The pointers in `docs/configuration.md`, `docs/SECURITY.md` and
+  `CHANGELOG.md` move to the new tag with them.
+
+The two declined options are on record for the same reason the chosen one is.
+*Bump `main` only* was cheapest and entirely inside the written words, and its
+cost was leaving m70.md asserting a purpose it did not discharge — the shape this
+project reopens milestones over. *Defer the second release to 0.4.1* kept the
+close small and left the phase's own acceptance test pointing at an add-on built
+against an unreleased commit for however long that lasted.
+
+### D415 — the 111 open findings are triaged as a tiered proposal with a recommendation on every row
+
+Every open row is read and returned to the owner grouped by disposition — fix in
+this close, carry with the reason written, or close — each carrying its severity
+and a one-line recommendation. The owner approves by tier and pulls out any row
+they disagree with.
+
+This is Phase 3's shape, and it keeps M58's standard: *every row open when the
+findings step ran has been owner-reviewed*. A recommendation per row is what
+makes tier approval a review of 111 rows rather than a review of three tiers.
+
+Its cost is real and was named: one long reading pass happens before the owner
+sees anything, and a row inside an approved tier can pass without the argument it
+would have drawn had it arrived alone. The mitigation is that the tiers are
+proposals — pulling a row out of one is expected, not an objection.
+
+The declined alternatives: reviewing only the High and Medium rows individually
+and carrying the 91 Low en bloc would have been far cheaper and would have made
+M70's own bullet false, which is an assertion and so an amendment prompt rather
+than a saving; reviewing all 111 individually is what the bullet literally asks
+and costs the owner 111 separate decisions before any fixing starts.
+
+## 2026-09-04 — M70's triage: the tiers, and the eleven answers
+
+The triage D415 called for was delivered as five tiers over all 111 open rows,
+one recommendation each. What follows is the owner's disposition of it and the
+eleven answers that turned Tier D into work. Every one was given on 2026-09-04,
+before anything was built against it.
+
+### D416 — Tiers A and B are both worked into the close, and F315 joins them
+
+Sixty-two rows: the twenty-four where a shipped claim is false or a defect is
+reachable, the thirty-seven mechanical ones, and [F315](deferred-findings.md)
+pulled out of the carry tier by name — a connected identity can be created and
+never removed, and deleting the account is the only thing that reliably severs
+one.
+
+**The cost was stated before the answer and is not a discovery.** Sixty-two
+fixes sit on top of the documentation pass, the README fold, the tag and D414's
+second cross-repository release, and every fix that is not spelling or prose
+re-triggers validation from [step 1](phase-loop.md#1-validate). The recommendation
+put to the owner was Tier A now and Tier B after the release, with the five gate
+rows — F360, F303, F304, F322, F333 — pulled up because a close that ships with
+those still misreporting leaves the loop unable to believe its own green. The
+owner took the whole of both tiers instead. Recorded because a close that runs
+long should be readable afterwards as a choice rather than as a milestone that
+sprawled.
+
+**Tier C's thirty-five remaining rows are carried** with their reasons written.
+Two are re-verified before they are carried rather than closed: F232's bound
+rested on a `size` field being unreleased and 0.3.0 has since shipped, and F263
+may already be closed by M67's atomic set. **Tier E closes two** — F242 into
+F333, which is the same defect measured at the whole suite rather than at one
+spec, and F244, open only for its (e) limb, into F239.
+
+### D417 — an add-on's migration timeout is operator-configurable, defaulting to five minutes
+
+F274. `LINKCTRL_ADDON_MIGRATE_TIMEOUT`, validated against the lock ceiling the
+way the other nested bounds already are. Five minutes matches the wait goose
+already gives the other replicas, so a migration exceeding it was going to fail
+them anyway; the knob exists for the operator whose `CREATE INDEX` on a genuinely
+large table is the case M63 chose five minutes for. The cost is a new
+configuration surface and a fifth nesting rule.
+
+### D418 — role adoption is accepted and documented where an operator names roles
+
+F309. The proof of ownership `EnsureAddonSchema` argues holds for a `CREATEROLE`
+grantor and is false for the superuser the shipped compose connects as. It is
+accepted rather than defended: reaching it needs an operator to have hand-made a
+role called `addon_<something>` **and** to install an add-on of exactly that
+name, no add-on can trigger it, and the principal who installs already holds
+non-delegable `addons.manage`. The declined alternative was a non-superuser
+connection in the shipped compose, which is the better posture and costs a change
+to what every deployment runs as.
+
+### D419 — the log boundary gains a byte budget per add-on per minute
+
+F305. Measured at 3697 lines and 14.7 MiB in two seconds from a module's
+initialization. `log` is ungated on purpose, so the answer is a budget rather
+than a permission: a generous default, and crossing it drops lines and writes one
+summary naming the add-on and what was dropped — so an operator learns the add-on
+is flooding instead of losing the signal. A line-rate budget was declined because
+it misses the shape that was actually measured, where few lines near the 4 KiB
+cap cost more disk than many small ones.
+
+### D420 — `temp_file_limit` becomes a superuser step at install time
+
+F279. A `WITH HOLD` cursor parks a temp file — 553,197,568 bytes, measured — that
+`AddonConfinementViolations` cannot see, because it asks catalogues of *objects*
+and a temp file is not one. The only bound Postgres offers needs superuser, and
+the owner took it: `docs/deployment.md` gains the step and the gap is closed
+rather than reported.
+
+This is the answer the recommendation argued against, and the argument is kept
+rather than dropped: the optional-hardening shape would have left the default
+install unbounded but stayed inside the trust boundary `CREATEROLE` was chosen
+for. **It does not collide with [D418](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)**, which is about the
+*runtime* connection; this is a step performed once at install time, and the two
+are different connections.
+
+### D421 — `template_render` is deprecated under the ABI's own window
+
+F283. D259 has a module return text the host wraps and escapes, because markup a
+module wrote is not data — so a function whose whole purpose is parsing markup a
+module authored has no future. Deprecating it is also the first real exercise of
+the deprecation machinery [F272](deferred-findings.md) records as reached by no
+test, in a release where getting it wrong is cheap. The declined alternative —
+redefining `name` to select one of a closed set of *host-owned* templates — stays
+available under a new name if host-owned layout is ever wanted.
+
+### D422 — a vetoed redirect is recorded under its own outcome, and the UI explains nothing
+
+F323. Not a click, so nobody's existing figure moves across the 0.4.0 upgrade,
+and not silence, so D101's rule — a request that reached a real link is recorded
+whatever the link's state made the answer — stops having two readings in one
+file. **The owner's answer carries an explicit bound: no prose is added to the
+dashboard explaining the category.** It is countable and it is not narrated.
+
+### D423 — the QR contrast warning fires on either metric
+
+F239, and F244(e)'s placement. Both a WCAG relative-luminance ratio and a
+QR-specific luminance delta, warning when either is crossed. The WCAG bar is
+published and citable and is borrowed — it is about text read by an eye, and a
+code is read by a camera; the delta is closer to what a decoder thresholds on and
+its number is ours to defend. Taking both means two numbers to defend rather than
+one, and a warning whose reason a reader cannot infer from the swatches.
+
+### D424 — the QR list sorts on the name that is drawn
+
+F243. *Alphabetical order by name* means the name on the row, including when the
+row draws a substitute the reader never typed. The substitution moves into the
+sort, and `api/openapi.yaml`'s published *a code nobody has named sorts first*
+becomes false and changes with it — which is the cost, on a surface whose
+accuracy was the one thing this row had going for it.
+
+### D425 — the QR shorthand stays API-only, and seven view fields are deleted
+
+F235 and F245. `…/qr.svg` and `…/qr.png` — a link's default code addressed
+without naming it — remain reachable from the API and the documents and gain no
+control in the dashboard, which is the answer four reports on this tab have
+already given. The seven fields that fed the removed paragraphs go with it.
+Noted against this repository's standing rule that **unused is not evidence**:
+the deletion rests on the owner's answer about the shorthand, not on the fields
+having no reader.
+
+### D426 — the QR row's overlay stays, and the slug stays unselectable
+
+F236. Owner, 2026-09-04: *"I don't notice any usage problems and it is
+functioning as I expect it to, so no changes need to be made now."* The whole-row
+click target F224(f) asked for is kept, and the slug remains reachable through
+`?code=<slug>` in the address bar, the download filenames and the API. The row
+closes on the owner's answer rather than on a repair.
+
+### D427 — the tab's duplicate tooltip descriptions go, and the focusable hosts are named
+
+F241, answered separately on 2026-09-04 after the question was re-put — the first
+round recorded an answer the owner had not given, and the entry was removed
+before it was committed rather than corrected, because there was no reasoning to
+preserve behind a decision nobody made.
+
+Where a tooltip's text equals its control's name, `aria-describedby` is dropped:
+the tooltip stays a hover target and stops being announced twice. Where a host
+takes focus for a disabled control — which is the only way a disabled button's
+description is ever reached, and is why D192 chose a tooltip this page owns — it
+gains a role and that control's name, so the description has something to attach
+to.
+
+The cost: the two tooltips that actually say something the name does not —
+*Every link must have at least 1 QR code.* and *A link carries at most 20 QR
+codes.* — then behave differently from the other four, and the reason for the
+difference lives in the template rather than on the screen.
+
+## 2026-09-04 — M70's fix shapes: ten answers, and the picks taken without asking
+
+D416 approved 62 rows. Ten of them could not be built without a choice the owner
+would want; those are D428–D437. The rest were picked from the nearest existing
+code or decision rather than spending the owner's attention on naming, and the
+last section here is what those picks were — because an actor deciding on the
+owner's behalf writes it down, most of all when it decided in order not to stall.
+
+### D428 — the host records what it discovered, separately from what it loaded
+
+F281, the phase's one open High. `OrphanSchemas` subtracts what *discovery*
+found rather than what instantiation appended, so *installed but not loaded* and
+*not installed at all* become one distinction made at the source. Every consumer
+inherits it: the boot warning, the manager's list, and the purge confirmation
+that today asserts a still-installed add-on was uninstalled and then deletes its
+rows.
+
+The two declined shapes are recorded because each closes the data loss and
+neither closes the defect. Having the manager read the add-ons directory at
+request time is confined to the page that does the damage and leaves the
+enumeration wrong at the source, so the next consumer re-derives the mistake.
+Refusing the purge while the directory still holds the add-on is the smallest
+diff and leaves the false sentence standing with a button that no longer works.
+
+The cost of the chosen shape, stated: `Host` grows a second set, and **every**
+failure path between `EnsureAddonSchema` and the append to `h.loaded` has to
+maintain it. A path that forgets brings the defect back, which is the same
+failure mode this row already demonstrates once.
+
+### D429 — F315 is built in both halves
+
+The operator sees and severs an add-on's identity links on its detail page in the
+manager; the person sees and disconnects theirs on their account page. A link
+admits somebody to an account with **no password and no second factor of this
+product's**, and a credential of that weight should be revocable by the person
+whose account it opens rather than only by whoever runs the instance.
+
+Cost: two surfaces, two API operations, `api/openapi.yaml` and its contract test,
+inside a close already carrying 62 rows.
+
+### D430 — an htmx 4xx is answered by a shared `webError` limb
+
+F218. `webError` is already the single site every refusal passes through, so one
+limb there answers an htmx request with a swappable fragment and all six controls
+— a routing rule's delete, a split variant's, the link's danger zone, an
+invitation revoke, a member removal, a dispute reviewer revoke — start rendering
+the refusal the reader is entitled to.
+
+The `htmx-config` `responseHandling` entry was declined for being global: it
+changes how every form on the site treats a 4xx, including forms written later
+against htmx's documented default, and it swaps a full error page into a fragment
+target. `hx-target` on each control was declined for leaving no rule, so the
+seventh control is written without it.
+
+Cost: one error path now has two response shapes, and `webError` being the only
+place that decides is the whole of what keeps that manageable.
+
+### D431 — `sign_in_label` takes a positive rule
+
+F359. Letters, marks, numbers, punctuation, symbols and the space are accepted;
+everything else is refused — so U+202E, U+200B and U+2028/9 stop reaching a
+string drawn on the unauthenticated sign-in page.
+
+**This is deliberately the shape [D285](decisions.md) could not take** for the log
+boundary. There the input is arbitrary bytes a module composes and *invisible* is
+not a property Unicode publishes, which defeated four workers; here it is a
+64-byte label an operator types, so a closed accept-set is affordable. Extending
+the denylist was declined by name: this phase has been bitten four times by an
+enumeration that was true when written — the log sanitizer's list, the size
+gauge's relkinds, the concatenation-mark allowlist, the emoji base set — and that
+would have been the fifth.
+
+Cost: an operator writing a label in a script whose characters the category set
+mishandles is refused with nothing to appeal to.
+
+### D432 — `temp_file_limit` is 256 MB per add-on role
+
+F279, and the number [D420](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)
+left open. Comfortably above an honest sort or hash spill inside a schema an
+add-on owns, and it refuses the measured 553,197,568-byte `WITH HOLD` cursor at
+roughly half of it.
+
+Cost: an add-on running an honest large aggregate over its own tables meets
+*temporary file size exceeds temp_file_limit* and cannot raise it — the role may
+not change the setting once a superuser has set it, which is exactly the property
+that makes it a bound rather than a suggestion.
+
+### D433 — the log budget is 8 MiB per add-on per minute
+
+F305, and the number [D419](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)
+left open. Two thousand full-width 4 KiB lines a minute is past anything an
+honest add-on writes, and it cuts the measured flood — 3697 lines and 14.7 MiB in
+two seconds — inside its first second.
+
+Cost: a genuinely chatty add-on under load is truncated, and the one summary line
+naming the add-on and what was dropped is all an operator gets.
+
+### D434 — the wasm half of the SDK is analysed by `go vet` under `GOOS=wasip1`
+
+F269. One line in the `vet` and `lint` targets and one step in the CI proposal,
+catching what actually threatens that file: `unsafe.Pointer` arithmetic, a
+missing `KeepAlive`, a printf-shaped mistake in the generated wrappers.
+
+A second `golangci-lint` run under the same GOOS was declined for cost — a full
+second lint pass on every commit and in CI — and a build-tag matrix for putting a
+matrix into `.github/workflows/`, which is the owner's hands rather than the
+loop's ([workflow.md](workflow.md#standing-rules)).
+
+Cost, and the comment beside the code has to say it: `vet` is a weaker net than
+`golangci-lint`, so the SDK's wasip1 half is held to a lower standard than the
+rest of the tree rather than to the same one.
+
+### D435 — the browser suite signs in once and shares the context
+
+F333. A Playwright global setup signs in and every spec reuses the storage state,
+so twenty specs stop spending a ten-per-minute budget none of them can see. The
+suite gets faster as a side effect.
+
+Raising `LINKCTRL_LOGIN_RATE_PER_MIN` on the test instance was declined for
+masking the limiter on the one instance that exercises it; a per-spec address was
+declined for needing a seeder that makes twenty accounts and growing with every
+spec added.
+
+Cost: no spec asserts its own sign-in any more, so a regression in the login flow
+shows up as twenty failures with one cause rather than being caught by the first
+spec that tries it.
+
+### D436 — the GeoIP sentence is reworded, and the predicate is not touched
+
+F195, and it is the option that was *not* recommended. The sentence says what it
+means — that no country could be resolved for what is in this window — rather
+than reading as a permanent fact about the instance.
+
+Both behaviour-changing shapes are declined and both stay on record. The cheap
+one would have given a link with no clicks at all the ordinary empty state, which
+narrows the disagreement without closing it. The thorough one asks whether this
+link has *ever* resolved a country, which costs a query and breaks
+`fillLinkAnalytics`'s stated seam that it performs no I/O and cannot fail — a
+documented property another milestone rests on.
+
+What this buys is that the row needs no behaviour change at all, so it is inside
+workflow.md's standing documentation approval rather than stretching it. What it
+costs is that two links side by side can still disagree; they are now honestly
+labelled about why.
+
+### D437 — the fetch hold is keyed to the invocation
+
+F347. The hold lives until the invocation ends, whatever the guest does with its
+out-parameter pointers — which is the property [F346](deferred-findings.md#closed)
+and D391 were after: **one outbound request per invocation, full stop.** Releasing
+it on `StatusInvalid` let a guest that hands back an unwritable pointer re-enter
+`doFetch` and make the request a second time.
+
+Cost: a hold nobody collects sits in `hostState` until the invocation finishes,
+so a guest that abandons a fetch pins its response bytes for the rest of its
+deadline.
+
+### The picks taken without a prompt, and what each followed
+
+None of these had a choice in it that the tree or an existing decision did not
+already answer. They are listed rather than left in the diff because *deciding
+that something needed no decision* is itself a judgement, and this project's
+record is that unwritten ones get re-taken.
+
+| Row | Pick | Followed |
+| --- | --- | --- |
+| F260 | The integration fallback **refuses** rather than guessing a port | Guessing is what pointed it at the demo instance; `make db-reset` already defaults to the disposable instance by written decision |
+| F261 | `release-check` runs the package list `make test-integration` runs | The gate should exercise what the contract says it exercises; the divergence was never argued for |
+| F358 | `InstallFetchTimeout` is validated against the request timeout | [D417](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)'s nesting rule, applied to the one egress bound that had none |
+| F303 | The three measurements tolerate an asynchronously extended fork, with the bound stated | The suspected cause is in the row and is Postgres's, not the product's |
+| F324 | `maxConcurrentRoutes` becomes `addonSlots` | The row's own two candidates; the shorter one, because the constant bounds three things and none of them is a route |
+| F320, F315 | Actions are `addon.identity_linked` and `addon.identity_unlinked` | `session.minted_by_addon`'s spelling, established by M65 |
+| F323 | The analytics outcome is spelled `vetoed` | `linkctrl_redirects_total{outcome="vetoed"}` already uses that token |
+| F203 | Cross-references inside deferred-findings.md drop the section anchor | The four in decisions.md must stay, because it is append-only and each was true when written |
+| F268 | `config_get`'s sentence is narrowed to what the manifest format can carry | The deprecation policy makes changing a status later expensive; narrowing now is free |
+| F216 | One `@source` line **and** the rule that Go files do not name utilities | `funcs.go` and `choropleth.go` are already exceptions, so the rule has to name them |
+| F311 | The scan covers every way to come by a logger, and the packages this one hands one to | The row's own two halves; `internal/store` is where F-1 was found |

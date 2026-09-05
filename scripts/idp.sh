@@ -74,7 +74,7 @@ ready() {
 	local i out
 	for i in $(seq 1 60); do
 		if out=$(curl -sS --max-time 3 --cacert "$TLS_DIR/idp.crt" "$url" 2>/dev/null) &&
-			printf '%s' "$out" | grep -q '"token_endpoint"'; then
+			grep -q '"token_endpoint"' <<<"$out"; then
 			echo "idp: $ISSUER answered discovery after ${i} attempt(s)"
 			return 0
 		fi

@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -793,6 +794,33 @@ var signInPathRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~/-]*$`)
 // cheaper than finding it out from an operator who cannot sign in. The one thing
 // that is *not* an error is declaring neither field, which is every add-on that
 // has ever been published against this schema.
+// firstUnprintable is the accept-set behind [Manifest.Validate]'s sign_in_label
+// rule: it answers the first rune outside it, and whether the whole string is
+// inside it.
+//
+// Categories rather than a list of refused code points, for the reason F359's
+// fix note gives. `unicode.IsPrint` is *almost* this and is not used alone,
+// because it admits nothing this rule wants to exclude but also treats the
+// non-breaking space and friends as printable — so the space is admitted
+// explicitly as U+0020 and no other separator is. What that refuses, by
+// construction rather than by enumeration: the bidi overrides (Cf), zero-width
+// joiners and spaces (Cf, Zs), the line and paragraph separators (Zl, Zp),
+// surrogates and private-use code points (Cs, Co), and the control characters
+// the previous rule already caught.
+func firstUnprintable(s string) (rune, bool) {
+	for _, r := range s {
+		if r == ' ' {
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsNumber(r) ||
+			unicode.IsPunct(r) || unicode.IsSymbol(r) {
+			continue
+		}
+		return r, false
+	}
+	return 0, true
+}
+
 func (m Manifest) validateSignIn(seenPerm map[string]bool) []error {
 	var errs []error
 	add := func(format string, args ...any) {
@@ -816,10 +844,30 @@ func (m Manifest) validateSignIn(seenPerm map[string]bool) []error {
 		add("sign_in_label is %d bytes: at most %d, because it is drawn on this "+
 			"product's sign-in page beside its own form", len(m.SignInLabel), MaxSignInLabelBytes)
 	}
-	if strings.ContainsFunc(m.SignInLabel, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-		// Escaping is html/template's and is not in question. This refuses a label
-		// nobody can *read* — a newline or a NUL in the middle of a button.
-		add("sign_in_label carries a control character: it is a line of text on a page")
+	if bad, ok := firstUnprintable(m.SignInLabel); !ok {
+		// Escaping is html/template's and is not in question — there is no XSS here.
+		// What this refuses is a label that reads as something other than what it
+		// says, on the page a visitor is asked to trust.
+		//
+		// **A positive rule rather than a denylist** (F359, D431). The old test was
+		// `r < 0x20 || r == 0x7f`, which refuses a newline and admits U+202E — the
+		// right-to-left override — along with U+200B and U+2028/9, about twenty of
+		// which fit inside MaxSignInLabelBytes. Adding those to the refusal was the
+		// obvious repair and is the one that was declined: this phase has been bitten
+		// four times by an enumeration that was true when written (the log
+		// sanitizer's list, the size gauge's relkinds, the concatenation-mark
+		// allowlist, the emoji base set), and a fifth was not worth having.
+		//
+		// The accept-set is affordable *here* and was not affordable for the log
+		// boundary, which is the distinction D285 turns on: there the input is
+		// arbitrary bytes a module composes and *invisible* is not a property Unicode
+		// publishes, while this is a short label an operator types into a manifest.
+		// The cost is stated rather than hidden — an operator writing a label in a
+		// script whose characters these categories mishandle is refused, with the
+		// offending rune named so they can at least see which one.
+		add("sign_in_label carries %U, which is not a printable character: it is a "+
+			"line of text drawn on this product's sign-in page, so it may hold "+
+			"letters, marks, numbers, punctuation, symbols and spaces and nothing else", bad)
 	}
 	if !seenPerm[PermissionSessionMint] {
 		// The whole premise of the link. An add-on that cannot mint a session has no

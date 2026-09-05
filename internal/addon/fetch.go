@@ -498,6 +498,24 @@ type fetchRequest struct {
 	// Accept and UserAgent are the whole header set one of these requests carries.
 	Accept    string `json:"-"`
 	UserAgent string `json:"-"`
+	// Identity asks the transport not to negotiate compression, which makes the
+	// bytes read here the bytes on the wire (F340).
+	//
+	// `net/http`'s transport adds `Accept-Encoding: gzip` on its own and inflates a
+	// `Content-Encoding: gzip` response before a caller sees a byte, unless the
+	// caller sets the header itself. For the add-on path that is exactly right —
+	// what it fetches is JSON and transparent decoding is what a caller wants. For
+	// the **install** path it is wrong twice over: the sha256 an operator typed is
+	// over the file on the release page, so an origin serving a `.tar` with
+	// `Content-Encoding: gzip` delivers it inflated and the digest is taken over
+	// bytes nobody hashed — `digest_mismatch`, sending the operator to check a
+	// digest that is correct. And the fifty-times ratio bound D385 argues for at
+	// the container layer does not exist one layer down, where the same request is;
+	// only `maxBytes` does.
+	//
+	// So the two doors want opposite defaults, which is why this is a field rather
+	// than a change to the transport.
+	Identity bool `json:"-"`
 }
 
 // fetchResponse is what comes back. It mirrors abi's FetchResponse record field
@@ -700,6 +718,11 @@ func (f *fetcher) get(
 	// declared a prefix for. What an OIDC exchange needs is exactly these.
 	hr.Header.Set("Accept", req.Accept)
 	hr.Header.Set("User-Agent", req.UserAgent)
+	if req.Identity {
+		// Setting it at all is what stops the transport adding its own and
+		// decompressing behind the caller's back. See [fetchRequest.Identity].
+		hr.Header.Set("Accept-Encoding", "identity")
+	}
 	if method == http.MethodPost {
 		hr.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
@@ -907,6 +930,22 @@ func (s *hostState) originsFor() originSet {
 		for _, field := range strings.Fields(value.Reveal()) {
 			o, err := parseOrigin(field)
 			if err != nil {
+				// Once per load per bad entry, not once per call (F338). `originsFor`
+				// runs on every `network_fetch` and `doFetch` calls it **before** the
+				// origin gate, so a guest looping on `invalid_request` — which dials
+				// nothing — emitted one Warn per call, across every instance slot, for
+				// the whole route deadline, on a page anybody can reach. One mistyped
+				// entry in an operator's setting was the only precondition, and the code
+				// deliberately keeps the setting working for its good entries, so that
+				// state is persistent rather than transient.
+				//
+				// Dropping it to Debug was the wrong fix and is why this was a row
+				// rather than an edit: nothing else carries the fact that an entry is
+				// malformed, so the operator would lose the only signal they have. The
+				// answer is to say it once and keep saying nothing.
+				if !s.originWarned.first(decl.Name, field) {
+					continue
+				}
 				// Logged **raw**, and that is the rule rather than an omission: hostLog
 				// is the neutralizing logger, and logsafe.go's whole discipline is that
 				// no call site escapes what it is about to log. Pre-escaping here

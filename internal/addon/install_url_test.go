@@ -30,6 +30,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon/abi"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
+	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
 
@@ -1526,4 +1527,21 @@ func assertFieldCode(t *testing.T, err error, want string) {
 	}
 	t.Errorf("the refusal carries %v, want a field error coded %q — a URL install "+
 		"says which bound bit, not that the upload was refused", ve, want)
+}
+
+// TestTheInstallFetchTimeoutMirrorIsTheRealOne ties internal/config's mirrored
+// copy to the constant it mirrors.
+//
+// The mirror exists because internal/config cannot import this package — the
+// dependency runs the other way — and config.Validate has to refuse an
+// HTTP_REQUEST_TIMEOUT that this bound cannot nest inside (F358). Two numbers,
+// one meaning; this is what stops them parting company, and it lives here
+// because this is the package that can see both.
+func TestTheInstallFetchTimeoutMirrorIsTheRealOne(t *testing.T) {
+	if got := config.InstallFetchTimeoutMirror(); got != InstallFetchTimeout {
+		t.Fatalf("internal/config mirrors the install fetch timeout as %s and it is %s. "+
+			"config.Validate nests HTTP_REQUEST_TIMEOUT against its copy, so a mirror "+
+			"that has drifted refuses the wrong configurations and admits the wrong "+
+			"ones (F358)", got, InstallFetchTimeout)
+	}
 }

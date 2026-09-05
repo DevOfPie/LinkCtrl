@@ -21,10 +21,6 @@ import (
 )
 
 const (
-	// Used only when TEST_DATABASE_URL is unset. `make test-integration` passes
-	// the DSN built from .env, so this literal is the last resort for someone
-	// running `go test` by hand — and it is a guess at their password.
-	fallbackDSN = "postgres://linkctrl:devpassword@localhost:55432/linkctrl?sslmode=disable"
 	// A template database of our own, rather than the application database.
 	//
 	// Postgres refuses CREATE DATABASE ... TEMPLATE while anything is connected
@@ -34,12 +30,22 @@ const (
 	templateDB = "linkctrl_test_template"
 )
 
-func baseDSN() string {
-	if v := os.Getenv("TEST_DATABASE_URL"); v != "" {
-		return v
-	}
-	return fallbackDSN
-}
+// baseDSN refuses rather than guessing, which is F260 and D428's table.
+//
+// There used to be a literal here for "someone running `go test` by hand", and
+// it named port **55432** — which is `.env.demo`'s `POSTGRES_PORT`. The test
+// instance is 55433. So the last resort pointed at the one stack the two-instance
+// split exists to keep tests away from, and what it does on arrival is
+// `ensureTemplate`: create a template database and clone it per test. Nothing
+// caught it because the demo's password does not happen to match `devpassword`,
+// which is luck — `scripts/instance.sh` generates that password, and an instance
+// created before it did would have matched.
+//
+// A default that is wrong in the destructive direction is worse than no default:
+// `make db-reset` already defaults to the disposable instance by written
+// decision, and this defaulted the other way. So the DSN is required, and the
+// message says the two ways to supply one.
+func baseDSN() string { return os.Getenv("TEST_DATABASE_URL") }
 
 // dsnFor rewrites the database name in the base DSN.
 func dsnFor(name string) string {
@@ -61,6 +67,17 @@ func dsnFor(name string) string {
 // each test in a transaction it also works with code that opens its own
 // transactions, which Register does.
 func TestMain(m *testing.M) {
+	// Refused before anything connects, rather than defaulted. See [baseDSN].
+	if baseDSN() == "" {
+		fmt.Fprint(os.Stderr, "integration setup refused: TEST_DATABASE_URL is not set, "+
+			"and this suite will not guess one.\n\n"+
+			"It creates and drops a template database, so a guessed port is how that "+
+			"reaches an instance nobody meant to touch — which is exactly what the "+
+			"literal removed here did (F260).\n\n"+
+			"  make test-integration        # builds the DSN from .env, against the test instance\n"+
+			"  TEST_DATABASE_URL=... go test -tags=integration ./test/integration/...\n")
+		os.Exit(1)
+	}
 	if err := ensureTemplate(); err != nil {
 		fmt.Fprintf(os.Stderr, "integration setup failed: %v\n\n"+
 			"These tests need Postgres. Start it with:\n  docker compose up -d\n\n"+

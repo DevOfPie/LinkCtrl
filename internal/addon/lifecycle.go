@@ -301,7 +301,15 @@ func (h *Host) install(
 		}}
 	}
 
-	h.store(newAddonSet(append(slices.Clone(old.loaded), loaded), old.pools))
+	// `discovered` grows with `loaded` here because an install that reached this
+	// line put a directory in the operator's add-ons directory, which is what
+	// being installed means (D428, F281). The two are appended together rather
+	// than derived from one another on purpose: a later failure path that adds to
+	// one and not the other is exactly the defect this set exists to prevent.
+	h.store(newAddonSet(
+		append(slices.Clone(old.loaded), loaded),
+		append(slices.Clone(old.discovered), loaded.Manifest.Name),
+		old.pools))
 	// Both are idempotent and both are needed: an instance that booted with no
 	// pooled add-on has no sweep, and one that booted with no observer has no queue
 	// or worker. See their own comments for why they are not started per add-on.
@@ -382,7 +390,13 @@ func (h *Host) remove(
 	// does not find it inline, the worker does not show it a click, and a request
 	// under its prefix is the 404 an add-on that is not installed gets.
 	kept := slices.Delete(slices.Clone(old.loaded), i, i+1)
-	h.store(newAddonSet(kept, old.pools))
+	// And out of `discovered` with it: after the rename below the directory is
+	// gone, so the add-on genuinely is not installed and its schema genuinely is
+	// an orphan. This is the one place that transition happens, which is why the
+	// two deletions sit together (D428).
+	stillThere := slices.DeleteFunc(slices.Clone(old.discovered),
+		func(n string) bool { return n == name })
+	h.store(newAddonSet(kept, stillThere, old.pools))
 
 	// Out of the directory second, and this is the bullet about a `required`
 	// add-on: the rename is what makes the removal survive a crash, because after

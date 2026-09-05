@@ -25,6 +25,31 @@ func TestAMintingAddonMayAskForASignInLink(t *testing.T) {
 	}
 }
 
+// The other half of F359's accept-set, and the half that keeps it honest: the
+// rule refuses by category rather than by a list, so the thing to guard is that
+// it does not refuse a label a publisher would reasonably write. Accents, an
+// em-dash, a registered mark, parentheses, digits and an ampersand are all
+// ordinary in a button that names a company.
+//
+// Without this, tightening the rule further would look free.
+func TestASignInLabelMayHoldTheCharactersARealNameNeeds(t *testing.T) {
+	for _, label := range []string{
+		"Sign in with Contoso",
+		"Se connecter à Contoso",
+		"Anmelden mit Contoso GmbH & Co.",
+		"Sign in — Contoso® (SSO)",
+		"Contoso ID 2.0",
+		"Войти через Contoso",
+		"使用 Contoso 登录",
+	} {
+		m := mintingManifest()
+		m.SignInLabel = label
+		if err := m.Validate(); err != nil {
+			t.Errorf("sign_in_label %q was refused: %v", label, err)
+		}
+	}
+}
+
 // TestASignInDeclarationThatCannotBeHonouredIsRefused walks every shape the host
 // will not compose a target from.
 //
@@ -81,7 +106,25 @@ func TestASignInDeclarationThatCannotBeHonouredIsRefused(t *testing.T) {
 		}, "at most 64"},
 		{"a label carrying a newline", func(m *Manifest) {
 			m.SignInLabel = "Sign in\nwith Contoso"
-		}, "control character"},
+		}, "not a printable character"},
+		// F359: the three the old control-character rule admitted, on a string drawn
+		// on the unauthenticated sign-in page. Each is named separately rather than
+		// as one case, because what makes them worth refusing differs — an override
+		// makes the label read backwards, a zero-width space makes two labels
+		// indistinguishable, and a line separator is a line break wearing a
+		// different code point.
+		{"a label carrying a right-to-left override", func(m *Manifest) {
+			m.SignInLabel = "Sign in with \u202eosotnoC"
+		}, "not a printable character"},
+		{"a label carrying a zero-width space", func(m *Manifest) {
+			m.SignInLabel = "Sign\u200b in with Contoso"
+		}, "not a printable character"},
+		{"a label carrying a line separator", func(m *Manifest) {
+			m.SignInLabel = "Sign in\u2028with Contoso"
+		}, "not a printable character"},
+		{"a label carrying a non-breaking space", func(m *Manifest) {
+			m.SignInLabel = "Sign\u00a0in with Contoso"
+		}, "not a printable character"},
 		{"a label from an add-on that cannot mint", func(m *Manifest) {
 			m.Permissions = []string{PermissionRoutes}
 		}, `"session.mint" is not`},

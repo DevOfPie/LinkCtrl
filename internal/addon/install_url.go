@@ -322,6 +322,10 @@ func (h *Host) fetchBundle(ctx context.Context, raw string) ([]byte, error) {
 		// bundle, and the version is what tells its publisher which ABI the asker
 		// supports.
 		UserAgent: "LinkCtrl/" + build.Get().Version + " (+add-on install)",
+		// The digest has to cover the file the operator hashed, not what a transport
+		// handed back after inflating it. See [fetchRequest.Identity] — the add-on
+		// path deliberately does not set this (F340).
+		Identity: true,
 	}
 	u, resp, err := h.installFetcher.get(ctx, req, operatorURL{})
 	switch resp.Stage {

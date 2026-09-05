@@ -90,7 +90,7 @@ Changing it has exactly the effect of losing it.
 | `LINKCTRL_TRUSTED_PROXIES` | *(empty)* | Comma-separated CIDRs. **Empty means `X-Forwarded-For` is ignored**, which is the safe default: anything listed here can claim any client address. Set it to your proxy and nothing more. |
 | `LINKCTRL_HTTP_READ_HEADER_TIMEOUT` | `5s` | Slowloris guard. |
 | `LINKCTRL_HTTP_WRITE_TIMEOUT` | `30s` | Socket-level backstop; the connection is closed regardless of what the handler is doing. |
-| `LINKCTRL_HTTP_REQUEST_TIMEOUT` | `15s` | Context deadline on the application tree. Queries abort and the client gets `504`. Not applied to the redirect tree, which has `REDIRECT_TIMEOUT` instead. `0` disables it. |
+| `LINKCTRL_HTTP_REQUEST_TIMEOUT` | `15s` | Context deadline on the application tree. Queries abort and the client gets `504`. Not applied to the redirect tree, which has `REDIRECT_TIMEOUT` instead. `0` disables it. With add-ons enabled it must also exceed **10s**, which is what installing an add-on from a URL spends fetching the bundle before it hashes, unpacks and compiles it; the instance refuses to start otherwise, because under that the fetch bound never fires and the install finishes under a cancelled context. |
 | `LINKCTRL_SERVER_TIMING` | `false` | Emits a `Server-Timing` header on the application tree, measuring server time to headers. Off by default because it publishes internal timings to anyone who asks — on a service where "does this alias exist" is the interesting question, a timing difference is an answer. |
 
 ### Two hostnames

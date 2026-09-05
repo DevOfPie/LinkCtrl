@@ -1031,6 +1031,26 @@ func HostOnly(host string) string {
 //
 // The messages name the variable and say what to do about it. An operator
 // reading them should not need to consult the source.
+// installFetchTimeout mirrors addon.InstallFetchTimeout, which this package
+// cannot import: internal/addon imports internal/config, so the dependency runs
+// the other way and a direct reference is a cycle.
+//
+// Mirrored rather than moved. Making it a configuration field would be a new
+// operator knob, and the reason it is a constant is argued where it is defined —
+// an install is bounded by the request it runs inside, and the number exists to
+// leave room for the hashing and WebAssembly compilation that follow the last
+// byte.
+//
+// TestTheInstallFetchTimeoutMirrorIsTheRealOne in internal/addon holds the two
+// equal, in the package that can see both. A mirror nothing ties is the drift
+// this phase has now found five times (F318, F319, F321, F273, F275).
+const installFetchTimeout = 10 * time.Second
+
+// InstallFetchTimeoutMirror is [installFetchTimeout], exported for the one test
+// that holds it equal to the constant it mirrors. Not for use in code: the real
+// one is addon.InstallFetchTimeout and this package is the one that cannot say so.
+func InstallFetchTimeoutMirror() time.Duration { return installFetchTimeout }
+
 func (c Config) Validate() error {
 	var errs []error
 	add := func(format string, args ...any) {
@@ -1492,6 +1512,32 @@ func (c Config) Validate() error {
 			"for no cap, because the response is held in memory to cross the add-on "+
 			"boundary and an unbounded body from a server this product does not run "+
 			"is an unbounded heap", c.Addons.FetchMaxBytes)
+	}
+
+	// The fourth, and the one that had no nesting rule at all (F358). An install
+	// runs as a request in the application tree, so HTTP_REQUEST_TIMEOUT cancels
+	// the context addon.InstallFetchTimeout is nested inside — and that constant's
+	// own comment reasons about it, claiming ten seconds *leaves five seconds for
+	// hashing, unpacking, parsing, writing, and compiling a WebAssembly module*.
+	// That arithmetic is against a fifteen-second request timeout. This file names
+	// LINKCTRL_HTTP_REQUEST_TIMEOUT=5s as valid and has never refused it, and at
+	// five the sentence is negative: the fetch bound cannot fire, and h.install
+	// runs under an already-cancelled context after a fetch that may have
+	// succeeded.
+	//
+	// Checked rather than reworded, because this file argues the principle for the
+	// other three bounds in as many words — *a knob whose upper half cannot take
+	// effect is not a knob* — and the install bound is a constant, so an operator
+	// cannot lower it to fit. The remedy named is therefore theirs to act on.
+	if c.Addons.Enabled() && c.HTTP.RequestTimeout > 0 &&
+		installFetchTimeout >= c.HTTP.RequestTimeout {
+		add("HTTP_REQUEST_TIMEOUT (%s): must exceed the %s an add-on install spends "+
+			"fetching a bundle, which is a constant this instance cannot lower; at or "+
+			"under it the fetch bound never fires and the install runs its hashing, "+
+			"unpacking and WebAssembly compilation under a context that is already "+
+			"cancelled. Raise HTTP_REQUEST_TIMEOUT, or install by upload rather than "+
+			"by URL, where the bytes travel on the client's own request",
+			c.HTTP.RequestTimeout, installFetchTimeout)
 	}
 
 	if c.Alias.Length < 4 || c.Alias.Length > 12 {

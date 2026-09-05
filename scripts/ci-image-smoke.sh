@@ -21,7 +21,8 @@ docker run --rm "$image" version
 docker run --rm --entrypoint /lctl "$image" version
 set +x
 
-if ! docker run --rm "$image" version | grep -q "linkctrl $expected"; then
+reported=$(docker run --rm "$image" version)
+if ! grep -q "linkctrl $expected" <<<"$reported"; then
   echo "$image does not report version '$expected' — build args did not reach the ldflags" >&2
   exit 1
 fi

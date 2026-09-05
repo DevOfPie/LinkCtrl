@@ -51,6 +51,23 @@ type addonSet struct {
 	// the current set on every event, because an add-on installed after the worker
 	// started must be shown redirects and one removed must not.
 	observers []Loaded
+	// discovered is every add-on **installed on disk**, by name, whether or not it
+	// loaded — which is a different question from `loaded` and is the one an
+	// orphan check has to ask. A degrade-class add-on whose module fails to
+	// instantiate, or whose manifest stops validating while its schema survives
+	// from an earlier good version, is still installed; subtracting `loaded`
+	// called its schema an orphan and M68's manager then offered a
+	// still-installed add-on's rows for purge, which is F281 and which was driven
+	// end to end. D428 puts the distinction here, at the source, so the boot
+	// warning, the manager's list and the purge confirmation inherit one answer
+	// instead of three.
+	//
+	// **Every path that leaves an add-on on disk has to keep this true.** That is
+	// the cost the decision names: a failure path added later which forgets to
+	// record what it found brings the defect back through a door nobody is
+	// watching. There is one recorder — [Open]'s loop — and two maintainers,
+	// [Host.Install] and [Host.Remove].
+	discovered []string
 	// pools is one idle set per (add-on, class) on either redirect class. Entries
 	// are carried across a set change for the add-ons that survive it: a pool is a
 	// live object holding open wasm instances, and rebuilding the map must not
@@ -77,13 +94,17 @@ func (h *Host) current() *addonSet {
 
 // newAddonSet derives the three subsets from one ordered list of add-ons.
 //
+// discovered is every add-on installed on disk, which is **not** derivable from
+// loaded and is why it is a parameter: the add-ons this list is missing are
+// exactly the ones the caller has to have remembered.
+//
 // prev is the pool map being replaced, or nil. A pool survives for an add-on
 // still in the list, so an install does not throw away the warm instances of the
 // add-ons it arrived beside; a pool for an add-on no longer in the list is left
 // behind here and drained by the caller, which is the only place that knows the
 // context to close instances with.
-func newAddonSet(loaded []Loaded, prev map[string]*addonPool) *addonSet {
-	s := &addonSet{loaded: loaded}
+func newAddonSet(loaded []Loaded, discovered []string, prev map[string]*addonPool) *addonSet {
+	s := &addonSet{loaded: loaded, discovered: discovered}
 	for _, l := range loaded {
 		if l.compiled == nil {
 			continue

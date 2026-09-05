@@ -156,37 +156,6 @@ and verified on 2026-08-01 by reproduction, not by reading — and that no
 milestone between here and M45 introduces a cross-workspace view for its own
 reasons.
 
-### M70 — Does the SDK bump reach the *published* worked example, or only its main branch?
-
-**Needed by:** [M70](phase-details/m70.md), which is next.
-
-M70's definition of done is that `DevOfPie/LinkCtrl-OIDC`'s go.mod names
-`github.com/DevOfPie/LinkCtrl v0.4.0`, its CI is green on the bump, and its
-changelog says the SDK moved from a pseudo-version to a release. Bumping that
-repository's `main` satisfies every word of that and **not** the purpose the
-milestone states for it — *immutable and publicly resolvable is what the exercise
-needs; tagged is what the worked example needs*. Every operator-facing pointer
-this repository publishes names `v0.1.0`, whose immutable go.mod requires
-`v0.3.1-0.20260827043355-9509158d0e75`. After M70 as written, the add-on a reader
-downloads is still built against a pseudo-version of an unreleased commit.
-
-| Option | Buys | Costs |
-| --- | --- | --- |
-| **Cut a second `LinkCtrl-OIDC` release in M70** *(recommended)* | The published example is actually built against the released SDK, which is the sentence M70 gives as its reason for existing. Moves the four pins in `scripts/oidc-fixture.sh:52-61` and the pointers in `docs/configuration.md`, `docs/SECURITY.md` and `CHANGELOG.md` to the new tag | A second cross-repo release inside the phase close, in a repository this tree cannot commit to — so it is the owner's hands, not the loop's, and M70 stalls until it happens. It also re-cuts the fixture digest that F348 just stabilised, so `make oidc-fixture` and `test/integration/addon_oidc_test.go`'s literals both move together or the suite goes red |
-| Bump `main` only, and say so | Cheapest, entirely inside M70's written words, and no second release to coordinate | Leaves m70.md asserting a purpose it did not discharge, which is the shape this project reopens milestones over. Wants the bullet amended to claim what it will actually do |
-| Defer the second release to 0.4.1 | Keeps the phase close small and lets 0.4.0 ship on schedule; the pins move once, later, when nothing else is in flight | Two releases where a reader has to know which pairs with which, and the phase's acceptance test keeps pointing at an add-on built against an unreleased commit for however long that is |
-
-**Default if unanswered:** M70 does what it says — bumps `main` — and the
-published example stays on the pseudo-version, unremarked. That is the outcome
-this entry exists to stop happening silently.
-
-**Assumes:** that `LinkCtrl-OIDC` `v0.1.0` remains the release every pointer in
-this repository names — true and verified on 2026-08-30 by reading
-`scripts/oidc-fixture.sh`, `test/integration/addon_oidc_test.go`,
-`docs/configuration.md`, `docs/SECURITY.md` and `CHANGELOG.md` — and that the SDK
-is still untagged at M70, which `git ls-tree -r --name-only v0.3.0 | grep ^sdk/`
-returning nothing is what makes true today.
-
 ### <milestone> — <the question in one sentence>
 
 **Needed by:** M31, after M25 and M29 land.

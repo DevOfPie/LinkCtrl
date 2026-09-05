@@ -779,6 +779,80 @@ func TestMigrationsThatTheManifestDoesNotDescribeRefuseTheAddon(t *testing.T) {
 	})
 }
 
+// F281, driven: an add-on that is **installed and did not load** is not an orphan,
+// and the manager does not offer its data for purge.
+//
+// This is the half [TestARemovedModuleLeavesADetectableOrphan] below does not
+// reach. That one deletes the directory, which is what being uninstalled means;
+// this one leaves the directory exactly where the operator put it and breaks the
+// load, which is the state every operator-facing sentence used to call
+// *uninstalled*. M68's manager acted on that sentence and dropped the schema —
+// `PURGE SUCCEEDED for a still-installed add-on` — so the assertion here is the
+// one that has to keep holding.
+//
+// The break is an `abi_version` the host does not implement, chosen because it
+// fails **after** the schema exists and leaves everything else about the add-on
+// untouched: same directory, same module, same digest, same migrations.
+func TestAnInstalledAddonThatDidNotLoadIsNotAnOrphan(t *testing.T) {
+	name := addonName(t)
+	pool, dsn, dir := newAddonDB(t, name)
+	schema := store.AddonSchema(name)
+
+	code := addonFixture(t, "minimal")
+	m := installAddon(t, dir, name, code, []string{abi.PermissionStorage},
+		map[string]string{"00001_own.sql": "-- +goose Up\nCREATE TABLE kept (x int);\n"})
+
+	// One good load, so the schema exists. Without it there is nothing for the
+	// second boot to mistake for an orphan and the test would pass vacuously.
+	first, _, sink, err := openAddonHost(t, dir, pool, dsn)
+	if err != nil {
+		t.Fatalf("the add-on did not load: %v\n%s", err, sink.String())
+	}
+	if got := first.Schemas(); len(got) != 1 || got[0] != schema {
+		t.Fatalf("the loaded add-on's schemas are %v, want [%s]", got, schema)
+	}
+	if err := first.Close(context.Background()); err != nil {
+		t.Fatalf("closing the first host: %v", err)
+	}
+
+	// Degrade, so the instance boots without it rather than refusing to boot — the
+	// class the finding needs, and the only one that leaves a purge surface to
+	// reach.
+	m.FailureClass = addon.ClassDegrade
+	m.ABIVersion = 999
+	writeManifest(t, filepath.Join(dir, name), m)
+
+	second, _, sink2, err := openAddonHost(t, dir, pool, dsn)
+	if err != nil {
+		t.Fatalf("a degrade-class add-on that will not load should not stop the boot: %v\n%s",
+			err, sink2.String())
+	}
+	if second.Len() != 0 {
+		t.Fatalf("the second boot loaded %d add-ons, want 0", second.Len())
+	}
+
+	orphans, err := second.OrphanSchemas(context.Background())
+	if err != nil {
+		t.Fatalf("enumerating orphans: %v", err)
+	}
+	if len(orphans) != 0 {
+		t.Fatalf("a still-installed add-on's schema reads as an orphan: %v. "+
+			"This is F281: the manager offers an orphan for purge, and the add-on's "+
+			"directory is still on disk", orphans)
+	}
+	// The boot must not say it either. The warning is what an operator reads before
+	// they ever open the manager.
+	if strings.Contains(sink2.String(), "belonging to no installed add-on") {
+		t.Errorf("the boot called a still-installed add-on's schema an orphan\n%s", sink2.String())
+	}
+	// The manager's list is not asserted separately here and the reason is worth
+	// stating rather than leaving as an omission: [Host.Orphans] is a permission
+	// check and then this same call, so a manager-level assertion would re-test
+	// `OrphanSchemas` through an identity this file has no fixture for. What binds
+	// the purge surface is that the enumeration behind it is right, and that is
+	// what is asserted above.
+}
+
 // m63.md's *an orphan is detectable*: remove the module's directory, reboot, and
 // the schema is still there with nothing claiming it.
 //
@@ -834,7 +908,7 @@ func TestARemovedModuleLeavesADetectableOrphan(t *testing.T) {
 	}
 	// Said at boot, because an orphan is data an operator is paying for and does not
 	// know about.
-	if !strings.Contains(sink2.String(), "add-on schemas with no loaded module") {
+	if !strings.Contains(sink2.String(), "add-on schemas belonging to no installed add-on") {
 		t.Errorf("the boot did not mention the orphaned schema\n%s", sink2.String())
 	}
 	// And the data is still there. Nothing in this milestone deletes it.

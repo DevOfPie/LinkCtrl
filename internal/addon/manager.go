@@ -348,6 +348,28 @@ func (h *Host) PurgeData(
 	if h == nil || h.db == nil {
 		return Orphan{}, ErrNoAddonDatabase
 	}
+
+	// Under installMu, with the guard below, because the guard is a time-of-check
+	// otherwise (F352). `Install`, `Remove` and `Close` all hold this lock; this
+	// function held nothing, so an install landing between the `h.find` below and
+	// the `DROP SCHEMA` at the end returned success and had the schema it had just
+	// created dropped underneath it. Reproduced 3/3 — `install: err=<nil>
+	// schema="addon_racer"` then `installed=true schemaExists=false` — with the
+	// window measured at 12.8–16.4ms, and that is the floor: `MigrateAddon` runs
+	// inside it, so a real add-on's DDL widens it arbitrarily.
+	//
+	// Postgres does not guard it either: dropping a schema whose add-on holds an
+	// open pooled connection returned no error at all in 1.44ms.
+	//
+	// Neither actor needs to be hand-racing. Install and purge are ordinary
+	// concurrent HTTP handlers, so a reconcile script that installs and then purges
+	// stale orphans meets this. The lock is held across the read and the drop
+	// because that pair is the whole of the check — this function's own comment
+	// already argues that dropping under a running module *is a failure mode with
+	// no upside*.
+	h.installMu.Lock()
+	defer h.installMu.Unlock()
+
 	if l := h.find(name); l != nil {
 		return Orphan{}, fmt.Errorf("%w: %s is installed, so its data is not orphaned; "+
 			"remove the add-on first and then purge what it leaves", domain.ErrConflict, name)

@@ -257,8 +257,15 @@ check-version-stamp: build ## Fail if a built binary does not report its version
 # target already explains: `htmx` and `swagger-ui` repair a stale copy, which is
 # right for a developer and wrong for a gate, because a gate that fixes what it
 # finds reports success on a tampered blob.
+#
+# `check-tidy` rather than `tidy`, for that same sentence three words along the
+# line — which is what F360 found, in the target F350's fix had just edited.
+# `tidy` rewrites go.mod and go.sum and then reports success; CI takes
+# `check-tidy`, which reports the difference. So an untidy module was a local
+# green and a CI red by construction, and the loop's own gate was the one that
+# could not see it.
 .PHONY: check
-check: verify-assets css tidy lint shellcheck check-links test ## Everything CI runs, short of integration tests
+check: verify-assets css check-tidy lint shellcheck check-links test ## Everything CI runs, short of integration tests
 
 # Deliberately NOT a prerequisite of `check` above, of any ci- target, or of
 # release-check — and this comment sits here because directly above is where

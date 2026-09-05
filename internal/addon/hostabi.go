@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -659,18 +660,33 @@ func (s *hostState) heldFetch(raw []byte) []byte {
 	return s.fetchHeld
 }
 
-// holdFetch keeps the answer exactly when the guest could not take it, and drops
-// it in every other case.
+// holdFetch drops the answer exactly when the guest took it, and keeps it
+// otherwise.
 //
 // Dropping is the half worth stating: an answer that was delivered must not be
 // able to answer a later call, or a module fetching the same URL twice on purpose
 // would get one request and two identical responses.
+//
+// **The condition is delivery, not fit** (F347, D437). It used to keep the answer
+// only when the value did not fit — the retry-for-a-bigger-buffer case the hold
+// was built for — and release it on every other outcome, `writeOut` answering
+// StatusInvalid included. StatusInvalid is the guest handing back a pointer the
+// host cannot write to, so the release let the next call re-enter `doFetch` and
+// **make the outbound request a second time**, which is F346 exactly, through a
+// different door.
+//
+// So the hold's lifetime is keyed to the invocation: it lives until the bytes are
+// actually in the guest's buffer or until `hostState` goes away with the
+// invocation that owns it. What that costs is stated rather than hidden — a guest
+// that abandons a fetch pins its response bytes for the rest of its deadline,
+// which is the trade D437 took against an outbound request going out twice.
 func (s *hostState) holdFetch(raw, encoded []byte, written int32, capacity int) {
-	if written >= 0 && len(encoded) > capacity {
-		s.fetchFor, s.fetchHeld = raw, encoded
+	if written >= 0 && len(encoded) <= capacity {
+		// A size, and one that fit: the write happened and the guest has the answer.
+		s.releaseFetch()
 		return
 	}
-	s.releaseFetch()
+	s.fetchFor, s.fetchHeld = raw, encoded
 }
 
 func (s *hostState) releaseFetch() { s.fetchFor, s.fetchHeld = nil, nil }
@@ -1028,6 +1044,22 @@ func moduleText(s string) string { return escapeModuleText(s, unbounded) }
 func neutralize(err error) error {
 	if err == nil {
 		return nil
+	}
+	// Already neutralized: hand it back rather than escaping it a second time,
+	// which turns `\\` into `\\\\` and makes a line read worse each time it
+	// passes through. No path does that today; two invite it, which is why this is
+	// a guard rather than a comment. `Route`'s exit neutralizes whatever the inner
+	// function returns, and D286's design is explicitly *add returns here freely*
+	// (F313).
+	//
+	// This closes the first half of that row. The second half is not closed here
+	// and is not pretended to be: [LoadError] is exported with exported fields, so
+	// a `&LoadError{Err: rawErr}` built anywhere carries the marker while its
+	// `Err` was never escaped — whether a marker interface may be claimed by a
+	// struct literal anybody can build is a question about the type, not about
+	// this function.
+	if _, ok := err.(logSafe); ok { //nolint:errorlint // the marker is on this value, not on a cause
+		return err
 	}
 	return moduleErr{err: err}
 }
@@ -1391,6 +1423,10 @@ type hostState struct {
 	// because it is a claim about a provider's authentication strength that only
 	// the person who configured that provider can make.
 	mfaSatisfied bool
+	// originWarned is shared across every invocation of one load, so a malformed
+	// origin entry is reported once rather than once per call. A pointer because
+	// forRequest copies this struct. See [originWarnLog].
+	originWarned *originWarnLog
 
 	// identity is whoever the host resolved for this request, or nil for nobody,
 	// and it is deliberately not read off `session`: Route blanks that record for
@@ -1645,7 +1681,44 @@ func newHostState(m Manifest, grants Grants, storage *store.AddonDB,
 		storage:      storage,
 		minter:       minter,
 		mfaSatisfied: mfaSatisfied,
+		// A pointer, deliberately: [hostState.forRequest] copies the struct per
+		// invocation, so anything that has to remember across invocations has to be
+		// shared rather than copied. One of these per load, discarded with the state
+		// at deregistration, which is what makes "once per load" the actual span.
+		originWarned: &originWarnLog{},
 	}
+}
+
+// originWarnLog is which malformed origin entries this load has already
+// complained about. See the call site in fetch.go: the line it guards is
+// guest-drivable at CPU speed and is the only signal an operator gets that an
+// entry is malformed, so it has to be said and it has to be said once (F338).
+//
+// Keyed by (setting, entry) rather than by setting, so an operator who mistypes
+// two entries in one field hears about both. The key space is bounded by what is
+// in the setting, which is an operator's text and not a guest's.
+type originWarnLog struct {
+	mu   sync.Mutex
+	seen map[string]bool
+}
+
+// first reports whether this is the first time this entry has been seen, and
+// records it. Nil-safe, because a hostState built by hand in a test has no log.
+func (w *originWarnLog) first(setting, entry string) bool {
+	if w == nil {
+		return true
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	key := setting + "\x00" + entry
+	if w.seen[key] {
+		return false
+	}
+	if w.seen == nil {
+		w.seen = make(map[string]bool, 1)
+	}
+	w.seen[key] = true
+	return true
 }
 
 // registerState makes an add-on's state reachable from a host function before the

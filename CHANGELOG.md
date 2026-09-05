@@ -27,7 +27,62 @@ migrations run at boot.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Purging an add-on's leftover data no longer offers a still-installed add-on's
+  data for deletion.** An add-on that is on disk but did not start — a module
+  that fails to load, or a manifest that stops validating while the tables it
+  created survive — was reported as an orphan, and the manager's confirmation
+  said it had been uninstalled. Following that confirmation dropped a schema the
+  add-on was going to need at its next successful start. The instance now
+  distinguishes *installed but not running* from *not installed*, everywhere it
+  says so: at boot, in the manager's list, and in the confirmation.
+
+  Loss was bounded and is worth stating for anyone who hit it: the add-on's role,
+  its account links and its saved settings survived, and its migrations re-run at
+  the next successful start — so the add-on came back structurally intact with
+  empty tables.
+
+- **A purge can no longer delete the schema of an add-on that was installed a
+  moment earlier.** The check and the deletion did not hold the lock the install
+  path holds, so an install landing between them returned success and had its new
+  schema dropped underneath it. This needed no unusual timing to reach: a script
+  that installs and then purges stale orphans is enough.
+
+- **An add-on install that fails no longer keeps its compiled module in memory
+  for the life of the process.** About 10 MB per failed attempt, invisible and
+  irreversible short of a restart, which is felt most in the loop where it is
+  least welcome: rebuilding a module that will not start.
+
+- **Installing an add-on from a URL asks the origin not to compress it.** An
+  origin serving the bundle with `Content-Encoding: gzip` delivered it inflated,
+  so the SHA-256 you typed was compared against bytes that were not the ones on
+  the release page — reported as a digest mismatch, sending you to check a digest
+  that was correct.
+
+- **An add-on whose outbound-origin setting holds a malformed entry warns once
+  when it loads, rather than once per request.** The line is worth having and was
+  reachable at whatever rate a module chose to call.
+
 ### Changed
+
+- **A sign-in label may hold letters, marks, numbers, punctuation, symbols and
+  spaces, and nothing else.** It is drawn on the sign-in page an unauthenticated
+  visitor is asked to trust, and the previous rule refused line breaks while
+  admitting the right-to-left override and zero-width characters — so a label
+  could read as something other than what it said. **A manifest that validated
+  before may now be refused**; the refusal names the character.
+
+- **An instance with add-ons enabled refuses to start if `HTTP_REQUEST_TIMEOUT`
+  is 10 seconds or under.** Installing an add-on from a URL spends up to ten
+  seconds fetching, inside that request — so under it the fetch bound never
+  fires and the install finishes hashing, unpacking and compiling under a context
+  that has already been cancelled. The default of 15s is unaffected.
+
+- **An add-on's redirect may not carry a backslash in its location.** Some
+  browsers read one as a path separator and follow it to another origin, which
+  the neighbouring check in this product's own sign-in flow has always refused.
+
 
 - **Some dashboard controls say what they do, and some paragraphs stopped saying
   it for them.** Deleting an add-on's leftover data is a trash-can control on the

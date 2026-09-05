@@ -865,6 +865,23 @@ func checkLocation(loc string) error {
 		return errors.New("location is scheme-relative, which reads as a path and behaves " +
 			"as another origin; write the scheme, or a path")
 	}
+	// And the backslash forms, which the `//` test alone does not see: `/\host`,
+	// `/\/host` and `/\\host` all reach another origin in a real browser —
+	// driven in Chromium against a genuine second origin, all three landed, and a
+	// plain `/landed` stayed put. `http.Redirect` emits the byte string unchanged,
+	// so nothing downstream is going to normalize it.
+	//
+	// This gains no reach an add-on does not already have: `checkLocation` permits
+	// an absolute `https://evil.example/` outright and docs/SECURITY.md states
+	// redirecting a visitor anywhere as an accepted consequence of installing a
+	// module. What it fixes is a filter whose comment names a form it does not
+	// filter — and `safeNext` one file away (internal/httpx/web.go) has refused
+	// backslashes since it was written, so the two now answer the same question the
+	// same way (F299).
+	if strings.Contains(loc, "\\") {
+		return errors.New("location carries a backslash, which some browsers read as " +
+			"a path separator and follow to another origin; write the scheme, or a path")
+	}
 	if strings.HasPrefix(loc, "/") {
 		return nil
 	}

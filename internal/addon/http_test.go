@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -1513,6 +1514,7 @@ func documentationFiles(t *testing.T) []string {
 		"dist": true, "tmp": true, "build-notes": true,
 	}
 	root := repoRoot(t)
+	inTheClone := trackedFiles(t, root)
 	var out []string
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -1529,6 +1531,16 @@ func documentationFiles(t *testing.T) []string {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if !inTheClone[rel] {
+			// Untracked or ignored: working state on one machine, absent from every
+			// other. `.current-task.md` is rewritten at every step boundary of the
+			// phase loop and `.queue.md` at every `/note`, so recording that a module
+			// gets sixteen slots reddened this test about docs/deployment.md, naming
+			// a file the reader does not have (F322). The sibling sweep in
+			// internal/addon/abi already asked git for exactly this reason; the row
+			// said no test here did, and that had stopped being true.
+			return nil
+		}
 		if strings.HasSuffix(rel, ".md") || rel == "sdk/doc.go" {
 			out = append(out, rel)
 		}
@@ -1538,6 +1550,31 @@ func documentationFiles(t *testing.T) []string {
 		t.Fatalf("walking %s for documentation: %v", root, err)
 	}
 	return out
+}
+
+// trackedFiles is what git says a clone has, which is the only way this sweep
+// can tell documentation from a working file that happens to end in .md. The
+// twin of internal/addon/abi's [tracked]; copied rather than shared because the
+// two are in different packages and a test helper is not an export either
+// package should grow for the other.
+func trackedFiles(t *testing.T, root string) map[string]bool {
+	t.Helper()
+	out, err := exec.Command("git", "-C", root, "ls-files", "-z").Output()
+	if err != nil {
+		t.Fatalf("asking git which files %s tracks: %v. This sweep reads the "+
+			"documentation a clone has, and it cannot tell that from a working file "+
+			"without an answer here", root, err)
+	}
+	in := map[string]bool{}
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			in[p] = true
+		}
+	}
+	if len(in) == 0 {
+		t.Fatalf("git tracks no files under %s; the sweep would read nothing", root)
+	}
+	return in
 }
 
 func flattenDocument(t *testing.T, path string) string {

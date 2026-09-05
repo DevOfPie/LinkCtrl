@@ -46,7 +46,8 @@ command -v docker >/dev/null || die "docker is required"
 
 # The stack has to be up, and it has to be the code under test. A load result from
 # a stale image is worse than no result.
-docker compose ps --status running --services 2>/dev/null | grep -qx app \
+running=$(docker compose ps --status running --services 2>/dev/null || true)
+grep -qx app <<<"$running" \
   || die "the app service is not running; start it with 'docker compose up -d --wait'"
 
 echo "== dataset =="
