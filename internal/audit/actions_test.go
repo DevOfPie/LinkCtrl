@@ -161,8 +161,19 @@ var theCountIsStatedHere = []anchoredCount{
 // re-read — which is the one place D104 says README changes. The obligation to do
 // the fold is a bullet in docs/build-notes/phase-details/m70.md, with a definition
 // of done, rather than a note somebody has to remember.
+//
+// **The fold happened at 0.4.0 and this entry is what it moved**: thirty-nine to
+// forty-six, and the entry went red exactly as designed the moment the vocabulary
+// grew past the sentence. What was corrected with the number is the clause beside
+// it. README claimed the count "cannot drift without a failing build", which was
+// true when it was written and false from M65 — the tie is what D313 removed, and
+// the count then drifted on a green build, twice. The sentence now says what
+// actually holds it: the release recounts, this entry pins the spelling so the
+// sentence cannot be edited silently, and CHANGELOG's unreleased section carries
+// the difference in between. That is a weaker mechanism than a tie and it is the
+// one this project chose, so it is stated rather than implied.
 var frozenUntilTheTag = map[string][]string{
-	"../../README.md": {"**Thirty-nine actions are recorded**"},
+	"../../README.md": {"**Forty-six actions are recorded**"},
 }
 
 // notThisCount is every other numeric "N actions" in the swept documents, with a

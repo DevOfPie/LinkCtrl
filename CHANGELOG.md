@@ -9,15 +9,20 @@ whether an upgrade is safe:
 
 - **The REST API is `/api/v1`** and is a stable contract. A breaking change there
   becomes `/api/v2`, not a major version bump here.
-- **The product** is pre-1.0 while account lifecycle and identity are incomplete.
-  SSO is a later phase, and a dashboard redesign is under way. Three entries left
-  this list at 0.3.0 because they were built: account recovery — a forgotten
-  password is recoverable by the person who forgot it, on an instance with a
-  mailer — account deletion with subject erasure, and two-factor authentication.
-  Each of the rest
-  moves the product surface, so the version stays in the `0.x` range until they
-  have settled. `0.x` here means "the product surface may still move", not
-  "unfinished": everything documented as built is tested and exercised end to end.
+- **The product** is pre-1.0 **while the add-on contract is still moving**, which
+  is what the gate became at 0.4.0. It read *while account lifecycle and identity
+  are incomplete* until then, and that condition discharged itself: recovery,
+  deletion with erasure and two-factor authentication shipped at 0.3.0, and
+  identity arrived at 0.4.0 **as a module** — an add-on asserts that somebody
+  authenticated and the host mints the session. Somebody who was tracking 1.0 for
+  single sign-on gets it here, and gets it as an add-on.
+
+  So 1.0 now means a publisher can build against the add-on ABI and have it hold:
+  the functions, the permission vocabulary, the records and the statuses stay as
+  documented, and a removal goes through the window `docs/addon-abi.md` fixes at
+  two minor releases and 90 days, whichever ends later. `0.x` here means "the
+  product surface may still move", not "unfinished": everything documented as
+  built is tested and exercised end to end.
   *(This read "pre-1.0 while Phase 2 is outstanding. Shared workspaces, folders
   and custom domains will change the dashboard and add tables" until 0.2.0 — all
   three shipped in it, so the sentence named its own contents as future work.)*
@@ -26,6 +31,17 @@ The database schema only ever changes additively within a minor version, and
 migrations run at boot.
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [0.4.0] - 2026-09-06
+
+**Add-ons.** An operator can install a WebAssembly module that serves pages,
+owns a database schema, watches or refuses redirects, reaches an origin they
+named, and signs people in — and the whole of what it may reach is a published
+contract rather than a convention. The release also carries the phase's own
+findings pass: sixty-two of them, including one that let a purge delete a
+still-installed add-on's data.
 
 ### Fixed
 
@@ -4477,7 +4493,8 @@ all in [Plan.md](Plan.md#known-limitations) with their consequences:
   and a registration creates a new isolated workspace rather than adding a member
   to yours. Invitations, and a signup form worth having, are Phase 2.
 
-[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/DevOfPie/LinkCtrl/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.4.0
 [0.3.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DevOfPie/LinkCtrl/releases/tag/v0.1.0

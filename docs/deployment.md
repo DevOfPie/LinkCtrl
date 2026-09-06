@@ -584,7 +584,7 @@ without you choosing to:
 
 ```sh
 # In .env
-LINKCTRL_TAG=0.3.0
+LINKCTRL_TAG=0.4.0
 ```
 
 ```sh
@@ -621,7 +621,7 @@ Every release also publishes static binaries — linux amd64/arm64, macOS
 amd64/arm64, and Windows amd64 — with a `SHA256SUMS` file:
 
 ```sh
-tar xzf linkctrl_0.3.0_linux_amd64.tar.gz
+tar xzf linkctrl_0.4.0_linux_amd64.tar.gz
 sha256sum -c SHA256SUMS --ignore-missing
 ./linkctrl version
 ```
@@ -721,7 +721,7 @@ Worth knowing so you do not spend an afternoon re-adding it:
 
 ## Air-gapped and egress-restricted deployments
 
-One thing in a default 0.3.0 instance reaches the public internet on a schedule:
+One thing in a default 0.4.0 instance reaches the public internet on a schedule:
 the daily release check. Set
 
 ```sh

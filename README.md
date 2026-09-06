@@ -4,9 +4,12 @@ Self-hostable link management. A short link here is a resource you can edit,
 measure, script and revoke — not a row you create once and hope about.
 
 Runs as one Go binary with Postgres and Redis beside it. No Node in the image,
-no SaaS dependency, no telemetry leaving the box.
+no SaaS dependency, and nothing reporting on you: the one request this product
+makes on its own is an update check, which is off until an operator is asked and
+says yes, and an add-on reaches outward only where an operator typed the address.
+`docs/SECURITY.md` enumerates every connection that leaves the box.
 
-> **Status: 0.3.0.** Everything described below is built, tested and exercised
+> **Status: 0.4.0.** Everything described below is built, tested and exercised
 > end to end, and the redirect latency target is measured rather than
 > aspirational. This page describes the released product — see
 > [CHANGELOG.md](CHANGELOG.md) for what each version shipped, and its
@@ -42,6 +45,9 @@ data and a weekend script with no analytics. LinkCtrl aims at the third option:
   CSRF check and no templates. Every one of 240,001 cached redirects answered in
   under 20ms at 2,000 rps, with 100k links and 5.7M click events in the database
   and the analytics rollup running throughout — [docs/slo.md](docs/slo.md).
+  **The figure is core, with no inline add-on on the path**: from 0.4.0 an
+  operator may install a module that runs inside a redirect, and what that costs
+  is theirs rather than this measurement's. `docs/slo.md` carries both runs.
 
 ## Quick start
 
@@ -69,10 +75,13 @@ docker compose up -d --wait
 
 That runs `latest`. For anything you care about, pin a version — set
 `LINKCTRL_TAG` in `.env` to the release you mean — so that a later `pull` is a
-decision rather than a surprise. **The latest tag is `0.3.0`, and it is what this
-page describes** — the account lifecycle below (recovery, deletion with erasure,
-two-factor authentication), the redesigned dashboard, PNG and multi-code QR, the
-account-wide API key and the failover contract all ship in it. `0.2.0` has the
+decision rather than a surprise. **The latest tag is `0.4.0`, and it is what this
+page describes** — add-ons below, in all of it: a module the operator installs,
+what it may and may not reach, the pages it can serve, the redirects it can watch
+or refuse, and the accounts it can sign in. `0.3.0` has the account lifecycle
+(recovery, deletion with erasure, two-factor authentication), the redesigned
+dashboard, PNG and multi-code QR, the account-wide API key and the failover
+contract. `0.2.0` has the
 organizations, custom domains, routing rules, split tests, gated links, webhooks
 and automation but none of the account lifecycle; `0.1.0` is a working shortener
 with none of either. Pin an older one only if that is what you want. Releases
@@ -111,7 +120,7 @@ answers, not the same ones with a domain name.
 | **Abuse limits** | Per-address limits on credential endpoints, the API, and 404 probing. The last charges misses only, so a working link is never throttled by anyone's scanning. |
 | **Bot blocking** | Refuse automated clients on a link, or on the whole link domain, with `403` and a body naming nothing — identical whether the link is live, expired or archived, so being blocked reveals no more than a `404` would. Off by default and inherited from the domain; an operator with `domains.write` may enforce it so no link can opt out. Detection is the same user-agent heuristic the click statistics use, and **there is no challenge or appeal**: a person it misjudges cannot get through. Refusals are counted as bot clicks and on `linkctrl_redirects_total{outcome="blocked_bot"}`, never written to the audit log — a crawler would fill it. |
 | **API keys** | `lk_live_…` bearer tokens, scoped to permissions you hold, intersected with your current role on every request — and dead the moment their owner stops holding a membership that covers them, so removing somebody stops the credentials they leave behind. Revocable by their owner, or by anybody holding `apikeys.write` across the organization, which is the answer to a key that has to be stopped and an owner who will not stop it. Usage timestamps. **A key belongs to your account, not to one tenant** — leave it unpinned and it reaches every organization you are a member of, which is what makes one credential usable by somebody who works in several; pin it to a workspace or an organization and it reaches that and nothing else. An administrator of an organization can **cut their own organization out** of somebody's account-wide key without destroying a credential that is not theirs, and the key's owner is told which ones. **A key can replace itself** — one call with its own token returns a successor with the same reach or less, and the old secret keeps working for a bounded window before it stops. Nobody has to be signed in, which is the point; the cost is that a leaked key can rotate itself too, so every generation is listed and audited and [SECURITY.md](docs/SECURITY.md) says what to do about a key you did not create. |
-| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. **Thirty-nine actions are recorded**, which is every administrative change this product makes: the root redirect and bot policy of a domain, the invitation lifecycle, member and workspace changes, the organization lifecycle, refused destinations and the disputes that follow them, domain registration and verification, API key rotation, automation firings, and the instance-level acts that belong to no tenant. The count is `audit.AllActions`, held to the declared set by `TestAllActionsIsExhaustive`, so it cannot drift without a failing build — and it has drifted twice from this page anyway, which is why it is now stated as a number this sentence had to be recounted against: it said *seven categories* until 0.2.0 and *thirty-two* until 0.3.0, while Phase 3 added the account lifecycle's own. A bot being refused is not among them — that is traffic, and it is counted rather than logged. An organization's records outlive the organization, so a teardown does not erase its own trail. |
+| **Audit log** | Events recorded with the actor snapshotted at write time and a network prefix rather than an address, readable at `GET /api/v1/audit` behind a non-delegable permission. Retention is its own setting and defaults to keeping everything, so growth is reported rather than trimmed silently. **Forty-six actions are recorded**, which is every administrative change this product makes: the root redirect and bot policy of a domain, the invitation lifecycle, member and workspace changes, the organization lifecycle, refused destinations and the disputes that follow them, domain registration and verification, API key rotation, automation firings, the add-on lifecycle and the external identities an add-on connects, and the instance-level acts that belong to no tenant. The count is `audit.AllActions`, and **it is recounted at each release rather than held to the list continuously** — this page describes what a tag ships, so a number tied to the vocabulary would drag a README edit into every milestone that adds an action. What holds it is the fold: the release recounts, `internal/audit` pins the sentence's exact spelling so it cannot be edited without the build saying so, and `CHANGELOG.md`'s unreleased section is what carries the difference in between. It said *seven categories* until 0.2.0, *thirty-two* until 0.3.0 and *thirty-nine* until 0.4.0, which is the same fold happening each time. A bot being refused is not among them — that is traffic, and it is counted rather than logged. An organization's records outlive the organization, so a teardown does not erase its own trail. |
 | **Notifications** | An in-app inbox for things the instance wanted you to know about — the audit log outgrowing its threshold is the first — with mark-read. A bell in the header carries the count and previews the newest few, so answering "what is it" costs nothing; the full page is one click on. Emailed as well when a mailer is configured. |
 | **Mail** | Optional SMTP, off unless `SMTP_HOST` is set. Queued in an outbox and delivered by the scheduler, so a message survives a restart; plain text only, and every consumer works unchanged with no mailer at all. |
 | **Invitations** | Bring somebody into your organization with a single-use, revocable, expiring link. It is tied to the address you send it to, so forwarding it cannot add a stranger, and the role it carries is capped at your own — at `editor` when an API key issued it, because redeeming one produces an account that outlives the key. Emailed when a mailer is configured, copyable either way. While sign-ups are `closed` an invitation may only add an account that already exists. |
@@ -122,6 +131,7 @@ answers, not the same ones with a domain name.
 | **Dashboard** | Server-rendered HTML with htmx, and **it needs JavaScript** — htmx swaps a fragment instead of reloading the page for search, filtering and several of the writes, and there is no `<noscript>` fallback: the stance is written down rather than defended in markup nobody reads. Individual pages do differ — the folder tree above is plain forms throughout, and so are the link filters — but that is what those controls happen to be and not a promise the product keeps, so read it as *this page works* rather than *the dashboard degrades*. **The redirect path needs none**, which is the part a visitor touches. *(This sentence read "works without JavaScript" until now. It stopped being true when the requirement was settled deliberately, before 0.3.0 shipped, and the row was not recounted against that.)* No build step at runtime — the header's menus are popovers, so the browser opens them, closes them on Escape and needs no script to do it. Needs a browser from mid-2023 (Chrome 114, Safari 17, Firefox 125) for that. Light and dark, following the operating system unless overridden per browser — the server renders the theme into the page, so there is no flash of the wrong one. **Rebuilt in 0.3.0 from a walkthrough of somebody using it**: two top-level destinations rather than nine, the shell naming the workspace and organization you are in at every membership count, a link page that opens on the link rather than on its analytics, and the buried high-traffic controls — the QR code, the dispute reviewers — moved onto routes of their own that render as ordinary pages and open as popups from where you were standing. **No page scrolls sideways at 360px**, held by a test that renders every one of them. |
 | **API** | REST with RFC 9457 problem responses, an OpenAPI 3 document, and Swagger UI at `/docs`. |
 | **Operations** | `/healthz`, `/readyz`, Prometheus metrics on a separate unpublished port, structured JSON logs, graceful shutdown that flushes buffered clicks. |
+| **Add-ons** | **A WebAssembly module the operator installs, and the whole of what it may reach is a published contract.** An add-on declares what it needs in a manifest — a closed nine-token vocabulary — and the host grants that and nothing else: there is no second surface, no socket, no file, no shared table, no environment. What it can do with a grant is serve pages under its own prefix, own a Postgres schema the host migrates for it, watch redirects out of band or run inside one, reach outward to an origin an operator named, and assert that somebody authenticated so this product mints the session. **It is never handed a client's address or a session token**, which is a property of the enumerated surface rather than a promise about somebody else's code. Install from a file or a URL with its digest, remove it without a restart, configure it from the Add-on manager, and read what it costs on the same page — invocations, refusals, latency, the disk its schema holds. A first-party worked example signs people in over OIDC. Read [docs/addon-abi.md](docs/addon-abi.md) before writing one and [docs/SECURITY.md](docs/SECURITY.md) before installing one you did not write: an add-on is code you are choosing to run, and the boundary bounds what the host hands it rather than what its author intended. |
 | **CLI** | `lctl` for config validation, migrations, partitions and API keys — including the first key on a headless box. |
 
 ## Documentation
@@ -200,6 +210,37 @@ never to what address, which stays behind `webhooks.read`. See
 
 Known limitations and deferred work, so nobody discovers them in production:
 
+- **An add-on is code you chose to run, and installing one is the trust
+  decision.** The boundary bounds what the host *hands over* — no client address,
+  no session token, no second surface — and it does not bound what a module can
+  learn by other means: one serving its own routes can send a visitor to an
+  origin its author controls and observe them there. `docs/SECURITY.md` says
+  which half of that this product enforces.
+- **Removing an add-on does not remove what it was given.** Its Postgres schema,
+  the accounts it could sign in, its saved settings and its consent to draw a
+  link on the sign-in page are all keyed on its **name**, so whatever is
+  installed under that name next inherits them. The Add-on manager counts each of
+  those before a purge and can sever the account links; the rest is an operator's
+  act.
+- **Erasure and retention do not reach an add-on's tables.** Deleting an account
+  removes the link that let an add-on sign it in, and an add-on's own schema is
+  outside both the erasure sweep and the retention job. The ABI has no way to
+  tell an add-on that a subject was erased, so cooperative erasure is not merely
+  unbuilt — it is not expressible on the published contract. This matters to
+  anyone with a legal erasure obligation.
+- **A pooled add-on instance resets its memory and not its WebAssembly globals.**
+  Instances are reused between invocations, and the reset restores linear memory;
+  a module that kept state in a mutable global or a funcref table would carry it
+  from one visitor to the next. No add-on the SDK can build does that — Go gives
+  a program no way to place its own state there — and an operator installing
+  arbitrary bytes from a URL is who this is written for. The remedies each cost
+  something the product is not paying yet, which is why it is disclosed rather
+  than closed.
+- **An add-on that ships migration files can only be installed by hand.** The
+  upload and the URL install both carry a module and a manifest and nothing else,
+  so an add-on whose schema changes belong to the host has nowhere to put them —
+  and every storage add-on therefore runs its own DDL from inside the guest,
+  which is the thing the host's migration runner exists to avoid.
 - **Rate limits are shared only while Redis is reachable.** The credential and
   API limits are enforced in Redis and hold across replicas; on any Redis error
   each replica falls back to its own bucket, so the limit then applies per

@@ -574,9 +574,9 @@ caveat with the data.
 
 ## Build status
 
-Phases 1, 2 and 3 are released: `v0.1.0` on 2026-07-31 (21 milestones),
+Phases 1, 2, 3 and 4 are released: `v0.1.0` on 2026-07-31 (21 milestones),
 `v0.2.0` on 2026-08-06 (33 milestones), `v0.3.0` tagged 2026-08-18 (23
-milestones). Status per milestone lives in
+milestones), `v0.4.0` tagged 2026-09-06 (18 milestones). Status per milestone lives in
 [phase-details/](docs/build-notes/phase-details/) and nowhere else: the live
 phase in its [README](docs/build-notes/phase-details/README.md), each released
 phase in its own `phase-N.md`.

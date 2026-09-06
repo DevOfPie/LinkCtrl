@@ -10,8 +10,9 @@ here restates another file.
 phase's rows move to their own file, so the resume path reads the milestones that
 can still be next rather than every milestone there has ever been: Phase 1 is in
 [phase-1.md](phase-1.md), Phase 2 in [phase-2.md](phase-2.md), Phase 3 in
-[phase-3.md](phase-3.md). The live table below is Phase 4's, added when it was
-planned on 2026-08-18.
+[phase-3.md](phase-3.md), Phase 4 in [phase-4.md](phase-4.md). **There is no live
+table right now**: Phase 4 closed on 2026-09-06 and the next phase has not been
+planned, which is the state the section below describes rather than an omission.
 
 [Plan.md](../../../Plan.md) holds the scope contract and the ordering table.
 This directory holds the definitions of done those rows point at.
@@ -29,45 +30,17 @@ looks like an ordering mistake. Reopening is what happens when a shipped
 milestone's claim turns out false — the rule, and why it beats a successor
 milestone, is in [workflow.md](../workflow.md).
 
-## Phase 4
+## No phase is live
 
-Planned 2026-08-18 — fourteen milestones, M59–M70; the ordering table and its
-dependency edges are [Plan.md](../../../Plan.md#phase-4-build-plan)'s. **Eighteen
-as built**, and the four additions are named rather than counted: [M66.5](m66.5.md)
-on 2026-08-23, after measuring what M66's inline class costs a visitor when
-nothing is pooled; [M68.5](m68.5.md) and [M68.6](m68.6.md) on 2026-08-25, when
-M69's validation found the foundation cannot make an outbound request at all
-([F334](../deferred-findings.md#closed)) and the owner corrected a constraint M67
-had shipped on nobody's decision. [M69.5](m69.5.md) on 2026-08-27, when
-building the OIDC add-on found that the flow it proves is reachable only by
-being handed a URL ([F345](../deferred-findings.md#closed)). All four are
-milestones the build turned out to need rather than optimistic planning, which
-is the case
-[planning.md](../planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
-2026-08-11 clarification allows. **Eighteen is past the planning target of
-fifteen and **at** the cap of eighteen, so there is no slack left**, which is the honest way to say it. Phase 3
-released as **0.3.0** the same day; its record is in [phase-3.md](phase-3.md).
+**Phase 4 closed on 2026-09-06, released as 0.4.0**, and its status table moved
+to [phase-4.md](phase-4.md) the way every closed phase's has. Until the next
+phase is planned this file carries the inherited rules below and no status table
+at all — which is the state `/work phase` should refuse to resume into, and
+[phase-loop.md](../phase-loop.md#1-validate)'s *next milestone* is the first row
+that is not `done` in a table that does not exist.
 
-| # | Milestone | Depends on | Status |
-| --- | --- | --- | --- |
-| [M59](m59.md) | Process debt: the gates that were not watching | — | done |
-| [M60](m60.md) | The host: a module loads, or is refused | M59 *(ordering)* | done |
-| [M61](m61.md) | The ABI: what an add-on may import, written down and versioned | M60 | done |
-| [M62](m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | done |
-| [M63](m63.md) | An add-on's tables: a schema of its own, migrated by the host | M62 | done |
-| [M64](m64.md) | An add-on reaches the page: routes, templates, config | M62 · M63 *(ordering)* | done |
-| [M64.9](m64.9.md) | Mid-phase adversarial review | M59–M64 | done |
-| [M65](m65.md) | The authentication hook: a session minted on an add-on's word | M61 · M62 · M64 | done |
-| [M66](m66.md) | Add-ons on the redirect path: two classes, a deadline, and a promise rescoped | M60 · M62 | done |
-| [M66.5](m66.5.md) | Instances are reused, so a visitor stops paying for a cold start | M66 · M60 *(ordering)* | done |
-| [M67](m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | done |
-| [M68](m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | done |
-| [M68.5](m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | done |
-| [M68.6](m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | done |
-| [M69](m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | done |
-| [M69.5](m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | done |
-| [M69.9](m69.9.md) | Pre-release adversarial review | everything below it | done |
-| [M70](m70.md) | Deferred findings, documentation pass, 0.4.0 | all | in progress |
+The released phases: [phase-1.md](phase-1.md), [phase-2.md](phase-2.md),
+[phase-3.md](phase-3.md), [phase-4.md](phase-4.md).
 
 **Phase 4 inherits all fourteen rules below, as written — owner-confirmed
 2026-08-18** at the plan's review, recorded in

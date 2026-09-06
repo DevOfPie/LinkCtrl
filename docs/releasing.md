@@ -11,11 +11,29 @@ Two contracts, deliberately separate:
 | The REST API | The path: `/api/v1` | A new path, `/api/v2`. Never a change to `v1`. |
 | The product | The release version | A new major version. |
 
-The product is pre-1.0 while account lifecycle and identity are incomplete —
-there is no SSO, OAuth, OIDC or SCIM, and each of those moves the sign-in surface
-and adds tables — so releases stay in the `0.x` range until that has settled.
-`0.x` says "the product surface may still move", not "unfinished". Everything
-documented as built is tested and exercised end to end, and the SLO is measured.
+The product is pre-1.0 **while the add-on contract is still moving**, and that is
+the whole of the gate from 0.4.0 on. `0.x` says "the product surface may still
+move", not "unfinished": everything documented as built is tested and exercised
+end to end, and the SLO is measured.
+
+**What changed at 0.4.0, and it is a narrowing rather than a slip.** This
+sentence said pre-1.0 while *account lifecycle and identity* were incomplete —
+no SSO, OAuth, OIDC or SCIM, each of which moves the sign-in surface and adds
+tables. Identity arrived, and it arrived as a **module**: an add-on asserts that
+somebody authenticated and the host mints the session, so the sign-in surface
+moved once, in this release, and the tables it added are the host's. Somebody
+tracking 1.0 for single sign-on gets it at 0.4.0 and gets it as an add-on, which
+the owner decided knowing that is not what they were watching for.
+
+So the gate is now the **add-on ABI**. 1.0 means a publisher can build against
+this contract and have it hold: the function set, the permission vocabulary, the
+records and the statuses stay as documented, and anything removed goes through
+the deprecation window [addon-abi.md](addon-abi.md) fixes at two minor releases
+and 90 days, whichever ends later. That window is a promise this project has
+made and has never had to keep — the first deprecation it announces will be the
+first exercise of the machinery that announces it — and 1.0 is where it stops
+being provisional. Until then a `0.x` bump may move the contract, with the
+changelog saying so.
 
 *(This read "pre-1.0 while Phase 2 is outstanding — shared workspaces, folders and
 custom domains will move the dashboard and add tables" until 0.3.0. All three

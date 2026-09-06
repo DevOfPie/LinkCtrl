@@ -48,8 +48,8 @@ Read before anything else happens, per CLAUDE.md.
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
 | `CLAUDE.md` | 1738 | 434 |
-| `docs/build-notes/workflow.md` | 20377 | 5094 |
-| **Total** | **22115** | **5528** |
+| `docs/build-notes/workflow.md` | 21594 | 5398 |
+| **Total** | **23332** | **5833** |
 
 ### `/work phase` — per resume, on top of the above
 
@@ -80,18 +80,18 @@ what makes the predicted column a ceiling rather than an estimate.
 
 | File | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| `docs/build-notes/decisions.md` | 2762500 | 690625 |
-| `docs/build-notes/deferred-findings.md` | 1029131 | 257282 |
+| `docs/build-notes/decisions.md` | 2770698 | 692674 |
+| `docs/build-notes/deferred-findings.md` | 1054618 | 263654 |
 | `docs/build-notes/development.md` | 7909 | 1977 |
 | `docs/build-notes/upcoming-decisions.md` | 10605 | 2651 |
-| **Total** | **3810145** | **952536** |
+| **Total** | **3843830** | **960957** |
 
 ### Floors
 
 | Trigger | Bytes | ≈tokens |
 | --- | ---: | ---: |
-| Any task | 22115 | 5528 |
-| `/work phase` resume | 68499 | 17124 |
+| Any task | 23332 | 5833 |
+| `/work phase` resume | 69716 | 17429 |
 
 Plus one `phase-details/mN.md` per milestone, which the split exists to
 keep small — the loop reads the one being built and no others.
@@ -115,10 +115,10 @@ singletons are rolled up in the last row instead.
 | File | Reads | Total bytes | ≈tokens | Mean/read | Size now | Mean ÷ size |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `docs/build-notes/phase-loop.md` | 15 | 332449 | 83112 | 22163 | 32276 | 0.69 |
-| `docs/build-notes/workflow.md` | 14 | 289838 | 72459 | 20702 | 20377 | 1.02 |
+| `docs/build-notes/workflow.md` | 14 | 289838 | 72459 | 20702 | 21594 | 0.96 |
 | `docs/build-notes/phase-details/README.md` | 10 | 102799 | 25699 | 10279 | 13786 | 0.75 |
-| `Plan.md` | 8 | 102080 | 25520 | 12760 | 101373 | 0.13 |
-| `docs/build-notes/deferred-findings.md` | 6 | 65889 | 16472 | 10981 | 1029131 | 0.01 |
+| `Plan.md` | 8 | 102080 | 25520 | 12760 | 101422 | 0.13 |
+| `docs/build-notes/deferred-findings.md` | 6 | 65889 | 16472 | 10981 | 1054618 | 0.01 |
 | `docs/build-notes/work-loop.md` | 4 | 46989 | 11747 | 11747 | 15073 | 0.78 |
 | `docs/build-notes/phase-details/m47.md` | 3 | 39693 | 9923 | 13231 | 14788 | 0.89 |
 | `.current-task.md` | 13 | 35363 | 8840 | 2720 | 9595 | 0.28 |
@@ -127,10 +127,10 @@ singletons are rolled up in the last row instead.
 | `docs/build-notes/planning.md` | 3 | 29755 | 7438 | 9918 | 14832 | 0.67 |
 | `docs/build-notes/phase-3-candidates.md` | 2 | 29224 | 7306 | 14612 | 30137 | 0.48 |
 | `internal/ui/static/js/qr-size.js` | 2 | 25882 | 6470 | 12941 | 15297 | 0.85 |
-| `docs/build-notes/decisions.md` | 10 | 25287 | 6321 | 2528 | 2762500 | 0.00 |
+| `docs/build-notes/decisions.md` | 10 | 25287 | 6321 | 2528 | 2770698 | 0.00 |
 | `docs/build-notes/phase-details/m52.md` | 3 | 23847 | 5961 | 7949 | 14910 | 0.53 |
 | `docs/build-notes/phase-details/m50.6.md` | 3 | 23552 | 5888 | 7850 | 21436 | 0.37 |
-| `docs/build-notes/phase-details/m50.8.md` | 4 | 21775 | 5443 | 5443 | 46021 | 0.12 |
+| `docs/build-notes/phase-details/m50.8.md` | 4 | 21775 | 5443 | 5443 | 46027 | 0.12 |
 | `docs/build-notes/workflow-changes.md` | 2 | 21538 | 5384 | 10769 | 39326 | 0.27 |
 | `docs/build-notes/phase-details/m58.md` | 5 | 17413 | 4353 | 3482 | 12058 | 0.29 |
 | `docs/build-notes/phase-details/m54.md` | 2 | 17384 | 4346 | 8692 | 9343 | 0.93 |

@@ -512,6 +512,7 @@ file. Append a row when you append an entry.
 | [M70's triage: the tiers, and the eleven answers](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers) | D416: Tiers A and B are both worked into the close and F315 joins them — 62 rows, against a recommendation of A now and B after the release, with the cost stated first. D417: an operator-configurable add-on migration timeout, five minutes by default. D418: role adoption accepted and documented. D419: a byte budget per add-on per minute on the log boundary. D420: `temp_file_limit` becomes a superuser step at install time, against the recommendation. D421: `template_render` deprecated, which is the deprecation machinery's first real exercise. D422: a vetoed redirect gets its own outcome and no prose in the UI. D423: the contrast warning fires on either metric. D424: the QR list sorts on the name that is drawn. D425: the QR shorthand stays API-only and seven view fields go. D426: the row overlay stays and the slug stays unselectable, on the owner's answer. D427: duplicate tooltip descriptions dropped and focusable hosts named, answered on a re-put question |
 | [M70's fix shapes: ten answers, and the picks taken without asking](#2026-09-04--m70s-fix-shapes-ten-answers-and-the-picks-taken-without-asking) | D428: the host records what it discovered separately from what it loaded, which is F281's fix at the source rather than at the page. D429: F315 is built in both halves, operator and person. D430: an htmx 4xx is answered by a shared `webError` limb rather than a global htmx config. D431: `sign_in_label` takes a positive rule, deliberately the shape D285 could not take for the log boundary. D432: `temp_file_limit` is 256 MB. D433: the log budget is 8 MiB per add-on per minute. D434: the SDK's wasm half is vetted under `GOOS=wasip1`, the CI half proposed. D435: the browser suite signs in once and shares the context. D436: the GeoIP sentence is reworded and the predicate untouched — the option not recommended. D437: the fetch hold is keyed to the invocation. Plus eleven picks taken without a prompt, each with what it followed |
 | [M70's documentation batch: what three append-only entries now get wrong](#2026-09-04--m70s-documentation-batch-what-three-append-only-entries-now-get-wrong) | D229's *an add-on cannot store what it is never handed* is a conclusion its own premise does not support — the surface bounds the host, not the module — and the sentence is corrected at five sites and here. D181 and D182's *at every level* went loose when D187 made the level a floor and `L` unreachable. And `LINKCTRL_ADDON_LOAD_TIMEOUT`, which `internal/config` reasoned about, has never existed |
+| [M70's documentation pass: the fold, the 1.0 gate, and a cost that did not move](#2026-09-06--m70s-documentation-pass-the-fold-the-10-gate-and-a-cost-that-did-not-move) | D438: the audit count is folded thirty-nine to forty-six and the *cannot drift without a failing build* clause is corrected rather than carried — it stopped being true at M65, which is when D313 removed the tie. D439: 1.0 now means the add-on contract is stable rather than that identity is built in; identity shipped as a module, so the old condition discharged itself. D440: the always-read contract grew 1217 bytes — one rule in workflow.md, whose realized read ratio is 0.96 — defended against the three test attempts and the one reverted fix that earned it. This entry claimed zero and was corrected in the same pass |
 
 ---
 
@@ -42308,3 +42309,74 @@ argued that the instantiation deadline could not be borrowed from
 real and is `addon.DefaultLoadTimeout`, a constant. Whether it should be an
 operator's is deliberately left open: adding a configuration surface is not a
 comment's to decide, and this correction does not.
+
+## 2026-09-06 — M70's documentation pass: the fold, the 1.0 gate, and a cost that did not move
+
+### D438 — the audit count is folded, and the clause beside it is corrected rather than carried
+
+D313 untied README's action count from `audit.AllActions` so that a mid-phase
+action could not force a mid-phase README edit, on the trade that the fold
+happens at the release. It happened here: **thirty-nine to forty-six**, and the
+entry in `internal/audit`'s `frozenUntilTheTag` went red the moment the
+vocabulary grew past the sentence, which is the self-announcing part of D313 and
+it worked.
+
+**The number was the smaller half.** The same sentence claimed the count *cannot
+drift without a failing build*, and that stopped being true at M65 — the tie is
+exactly what D313 removed, and the count then drifted on a green build twice. So
+the clause is corrected rather than restored: the sentence now says what actually
+holds it, which is that the release recounts, `internal/audit` pins the
+sentence's exact spelling so it cannot be edited silently, and `CHANGELOG.md`'s
+`[Unreleased]` carries the difference in between.
+
+Tying it back was considered and declined for D313's own reason: a README held to
+the vocabulary drags a README edit into every milestone that adds an action, and
+D104 exists to stop that. The mechanism is weaker than a tie and is now described
+as what it is rather than as what it was.
+
+### D439 — 1.0 means the add-on contract is stable, not that identity is built in
+
+`docs/releasing.md` said the product is pre-1.0 while account lifecycle and
+identity are incomplete — no SSO, OAuth, OIDC or SCIM. Identity arrived in this
+release and arrived as a **module**: an add-on asserts that somebody
+authenticated and the host mints the session. So the sentence's own condition is
+discharged, and the owner's answer — taken knowing that somebody tracking 1.0 for
+single sign-on gets it as an add-on rather than as a feature — is that the gate
+moves to the ABI.
+
+What 1.0 now obliges: the function set, the permission vocabulary, the records
+and the statuses hold as documented, and anything removed goes through the window
+`docs/addon-abi.md` fixes at two minor releases and 90 days, whichever ends
+later. **That window has never been exercised** — the first deprecation this ABI
+announces will be the first run of the machinery that announces it, which M70
+gave a test rather than leaving to the release that needs it (F272) — and 1.0 is
+where it stops being provisional.
+
+### D440 — the always-read contract grew 1217 bytes, and here is what they bought
+
+`make doc-cost`, regenerated at the close and read rather than filed. Any task
+**22115 → 23332** bytes; a `/work phase` resume **68499 → 69716**. One file moved
+and it is `workflow.md`, whose realized read ratio is **0.96** — the most
+expensive byte in the contract, because it is read nearly whole on every task.
+
+**This entry was written claiming zero and was wrong when it was written**,
+because the documentation pass then added the rule below to `workflow.md`. It is
+corrected here rather than left, which is the same discipline the pass applied to
+everybody else's sentences.
+
+What the 1217 bytes bought is one rule with two halves, and both are things this
+milestone paid for by not knowing them:
+
+- **Sabotage the fix, and check the test fails for the reason you meant.** Three
+  of M70's tests passed against the unfixed tree before one of them was right.
+- **A finding is a claim about the tree, and the tree settles it.** Three rows
+  were wrong about a fact, and F216 was not a defect at all — its fix was
+  reverted rather than kept.
+
+The trade is stated rather than assumed: 1217 bytes on the file every task reads,
+against a milestone that spent three test-writing attempts and one whole reverted
+fix on exactly what the rule now says. It is defended on those terms. Nothing
+else in the always-read set moved, and the other 29367 bytes of this phase's
+growth are **record** — `decisions.md` and `deferred-findings.md`, both charged
+by-row, neither one's longest row grown, which is what by-row charging was
+introduced to make visible.

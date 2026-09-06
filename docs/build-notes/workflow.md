@@ -189,6 +189,23 @@ restore. A test that has never failed has not been shown to test anything.
 Restore by **counter-edit**, never `git checkout` — checkout has twice destroyed
 uncommitted work in this repo.
 
+**Sabotage the fix, and check the test fails for the reason you meant.** M70 wrote
+three tests that passed against the *unfixed* tree before one of them was right:
+each asserted something true either way. The QR re-fit is the worked example — the
+view reports the size a code is **drawn** at, so comparing it against a floor
+compares a value with itself, and the defect is only reachable once the row is
+pinned to its own floor. A sabotage that produces a *build* failure has not run
+the assertion either, which is the second way to think you verified something.
+
+**A finding is a claim about the tree, and the tree is what settles it.** Three of
+M70's rows were wrong about a fact when they were read — a site count, whether any
+test asks git, where two sentences live — and one, F216, was not a defect at all:
+Tailwind v4 auto-detects sources across the whole tree, so the class it said
+reached the stylesheet by coincidence had never depended on the coincidence. Its
+fix was reverted rather than kept, because a redundant change carrying a comment
+that asserts a false mechanism is worse than no change. **Check the row's evidence
+before building against it, and close a refuted row with the measurement.**
+
 ### Before a phase PR is created
 
 1. Full validation:
