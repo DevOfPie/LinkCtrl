@@ -341,7 +341,14 @@ require "go vet ./..."              go vet ./...
 # script can wire: the release workflow's direct `go test ./...`, and the CI
 # `image` job (M60, F262). Building them a second time here would be a second
 # enumeration of the fixture set, free to disagree with the Makefile's.
-require "unit tests (race)"         go test -race -count=1 ./...
+# -timeout 30m, which is the Makefile's `test` target's, because Go's default is
+# ten minutes and the add-on package does not finish in it under `-race`: wazevo
+# compiles a WebAssembly module per fixture and the race detector multiplies what
+# that costs. Without this the pre-tag gate cannot pass a suite `make check`
+# passes, which is F261's shape — the gate diverging from the target it is
+# supposed to be the stricter form of — and it was found by this gate refusing
+# 0.4.0.
+require "unit tests (race)"         go test -race -count=1 -timeout 30m ./...
 require "OpenAPI matches the routes" go test -count=1 -run TestOpenAPI ./internal/httpx/
 if command -v golangci-lint >/dev/null 2>&1; then
   require "golangci-lint" golangci-lint run
@@ -394,7 +401,12 @@ elif grep -qx postgres <<<"$(docker compose ps --status running --services 2>/de
   #
   # Slower, and deliberately: this seeds a demo database. That cost is what the
   # divergence was buying, and it is not worth an unasked claim at a release.
-  require "integration tests (race)" go test -tags=integration -race -count=1 \
+  # -timeout 30m for the reason the unit step above carries it, and this is the
+  # step that actually needs it: the package list widened at M70 (F261) and the
+  # suite seeds a demo database inside it. Fixing only the unit step left this one
+  # failing on the very next run, which is why the comment is here as well as
+  # there rather than once.
+  require "integration tests (race)" go test -tags=integration -race -count=1 -timeout 30m \
     ./test/integration/ ./cmd/lctl/... ./cmd/linkctrl/...
 else
   printf '  skip  Postgres is not running in project %s (docker compose up -d)\n' "$COMPOSE_PROJECT_NAME"

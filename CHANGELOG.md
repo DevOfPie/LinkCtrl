@@ -32,8 +32,6 @@ migrations run at boot.
 
 ## [Unreleased]
 
-Nothing yet.
-
 ## [0.4.0] - 2026-09-06
 
 **Add-ons.** An operator can install a WebAssembly module that serves pages,
