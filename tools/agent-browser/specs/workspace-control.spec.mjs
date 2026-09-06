@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+
+import { credentials } from '../credentials.mjs';
 
 // M46.6's kept assertions: the rendered-appearance claims no template test can
 // see. The template suite proves the markup — a chevron-button invoker, a
@@ -16,8 +16,19 @@ import { fileURLToPath } from 'node:url';
 // this spec opens the panel, reads its rows, measures its right edge against
 // the control's, and drives a real switch there and back — the round trip is
 // what proves the invoker's face holds no text after a switch is triggered,
-// and it leaves the instance in the workspace it started in, so the other
-// signed-in specs see the data they expect.
+// and it leaves the instance in the workspace it started in.
+//
+// **That last promise needs its own session to be true, since M70.** The switch
+// is real: it changes which workspace the *session* acts in, and until F333 every
+// spec signed in for itself so no other spec could be inside the window between
+// "there" and "back". The suite now shares one signed-in state (D435), and with
+// parallel workers another spec reading /links during that window sees a
+// different workspace's links — which is not a flake in the other spec, it is
+// this one reaching into it.
+//
+// So this file takes a context of its own. It is the one spec in the suite that
+// mutates session state, and it is one extra sign-in against a ten-per-minute
+// budget — two for the whole run, where twenty was the defect.
 //
 // Unlike the clean-console spec this one needs a session: the workspace pair
 // renders only in the signed-in shell, and the switcher half only above one
@@ -29,30 +40,23 @@ import { fileURLToPath } from 'node:url';
 // 0), so a stale table costs one charge against the lockout counter and a red
 // run pointing at the file to fix.
 
-const instancesDoc = fileURLToPath(
-  new URL('../../../docs/dev-notes/instances.md', import.meta.url),
-);
-
-function credentials() {
-  const { LINKCTRL_UI_EMAIL: email, LINKCTRL_UI_PASSWORD: password } = process.env;
-  if (email && password) return { email, password };
-  const doc = readFileSync(instancesDoc, 'utf8');
-  const address = doc.match(/\|\s*Address\s*\|\s*`([^`]+)`\s*\|/);
-  const pass = doc.match(/\|\s*Password\s*\|\s*`([^`]+)`\s*\|/);
-  if (!address || !pass) {
-    throw new Error(
-      'no credentials: set LINKCTRL_UI_EMAIL and LINKCTRL_UI_PASSWORD, or keep ' +
-        'the Address/Password table in docs/dev-notes/instances.md current',
-    );
-  }
-  return { email: address[1], password: pass[1] };
-}
-
 // 360px is the bound that shaped the header (M46): the width the round-two
 // walkthrough overflowed, and where m46.6.md says the fused control is measured.
-test.use({ viewport: { width: 360, height: 780 } });
+//
+// An **empty** storage state is the isolation the header comment argues for, and
+// it has to be spelled this way: `undefined` does not override the config's value
+// — Playwright reads it as "not set here" and the shared session applies — so the
+// opt-out is a state with nothing in it. This context signs in for itself, and the
+// switch it drives reaches nothing else.
+test.use({
+  viewport: { width: 360, height: 780 },
+  storageState: { cookies: [], origins: [] },
+});
 
 test('the workspace pair is one control: chevron-only face, a panel of its own, inside 360px', async ({ page }) => {
+  // The one spec that signs in for itself, for the reason the header gives: it
+  // switches workspaces, and a switch inside a shared session reaches every other
+  // spec running beside it.
   const { email, password } = credentials();
   await page.goto('/login');
   await page.fill('#email', email);

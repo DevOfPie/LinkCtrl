@@ -1327,6 +1327,11 @@ var documentedNumberSites = []struct {
 			// M66.5: the host-side image, which is not inside the ceiling because the
 			// ceiling states guest memory, so the sizing row quotes the ceiling twice.
 			"the resident worst case is {ceiling} twice over",
+			// M70's re-measurement (F362). The concurrency it was driven at is stated
+			// as a multiple of this bound rather than as a bare number, so it is
+			// anchored here rather than exempted — a run that stopped saturating the
+			// slots would be measuring something else, and this is what says so.
+			"24 concurrent requests — half again the {n}-slot budget",
 		}},
 	{path: "docs/configuration.md",
 		sentences: []string{

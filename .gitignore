@@ -87,3 +87,8 @@ Thumbs.db
 # `make idp-up`. A private key in a public repository is a private key nobody may
 # reuse; this one is trusted by the suite that generated it and by nothing else.
 /test/integration/testdata/idp/tls/
+
+# The browser suite's shared sign-in, written by its globalSetup at every run
+# (F333). It holds a live session cookie for the test instance and is per-run
+# state, which is what /.playwright-cli/ above is ignored for.
+/tools/agent-browser/.auth/

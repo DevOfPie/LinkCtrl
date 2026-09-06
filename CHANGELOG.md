@@ -111,6 +111,14 @@ changed what a release is checked against.
   layer only, so a tag could be cut from a tree whose committed SDK did not match
   the ABI it is generated from.
 
+- **The add-on memory figures in `docs/deployment.md` are re-measured with the
+  instance pool in place.** A **185 MB peak against a 146 MB idle**, where the
+  figures taken before pooling were 406 MB and 103 MB. Idle is higher because warm
+  instances and their reset images are held between invocations; the peak is lower
+  because a saturated host stops building an instance per request. The 1 GB floor
+  and the 2 GB recommendation for a host serving add-on pages are unchanged, and
+  are now a comfortable margin rather than a close one.
+
 ### Fixed
 
 - **A refusal on a control that acts in place is now shown.** Deleting a routing

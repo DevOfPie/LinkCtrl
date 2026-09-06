@@ -1,6 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 // M68's browser claim: **the table does not shift when Remove is pressed.**
 //
@@ -35,25 +33,6 @@ import { fileURLToPath } from 'node:url';
 // Credentials follow every other signed-in spec: LINKCTRL_UI_EMAIL /
 // LINKCTRL_UI_PASSWORD, else the account table in docs/dev-notes/instances.md.
 
-const instancesDoc = fileURLToPath(
-  new URL('../../../docs/dev-notes/instances.md', import.meta.url),
-);
-
-function credentials() {
-  const { LINKCTRL_UI_EMAIL: email, LINKCTRL_UI_PASSWORD: password } = process.env;
-  if (email && password) return { email, password };
-  const doc = readFileSync(instancesDoc, 'utf8');
-  const address = doc.match(/\|\s*Address\s*\|\s*`([^`]+)`\s*\|/);
-  const pass = doc.match(/\|\s*Password\s*\|\s*`([^`]+)`\s*\|/);
-  if (!address || !pass) {
-    throw new Error(
-      'no credentials: set LINKCTRL_UI_EMAIL and LINKCTRL_UI_PASSWORD, or keep ' +
-        'the Address/Password table in docs/dev-notes/instances.md current',
-    );
-  }
-  return { email: address[1], password: pass[1] };
-}
-
 // The manager's nav entry, addressed by where it lives rather than by its words.
 //
 // It sits inside the identity menu, which is a `popover="auto"` element and is
@@ -65,17 +44,22 @@ function credentials() {
 // Cancel links to the same address.
 const navEntry = '#linkctrl-identity-menu a[href="/instance/addons"]';
 
+// The suite signs in once, in global-setup.mjs, and every context starts from
+// that storage state (F333, D435). This is what is left: a navigation that
+// proves the shared session reached this spec, so a state that failed to load
+// fails here rather than three assertions later on a page that redirected to
+// /login.
+//
+// It performs no sign-in. Twenty specs signing in as one address against a
+// ten-per-minute limiter is what made the tail of a full run fail at /login and
+// report it as a broken instance.
 async function signIn(page) {
-  const { email, password } = credentials();
-  await page.goto('/login');
-  await page.fill('#email', email);
-  await page.fill('#password', password);
-  await page.click('button[type="submit"]');
+  await page.goto('/dashboard');
   await page.waitForURL('**/dashboard', { timeout: 10000 }).catch(() => {
     throw new Error(
-      'sign-in did not reach /dashboard — if the test instance was rebuilt, ' +
-        'update the account table in docs/dev-notes/instances.md or export ' +
-        'LINKCTRL_UI_EMAIL / LINKCTRL_UI_PASSWORD',
+      'the shared signed-in state did not reach /dashboard — global-setup.mjs ' +
+        'writes it once per run, so this is that state failing to load rather ' +
+        'than a sign-in being refused',
     );
   });
 }

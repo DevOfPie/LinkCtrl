@@ -10,11 +10,17 @@ import { defineConfig } from '@playwright/test';
 // overrides it. Chromium only: the spec's claims are about what the product
 // serves, not about engine differences — cross-engine geometry is
 // tools/render-verify's job, on its own pin.
+// **One sign-in for the suite** (F333, D435). `globalSetup` performs it and
+// writes the storage state below; every context starts from that state, so the
+// twenty specs stop spending a ten-per-minute budget none of them could see. The
+// state file is per-run and gitignored — it holds a live session cookie.
 export default defineConfig({
   testDir: './specs',
   retries: 0,
+  globalSetup: './global-setup.mjs',
   use: {
     baseURL: process.env.LINKCTRL_BASE_URL ?? 'http://127.0.0.1:8081',
     browserName: 'chromium',
+    storageState: './.auth/state.json',
   },
 });
