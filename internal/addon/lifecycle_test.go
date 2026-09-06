@@ -693,11 +693,45 @@ func TestRepeatedInstallAndRemovalDoesNotGrowResidentMemory(t *testing.T) {
 	t.Logf("%d cycles a window: %d KiB held, %+d KiB across the first, %+d KiB "+
 		"across the second, bound %d KiB", window, start/1024, early/1024,
 		late/1024, bound/1024)
+
+	// **A third window, and only when the second one already looks bad** (F364).
+	//
+	// The claim this test makes is about a *trend* — cycling accumulates rather
+	// than warming up — and until M70 it decided that from one sample. On a loaded
+	// machine that sample is not good enough: CI failed here with a second window
+	// of 10,616 KiB against a first of −1,628, which is under half of one leaked
+	// cycle and is ordinary allocator jitter. The negative first window is what
+	// made it fatal, because `early/4` then falls to the floor and the floor is
+	// smaller than the noise. No production Go code had changed since the previous
+	// green run.
+	//
+	// A leak grows every window; jitter does not. So the second sample is not the
+	// verdict — a third window is taken, and the failure needs *both* of the later
+	// windows past the bound. What that costs is five more cycles on a red run and
+	// nothing at all on a green one; what it buys is that a false red in this gate
+	// takes two independent excursions rather than one.
+	//
+	// The sensitivity is unchanged: the sabotage this test exists for — removing
+	// `l.compiled.Close` — grows every window by about 25 MiB a cycle, so it is
+	// still caught, and the second and third windows are both far past any bound.
 	if late > bound {
-		t.Errorf("the second %d cycles grew the resident set by %d KiB against the "+
-			"first %d's %d KiB, past the %d KiB this allows; cycling is accumulating "+
-			"rather than warming up, so a compiled module or an instance is not being "+
-			"closed", window, late/1024, window, early/1024, bound/1024)
+		for range window {
+			cycle()
+		}
+		third := int64(heldBytes(t)) - int64(after)
+		t.Logf("the second window was past the bound, so a third was taken: "+
+			"%+d KiB across it", third/1024)
+		if third <= bound {
+			t.Logf("the third window is inside the bound, so the second was noise " +
+				"rather than accumulation — which is the reading this test now " +
+				"requires two windows to make")
+			return
+		}
+		t.Errorf("the second %d cycles grew the resident set by %d KiB and the third "+
+			"by %d KiB, both past the %d KiB this allows, against the first %d's %d "+
+			"KiB; cycling is accumulating rather than warming up, so a compiled "+
+			"module or an instance is not being closed",
+			window, late/1024, third/1024, bound/1024, window, early/1024)
 	}
 	if h.Len() != 0 {
 		t.Errorf("the host runs %d add-ons after the cycles", h.Len())
