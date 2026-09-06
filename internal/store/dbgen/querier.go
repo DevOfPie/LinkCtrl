@@ -777,6 +777,17 @@ type Querier interface {
 	// The counts come back so the caller can log what went, and so a test can assert
 	// the statement reached each table rather than assert it did not error.
 	DeleteAccountDependents(ctx context.Context, accountID uuid.UUID) (DeleteAccountDependentsRow, error)
+	// Sever one link, returning what was severed so the caller can record it.
+	//
+	// **The user id is in the predicate and is not optional**, which is what makes
+	// one statement serve both surfaces without a second one that could disagree
+	// about ownership: a person passes their own, and the operator's path resolves
+	// the row's owner first and passes that. An id alone would let a mistyped
+	// identifier remove somebody else's credential.
+	//
+	// Returning rather than :exec, because what is deleted is what the audit record
+	// has to name and reading it back afterwards is impossible.
+	DeleteAddonIdentityLink(ctx context.Context, arg DeleteAddonIdentityLinkParams) (DeleteAddonIdentityLinkRow, error)
 	// Clear one declared setting, so the add-on falls back to its manifest default.
 	//
 	// Emptying a field in the manager means *unset*, not *the empty string*: the
@@ -1619,6 +1630,28 @@ type Querier interface {
 	// question they both ask is the same one — whose key is this — and an
 	// account-wide key has no organization to filter on in the first place.
 	ListAPIKeysForUser(ctx context.Context, userID uuid.UUID) ([]ListAPIKeysForUserRow, error)
+	// Every account one add-on has connected, newest first, with the person named.
+	//
+	// The operator's half of the same question, and it carries the email because the
+	// operator is deciding about *accounts* — an add-on's row means nothing to them
+	// without knowing whose it is. The person's own list above deliberately carries
+	// no such column: it is already their account.
+	ListAddonIdentityLinksForAddon(ctx context.Context, addon string) ([]ListAddonIdentityLinksForAddonRow, error)
+	// Every provider one account has connected, newest first.
+	//
+	// **M70's, and it is what F315 was waiting for.** M65 wrote this table, the flow
+	// that fills it and the refusals that read it, and deliberately shipped no way to
+	// see or sever a row — so somebody who connected a provider was connected to it
+	// for the life of the account, and deleting the whole account was the only thing
+	// that reliably removed one. A link admits somebody with no password and no
+	// second factor of this product's, which is why account deletion already takes
+	// these rows; the missing half was undoing one on purpose.
+	//
+	// No subject column. The subject is the provider's identifier for a person and
+	// nothing on either surface needs it: what a reader chooses between is *which
+	// add-on, which issuer, and when it was last used*, and putting an opaque
+	// external id on a page invites somebody to treat it as one of ours.
+	ListAddonIdentityLinksForUser(ctx context.Context, userID uuid.UUID) ([]ListAddonIdentityLinksForUserRow, error)
 	//
 	// Newest first, keyed on (occurred_at, id) so the cursor is a position rather
 	// than an offset: an event written while a reader is paginating shifts every

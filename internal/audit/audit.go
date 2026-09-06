@@ -416,6 +416,34 @@ const (
 	ActionAddonDataPurged    = "addon.data_purged"
 )
 
+// Connecting and disconnecting an external identity (M70, F320 and F315).
+//
+// **The asymmetry these close.** `addon_identity_links` writes a standing
+// credential: a row there signs somebody into an account with no password and no
+// second factor of this product's, for as long as it exists. Every other
+// credential on an account is audited — `mfa.enabled`, `mfa.disabled`,
+// `mfa.recovery_codes_regenerated`, `apikey.rotated`, `apikey.revoked` — and this
+// one was not, so an operator reading the log of a compromised account could see
+// the sessions an identity minted (`session.minted_by_addon`) and could not see
+// **when the identity was connected**, which is the act that made those sessions
+// possible.
+//
+// Two actions rather than one with a direction in the metadata, for the reason
+// the install/remove pair above gives: they are two questions, and the second is
+// the one asked after an incident.
+//
+// **Tenanted, unlike the four add-on lifecycle actions.** Those are about the
+// box; these are about one person's account, which belongs to an organization,
+// and the account-lifecycle actions beside them are filed the same way.
+//
+// Landing both here rather than one now and one later is D313's own arithmetic:
+// the README count is folded at this release, and adding a second action in a
+// later phase would be a second fold.
+const (
+	ActionAddonIdentityLinked   = "addon.identity_linked"
+	ActionAddonIdentityUnlinked = "addon.identity_unlinked"
+)
+
 // Event is one thing that happened.
 //
 // The actor is not a field: it is taken from the *auth.Identity passed to
@@ -775,6 +803,39 @@ func (s *Service) RecordAddonSessionMint(
 	})
 }
 
+// RecordAddonIdentityLink writes the connect and disconnect records (M70, F320).
+//
+// Filed against the account the link is on rather than against the actor, which
+// are different rows whenever an operator severs somebody else's credential —
+// and the account is what a reader is searching by.
+func (s *Service) RecordAddonIdentityLink(
+	ctx context.Context, actor *auth.Identity, ev auth.AddonIdentityLink,
+) error {
+	action := ActionAddonIdentityUnlinked
+	if ev.Linked {
+		action = ActionAddonIdentityLinked
+	}
+	var target *uuid.UUID
+	if ev.UserID != uuid.Nil {
+		id := ev.UserID
+		target = &id
+	}
+	return s.Record(ctx, actor, Event{
+		Action:     action,
+		TargetType: "user",
+		TargetID:   target,
+		Metadata: map[string]any{
+			"addon":  ev.Addon,
+			"issuer": ev.Issuer,
+			// Who reached it, not who they are — the actor columns already carry
+			// that. What this answers is *through which surface*, which is the
+			// difference between somebody removing their own credential and an
+			// operator removing theirs.
+			"by_operator": ev.ByOperator,
+		},
+	})
+}
+
 // mfaActions maps the seam's vocabulary onto this package's.
 //
 // A map rather than a switch with a default, so a kind added on the other side of
@@ -1088,5 +1149,7 @@ func AllActions() []string {
 		ActionAddonRemoved,
 		ActionAddonSettingsSaved,
 		ActionAddonDataPurged,
+		ActionAddonIdentityLinked,
+		ActionAddonIdentityUnlinked,
 	}
 }

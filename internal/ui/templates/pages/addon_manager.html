@@ -224,6 +224,44 @@
 
 {{/* ---- data and removal -------------------------------------------------- */}}
 
+{{- /* The accounts this add-on can sign in (M70, F315).
+
+       **Drawn only when there is one**, like every optional panel here: an
+       add-on that signs nobody in has no section rather than an empty heading.
+
+       The email is on this list and is deliberately not on the person's own copy
+       of it: the question an operator answers here is *whose account is this*,
+       which is what they need when a provider is compromised. What is not here is
+       the subject — the provider's identifier for a person — for the reason the
+       account page does not carry it either.
+
+       Removing a row here is not the same act as somebody removing their own, and
+       the record says which. */}}
+{{if .Identities}}
+<section class="mt-6 rounded-lg border border-line bg-raised p-6" id="identities">
+  <h2 class="text-sm font-medium text-ink">Accounts this add-on can sign in</h2>
+  <p class="mt-1 text-sm text-muted">Each of these lets this add-on sign that account in without a password or a second factor. Removing the add-on leaves them: they are keyed on its name, and whatever is installed under that name next inherits them.</p>
+  <ul class="mt-4 divide-y divide-line">
+    {{range .Identities}}
+    <li class="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div class="min-w-0">
+        <p class="truncate text-sm font-medium text-ink">{{.Email}}</p>
+        <p class="text-xs text-muted">
+          {{.Issuer}} &middot; connected {{date .CreatedAt}}
+          {{- if .LastUsedAt}} &middot; last used {{date .LastUsedAt}}
+          {{- else}} &middot; never used
+          {{- end}}
+        </p>
+      </div>
+      <form method="post" action="/instance/addons/{{$.Row.Name}}/identities/{{.ID}}/disconnect">
+        <button type="submit" class="shrink-0 cursor-pointer rounded-md border border-danger-line px-3 py-2 text-sm font-medium text-danger-ink hover:bg-danger-soft">Disconnect</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
 <section class="rounded-lg border border-line bg-raised p-6">
   <h2 class="text-sm font-medium text-ink">Data</h2>
   {{if .Row.Schema}}

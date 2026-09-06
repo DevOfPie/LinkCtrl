@@ -191,6 +191,42 @@
 </div>
 {{end}}
 
+{{- /* Connected identity providers (M70, F315).
+
+       **Drawn only when there is one.** An instance running no authentication
+       add-on has nobody with a link, and a heading explaining a capability that
+       is absent is the prose four reports on the QR tab asked this product to
+       stop writing.
+
+       What a row carries is what somebody chooses between: which add-on, which
+       provider, and when it last signed them in. Not the subject — that is the
+       provider's identifier for a person, and putting an opaque external id on a
+       page invites a reader to treat it as one of ours. */}}
+{{if .ConnectedIdentities}}
+<div id="identities" class="mt-6 max-w-2xl rounded-lg border border-line bg-raised p-6">
+  <h2 class="mb-1 text-sm font-medium text-ink">Connected sign-in providers</h2>
+  <p class="mb-4 text-sm text-muted">Each of these can sign you in without your password or your second factor. Disconnecting one does not sign out sessions it already started.</p>
+  <ul class="divide-y divide-line">
+    {{range .ConnectedIdentities}}
+    <li class="flex flex-wrap items-center justify-between gap-3 py-3">
+      <div class="min-w-0">
+        <p class="truncate text-sm font-medium text-ink">{{.Issuer}}</p>
+        <p class="text-xs text-muted">
+          via {{.Addon}} &middot; connected {{date .CreatedAt}}
+          {{- if .LastUsedAt}} &middot; last used {{date .LastUsedAt}}
+          {{- else}} &middot; never used
+          {{- end}}
+        </p>
+      </div>
+      <form method="post" action="/account/identities/{{.ID}}/disconnect">
+        <button type="submit" class="shrink-0 rounded-md border border-line-strong px-3 py-2 text-sm font-medium text-danger-ink hover:bg-sunken">Disconnect</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+
 {{if .ShowDelete}}
 <div class="mt-6 max-w-2xl rounded-lg border border-danger-line bg-raised p-6">
   <h2 class="mb-1 text-sm font-medium text-danger-ink">Delete this account</h2>

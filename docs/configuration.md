@@ -1304,13 +1304,27 @@ identity nobody has connected signs nobody in. The mapping from a provider's
 subject to an account on this instance is written only while the person it belongs
 to is signed in, in their own browser, and never on an add-on's say-so; there is
 no matching on the email address an assertion carries, which is the classic
-account-takeover shape and is absent by design. There is no screen for reviewing
-or removing a connection — the Add-on manager administers *add-ons* rather than the
-identities they vouch for — so today the table is `addon_identity_links` and
-removal is a `DELETE`. What the manager does say about them is what survives a
-purge: the confirmation counts the mappings a `DROP SCHEMA` leaves standing,
-because they are keyed on the add-on's **name** and whatever is installed under it
-next inherits them.
+account-takeover shape and is absent by design.
+
+**Both sides can see and sever a connection**, which they could not before 0.4.0
+— until then the table was `addon_identity_links` and removal was a `DELETE` by
+hand. A person sees what is connected to their account on **Account**, and can
+disconnect any of it; an operator sees every account one add-on can sign in on
+that add-on's page in the **Add-on manager**, and can sever any of them. Both are
+audited and the records are distinguishable, because *I removed my own* and
+*somebody removed mine* are different events. The API carries the same three
+operations: `GET /account/identities`, `DELETE /account/identities/{id}` and
+`DELETE /addons/{name}/identities/{id}`.
+
+**Disconnecting is not signing out.** Sessions a connection already started stay
+valid until they expire or are signed out; what a disconnection removes is the
+standing way back in. Ending the account removes the connections either way, and
+always has.
+
+What the manager also says about these rows is what survives a purge: the
+confirmation counts the mappings a `DROP SCHEMA` leaves standing, because they are
+keyed on the add-on's **name** and whatever is installed under it next inherits
+them. Severing them is the act that stops that.
 
 **A provider that offers only `response_mode=form_post` cannot be used.** An
 add-on's callback has to arrive as a GET redirect carrying `code` in the query,

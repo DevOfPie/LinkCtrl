@@ -239,6 +239,33 @@ var httpSurfaceMentioningAddOns = []string{
 	"internal/ui/templates/pages/login.html",
 	"internal/ui/login_test.go",
 	"internal/ui/testdata/login_stock.html",
+	// Connected sign-in providers (M70, F315), and this is the **fifth**
+	// deliberate change — the one that makes a sentence three entries above
+	// false, which is why it is written here rather than added to the slice
+	// quietly.
+	//
+	// That sentence said nothing in the link tree, the analytics reader, **the
+	// account page** or the workspace surfaces knows add-ons exist. The account
+	// page now does, and the reason is not convenience: an `addon_identity_links`
+	// row signs somebody into their account with no password and no second factor
+	// of this product's, and until this release it could be created and never
+	// undone. The owner's answer (D429) was that a credential of that weight has
+	// to be revocable by the person whose account it opens, and the only surface
+	// that person visits is theirs.
+	//
+	// **What the bound still holds.** The link tree, the analytics reader and the
+	// workspace surfaces are unchanged. What the account page knows is one list
+	// and one form; it resolves nothing about add-ons itself and reaches the
+	// add-on world through `auth.ConnectedIdentities`, which returns a name and an
+	// issuer as strings. The operator's half stays inside the manager files
+	// already listed above.
+	//
+	// The remaining exclusion, stated so the next reader has one rather than a
+	// deleted sentence: **nothing in the link tree, the analytics reader or the
+	// workspace surfaces knows add-ons exist.**
+	"internal/httpx/api_identities.go",
+	"internal/httpx/web_keys.go",
+	"internal/ui/templates/pages/account.html",
 }
 
 // The HTTP surface knows about add-ons in the files M64 gave it and in no
@@ -342,6 +369,12 @@ func TestOnlyTheNamedHTTPFilesMentionAddOns(t *testing.T) {
 		if slices.Contains([]string{
 			"/addons", "/addons/{name}", "/addons/{name}/settings",
 			"/addons/orphaned-data", "/addons/orphaned-data/{name}",
+			// M70's, and the same kind as the five above rather than a new one:
+			// answered by this product's code, about an add-on, under the same
+			// non-delegable scope. What it severs is a row in a table this product
+			// owns — nothing here is served *from* a module, which is the line this
+			// list exists to keep visible.
+			"/addons/{name}/identities/{id}",
 		}, path) {
 			continue
 		}

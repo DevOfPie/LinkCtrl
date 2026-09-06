@@ -14,6 +14,8 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/observability"
+
+	"github.com/google/uuid"
 )
 
 // The Add-on manager (M68).
@@ -204,6 +206,16 @@ type addonDetailPageData struct {
 	// FetchOutcomes is the breakdown, most frequent first, each with the sentence
 	// that says what an operator should do about it.
 	FetchOutcomes []addonFetchOutcomeRow
+	// Identities is every account this add-on has connected (M70, F315), and it
+	// is drawn only when there is one — an add-on that signs nobody in has no
+	// section rather than an empty heading.
+	//
+	// **The operator's list carries the email and the person's own does not.** The
+	// question here is *whose account is this*, which is the one an operator
+	// answers when a provider is compromised; on the account page it is already
+	// theirs.
+	Identities []auth.ConnectedIdentity
+
 	// FieldErrors puts a refusal beside the input that earned it.
 	FieldErrors map[string]string
 	Notice      string
@@ -441,6 +453,13 @@ func (h *Web) loadAddonDetail(w http.ResponseWriter, r *http.Request) (addonDeta
 		data.FetchOutcomes = append(data.FetchOutcomes, addonFetchOutcomeRow{
 			Outcome: o.Outcome, Count: o.Count, Means: fetchOutcomeMeaning[o.Outcome],
 		})
+	}
+	if h.Auth != nil {
+		// A failed read draws no section, on the trade every optional panel in this
+		// product makes: a list is not worth replacing the page over.
+		if links, err := h.Auth.IdentitiesForAddon(r.Context(), m.Name); err == nil {
+			data.Identities = links
+		}
 	}
 	return data, true
 }
@@ -820,6 +839,9 @@ func addonNotice(q url.Values) (notice, failure string) {
 			return "", addonPartialRemoval(n, p) + " " + addonFailureMessage(q.Get("failed"))
 		}
 		return "", addonFailureMessage(q.Get("failed"))
+	case q.Get("disconnected") == "1":
+		return "That account's link to this add-on is gone. It can no longer sign " +
+			"them in. Sessions it already started stay signed in until they expire.", ""
 	case q.Get("nothing") == "1":
 		return "", "Nothing was selected, so nothing was removed. Tick the add-ons to remove."
 	case q.Get("installed") != "":
@@ -989,4 +1011,39 @@ func dedupe(in []string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// AddonIdentityDisconnect severs one account's link to this add-on, from the
+// manager.
+//
+// **F315's operator half**, and the reason it is a separate route from the
+// account page's: it acts on somebody else's credential, it costs the instance's
+// non-delegable `addons.manage` rather than the account's own session, and the
+// record it writes says `by_operator` — which is the first question the person
+// asks when they find they can no longer sign in.
+//
+// The owner is resolved from the row rather than taken from the request, so a
+// mistyped id is a 404 rather than a removal on the wrong account.
+func (h *Web) AddonIdentityDisconnect(w http.ResponseWriter, r *http.Request) {
+	if h.Auth == nil {
+		h.webError(w, r, domain.ErrNotFound)
+		return
+	}
+	actor := IdentityFrom(r.Context())
+	if !actor.Can(auth.PermAddonsManage) {
+		h.webError(w, r, fmt.Errorf("%w: disconnecting an identity requires %s",
+			domain.ErrForbidden, auth.PermAddonsManage))
+		return
+	}
+	name := r.PathValue("name")
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.webError(w, r, domain.ErrNotFound)
+		return
+	}
+	if err := h.Auth.DisconnectIdentityFor(r.Context(), actor, name, id); err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	seeOther(w, r, AddonManagerPath+"/"+url.PathEscape(name)+"?disconnected=1#identities")
 }

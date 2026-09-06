@@ -574,6 +574,48 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /addons/{name}/identities/{id}:
+    delete:
+      tags: [addons]
+      operationId: disconnectAddonIdentity
+      summary: Sever one account's link to this add-on
+      description: |
+        The operator's half of the same capability the account page offers
+        (`DELETE /account/identities/{id}`), and it is a separate operation
+        because it acts on **somebody else's credential**: it costs the
+        instance's non-delegable `addons.manage`, and the audit record it writes
+        says the removal came from an operator rather than from the account.
+        That distinction is the first question the person asks when they find
+        they can no longer sign in this way.
+
+        The account is resolved from the link itself rather than taken from the
+        request, so an identifier that does not belong to this add-on is a `404`
+        rather than a removal somewhere else.
+
+        **Removing the add-on does not do this.** These rows are keyed on the
+        add-on's name and survive a removal, so whatever is installed under that
+        name next inherits them — which is why this exists as an act of its own.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: >-
+            Severed. That account can no longer be signed in by this add-on.
+            Sessions it already started remain until they expire.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /auth/setup:
     post:
       tags: [auth]
@@ -1262,6 +1304,77 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/RateLimited"
+
+  /account/identities:
+    get:
+      tags: [auth]
+      operationId: listConnectedIdentities
+      summary: The sign-in providers connected to the authenticated account
+      description: |
+        Each row here is a **standing credential**: it signs this account in
+        with no password and no second factor of this product's, for as long as
+        it exists. That is why ending the account removes them, and why this
+        endpoint and its sibling below exist at all — until 0.4.0 a connection
+        could be created and never undone, and deleting the whole account was
+        the only thing that reliably severed one.
+
+        **The provider's identifier for the person is not returned.** What a
+        caller chooses between is which add-on, which provider, and when it was
+        last used; an opaque external id on a surface of ours invites a caller
+        to treat it as one of ours.
+
+        `last_used_at` is null for a connection that has never signed anybody
+        in. Not paginated: a person's connections are a handful of rows.
+      responses:
+        "200":
+          description: The connected providers, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConnectedIdentity"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /account/identities/{id}:
+    delete:
+      tags: [auth]
+      operationId: disconnectIdentity
+      summary: Disconnect one sign-in provider from the authenticated account
+      description: |
+        Acts on the **calling account and no other**: the identifier is matched
+        against this account's own connections, so one belonging to somebody
+        else is a `404` rather than a removal. An operator severing somebody
+        else's uses `DELETE /addons/{name}/identities/{id}`, which costs a
+        different permission and is recorded differently.
+
+        Requires an interactive session, for the reason deleting the account
+        does: the subject is the person rather than the credential.
+
+        **This is not a sign-out.** Sessions the connection already started
+        stay valid until they expire or the account signs them out — a separate
+        act with its own record. What this removes is the standing way back in.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Disconnected. The provider can no longer sign this account in.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /me:
     get:
@@ -5233,6 +5346,45 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    ConnectedIdentity:
+      type: object
+      required: [id, addon, issuer, created_at, last_used_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: This connection, for the operation that severs it.
+        addon:
+          type: string
+          description: >-
+            The add-on that owns the connection, by manifest name. These rows are
+            keyed on that name and survive the add-on's removal, so whatever is
+            installed under it next inherits them.
+        issuer:
+          type: string
+          description: >-
+            The provider as it named itself. Not an identifier of a person, and
+            not guaranteed unique across add-ons.
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            When this connection last signed the account in, or null if it never
+            has. The question an operator asks about a credential they are
+            considering removing.
+        email:
+          type: string
+          description: >-
+            Whose account this is. Present only on an add-on's listing, where the
+            reader is deciding about accounts that are not their own; absent from
+            the account's own list, where it would always be the caller's.
+        name:
+          type: string
+          description: The account holder's display name, present under the same rule as `email`.
     MFAStatus:
       type: object
       required: [available, enabled, recovery_codes_remaining]

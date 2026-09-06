@@ -64,6 +64,38 @@ migrations run at boot.
   when it loads, rather than once per request.** The line is worth having and was
   reachable at whatever rate a module chose to call.
 
+### Added
+
+- **You can see and disconnect the sign-in providers connected to your account.**
+  Each is a standing credential: it signs you in with no password and no second
+  factor of this product's. Until now one could be created and never undone, and
+  deleting the whole account was the only thing that reliably removed one.
+
+  They are on **Account**, with which add-on vouched, which provider, and when it
+  last signed you in. Disconnecting is **not** signing out — sessions it already
+  started stay until they expire or you sign them out.
+
+- **An operator can see and sever every account one add-on is able to sign in**,
+  on that add-on's page in the Add-on manager. This is the answer to a provider
+  being compromised, which previously had none short of SQL.
+
+  These rows survive removing the add-on, because they are keyed on its name and
+  whatever is installed under that name next inherits them — so severing them is
+  its own act rather than a side effect of uninstalling.
+
+- **Connecting and disconnecting are recorded in the audit log**, as
+  `addon.identity_linked` and `addon.identity_unlinked`. Every other credential on
+  an account was already recorded; this one was not, so the log of a compromised
+  account showed the sessions an identity minted and not when the identity was
+  connected. The record says whether the removal came from the account or from an
+  operator, and never carries the provider's identifier for the person.
+
+  **Two actions join the audit vocabulary**, which `docs/SECURITY.md` states the
+  size of.
+
+- **Three API operations for the same capability**: `GET /account/identities`,
+  `DELETE /account/identities/{id}` and `DELETE /addons/{name}/identities/{id}`.
+
 ### Internal
 
 Gates and tests, with no behaviour behind them. Listed because two of them

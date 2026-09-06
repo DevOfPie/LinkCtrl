@@ -801,3 +801,186 @@ func enrolSecondFactor(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID) {
 		t.Fatal(err)
 	}
 }
+
+// TestConnectingAnIdentityIsAudited is F320, driven.
+//
+// `addon_identity_links` writes a standing credential: a row there signs somebody
+// into an account with **no password and no second factor of this product's**,
+// for as long as it exists. Every other credential on an account is audited —
+// `mfa.enabled`, `mfa.disabled`, `mfa.recovery_codes_regenerated`,
+// `apikey.rotated`, `apikey.revoked` — and this one was not.
+//
+// What that cost is precise and is the reason this is a fix rather than a note:
+// an operator reading the audit log of a compromised account could see the
+// sessions an identity minted (`session.minted_by_addon`) and could **not** see
+// when the identity was connected, which is the act that made those sessions
+// possible.
+func TestConnectingAnIdentityIsAudited(t *testing.T) {
+	f := newAddonAuth(t, nil, nil)
+
+	if resp := f.link("subject-audited", f.owner); !strings.Contains(resp.Body, "link: <nil>") {
+		t.Fatalf("the provider was not connected: %q", resp.Body)
+	}
+
+	ev := f.auditRow(t, audit.ActionAddonIdentityLinked)
+	if ev.TargetID == nil || *ev.TargetID != f.owner.UserID {
+		t.Errorf("the record is filed against %v, want the account the link is on (%v)",
+			ev.TargetID, f.owner.UserID)
+	}
+	// The two fields an operator searches by when a provider is compromised.
+	if got := ev.Metadata["addon"]; got != f.host.Addons()[0].Manifest.Name {
+		t.Errorf("the record names add-on %v", got)
+	}
+	if ev.Metadata["issuer"] == nil || ev.Metadata["issuer"] == "" {
+		t.Errorf("the record names no issuer: %v", ev.Metadata)
+	}
+	// **No subject.** It is the provider's identifier for a person, it answers
+	// none of the questions this record exists for, and a log this product keeps
+	// for years is the wrong place for an opaque external id.
+	if _, ok := ev.Metadata["subject"]; ok {
+		t.Errorf("the record carries the provider's subject: %v", ev.Metadata)
+	}
+	if got := ev.Metadata["by_operator"]; got != false {
+		t.Errorf("by_operator is %v for somebody connecting their own provider", got)
+	}
+}
+
+// TestDisconnectingAnIdentityRemovesItAndIsAudited is F315, driven from the side
+// of the person whose account it is.
+//
+// M65 built the table, the flow that fills it and the refusals that read it, and
+// deliberately shipped no way to sever a row — so somebody who connected a
+// provider was connected for the life of the account, and deleting the whole
+// account was the only thing that reliably removed one.
+//
+// The assertion that matters is the last one: after the disconnection the same
+// callback that signed them in no longer does.
+func TestDisconnectingAnIdentityRemovesItAndIsAudited(t *testing.T) {
+	f := newAddonAuth(t, nil, nil)
+
+	if resp := f.link("subject-severed", f.owner); !strings.Contains(resp.Body, "link: <nil>") {
+		t.Fatalf("the provider was not connected: %q", resp.Body)
+	}
+	if resp := f.callback("/callback", "subject-severed", nil); resp.Minted == nil {
+		t.Fatalf("the link does not mint before it is severed, so nothing below "+
+			"distinguishes the removal from a link that never worked: %q", resp.Body)
+	}
+
+	links, err := f.auth.ConnectedIdentities(t.Context(), f.owner)
+	if err != nil {
+		t.Fatalf("listing connected identities: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("the account has %d connected identities, want 1", len(links))
+	}
+	// The listing is what a person chooses from, so what it carries is asserted
+	// rather than assumed: the add-on, the provider, and no external subject.
+	if links[0].Addon != f.host.Addons()[0].Manifest.Name || links[0].Issuer == "" {
+		t.Errorf("the listed link is %+v", links[0])
+	}
+
+	if err := f.auth.DisconnectIdentity(t.Context(), f.owner, links[0].ID); err != nil {
+		t.Fatalf("disconnect: %v", err)
+	}
+
+	if after, err := f.auth.ConnectedIdentities(t.Context(), f.owner); err != nil {
+		t.Fatalf("listing after: %v", err)
+	} else if len(after) != 0 {
+		t.Errorf("the account still lists %d connected identities", len(after))
+	}
+	ev := f.auditRow(t, audit.ActionAddonIdentityUnlinked)
+	if got := ev.Metadata["by_operator"]; got != false {
+		t.Errorf("by_operator is %v for somebody removing their own credential", got)
+	}
+
+	// **The point of the whole row**: the standing way in is gone.
+	if resp := f.callback("/callback", "subject-severed", nil); resp.Minted != nil {
+		t.Errorf("the same assertion still mints a session after the provider was " +
+			"disconnected; the credential outlived its removal")
+	}
+}
+
+// TestAnOperatorCanSeverSomebodyElsesLink is F315's other half.
+//
+// An operator responding to a compromised provider had `DELETE FROM
+// addon_identity_links` and nothing else. The record says the removal came from
+// an operator, which is the first question the person asks when they find they
+// can no longer sign in this way.
+func TestAnOperatorCanSeverSomebodyElsesLink(t *testing.T) {
+	f := newAddonAuth(t, nil, nil)
+
+	if resp := f.link("subject-operator", f.owner); !strings.Contains(resp.Body, "link: <nil>") {
+		t.Fatalf("the provider was not connected: %q", resp.Body)
+	}
+
+	name := f.host.Addons()[0].Manifest.Name
+	rows, err := f.auth.IdentitiesForAddon(t.Context(), name)
+	if err != nil {
+		t.Fatalf("listing an add-on's identities: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("the add-on holds %d links, want 1", len(rows))
+	}
+	// The operator's listing names whose account it is, which the person's own
+	// deliberately does not — here it is the whole point of the page.
+	if rows[0].Email == "" {
+		t.Errorf("the operator's listing does not say whose account this is: %+v", rows[0])
+	}
+
+	if err := f.auth.DisconnectIdentityFor(
+		t.Context(), f.owner, name, rows[0].ID,
+	); err != nil {
+		t.Fatalf("operator disconnect: %v", err)
+	}
+	if after, err := f.auth.IdentitiesForAddon(t.Context(), name); err != nil {
+		t.Fatalf("listing after: %v", err)
+	} else if len(after) != 0 {
+		t.Errorf("the add-on still holds %d links", len(after))
+	}
+
+	ev := f.auditRow(t, audit.ActionAddonIdentityUnlinked)
+	if got := ev.Metadata["by_operator"]; got != true {
+		t.Errorf("by_operator is %v for an operator severing somebody else's "+
+			"credential; the two removals have to be tellable apart afterwards", got)
+	}
+}
+
+// auditRow reads the single audit record with this action, in the shape this
+// file's older assertions read the provenance record.
+//
+// Deliberately fails when there is more than one: every test that calls it
+// performs the act once, and a second row means something wrote a record nobody
+// asked for.
+func (f *authFixture) auditRow(t *testing.T, action string) struct {
+	TargetID *uuid.UUID
+	Metadata map[string]any
+} {
+	t.Helper()
+	var (
+		target *uuid.UUID
+		raw    []byte
+		n      int
+	)
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM audit_logs WHERE action = $1`, action).Scan(&n); err != nil {
+		t.Fatalf("counting %s records: %v", action, err)
+	}
+	if n != 1 {
+		t.Fatalf("%d %s records, want exactly 1", n, action)
+	}
+	if err := f.pool.QueryRow(t.Context(),
+		`SELECT target_id, metadata FROM audit_logs WHERE action = $1`, action).
+		Scan(&target, &raw); err != nil {
+		t.Fatalf("reading the %s record: %v", action, err)
+	}
+	meta := map[string]any{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return struct {
+		TargetID *uuid.UUID
+		Metadata map[string]any
+	}{TargetID: target, Metadata: meta}
+}

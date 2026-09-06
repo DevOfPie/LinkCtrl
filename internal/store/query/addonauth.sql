@@ -58,7 +58,51 @@ RETURNING id, user_id, addon, issuer, subject, created_at, last_used_at;
 -- not a foreign key to anything, which is exactly why the inheritance exists.
 SELECT count(*) FROM addon_identity_links WHERE addon = @addon;
 
--- Reading and *removing* a link still have no statement here, deliberately. M65
--- builds the table, the flow that writes it and the refusals that read it; a
--- management surface is nobody's yet, and a query kept alive by nothing but
--- sqlc's generator is a query nobody has ever run against this schema.
+-- name: ListAddonIdentityLinksForUser :many
+-- Every provider one account has connected, newest first.
+--
+-- **M70's, and it is what F315 was waiting for.** M65 wrote this table, the flow
+-- that fills it and the refusals that read it, and deliberately shipped no way to
+-- see or sever a row — so somebody who connected a provider was connected to it
+-- for the life of the account, and deleting the whole account was the only thing
+-- that reliably removed one. A link admits somebody with no password and no
+-- second factor of this product's, which is why account deletion already takes
+-- these rows; the missing half was undoing one on purpose.
+--
+-- No subject column. The subject is the provider's identifier for a person and
+-- nothing on either surface needs it: what a reader chooses between is *which
+-- add-on, which issuer, and when it was last used*, and putting an opaque
+-- external id on a page invites somebody to treat it as one of ours.
+SELECT id, addon, issuer, created_at, last_used_at
+  FROM addon_identity_links
+ WHERE user_id = @user_id
+ ORDER BY created_at DESC, id;
+
+-- name: ListAddonIdentityLinksForAddon :many
+-- Every account one add-on has connected, newest first, with the person named.
+--
+-- The operator's half of the same question, and it carries the email because the
+-- operator is deciding about *accounts* — an add-on's row means nothing to them
+-- without knowing whose it is. The person's own list above deliberately carries
+-- no such column: it is already their account.
+SELECT l.id, l.issuer, l.created_at, l.last_used_at, l.user_id, u.email, u.name
+  FROM addon_identity_links l
+  JOIN users u ON u.id = l.user_id
+ WHERE l.addon = @addon
+   AND u.deleted_at IS NULL
+ ORDER BY l.created_at DESC, l.id;
+
+-- name: DeleteAddonIdentityLink :one
+-- Sever one link, returning what was severed so the caller can record it.
+--
+-- **The user id is in the predicate and is not optional**, which is what makes
+-- one statement serve both surfaces without a second one that could disagree
+-- about ownership: a person passes their own, and the operator's path resolves
+-- the row's owner first and passes that. An id alone would let a mistyped
+-- identifier remove somebody else's credential.
+--
+-- Returning rather than :exec, because what is deleted is what the audit record
+-- has to name and reading it back afterwards is impossible.
+DELETE FROM addon_identity_links
+ WHERE id = @id AND user_id = @user_id
+RETURNING id, user_id, addon, issuer, created_at, last_used_at;

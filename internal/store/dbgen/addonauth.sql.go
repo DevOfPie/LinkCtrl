@@ -78,6 +78,158 @@ func (q *Queries) CreateAddonIdentityLink(ctx context.Context, arg CreateAddonId
 	return i, err
 }
 
+const deleteAddonIdentityLink = `-- name: DeleteAddonIdentityLink :one
+DELETE FROM addon_identity_links
+ WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, addon, issuer, created_at, last_used_at
+`
+
+type DeleteAddonIdentityLinkParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+type DeleteAddonIdentityLinkRow struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Addon      string
+	Issuer     string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+// Sever one link, returning what was severed so the caller can record it.
+//
+// **The user id is in the predicate and is not optional**, which is what makes
+// one statement serve both surfaces without a second one that could disagree
+// about ownership: a person passes their own, and the operator's path resolves
+// the row's owner first and passes that. An id alone would let a mistyped
+// identifier remove somebody else's credential.
+//
+// Returning rather than :exec, because what is deleted is what the audit record
+// has to name and reading it back afterwards is impossible.
+func (q *Queries) DeleteAddonIdentityLink(ctx context.Context, arg DeleteAddonIdentityLinkParams) (DeleteAddonIdentityLinkRow, error) {
+	row := q.db.QueryRow(ctx, deleteAddonIdentityLink, arg.ID, arg.UserID)
+	var i DeleteAddonIdentityLinkRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Addon,
+		&i.Issuer,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const listAddonIdentityLinksForAddon = `-- name: ListAddonIdentityLinksForAddon :many
+SELECT l.id, l.issuer, l.created_at, l.last_used_at, l.user_id, u.email, u.name
+  FROM addon_identity_links l
+  JOIN users u ON u.id = l.user_id
+ WHERE l.addon = $1
+   AND u.deleted_at IS NULL
+ ORDER BY l.created_at DESC, l.id
+`
+
+type ListAddonIdentityLinksForAddonRow struct {
+	ID         uuid.UUID
+	Issuer     string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+	UserID     uuid.UUID
+	Email      string
+	Name       string
+}
+
+// Every account one add-on has connected, newest first, with the person named.
+//
+// The operator's half of the same question, and it carries the email because the
+// operator is deciding about *accounts* — an add-on's row means nothing to them
+// without knowing whose it is. The person's own list above deliberately carries
+// no such column: it is already their account.
+func (q *Queries) ListAddonIdentityLinksForAddon(ctx context.Context, addon string) ([]ListAddonIdentityLinksForAddonRow, error) {
+	rows, err := q.db.Query(ctx, listAddonIdentityLinksForAddon, addon)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAddonIdentityLinksForAddonRow{}
+	for rows.Next() {
+		var i ListAddonIdentityLinksForAddonRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Issuer,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.UserID,
+			&i.Email,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAddonIdentityLinksForUser = `-- name: ListAddonIdentityLinksForUser :many
+SELECT id, addon, issuer, created_at, last_used_at
+  FROM addon_identity_links
+ WHERE user_id = $1
+ ORDER BY created_at DESC, id
+`
+
+type ListAddonIdentityLinksForUserRow struct {
+	ID         uuid.UUID
+	Addon      string
+	Issuer     string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+// Every provider one account has connected, newest first.
+//
+// **M70's, and it is what F315 was waiting for.** M65 wrote this table, the flow
+// that fills it and the refusals that read it, and deliberately shipped no way to
+// see or sever a row — so somebody who connected a provider was connected to it
+// for the life of the account, and deleting the whole account was the only thing
+// that reliably removed one. A link admits somebody with no password and no
+// second factor of this product's, which is why account deletion already takes
+// these rows; the missing half was undoing one on purpose.
+//
+// No subject column. The subject is the provider's identifier for a person and
+// nothing on either surface needs it: what a reader chooses between is *which
+// add-on, which issuer, and when it was last used*, and putting an opaque
+// external id on a page invites somebody to treat it as one of ours.
+func (q *Queries) ListAddonIdentityLinksForUser(ctx context.Context, userID uuid.UUID) ([]ListAddonIdentityLinksForUserRow, error) {
+	rows, err := q.db.Query(ctx, listAddonIdentityLinksForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAddonIdentityLinksForUserRow{}
+	for rows.Next() {
+		var i ListAddonIdentityLinksForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Addon,
+			&i.Issuer,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveAddonIdentityLink = `-- name: ResolveAddonIdentityLink :one
 SELECT l.id,
        l.user_id,

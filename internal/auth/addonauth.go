@@ -159,6 +159,38 @@ func MintedByLabel(addon string) string { return "addon:" + addon }
 // label it stores, so this package cannot import that one. Nil records nothing.
 type SessionAuditor interface {
 	RecordAddonSessionMint(ctx context.Context, actor *Identity, ev AddonSessionMint) error
+	// RecordAddonIdentityLink records a provider being connected to an account or
+	// disconnected from one (M70, F320). `linked` says which.
+	//
+	// On the same interface as the mint rather than on one of its own, because it
+	// is the same seam onto internal/audit and the same nil-records-nothing rule.
+	// There is one implementer.
+	RecordAddonIdentityLink(ctx context.Context, actor *Identity, ev AddonIdentityLink) error
+}
+
+// AddonIdentityLink is a provider being connected to an account, or disconnected.
+//
+// **No subject.** The subject is the provider's identifier for a person, and an
+// audit record naming it would put an opaque external id into a log this product
+// keeps for years — while answering none of the questions the record exists for,
+// which are *which add-on, which provider, and when*. The issuer is here for the
+// reason it is on the mint: an operator responding to a compromised provider needs
+// to find every account that trusted it.
+type AddonIdentityLink struct {
+	// Addon is the add-on that owns the connection.
+	Addon string
+	// Issuer is the provider as it named itself. Not an identifier of a person.
+	Issuer string
+	// UserID is whose account the link is on, which is not always the actor's:
+	// an operator severing a link is acting on somebody else's account.
+	UserID uuid.UUID
+	// Linked distinguishes the two actions. False is a disconnection.
+	Linked bool
+	// ByOperator says the actor reached this through the Add-on manager rather
+	// than through their own account page. It is the difference between *I removed
+	// my own credential* and *somebody removed mine*, which is the first question
+	// asked when a person finds they can no longer sign in.
+	ByOperator bool
 }
 
 // SetSessionAuditor wires the recorder.
@@ -370,13 +402,178 @@ func (s *Service) LinkAddonIdentity(ctx context.Context, actor *Identity,
 		}
 		return fmt.Errorf("link add-on identity: %w", err)
 	}
+	// A standing credential was just written, and every other credential on this
+	// account is audited (F320). Without this, an operator reading the log of a
+	// compromised account sees the sessions an identity minted and cannot see when
+	// the identity was connected — which is the act that made those sessions
+	// possible.
+	s.auditIdentityLink(ctx, actor, AddonIdentityLink{
+		Addon: addon, Issuer: issuer, UserID: actor.UserID, Linked: true,
+	})
 	return nil
 }
 
-// **Reading and removing links are deliberately not here.** m65.md asks for the
-// table, for the flow that writes it, and for what an assertion against it does;
-// it asks for no management surface, and M68 is the milestone that builds one.
-// Two exported functions nothing calls would be API on the most sensitive boundary
-// in this product, kept alive by a test rather than by a caller. The gap that
-// leaves — somebody who connects a provider cannot disconnect it — is real and is
-// a deferred row rather than an omission.
+// auditIdentityLink records a connect or a disconnect, best-effort.
+//
+// Best-effort for [Service.auditAddonSession]'s reason: the act has happened by
+// the time this runs, and failing it afterwards would leave a link that exists
+// and a caller told it does not.
+func (s *Service) auditIdentityLink(ctx context.Context, actor *Identity, ev AddonIdentityLink) {
+	if s.sessionAuditor == nil {
+		return
+	}
+	if err := s.sessionAuditor.RecordAddonIdentityLink(ctx, actor, ev); err != nil && s.log != nil {
+		s.log.Warn("could not record a change to an account's connected identities; "+
+			"the change itself happened",
+			slog.String("addon", ev.Addon),
+			slog.Bool("linked", ev.Linked), slog.Any("error", err))
+	}
+}
+
+// ConnectedIdentity is one provider an account has connected, for a page that
+// lists them.
+//
+// No subject, for [AddonIdentityLink]'s reason. Email and Name are set only on
+// the operator's listing, where the question is *whose account is this*.
+type ConnectedIdentity struct {
+	ID         uuid.UUID
+	Addon      string
+	Issuer     string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+
+	UserID uuid.UUID
+	Email  string
+	Name   string
+}
+
+// ConnectedIdentities is every provider one account has connected.
+//
+// **M70, and it is half of what F315 was open for.** M65 built the table and
+// deliberately shipped no way to see a row; a link signs somebody in with no
+// password and no second factor of this product's, so *what is connected to my
+// account* is a question the account's owner is entitled to ask.
+//
+// The actor's own account only. An operator asking about somebody else's uses
+// [Service.IdentitiesForAddon], which costs a different permission and answers a
+// different question.
+func (s *Service) ConnectedIdentities(ctx context.Context, actor *Identity) ([]ConnectedIdentity, error) {
+	if err := requireSessionActor(actor, "listing connected identity providers"); err != nil {
+		return nil, err
+	}
+	if actor.UserID == uuid.Nil {
+		return nil, domain.ErrUnauthorized
+	}
+	rows, err := s.q.ListAddonIdentityLinksForUser(ctx, actor.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("list connected identities: %w", err)
+	}
+	out := make([]ConnectedIdentity, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ConnectedIdentity{
+			ID: r.ID, Addon: r.Addon, Issuer: r.Issuer,
+			CreatedAt: r.CreatedAt, LastUsedAt: r.LastUsedAt,
+			UserID: actor.UserID,
+		})
+	}
+	return out, nil
+}
+
+// DisconnectIdentity severs one of the actor's own connected providers.
+//
+// The other half of F315, from the side of the person whose account it is. The
+// statement carries the user id, so an id belonging to somebody else is
+// [domain.ErrNotFound] rather than a removal.
+//
+// **A disconnection is not a sign-out.** Sessions this link already minted stay
+// valid until they lapse or are revoked, and that is deliberate rather than
+// overlooked: revoking them is the account's session control, which exists and is
+// a separate act with its own record. What this removes is the standing way back
+// in.
+func (s *Service) DisconnectIdentity(ctx context.Context, actor *Identity, id uuid.UUID) error {
+	if err := requireSessionActor(actor, "disconnecting an identity provider"); err != nil {
+		return err
+	}
+	if actor.UserID == uuid.Nil {
+		return domain.ErrUnauthorized
+	}
+	gone, err := s.q.DeleteAddonIdentityLink(ctx, dbgen.DeleteAddonIdentityLinkParams{
+		ID: id, UserID: actor.UserID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("disconnect identity: %w", err)
+	}
+	s.auditIdentityLink(ctx, actor, AddonIdentityLink{
+		Addon: gone.Addon, Issuer: gone.Issuer, UserID: gone.UserID, Linked: false,
+	})
+	return nil
+}
+
+// IdentitiesForAddon is every account one add-on has connected, for the operator.
+//
+// The manager's half of F315, and the reason it is a separate function rather
+// than a parameter on [Service.ConnectedIdentities]: it answers about accounts
+// that are not the caller's, so it carries the email, and the permission it costs
+// is the instance's rather than the account's. The caller checks that permission —
+// this package has no view of the instance grant vocabulary, which is why
+// [Service.DisconnectIdentityFor] takes the same shape.
+func (s *Service) IdentitiesForAddon(ctx context.Context, addon string) ([]ConnectedIdentity, error) {
+	rows, err := s.q.ListAddonIdentityLinksForAddon(ctx, addon)
+	if err != nil {
+		return nil, fmt.Errorf("list identities for add-on %q: %w", addon, err)
+	}
+	out := make([]ConnectedIdentity, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ConnectedIdentity{
+			ID: r.ID, Addon: addon, Issuer: r.Issuer,
+			CreatedAt: r.CreatedAt, LastUsedAt: r.LastUsedAt,
+			UserID: r.UserID, Email: r.Email, Name: r.Name,
+		})
+	}
+	return out, nil
+}
+
+// DisconnectIdentityFor severs a link on somebody else's account, for an operator
+// responding to a compromised provider.
+//
+// **The owner is resolved from the row rather than taken from the caller**, which
+// is what lets one statement serve both surfaces: the delete's predicate is
+// (id, user_id) either way, and here the user_id comes from the row this function
+// just read rather than from an argument that could name the wrong account.
+//
+// The permission is the caller's to check, for [Service.IdentitiesForAddon]'s
+// reason, and `by_operator` is what tells the two records apart afterwards.
+func (s *Service) DisconnectIdentityFor(
+	ctx context.Context, actor *Identity, addon string, id uuid.UUID,
+) error {
+	rows, err := s.q.ListAddonIdentityLinksForAddon(ctx, addon)
+	if err != nil {
+		return fmt.Errorf("list identities for add-on %q: %w", addon, err)
+	}
+	owner := uuid.Nil
+	var issuer string
+	for _, r := range rows {
+		if r.ID == id {
+			owner, issuer = r.UserID, r.Issuer
+			break
+		}
+	}
+	if owner == uuid.Nil {
+		return domain.ErrNotFound
+	}
+	if _, err := s.q.DeleteAddonIdentityLink(ctx, dbgen.DeleteAddonIdentityLinkParams{
+		ID: id, UserID: owner,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("disconnect identity: %w", err)
+	}
+	s.auditIdentityLink(ctx, actor, AddonIdentityLink{
+		Addon: addon, Issuer: issuer, UserID: owner, Linked: false, ByOperator: true,
+	})
+	return nil
+}

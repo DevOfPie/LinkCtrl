@@ -253,6 +253,22 @@ func registerAppRoutes(d Deps, app *appMux) {
 				guard(RequireAuth(http.HandlerFunc(acct.Delete))))
 		}
 
+		// The connected sign-in providers (M70, F315). On the auth service for the
+		// switcher's reason below: what can sign somebody in is identity.
+		//
+		// The account's own pair is under RequireAuth alone, like the deletion
+		// above — somebody asking what can sign them in may belong to no
+		// organization. The operator's severance is registered beside it rather
+		// than with the add-on routes because it is the same handler and the same
+		// service; the permission it costs is checked in the handler.
+		ident := &IdentityAPI{Auth: d.Auth}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/account/identities":         ident.List,
+			"DELETE " + APIPrefix + "/account/identities/{id}": ident.Delete,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
+
 		// The switcher. On the auth service because which workspace a request
 		// acts in is identity, not a feature of one.
 		ws := &WorkspaceAPI{Auth: d.Auth}
@@ -522,6 +538,12 @@ func registerAppRoutes(d Deps, app *appMux) {
 				RequireAuth(http.HandlerFunc(ad.Install))))
 		app.Handle("DELETE "+APIPrefix+"/addons/{name}",
 			RequireAuth(http.HandlerFunc(ad.Remove)))
+		// Severing one account's link to this add-on (M70, F315). **Here rather
+		// than beside the account's own pair above**, because it must not exist on
+		// an instance with no add-on host — which TestNoAddonRouteWithoutAHost
+		// caught the moment it was registered in the wrong block.
+		app.Handle("DELETE "+APIPrefix+"/addons/{name}/identities/{id}",
+			RequireAuth(http.HandlerFunc((&IdentityAPI{Auth: d.Auth}).DeleteForAddon)))
 		// M68's manager reads, and the two writes behind it. Unlimited beyond the
 		// API's own bound for the reason the removal is: they carry no body worth
 		// throttling, and the one that does — a settings form — is a handful of
@@ -688,6 +710,13 @@ func registerAppRoutes(d Deps, app *appMux) {
 		if web.Accounts != nil {
 			app.Handle("POST /account/delete", guard(signedIn(web.AccountDelete)))
 		}
+		// Disconnecting a provider (M70, F315). Under `guard` with the password
+		// change and the deletion beside it, because it removes a way into the
+		// account and the same reasoning about a guessable surface applies — an id
+		// is not guessable, and the limiter costs nothing to a person who does this
+		// once.
+		app.Handle("POST /account/identities/{id}/disconnect",
+			guard(signedIn(web.IdentityDisconnect)))
 		app.Handle("POST /account/domain", signedIn(web.DomainUpdate))
 		app.Handle("POST /account/bots", signedIn(web.BotBlockingUpdate))
 
@@ -846,6 +875,10 @@ func registerAppRoutes(d Deps, app *appMux) {
 				"POST " + AddonManagerPath + "/" + AddonRemoveSegment: web.AddonRemove,
 				"POST " + AddonManagerPath + "/" + AddonPurgeSegment:  web.AddonPurge,
 				"POST " + AddonManagerPath + "/{name}/settings":       web.AddonSettingsSubmit,
+				// Severing one account's link to this add-on (M70, F315). Beside the
+				// settings save because it costs the same non-delegable permission and
+				// is reached from the same page.
+				"POST " + AddonManagerPath + "/{name}/identities/{id}/disconnect": web.AddonIdentityDisconnect,
 			} {
 				app.Handle(pattern, signedIn(fn))
 			}

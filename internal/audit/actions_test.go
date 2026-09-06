@@ -116,6 +116,8 @@ var countedActions = map[int][]string{
 	42: {"Forty-two", "forty-two", "42"},
 	43: {"Forty-three", "forty-three", "43"},
 	44: {"Forty-four", "forty-four", "44"},
+	45: {"Forty-five", "forty-five", "45"},
+	46: {"Forty-six", "forty-six", "46"},
 }
 
 // anchoredCount is one sentence that states the size of the audit vocabulary,
@@ -178,6 +180,11 @@ var notThisCount = map[string][]string{
 	// about a release or about a different vocabulary; none is the size of this
 	// one, and each is one line rather than the file being waved through.
 	"../../CHANGELOG.md": {
+		// M70's entry (F320, F315). It counts what this release **added** to the
+		// vocabulary, not the vocabulary — the same shape as the release-history
+		// lines below it — and it points at docs/SECURITY.md for the size rather
+		// than restating a number that would then need moving here as well.
+		"Two actions join the audit vocabulary",
 		"switching is still one action",
 		"the three membership actions and the two instance-level ones",
 		"Three actions: an in-app notification",

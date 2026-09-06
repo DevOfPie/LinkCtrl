@@ -1733,6 +1733,28 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		"password": "a-brand-new-longer-password",
 	}, http.StatusConflict)
 
+	// --- connected sign-in providers (M70, F315) ----------------------------
+	//
+	// The list is empty on this account and that is the shape being replayed:
+	// nothing here connects a provider, because doing so needs a loaded
+	// authentication add-on and this fixture has none. What the contract owes is
+	// that the operation exists, answers 200, and answers with the envelope the
+	// spec documents — the rows themselves are driven end to end in
+	// addon_auth_test.go, against a real link and a real assertion.
+	c.do("GET", p+"/account/identities", nil, http.StatusOK)
+
+	// And the two removals, each against an identifier that names nothing. A 404
+	// is the documented answer for a link this account does not hold, and it is
+	// the one this fixture can reach — the successes are asserted in
+	// addon_auth_test.go, where a link exists to remove.
+	//
+	// The add-on's own path is exercised with a name no add-on has, which is the
+	// same 404 for the same reason: the row is resolved before anything is
+	// deleted, so an identifier that resolves to nothing never reaches a
+	// statement.
+	c.do("DELETE", p+"/account/identities/"+uuid.NewString(), nil, http.StatusNotFound)
+	c.do("DELETE", p+"/addons/none/identities/"+uuid.NewString(), nil, http.StatusNotFound)
+
 	// --- account recovery (M51) ---------------------------------------------
 	//
 	// Last of the authenticated flow on purpose: the reset revokes every session
