@@ -32,7 +32,7 @@ migrations run at boot.
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-09-06
+## [0.4.0] - 2026-09-08
 
 **Add-ons.** An operator can install a WebAssembly module that serves pages,
 owns a database schema, watches or refuses redirects, reaches an origin they

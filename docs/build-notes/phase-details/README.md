@@ -11,8 +11,9 @@ phase's rows move to their own file, so the resume path reads the milestones tha
 can still be next rather than every milestone there has ever been: Phase 1 is in
 [phase-1.md](phase-1.md), Phase 2 in [phase-2.md](phase-2.md), Phase 3 in
 [phase-3.md](phase-3.md), Phase 4 in [phase-4.md](phase-4.md). **There is no live
-table right now**: Phase 4 closed on 2026-09-06 and the next phase has not been
-planned, which is the state the section below describes rather than an omission.
+table right now**: Phase 4's last milestone was accepted on 2026-09-06 and the
+next phase has not been planned, which is the state the section below describes
+rather than an omission.
 
 [Plan.md](../../../Plan.md) holds the scope contract and the ordering table.
 This directory holds the definitions of done those rows point at.
@@ -32,7 +33,8 @@ milestone, is in [workflow.md](../workflow.md).
 
 ## No phase is live
 
-**Phase 4 closed on 2026-09-06, released as 0.4.0**, and its status table moved
+**Phase 4's last milestone was accepted on 2026-09-06 and it released as 0.4.0
+on 2026-09-08**, and its status table moved
 to [phase-4.md](phase-4.md) the way every closed phase's has. Until the next
 phase is planned this file carries the inherited rules below and no status table
 at all — which is the state `/work phase` should refuse to resume into, and

@@ -515,6 +515,7 @@ file. Append a row when you append an entry.
 | [M70's documentation pass: the fold, the 1.0 gate, and a cost that did not move](#2026-09-06--m70s-documentation-pass-the-fold-the-10-gate-and-a-cost-that-did-not-move) | D438: the audit count is folded thirty-nine to forty-six and the *cannot drift without a failing build* clause is corrected rather than carried — it stopped being true at M65, which is when D313 removed the tie. D439: 1.0 now means the add-on contract is stable rather than that identity is built in; identity shipped as a module, so the old condition discharged itself. D440: the always-read contract grew 1217 bytes — one rule in workflow.md, whose realized read ratio is 0.96 — defended against the three test attempts and the one reverted fix that earned it. This entry claimed zero and was corrected in the same pass |
 | [PR #11's code review: fifteen findings, and the four that changed a rule rather than a line](#2026-09-08--pr-11s-code-review-fifteen-findings-and-the-four-that-changed-a-rule-rather-than-a-line) | D441: a defaulted `ADDON_ROUTE_DEADLINE` is clamped to fit an operator's request timeout rather than refusing the boot, and only an explicitly set one is still refused — the upgrade break in CHANGELOG.md is withdrawn. D442: the pipeline asks the host *is anything observing* per batch instead of sampling the answer at boot, which is the same reasoning `jobs.go` already applied. D443: an add-on lifecycle act takes a cluster-wide advisory lock keyed on the add-on's name, because `installMu` guards one process and the schema is shared. D444: inline add-ons run after the gates, not before. Plus `internal/auth/authtest`, a package whose only power is to conjure a permission, made visible by being an import |
 | [The OIDC fixture moves to the release M70 owed another repository](#2026-09-08--the-oidc-fixture-moves-to-the-release-m70-owed-another-repository) | No new decision — D414's discharge. The nine pins move from `v0.1.0` to `v0.2.0`, and the digests measured from a local build before the release matched the published assets byte for byte, which is the reproducibility F348's toolchain pin was bought for and this is its second independent confirmation |
+| [The release date the records carried was the date of a tag that published nothing](#2026-09-08--the-release-date-the-records-carried-was-the-date-of-a-tag-that-published-nothing) | No decision — a correction. Four records said 0.4.0 was released 2026-09-06; that tag was deleted after F365 failed its workflow, and the release that exists published 2026-09-08. `release-check.sh`'s own rule settles which date is meant. The acceptance date stays where it is true, now said as acceptance rather than as release |
 
 ---
 
@@ -42544,4 +42545,43 @@ repository's `go.mod` names `github.com/DevOfPie/LinkCtrl v0.4.0`, its CI is gre
 on the bump, its changelog says the SDK moved from a pseudo-version to a release,
 and — the part the milestone could not write down as a gate — this tree's fixture
 consumes the result.
+
+---
+
+## 2026-09-08 — the release date the records carried was the date of a tag that published nothing
+
+Not a decision. A correction, recorded because the thing corrected is a claim four
+files made about a release.
+
+`v0.4.0` was first tagged on 2026-09-06 at `dfc4595`. That release **failed** —
+F365, the release workflow's `go test` running under Go's default ten-minute
+timeout — and published nothing. The tag was deleted and re-cut on 2026-09-08 at
+`8a0b6b2`, and that is the release that exists: four jobs green, six assets,
+published 09:54Z.
+
+Four records still said 2026-09-06:
+
+- `CHANGELOG.md`'s `## [0.4.0]` heading
+- `Plan.md`'s build status, which said *tagged 2026-09-06*
+- `phase-details/README.md`, twice, which said *Phase 4 closed on 2026-09-06,
+  released as 0.4.0*
+- `phase-details/phase-4.md`'s header, which said *tagged 2026-09-06*
+
+**What settles which date is meant is `scripts/release-check.sh`'s own rule**, in
+the comment above its date gate: *Keep a Changelog's date is a claim about when a
+version was released, and this script runs when it is about to be.* By that rule
+2026-09-06 is not a late date or an early one, it is a date on which nothing was
+released. The gate could not catch this because it runs **before** a tag; a tag
+that fails afterwards is outside what it can see, and that is worth knowing rather
+than fixing — a gate that ran after the workflow would be a different mechanism.
+
+Both dates are real and they are different facts, so the correction keeps both.
+M70 was accepted on 2026-09-06 — that is when the work was judged done — and the
+release is 2026-09-08. `phase-details/README.md` and `phase-4.md` now say which is
+which instead of collapsing them, and `Plan.md` says *released* rather than
+*tagged*, because the tag it named no longer exists.
+
+Nothing published diverges from this: the release workflow's `awk` extracts the
+section's **contents** and not its heading, so the published notes never carried a
+date at all.
 

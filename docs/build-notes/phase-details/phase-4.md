@@ -1,6 +1,6 @@
 # Phase 4 — the milestones
 
-Released as **0.4.0**, tagged 2026-09-06. History, kept for the reason Phase 1,
+Released as **0.4.0** on 2026-09-08. History, kept for the reason Phase 1,
 2 and 3's records are: the build plan and decisions below are what the shipped
 milestones were judged against, and moving them out of the live path is what
 keeps `/work phase` from resuming into a phase that already closed.
