@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -536,5 +537,134 @@ func waitForLog(t *testing.T, sink *logSink, marker string) string {
 			t.Fatalf("the observing add-on never reported %q\n%s", marker, sink.String())
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestObservingIsAskedPerBatchNotAtBoot is the fence around review finding 2.
+//
+// The pipeline used to be handed an observer only when the host *already* had
+// one at the moment the process started. Install an observing add-on an hour
+// later and it received nothing, for ever: its workers came up and sat on a
+// channel the pipeline never wrote to, with no error and no log. The set of
+// observing add-ons is a fact about the running instance, and it changes at every
+// install, so it cannot be sampled once.
+//
+// The fake is the whole point here rather than a real host: what is under test is
+// that the pipeline *re-asks*, and the only way to assert that is to change the
+// answer underneath it.
+func TestObservingIsAskedPerBatchNotAtBoot(t *testing.T) {
+	f := newInlineAddon(t, "redirect", addon.PermissionRedirectObserve)
+	obs := &lateObserver{}
+	ing := newIngester(t, f.pool, analytics.IngestConfig{Observer: obs})
+	id := f.seed("watched-later", "https://shop.example.test/watched-later")
+
+	click := func() {
+		ing.Record(analytics.Event{
+			LinkID: id, WorkspaceID: f.owner.WorkspaceID, OccurredAt: time.Now(),
+			IP:        netip.MustParseAddr("203.0.113.9"),
+			UserAgent: "Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/128.0",
+			Language:  "en-GB",
+		})
+	}
+
+	// Nothing is observing yet, so nothing is handed over — and the cost of the
+	// class on an instance that does not use it stays one call per batch.
+	//
+	// Waited on the click row rather than on a sleep, because the point of the
+	// wait is that this click is in a batch of its own: if it were still
+	// buffered when the observer starts, it would be delivered by the flush below
+	// and the count could not tell "asked per batch" from "asked once, late".
+	click()
+	waitForClicks(t, f.pool, id, 1)
+	if n := obs.delivered(); n != 0 {
+		t.Fatalf("%d events delivered with nothing observing", n)
+	}
+
+	// The install happens here, after the pipeline was built and is running.
+	obs.start()
+	click()
+	if err := ing.Close(f.t.Context()); err != nil {
+		t.Fatalf("closing the pipeline: %v", err)
+	}
+	if n := obs.delivered(); n != 1 {
+		t.Fatalf("%d events reached an add-on installed after the pipeline started; "+
+			"want 1. The observer set was sampled once instead of asked", n)
+	}
+}
+
+// lateObserver is an [analytics.RedirectObserver] whose answer to Observing
+// changes while the pipeline runs, which is what an install does to a real host.
+type lateObserver struct {
+	mu        sync.Mutex
+	observing bool
+	events    []addon.RedirectEvent
+}
+
+func (o *lateObserver) Observing() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.observing
+}
+
+func (o *lateObserver) Observe(ev addon.RedirectEvent) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.events = append(o.events, ev)
+}
+
+func (o *lateObserver) start() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.observing = true
+}
+
+func (o *lateObserver) delivered() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return len(o.events)
+}
+
+// TestAPasswordPromptDoesNotSpendAnInlineAddon fences review finding 8.
+//
+// The inline extension point fired on `outcome == OutcomeRedirect` alone, ahead
+// of the gates. So every anonymous GET that merely renders a password prompt —
+// and every wrong-password POST — instantiated every inline module and held one
+// of the host's slots for the full inline deadline, and then discarded the
+// answer. Prompt views are not rate-limited, because the alias exists and the
+// probe limiters never charge for it, and `invokeInline` answers *allow* when no
+// slot is free. A flood of prompt views on one link therefore skipped an access
+// control add-on's vetoes for everybody else's traffic.
+//
+// The fixture's module logs on every invocation, so "was it asked" is a fact the
+// sink can answer.
+func TestAPasswordPromptDoesNotSpendAnInlineAddon(t *testing.T) {
+	f := newInlineAddon(t, "redirect", addon.PermissionRedirectInline)
+	f.seed("gated", "https://shop.example.test/gated", func(in *link.CreateInput) {
+		in.Password = "a-sufficiently-long-password"
+	})
+
+	resp := f.visit("/gated")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("the password prompt answered %d, want 200; this test's premise is "+
+			"that the gate answers before the redirect does", resp.StatusCode)
+	}
+	// `redirect: alias=` is the per-invocation line. A bare `redirect:` also
+	// matches what the fixture writes during `_initialize` at boot, which is not an
+	// invocation and would make this assertion fail against a fixed tree.
+	if logs := f.log.String(); strings.Contains(logs, "redirect: alias=gated") {
+		t.Errorf("the inline add-on was invoked for a request that only rendered a "+
+			"password prompt. Every such view instantiates every inline module and "+
+			"holds one of the host's slots for the inline deadline, and prompt views "+
+			"are not rate-limited\n%s", logs)
+	}
+
+	// And the ordering did not cost the add-on the redirects it is for: a link
+	// with no gate still reaches it.
+	f.seed("open", "https://shop.example.test/open")
+	if resp := f.visit("/open"); resp.StatusCode != http.StatusFound {
+		t.Fatalf("an ungated link answered %d, want 302", resp.StatusCode)
+	}
+	if logs := waitForLog(t, f.log, "redirect: alias=open"); logs == "" {
+		t.Error("the inline add-on saw nothing on a link with no gate")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"reflect"
 	"strconv"
 	"sync"
 	"time"
@@ -333,6 +334,19 @@ func (h *Host) acquireInstance(ctx context.Context, l *Loaded, class string) (*p
 	// redirect-safe subset: an instance made for the redirect path is held to that
 	// subset from its first instruction, whether or not a redirect is attached yet.
 	h.setState(inst, rest.forPool(class))
+	// **Sampled before instantiation, not after** (review finding 13). Package
+	// initialization runs inside InstantiateModule and `_initialize` is where a
+	// guest reads its settings, so the configuration this instance is built from is
+	// the one in force *now*. An operator saving a setting while that runs bumps
+	// the generation; stamping the entry with the value read afterwards would mark
+	// an instance holding the old configuration as current, `put` would accept it,
+	// and it would serve for up to DefaultPoolTTL — which is precisely the case
+	// poolEntry.gen exists to catch.
+	//
+	// Reading it early can only be conservative: a generation that moves between
+	// here and the release makes this entry stale, and a stale entry is closed
+	// rather than pooled.
+	gen := h.current().pools[poolKey(name, class)].generation()
 	mod, err := h.runtime.InstantiateModule(ctx, l.compiled, guestModuleConfig(inst))
 	if err != nil {
 		if mod != nil {
@@ -342,7 +356,7 @@ func (h *Host) acquireInstance(ctx context.Context, l *Loaded, class string) (*p
 		return nil, err
 	}
 	mem := mod.Memory()
-	if mem == nil {
+	if noGuestMemory(mem) {
 		// A module with no memory cannot be reset, so it is not poolable and the
 		// honest answer is to refuse it rather than to reuse it. Nothing this
 		// toolchain produces reaches here — every fixture exports one — and the
@@ -363,11 +377,11 @@ func (h *Host) acquireInstance(ctx context.Context, l *Loaded, class string) (*p
 	// itself, which resets nothing and looks exactly like a reset that works.
 	image := make([]byte, len(live))
 	copy(image, live)
-	// Stamped from the pool as it is now. A drain between here and the release that
-	// follows makes this entry stale, which is what closes it instead of pooling it.
+	// Stamped from the generation read before this instance was built. A drain
+	// between there and the release that follows makes this entry stale, which is
+	// what closes it instead of pooling it.
 	return &poolEntry{
-		mod: mod, addon: name, class: class, name: inst, image: image,
-		gen: h.current().pools[poolKey(name, class)].generation(),
+		mod: mod, addon: name, class: class, name: inst, image: image, gen: gen,
 	}, nil
 }
 
@@ -388,7 +402,7 @@ func (h *Host) releaseInstance(ctx context.Context, e *poolEntry, clean bool) {
 		return
 	}
 	mem := e.mod.Memory()
-	if mem == nil || int(mem.Size()) != len(e.image) {
+	if noGuestMemory(mem) || int(mem.Size()) != len(e.image) {
 		// Memory grew during the invocation, so the image no longer describes the
 		// instance and WebAssembly gives no way to make it: memory does not shrink.
 		// Closing is the only reset left.
@@ -568,4 +582,27 @@ func poolTTLFrom(d time.Duration) time.Duration {
 		return DefaultPoolTTL
 	}
 	return d
+}
+
+// noGuestMemory reports whether a module has no linear memory.
+//
+// **`mod.Memory() == nil` is dead code and this exists because of it.** wazero's
+// `(*ModuleInstance).Memory` returns `m.MemoryInstance`, a `*wasm.MemoryInstance`
+// — so a module that declares no memory yields an interface holding a nil
+// pointer, which is not equal to nil. Every guard in this package written as
+// `== nil` therefore never fired, and the line after it dereferenced the nil.
+// Measured against wazero v1.12.0 rather than reasoned about: a module compiled
+// from the eight-byte empty wasm header gives `mem == nil -> false`.
+//
+// That matters most on the observe worker, which has no `recover` anywhere in
+// this package: a panic there takes the process down rather than the request.
+//
+// The branch these guards sit in exists because *"it always has memory" is an
+// assumption about somebody else's compiler*, which is exactly what the `== nil`
+// form quietly re-introduced.
+func noGuestMemory(mem api.Memory) bool {
+	if mem == nil {
+		return true
+	}
+	return reflect.ValueOf(mem).IsNil()
 }

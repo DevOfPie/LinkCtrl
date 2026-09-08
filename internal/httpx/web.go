@@ -280,46 +280,45 @@ type errorPageData struct {
 }
 
 func (h *Web) errorPage(w http.ResponseWriter, r *http.Request, code int, heading, message string) {
-	// **An htmx request gets a fragment, not a page** (F218, D430).
-	//
-	// htmx's default `responseHandling` is `[{204,false},{"[23]..",true},{"[45]..",false}]`
-	// — a 4xx is read, an error event fires, and **no swap happens**. Every refusal
-	// this function writes is a 4xx error *page*, so a reader who clicked Delete on
-	// a routing rule, a split variant, the link's danger zone, an invitation
-	// revoke, a member removal or a dispute reviewer revoke, and was refused with a
-	// 403 or a 409, saw the confirmation dismissed and the page unchanged. The
-	// refusal was rendered and thrown away.
-	//
-	// Answered `200` with the flash as the body, because htmx swaps a 2xx and the
-	// status is not what the reader is owed — the sentence is. The refusal already
-	// happened: nothing was written, and this is the report. A 4xx with
-	// `HX-Reswap` would keep the code honest for a machine and needs every caller
-	// to set a target; this is the one site every refusal passes through, which is
-	// what D430 chose it for.
-	//
-	// The cost is stated rather than hidden: one error path now has two response
-	// shapes. What keeps that manageable is that this is the only place that
-	// decides.
-	//
-	// "error" names the template *set* to render the block from, not what is
-	// rendered: RenderPartial resolves a page and then executes one block inside
-	// it, and `flash_error` is a partial every page's set carries. The error page
-	// is the honest set to take it from here.
-	if isHTMX(r) {
-		w.Header().Set("Cache-Control", "no-store")
-		if err := h.UI.RenderPartial(w, http.StatusOK, "error", "flash_error", message); err != nil {
-			observability.LoggerFrom(r.Context()).Error("render htmx refusal failed",
-				slog.Int("code", code), slog.Any("error", err))
-			http.Error(w, message, code)
-		}
-		return
-	}
 	h.render(w, r, code, "error", errorPageData{
 		shell:   h.shell(r, heading, ""),
 		Code:    code,
 		Heading: heading,
 		Message: message,
 	})
+}
+
+// htmxRefusal answers an hx-post with the refusal as a swappable fragment.
+//
+// **Scoped to two refusal kinds, and that scoping is the whole of the fix for
+// review finding 7.** D430's limb lived in [Web.errorPage], which has 77 callers,
+// so any client sending `HX-Request: true` — a header it chooses — turned every
+// 401, 403, 404, 409, 429 and 500 across the dashboard into a `200`. That
+// included [Web.tooManyRequests], the `deny` for both the login limiter and the
+// add-on page limiter, so a throttled request answered success.
+//
+// What F218 is about is narrower: six destructive controls post over htmx, are
+// refused with a 403 or a 409, and htmx's default response handling reads the
+// 4xx, fires an error event and swaps nothing — so the confirmation is dismissed
+// and the reason is rendered and thrown away. Those two kinds, reached through
+// [Web.webError], are the only ones that take this path.
+//
+// `200` with the flash as the body, because htmx swaps a 2xx and discards
+// everything else. The residue is stated rather than hidden: for these two kinds
+// a machine reading the status sees success where a person sees the refusal. That
+// is the trade D430 took, and it is now confined to the case it was argued for
+// rather than applied to every error the dashboard can produce.
+func (h *Web) htmxRefusal(w http.ResponseWriter, r *http.Request, code int, message string) bool {
+	if !isHTMX(r) {
+		return false
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if err := h.UI.RenderPartial(w, http.StatusOK, "error", "flash_error", message); err != nil {
+		observability.LoggerFrom(r.Context()).Error("render htmx refusal failed",
+			slog.Int("code", code), slog.Any("error", err))
+		http.Error(w, message, code)
+	}
+	return true
 }
 
 // tooManyRequests is the dashboard's counterpart of writeTooManyRequests: a
@@ -341,12 +340,20 @@ func (h *Web) webError(w http.ResponseWriter, r *http.Request, err error) {
 		h.errorPage(w, r, http.StatusNotFound, "Not found",
 			"This page or link does not exist, or it belongs to a different workspace.")
 	case errors.Is(err, domain.ErrForbidden):
+		// The two kinds F218's six controls are refused with, and the only two that
+		// answer an htmx request with a fragment. See [Web.htmxRefusal].
+		if h.htmxRefusal(w, r, http.StatusForbidden, err.Error()) {
+			return
+		}
 		h.errorPage(w, r, http.StatusForbidden, "Not allowed", err.Error())
 	case errors.Is(err, domain.ErrConflict):
 		// A refusal with a reason the reader can act on — "delete the links
 		// first", "make somebody else an owner first". Pages that can put it
 		// beside the list it is about do so; this is the answer for the ones
 		// that cannot.
+		if h.htmxRefusal(w, r, http.StatusConflict, conflictMessage(err)) {
+			return
+		}
 		h.errorPage(w, r, http.StatusConflict, "Not allowed yet", conflictMessage(err))
 	case errors.Is(err, domain.ErrUnauthorized),
 		errors.Is(err, auth.ErrSessionNotFound),
@@ -422,8 +429,18 @@ func (h *Web) RequireWebAuth(next http.Handler) http.Handler {
 // anything else would make the login form an open redirect, and "//evil.com"
 // is the classic way a naive "starts with /" check gets beaten.
 func safeNext(raw string) string {
+	// TAB joins the set at M70, review finding 5. The WHATWG URL parser strips
+	// ASCII tab, newline and carriage return before parsing, so `/<TAB>/evil.example`
+	// is `//evil.example` to a browser — which is what the `//` prefix test above
+	// refuses and what this one let past.
+	//
+	// It is load-bearing here rather than merely tidy: internal/httpx/addons.go
+	// passes an add-on's own location through this function to clamp it when a
+	// second factor is owed, and the value lands as `next=` on /login/code and
+	// reaches seeOther in web_mfa.go — which that function's comment says must
+	// not send somebody off-origin.
 	if raw == "" || raw[0] != '/' ||
-		strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, "\\\r\n") {
+		strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, "\\\r\n\t") {
 		return "/dashboard"
 	}
 	return raw

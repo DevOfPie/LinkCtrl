@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -240,11 +241,42 @@ var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,30}$`)
 // milestone before it works.
 var permissionRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
 
-// migrationFileRe is the filename shape goose reads a version out of: digits, an
-// underscore, then anything. Checked here rather than left to goose, because a
-// file goose cannot version is one it silently ignores — and a migration that
-// silently never ran is the worst available failure for DDL.
+// migrationFileRe is the filename shape goose reads a version out of: a version
+// number, an underscore, then anything. Checked here rather than left to goose,
+// because a file goose cannot version is one it silently ignores — and a
+// migration that silently never ran is the worst available failure for DDL.
+//
+// **The number is goose's, not "digits"** (review finding 3). goose's
+// NumericComponent rejects a version below 1 and one that overflows int64, and
+// the provider collects with `strict=false`, so it *continues* past such a file
+// with no log and no error. `0_init.sql` therefore passed here with a correct
+// digest, MigrateAddon returned nil, the store logged "add-on migrations
+// complete", and the tables did not exist — the exact failure the paragraph above
+// says this expression exists to prevent.
+//
+// The shape stays permissive about leading zeros, because `00001_initial.sql` is
+// the convention this repository documents and every error below quotes. What
+// the value has to satisfy is goose's rule, and that is checked by parsing it —
+// see [migrationVersion] — rather than by counting digits, which cannot express
+// "at most int64" and would drift from goose the first time it changed.
 var migrationFileRe = regexp.MustCompile(`^[0-9]+_[^\n]*\.sql$`)
+
+// migrationVersionOK reports whether goose can read a usable version out of a
+// migration filename.
+//
+// goose's NumericComponent, which is the authority here: everything before the
+// first underscore, parsed as a base-ten int64, refused at zero or below. A file
+// it refuses is not an error to goose — the provider collects with `strict=false`
+// and continues past it silently — so refusing it here is the only place it can
+// be caught.
+func migrationVersionOK(name string) bool {
+	digits, _, ok := strings.Cut(name, "_")
+	if !ok {
+		return false
+	}
+	v, err := strconv.ParseInt(digits, 10, 64)
+	return err == nil && v >= 1
+}
 
 // cookiePrefixRe bounds a declared cookie prefix to the shape a cookie name can
 // have here. Narrower than RFC 6265's token, and deliberately the same alphabet
@@ -639,6 +671,12 @@ func (m Manifest) Validate() error {
 		case !migrationFileRe.MatchString(f.File):
 			add("migrations: %q must begin with a version number and an underscore, "+
 				"as in 00001_initial.sql — the number is what orders it", f.File)
+		case !migrationVersionOK(f.File):
+			// Shaped like a version and still unusable: zero, negative by way of a
+			// sign goose will not parse, or wider than int64. goose skips such a file
+			// without a word, so the manifest is where it has to stop.
+			add("migrations: %q has a version goose cannot use — it must be a whole "+
+				"number from 1 upwards, as in 00001_initial.sql", f.File)
 		case seenMigration[f.File]:
 			add("migrations: %q is listed twice", f.File)
 		}

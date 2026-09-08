@@ -251,3 +251,36 @@ func TestANonSQLFileBesideTheMigrationsIsIgnored(t *testing.T) {
 		t.Fatalf("a README beside the migrations was refused: %v", err)
 	}
 }
+
+// TestAMigrationGooseCannotVersionIsRefused fences review finding 3.
+//
+// `0_init.sql` matched the old expression, so a manifest listing it with a
+// correct digest validated, readMigrations succeeded and MigrateAddon returned
+// nil — while goose's NumericComponent refused the version, the collector
+// `continue`d past it with `strict=false`, and the tables were never created. The
+// store then logged "add-on migrations complete" over an empty schema.
+//
+// The convention this repository documents is still accepted, because leading
+// zeros were never the problem: the value was.
+func TestAMigrationGooseCannotVersionIsRefused(t *testing.T) {
+	for _, tc := range []struct {
+		file string
+		ok   bool
+	}{
+		{"00001_initial.sql", true},
+		{"1_initial.sql", true},
+		{"20260907120000_add_index.sql", true},
+		{"0_init.sql", false},
+		{"00_init.sql", false},
+		{"000000_init.sql", false},
+		// Nineteen digits fit int64; twenty do not, and goose's ParseInt fails the
+		// same way it fails on zero — silently, in the collector.
+		{"99999999999999999999_wide.sql", false},
+	} {
+		if got := migrationVersionOK(tc.file); got != tc.ok {
+			t.Errorf("migrationVersionOK(%q) = %v, want %v — goose reads this "+
+				"filename the other way and skips what it cannot version without "+
+				"saying so", tc.file, got, tc.ok)
+		}
+	}
+}

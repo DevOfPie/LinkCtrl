@@ -128,8 +128,12 @@ type Config struct {
 	baseURL *url.URL
 	// appBaseURL and linkBaseURL are the parsed effective origins. Never nil
 	// after Load; both fall back to baseURL.
-	appBaseURL  *url.URL
-	linkBaseURL *url.URL
+	appBaseURL *url.URL
+	// addonRouteDeadlineClamped records that Parse lowered a defaulted route
+	// deadline to nest inside the operator's request timeout. Read by main to say
+	// so once at startup.
+	addonRouteDeadlineClamped bool
+	linkBaseURL               *url.URL
 }
 
 type HTTPConfig struct {
@@ -883,6 +887,36 @@ func Parse() (Config, error) {
 	if err := env.ParseWithOptions(&c, env.Options{Prefix: EnvPrefix}); err != nil {
 		return Config{}, err
 	}
+	// **A defaulted route deadline yields to an operator's request timeout rather
+	// than refusing the boot** (review finding 14).
+	//
+	// The check in Validate says a route deadline at or above HTTP_REQUEST_TIMEOUT
+	// never fires, which is true, and its own comment already names the problem
+	// with refusing over it: *an operator who deliberately set a short
+	// HTTP_REQUEST_TIMEOUT is being refused over a number they never chose*. Both
+	// defaults are ten seconds, so `HTTP_REQUEST_TIMEOUT=10s` — a value this file
+	// documents as valid — stopped an instance with add-ons from starting at all,
+	// over a knob the operator had not touched.
+	//
+	// So the unset one gives way: it becomes the largest value that still nests,
+	// and the operator's setting is honoured. An **explicitly set** route deadline
+	// is still refused by Validate, because then two numbers were chosen and only
+	// the operator can say which was meant.
+	// An empty value is not a setting: env applies the envDefault to it, so
+	// reading it as "the operator chose ten seconds" would bring the refusal back
+	// for anyone whose orchestrator passes the variable through blank.
+	routeDeadlineSet := os.Getenv(EnvPrefix+"ADDON_ROUTE_DEADLINE") != ""
+	if c.Addons.Enabled() && c.HTTP.RequestTimeout > 0 && !routeDeadlineSet &&
+		c.Addons.RouteDeadline == defaultAddonRouteDeadline &&
+		c.Addons.RouteDeadline >= c.HTTP.RequestTimeout {
+		c.Addons.RouteDeadline = c.HTTP.RequestTimeout - time.Second
+		if c.Addons.RouteDeadline <= 0 {
+			// A request timeout of a second or less leaves nothing to nest inside.
+			// Validate refuses that, with both numbers named.
+			c.Addons.RouteDeadline = defaultAddonRouteDeadline
+		}
+		c.addonRouteDeadlineClamped = true
+	}
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -903,6 +937,7 @@ func Parse() (Config, error) {
 	c.LinkBaseURL = strings.TrimRight(c.LinkBaseURL, "/")
 	c.appBaseURL, _ = url.Parse(c.AppBaseURL)
 	c.linkBaseURL, _ = url.Parse(c.LinkBaseURL)
+
 	return c, nil
 }
 
@@ -1052,7 +1087,44 @@ func HostOnly(host string) string {
 // TestTheInstallFetchTimeoutMirrorIsTheRealOne in internal/addon holds the two
 // equal, in the package that can see both. A mirror nothing ties is the drift
 // this phase has now found five times (F318, F319, F321, F273, F275).
+// defaultAddonRouteDeadline is `ADDON_ROUTE_DEADLINE`'s envDefault, as a value
+// this file can compare against — which is how Parse tells a knob an operator
+// set from one they never touched. The tag and this constant are one fact in two
+// places and TestTheRouteDeadlineDefaultIsTheOneDeclared holds them equal.
+const defaultAddonRouteDeadline = 10 * time.Second
+
 const installFetchTimeout = 10 * time.Second
+
+// InstallFetchNestingProblem says why a URL install cannot work under this
+// configuration, or "" when it can.
+//
+// **This was a fatal validation error until review finding 14 and should never
+// have been one.** It refused to start any instance with an add-ons directory
+// and `HTTP_REQUEST_TIMEOUT` at or under ten seconds — a value this file names
+// as valid — so an upgrade broke the boot of a deployment that had changed
+// nothing, over a bound that only matters if somebody installs an add-on from a
+// URL. At exactly `10s` it also tripped the route-deadline check below for the
+// *default* route deadline, so one unchanged setting produced two errors, and
+// the remedy the message named — install by upload instead — could not help,
+// because the check fired whether or not URL install was ever used.
+//
+// So it is a question the install path asks at the moment it matters, and the
+// answer is a refusal an operator can act on rather than an instance that will
+// not start. F358's defect is unchanged: at or under this bound the fetch's own
+// deadline never fires and the work after the last byte — hashing, unpacking,
+// compiling — runs under a context that is already cancelled.
+func InstallFetchNestingProblem(c Config) string {
+	if !c.Addons.Enabled() || c.HTTP.RequestTimeout <= 0 ||
+		installFetchTimeout < c.HTTP.RequestTimeout {
+		return ""
+	}
+	return fmt.Sprintf("installing from a URL needs LINKCTRL_HTTP_REQUEST_TIMEOUT "+
+		"above the %s the fetch is allowed, and it is %s: the fetch bound cannot "+
+		"fire, and the hashing, unpacking and WebAssembly compilation after the "+
+		"last byte would run under a context that is already cancelled. Raise it, "+
+		"or install by upload, where the bytes travel on the client's own request",
+		installFetchTimeout, c.HTTP.RequestTimeout)
+}
 
 // InstallFetchTimeoutMirror is [installFetchTimeout], exported for the one test
 // that holds it equal to the constant it mirrors. Not for use in code: the real
@@ -1483,6 +1555,7 @@ func (c Config) Validate() error {
 			"instance slot back when somebody else's module will not return",
 			c.Addons.RouteDeadline)
 	} else if c.Addons.Enabled() && c.HTTP.RequestTimeout > 0 &&
+		!c.addonRouteDeadlineClamped &&
 		c.Addons.RouteDeadline >= c.HTTP.RequestTimeout {
 		// Both remedies, because the default is the one more likely to be at fault:
 		// an operator who deliberately set a short HTTP_REQUEST_TIMEOUT is being
@@ -1522,32 +1595,6 @@ func (c Config) Validate() error {
 			"is an unbounded heap", c.Addons.FetchMaxBytes)
 	}
 
-	// The fourth, and the one that had no nesting rule at all (F358). An install
-	// runs as a request in the application tree, so HTTP_REQUEST_TIMEOUT cancels
-	// the context addon.InstallFetchTimeout is nested inside — and that constant's
-	// own comment reasons about it, claiming ten seconds *leaves five seconds for
-	// hashing, unpacking, parsing, writing, and compiling a WebAssembly module*.
-	// That arithmetic is against a fifteen-second request timeout. This file names
-	// LINKCTRL_HTTP_REQUEST_TIMEOUT=5s as valid and has never refused it, and at
-	// five the sentence is negative: the fetch bound cannot fire, and h.install
-	// runs under an already-cancelled context after a fetch that may have
-	// succeeded.
-	//
-	// Checked rather than reworded, because this file argues the principle for the
-	// other three bounds in as many words — *a knob whose upper half cannot take
-	// effect is not a knob* — and the install bound is a constant, so an operator
-	// cannot lower it to fit. The remedy named is therefore theirs to act on.
-	if c.Addons.Enabled() && c.HTTP.RequestTimeout > 0 &&
-		installFetchTimeout >= c.HTTP.RequestTimeout {
-		add("HTTP_REQUEST_TIMEOUT (%s): must exceed the %s an add-on install spends "+
-			"fetching a bundle, which is a constant this instance cannot lower; at or "+
-			"under it the fetch bound never fires and the install runs its hashing, "+
-			"unpacking and WebAssembly compilation under a context that is already "+
-			"cancelled. Raise HTTP_REQUEST_TIMEOUT, or install by upload rather than "+
-			"by URL, where the bytes travel on the client's own request",
-			c.HTTP.RequestTimeout, installFetchTimeout)
-	}
-
 	if c.Alias.Length < 4 || c.Alias.Length > 12 {
 		add("ALIAS_LENGTH: must be between 4 and 12, got %d", c.Alias.Length)
 	}
@@ -1573,4 +1620,17 @@ func (c Config) Validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// AddonRouteDeadlineClamped says Parse lowered a defaulted `ADDON_ROUTE_DEADLINE`
+// so it nests inside `HTTP_REQUEST_TIMEOUT`, and by how much. The second value is
+// zero when it did not.
+//
+// Exported so startup can say it once, rather than an operator finding a bound
+// they did not set at a value they did not choose.
+func (c Config) AddonRouteDeadlineClamped() (bool, time.Duration) {
+	if !c.addonRouteDeadlineClamped {
+		return false, 0
+	}
+	return true, c.Addons.RouteDeadline
 }

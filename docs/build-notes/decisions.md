@@ -513,6 +513,7 @@ file. Append a row when you append an entry.
 | [M70's fix shapes: ten answers, and the picks taken without asking](#2026-09-04--m70s-fix-shapes-ten-answers-and-the-picks-taken-without-asking) | D428: the host records what it discovered separately from what it loaded, which is F281's fix at the source rather than at the page. D429: F315 is built in both halves, operator and person. D430: an htmx 4xx is answered by a shared `webError` limb rather than a global htmx config. D431: `sign_in_label` takes a positive rule, deliberately the shape D285 could not take for the log boundary. D432: `temp_file_limit` is 256 MB. D433: the log budget is 8 MiB per add-on per minute. D434: the SDK's wasm half is vetted under `GOOS=wasip1`, the CI half proposed. D435: the browser suite signs in once and shares the context. D436: the GeoIP sentence is reworded and the predicate untouched — the option not recommended. D437: the fetch hold is keyed to the invocation. Plus eleven picks taken without a prompt, each with what it followed |
 | [M70's documentation batch: what three append-only entries now get wrong](#2026-09-04--m70s-documentation-batch-what-three-append-only-entries-now-get-wrong) | D229's *an add-on cannot store what it is never handed* is a conclusion its own premise does not support — the surface bounds the host, not the module — and the sentence is corrected at five sites and here. D181 and D182's *at every level* went loose when D187 made the level a floor and `L` unreachable. And `LINKCTRL_ADDON_LOAD_TIMEOUT`, which `internal/config` reasoned about, has never existed |
 | [M70's documentation pass: the fold, the 1.0 gate, and a cost that did not move](#2026-09-06--m70s-documentation-pass-the-fold-the-10-gate-and-a-cost-that-did-not-move) | D438: the audit count is folded thirty-nine to forty-six and the *cannot drift without a failing build* clause is corrected rather than carried — it stopped being true at M65, which is when D313 removed the tie. D439: 1.0 now means the add-on contract is stable rather than that identity is built in; identity shipped as a module, so the old condition discharged itself. D440: the always-read contract grew 1217 bytes — one rule in workflow.md, whose realized read ratio is 0.96 — defended against the three test attempts and the one reverted fix that earned it. This entry claimed zero and was corrected in the same pass |
+| [PR #11's code review: fifteen findings, and the four that changed a rule rather than a line](#2026-09-08--pr-11s-code-review-fifteen-findings-and-the-four-that-changed-a-rule-rather-than-a-line) | D441: a defaulted `ADDON_ROUTE_DEADLINE` is clamped to fit an operator's request timeout rather than refusing the boot, and only an explicitly set one is still refused — the upgrade break in CHANGELOG.md is withdrawn. D442: the pipeline asks the host *is anything observing* per batch instead of sampling the answer at boot, which is the same reasoning `jobs.go` already applied. D443: an add-on lifecycle act takes a cluster-wide advisory lock keyed on the add-on's name, because `installMu` guards one process and the schema is shared. D444: inline add-ons run after the gates, not before. Plus `internal/auth/authtest`, a package whose only power is to conjure a permission, made visible by being an import |
 
 ---
 
@@ -42380,3 +42381,129 @@ else in the always-read set moved, and the other 29367 bytes of this phase's
 growth are **record** — `decisions.md` and `deferred-findings.md`, both charged
 by-row, neither one's longest row grown, which is what by-row charging was
 introduced to make visible.
+
+---
+
+## 2026-09-08 — PR #11's code review: fifteen findings, and the four that changed a rule rather than a line
+
+The review of `phase-4` → `main` raised fifteen findings across 271 files. Eleven
+were lines: a typed-nil interface, a regex, a missing TAB, an unlocked field
+write, a sample taken one statement too late. Four were rules this phase had
+written down and then contradicted in code, and those are the entries below.
+
+Every fix here carries a test, and every test was sabotaged and watched fail
+before it was believed — the rule D440 bought.
+
+### D441 — a default gives way to an operator's setting; only two chosen numbers are refused
+
+`ADDON_ROUTE_DEADLINE` must nest inside `HTTP_REQUEST_TIMEOUT` or it never fires,
+and the check enforcing that refused the boot. Both default to ten seconds, so
+`LINKCTRL_HTTP_REQUEST_TIMEOUT=10s` — a value this product's own configuration
+reference names as valid — stopped an instance with add-ons from starting, over a
+knob the operator had never touched. The check's own comment named the problem
+and refused anyway.
+
+`Parse` now lowers a **defaulted** route deadline to one second under the request
+timeout and says so at start-up. An **explicitly set** one is still refused,
+because then two numbers were chosen and only the operator can say which was
+meant — and *set* is read from the environment rather than from the value, since
+`ADDON_ROUTE_DEADLINE=10s` and an untouched knob are the same ten seconds.
+
+Two consequences worth stating:
+
+- **CHANGELOG.md's one upgrade break is withdrawn.** It described this refusal.
+  It is replaced by the clamp, the warning, and the one bound that genuinely
+  cannot nest.
+- **The URL-install bound moved off the boot path entirely.** Installing from a
+  URL needs a request timeout above ten seconds, and that is now answered where
+  it applies: `url_unavailable`, with a sentence of its own on the manager page
+  and a warning at start-up. A bound that binds one operation must not stop an
+  instance that never performs it.
+
+### D442 — *is anything observing* is asked per batch, not sampled at boot
+
+`cmd/linkctrl` assigned the click pipeline's `Observer` only when the host already
+had one at the moment the process started. Install an observing add-on an hour
+later and it received nothing, for ever: `startObserving` brought its workers up
+and they sat on a channel the pipeline never wrote to. No error, no log.
+
+`jobs.go` had already reasoned this out for its own list — *a list captured here
+would describe the boot rather than the instance* — and `redirectHandler.Addons`
+gets it right for the inline class. The reasoning simply was not applied here.
+
+The `RedirectObserver` interface grows `Observing() bool`, answered off the same
+atomic load the rest of the host uses, and the pipeline asks it per flush. The
+field is now assigned from the host's *existence*, which is the only fact about
+it that does not change while the process runs.
+
+### D443 — an add-on lifecycle act takes a cluster-wide lock, because the schema is shared
+
+F352 closed `PurgeData`'s time-of-check window with `installMu`. That is a
+`sync.Mutex` on one `*Host`, and the decision it guards reads process-local state
+— is this add-on loaded *here*, is it in *this* host's discovered set — before
+writing the shared database.
+
+On a multi-replica deployment, which `AddonDB.reauthenticate`'s own warning calls
+ordinary, an install lands on replica A while the manager page is served by
+replica B, where that add-on was never discovered. B offers it as an orphan and
+drops its schema while A is serving against it. Neither actor is hand-racing:
+install and purge are ordinary concurrent HTTP handlers.
+
+So both acts now take a Postgres advisory lock keyed on the add-on's name, in a
+class of its own — `0x6c63_6164`, not a value in `cmd/linkctrl`'s job namespace,
+because this is not leader election. Session-level rather than transactional: the
+check and the act are several round trips apart, and a transaction spanning them
+would hold the drop's locks across the read. An instance with no add-on database
+has no shared state and takes nothing.
+
+An add-on's own role can take this key — `pg_advisory_lock` is `EXECUTE` to
+`PUBLIC` — but cannot hold it, because `releaseLocks` runs `pg_advisory_unlock_all`
+before its connection returns to the pool. The worst it can do is delay a
+lifecycle act by one statement timeout.
+
+### D444 — the gates are split, and the add-ons run between the two halves
+
+The extension point fired on `outcome == OutcomeRedirect` alone, which is true of
+a request that is about to render a password prompt. So every anonymous GET of a
+gated link, and every wrong-password POST, instantiated every inline module and
+held one of the host's slots for the full inline deadline, then discarded the
+answer.
+
+Three facts compose into the defect. Prompt views are not rate-limited — the
+alias exists, so the probe limiters never charge. `invokeInline` answers *allow*
+when no slot is free, which is deliberate and stays: a visitor must never queue
+for an add-on's turn. And the slots are shared across the instance. So a flood of
+prompt views on one link silently skipped an access-control add-on's vetoes for
+everybody else's traffic.
+
+**Moving the block after `passGates` fixed that and broke something else**, which
+is how the answer was found rather than reasoned to.
+`TestAVetoDoesNotSpendAOneTimeLinksClick` went red: the budget gate spends a
+one-time link's only click, and an add-on that refuses traffic to a link must not
+thereby retire it. The original ordering was not an oversight — it was that
+property, and the review's finding and that property are in direct tension as
+long as *the gates* is treated as one thing.
+
+They are not one thing. `passGates` was already three ordered gates and only the
+last of them writes. So it is split: signature and password refuse or challenge
+without cost, then the add-ons, then the budget. Each gate keeps the position it
+needs and neither property is traded for the other. A prompt view spends no
+add-on slot; a veto costs no click.
+
+The lesson is the ordering of the discovery: the conflicting property was
+discovered by a test that already existed, not by reading the review, and the
+fix that satisfies both is narrower than either of the two orderings on offer.
+
+### The permission a test may conjure is an import, not a method
+
+Finding 6 moved the `addons.manage` check ahead of the 32 MiB body read, and the
+handler tests then needed a caller who holds a permission. `Identity.permissions`
+is unexported on purpose: the only things that may fill it are the loaders that
+read a real membership or instance grant.
+
+`internal/auth/authtest` is the seam, and it is a package rather than an exported
+constructor so that the ability to conjure a permission has to be named in an
+import block — visible in a way a method on a type already in scope is not. Every
+constructor in it demands a `*testing.T`, which production code has nowhere to
+get.
+

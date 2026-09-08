@@ -317,6 +317,23 @@ func (h *Host) ObservingAddons() []string {
 	return out
 }
 
+// Observing answers whether anything is watching redirects **right now**,
+// without allocating.
+//
+// Live rather than sampled, and that is the whole point of it existing next to
+// [Host.ObservingAddons] (review finding 2). A caller that asks once — at boot,
+// say — and keeps the answer describes the instance as it started, not as it is:
+// install an observing add-on an hour later and a sampled `false` means it is
+// handed nothing, for ever, with the workers up and no error anywhere. So the
+// per-click question is asked of the host every time, off the same atomic load
+// the rest of this file uses.
+func (h *Host) Observing() bool {
+	if h == nil {
+		return false
+	}
+	return len(h.current().observers) > 0
+}
+
 // Inline runs every inline add-on against one decided redirect, in load order,
 // and reports what they made of it.
 //

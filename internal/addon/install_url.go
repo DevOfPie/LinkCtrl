@@ -132,6 +132,14 @@ const (
 	// CodeURLInvalid is a URL this host will not make a request out of at all:
 	// not https, no host, credentials in it, or not a URL.
 	CodeURLInvalid = "url_invalid"
+	// CodeURLUnavailable is a URL install this instance's configuration cannot
+	// perform at all, whatever the address (review finding 14). Today the one
+	// cause is a request timeout that the fetch's own bound cannot nest inside;
+	// upload is unaffected, which is what the message says.
+	//
+	// A code of its own rather than [CodeURLInvalid], because nothing about the
+	// URL is wrong: the same address works once the instance is reconfigured.
+	CodeURLUnavailable = "url_unavailable"
 	// CodeDigestInvalid is a digest that is not 64 hex characters. Its own code
 	// rather than a mismatch, because the operator mistyped the field rather than
 	// fetched the wrong thing.
@@ -175,6 +183,7 @@ var URLInstallCodes = []string{
 	"fetch_timeout",
 	"fetch_too_large",
 	CodeURLInvalid,
+	CodeURLUnavailable,
 }
 
 // URLInstallRequest is what an operator typed: where the bundle is, and what it
@@ -220,6 +229,18 @@ func (h *Host) installFromURL(
 ) (Installed, error) {
 	if h == nil || h.dir == "" {
 		return Installed{}, ErrNoAddonsDir
+	}
+
+	// Refused here, where it matters, rather than at startup (review finding 14).
+	// At or under this bound the fetch's own deadline never fires and the hashing,
+	// unpacking and compiling that follow the last byte run under a context that
+	// is already cancelled — so the install would fail late and confusingly. The
+	// operator gets both numbers and the two ways out.
+	if h.urlInstallProblem != "" {
+		return Installed{}, domain.ValidationErrors{{
+			Field: "url", Code: CodeURLUnavailable,
+			Message: h.urlInstallProblem,
+		}}
 	}
 
 	digest := strings.ToLower(strings.TrimSpace(req.SHA256))

@@ -337,10 +337,36 @@ func (s *Service) auditAddonSession(ctx context.Context, actor *Identity,
 		return
 	}
 	if actor == nil {
-		// Enough for the tenancy columns to be right and for the record to name
-		// whose account it is about, without claiming a session that does not exist.
+		// **The tenancy has to be resolved, not left zero** (review finding 11a).
+		// RecordTx takes the organization from the actor and this action is not
+		// InstanceWide, so a zero OrgID put the row in the instance-wide log while
+		// the very same act, on an account with no second factor, landed in the
+		// organization's. One act, split across two audit surfaces by whether the
+		// account happens to have TOTP configured.
+		//
+		// Nobody has signed in yet and this still does not claim they have: the
+		// identity is loaded for its tenancy alone, and everything that would
+		// assert a session — the session id — stays unset. A lookup that fails
+		// leaves the record where it was, which is worse than tenanted and better
+		// than absent.
 		actor = &Identity{UserID: userID}
+		if tenant, err := s.tenancyFor(ctx, userID); err != nil {
+			if s.log != nil {
+				s.log.Warn("could not resolve whose organization an add-on's pending "+
+					"sign-in belongs to; the record is instance-wide",
+					slog.String("addon", ev.Addon), slog.Any("error", err))
+			}
+		} else {
+			actor.WorkspaceID, actor.OrgID = tenant.ID, tenant.OrganizationID
+		}
 	}
+	// Detached, for the reason every other audit write added in this phase is
+	// (review finding 11b): the act has already happened, and this context is the
+	// guest invocation's — cancellable and bounded by the route deadline. A mint
+	// that lands near that deadline would commit the session and lose its record,
+	// which is exactly the failure F320 is a row about.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), auditRecordTimeout)
+	defer cancel()
 	if err := s.sessionAuditor.RecordAddonSessionMint(ctx, actor, ev); err != nil && s.log != nil {
 		s.log.Warn("could not record that an add-on minted a session",
 			slog.String("addon", ev.Addon), slog.Any("error", err))
@@ -422,6 +448,11 @@ func (s *Service) auditIdentityLink(ctx context.Context, actor *Identity, ev Add
 	if s.sessionAuditor == nil {
 		return
 	}
+	// Detached for [Service.auditAddonSession]'s reason (review finding 11b): the
+	// link exists by the time this runs, and the caller's context is the guest
+	// invocation's.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), auditRecordTimeout)
+	defer cancel()
 	if err := s.sessionAuditor.RecordAddonIdentityLink(ctx, actor, ev); err != nil && s.log != nil {
 		s.log.Warn("could not record a change to an account's connected identities; "+
 			"the change itself happened",
@@ -576,4 +607,26 @@ func (s *Service) DisconnectIdentityFor(
 		Addon: addon, Issuer: issuer, UserID: owner, Linked: false, ByOperator: true,
 	})
 	return nil
+}
+
+// auditRecordTimeout bounds an audit write this file detaches onto its own
+// context. The same five seconds internal/addon uses for the same reason and
+// under the same name there — a detached write needs a bound, or a database that
+// has stopped answering leaves a goroutine per act.
+const auditRecordTimeout = 5 * time.Second
+
+// tenancyFor is which organization an account acts in, for an audit record
+// written before anybody has signed in.
+//
+// Its one caller is [Service.auditAddonSession]'s pending-second-factor path,
+// which has a user id and nothing else. Deliberately the same resolution
+// [Service.IdentityForEmail] uses — the workspace the person would land in — so
+// the record lands where the same act lands for an account with no second
+// factor.
+//
+// An account belonging to no organization answers ErrNoWorkspace, and the caller
+// leaves the record instance-wide: that is where an act by such an account
+// belongs, rather than a wrong organization.
+func (s *Service) tenancyFor(ctx context.Context, userID uuid.UUID) (dbgen.Workspace, error) {
+	return s.resolveWorkspace(ctx, userID, nil, nil)
 }

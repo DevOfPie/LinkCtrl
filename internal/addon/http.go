@@ -864,7 +864,17 @@ func checkContentType(r *Response) error {
 // provider, so the routes grant includes sending a visitor off this origin, and
 // docs/SECURITY.md says so where an operator will read it.
 func checkLocation(loc string) error {
-	if strings.ContainsAny(loc, "\r\n\x00") {
+	// TAB is in this set and was not until review finding 5 (M70). The WHATWG URL
+	// parser strips ASCII tab, newline and carriage return *before* parsing, so
+	// `/<TAB>/evil.example/x` is read by a browser as `//evil.example/x` — the
+	// exact form the scheme-relative check below exists to refuse, reaching
+	// another origin past it because `HasPrefix(loc, "/")` returns early and
+	// `url.Parse` never runs. Go keeps a TAB in a header value, so it survives
+	// the write.
+	//
+	// The two other stripped characters were already refused; TAB completes the
+	// set the parser removes.
+	if strings.ContainsAny(loc, "\r\n\t\x00") {
 		return errors.New("location carries a control character")
 	}
 	if strings.HasPrefix(loc, "//") {

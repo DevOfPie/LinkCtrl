@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io/fs"
 	"log/slog"
 	"regexp"
@@ -320,10 +321,10 @@ func EnsureAddonSchema(ctx context.Context, admin *pgxpool.Pool, name string, lo
 	}
 	// In the same transaction, so a boot that built the role built the narrowing
 	// too. Its outcome is logged rather than fatal, for the reason the function
-	// gives.
-	if err := restrictDatabaseTemp(ctx, tx, schema, log); err != nil {
-		return "", err
-	}
+	// gives — and it now is: [restrictDatabaseTemp] returns nothing and takes a
+	// savepoint of its own, so a REVOKE this deployment cannot perform costs the
+	// add-on its confinement narrowing and not its load.
+	restrictDatabaseTemp(ctx, tx, schema, log)
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("commit: %w", err)
@@ -514,7 +515,52 @@ func resetRoleSettingsIn(ctx context.Context, db pgx.Tx, schema, database string
 // Failure is therefore logged and not fatal. What makes the confinement true is
 // [AddonConfinementViolations], which reports a `pg_temp` relation whether this
 // succeeded or not. D251.
-func restrictDatabaseTemp(ctx context.Context, tx pgx.Tx, schema string, log *slog.Logger) error {
+//
+// **The savepoint is what makes that sentence true** (review finding 10). It said
+// "logged and not fatal" while returning every error into the caller's
+// transaction, which aborts the load — and for a `required` add-on, the instance.
+// Worse, Postgres aborts a transaction at the failing statement, so simply
+// discarding the error here would leave every statement after it failing too.
+// Only the non-owner case survived, and it survived because Postgres answers it
+// with a WARNING rather than an error, which is the one path that was never
+// returning anything.
+//
+// So the work runs inside a nested transaction — pgx emits SAVEPOINT for one —
+// and a failure rolls back to the savepoint and is logged. The load transaction
+// is untouched and continues.
+func restrictDatabaseTemp(ctx context.Context, tx pgx.Tx, schema string, log *slog.Logger) {
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		log.Warn("could not open a savepoint to narrow this database's temporary "+
+			"privilege; the add-on loads without that narrowing",
+			slog.String("role", schema), slog.Any("error", err))
+		return
+	}
+	if err := revokeDatabaseTemp(ctx, sp, schema, log); err != nil {
+		// Rolled back rather than left, because the failing statement has already
+		// poisoned the nested transaction and everything after it in the load would
+		// fail on the aborted state rather than on its own merits.
+		if rbErr := sp.Rollback(ctx); rbErr != nil {
+			log.Warn("rolling back the temporary-privilege narrowing",
+				slog.String("role", schema), slog.Any("error", rbErr))
+		}
+		log.Warn("could not narrow this database's temporary privilege; an add-on's "+
+			"role may still create temporary tables. They are outside its schema and "+
+			"a load will refuse an add-on that owns one — see AddonConfinementViolations",
+			slog.String("role", schema), slog.Any("error", err))
+		return
+	}
+	if err := sp.Commit(ctx); err != nil {
+		log.Warn("could not commit the temporary-privilege narrowing; the add-on "+
+			"loads without it",
+			slog.String("role", schema), slog.Any("error", err))
+	}
+}
+
+// revokeDatabaseTemp is [restrictDatabaseTemp]'s work, inside the savepoint that
+// makes its failure survivable. Every error here is returned rather than logged,
+// because the caller is what decides they are not fatal.
+func revokeDatabaseTemp(ctx context.Context, tx pgx.Tx, schema string, log *slog.Logger) error {
 	var db string
 	if err := tx.QueryRow(ctx, `SELECT current_database()`).Scan(&db); err != nil {
 		return fmt.Errorf("read the database name: %w", err)
@@ -1271,12 +1317,24 @@ func (a *AddonDB) reauthenticate(ctx context.Context, stale string) error {
 }
 
 // Close releases the add-on's connections.
+//
+// **The pool is not nilled out afterwards** (review finding 4). Draining is a
+// designed concurrent state, not a shutdown: when `removeGrace` expires, `unload`
+// calls this with guest calls still in flight, so `Query` and `Exec` are reading
+// `a.pool` on other goroutines at the moment this runs. Writing nil to it there —
+// unlocked, while `a.mu` guards `password` and nothing guards this — raced, and
+// an in-flight `storage_query` could pass the nil check and then dereference nil
+// in `acquire`.
+//
+// Leaving the field alone removes the race outright rather than moving it under a
+// lock, because pgxpool.Close is already safe against a concurrent Acquire: a
+// closed pool answers every later Acquire with an error, which is exactly what
+// the nil check was there to produce.
 func (a *AddonDB) Close() {
 	if a == nil || a.pool == nil {
 		return
 	}
 	a.pool.Close()
-	a.pool = nil
 }
 
 // Query runs one read and returns its rows as a JSON array of objects.
@@ -1599,4 +1657,102 @@ func PurgeAddonSchema(ctx context.Context, admin *pgxpool.Pool, name string) err
 		return fmt.Errorf("purge schema %s: %w", schema, err)
 	}
 	return nil
+}
+
+// addonLifecycleClass is the advisory-lock class every add-on lifecycle act is
+// serialized under, cluster-wide. `0x6c63_6164` is "lcad".
+//
+// A class of its own rather than a value in cmd/linkctrl's jobs namespace,
+// because this is not leader election: every replica takes it, one at a time, for
+// as long as it is changing one add-on. The two-argument form is what lets the
+// second half name *which* add-on, so an install of one and a purge of another
+// do not queue behind each other.
+const addonLifecycleClass = int32(0x6c63_6164)
+
+// addonLifecycleKey is the second half of the lock, derived from the add-on's
+// name so each add-on has a lock of its own.
+//
+// FNV-1a because it needs to be a pure function of the name that every replica
+// and every version of this binary agrees on — a lock two replicas compute
+// differently is not a lock. Collisions cost serialization between two unrelated
+// add-ons and nothing else, which is why 32 bits is enough.
+//
+// The top bit is cleared rather than reinterpreted, so the value is a
+// non-negative int32 on every platform and the conversion cannot depend on how a
+// compiler treats the sign. That halves the space to 31 bits and changes nothing
+// about the paragraph above: a collision still costs serialization and nothing
+// else.
+func addonLifecycleKey(name string) int32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	return int32(h.Sum32() & 0x7fff_ffff)
+}
+
+// WithAddonLifecycleLock runs fn while holding the cluster-wide lock for one
+// add-on's lifecycle.
+//
+// **The process-local mutex is not the guard this needs** (review finding 12).
+// PurgeData reads process-local state — is this add-on loaded here, is it in this
+// host's discovered set — and then writes the shared database. On a
+// multi-replica deployment, which AddonDB.reauthenticate's own warning calls
+// ordinary, an install lands on replica A while the manager page is served by
+// replica B, where that add-on was never discovered. B offers it as an orphan and
+// drops its schema while A is serving against it. No hand-racing is required:
+// install and purge are ordinary concurrent HTTP handlers.
+//
+// Session-level rather than transactional, because the check and the act are
+// several statements and several round trips apart — reading the orphan list,
+// deciding, then dropping — and a transaction spanning that would hold the drop's
+// locks across the read.
+//
+// The connection is dedicated for the duration and released on the way out. A
+// failure to unlock hijacks it, for [AddonDB.releaseLocks]'s reason: a connection
+// that may still hold this lock must not be handed to the next caller, and
+// Postgres releases what a backend held when the backend ends.
+//
+// An add-on's own role could take this key — `pg_advisory_lock` is EXECUTE to
+// PUBLIC — but cannot hold it: releaseLocks runs `pg_advisory_unlock_all` before
+// its connection goes back to the pool. The worst it can do is delay a lifecycle
+// act by one statement timeout.
+func WithAddonLifecycleLock(
+	ctx context.Context, admin *pgxpool.Pool, name string, fn func(context.Context) error,
+) error {
+	if err := checkAddonName(name); err != nil {
+		return err
+	}
+	conn, err := admin.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire a connection for the add-on lifecycle lock: %w", err)
+	}
+	released := false
+	defer func() {
+		if !released {
+			// Never reached on the ordinary path. If the unlock below failed, the
+			// connection is hijacked there instead and this is a no-op.
+			conn.Release()
+		}
+	}()
+	key := addonLifecycleKey(name)
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1, $2)`,
+		addonLifecycleClass, key); err != nil {
+		return fmt.Errorf("take the lifecycle lock for %s: %w", name, err)
+	}
+
+	fnErr := fn(ctx)
+
+	// Not the caller's context: a cancelled call is exactly when the lock is most
+	// likely to still be held, and a cancelled context cannot run the statement
+	// that releases it.
+	unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), AddonStatementTimeout)
+	defer cancel()
+	if _, err := conn.Exec(unlockCtx, `SELECT pg_advisory_unlock($1, $2)`,
+		addonLifecycleClass, key); err != nil {
+		released = true
+		_ = conn.Hijack().Close(unlockCtx)
+		if fnErr != nil {
+			return fnErr
+		}
+		return fmt.Errorf("release the lifecycle lock for %s: %w", name, err)
+	}
+	return fnErr
 }

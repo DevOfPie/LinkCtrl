@@ -1916,7 +1916,15 @@ func readBytes(mod api.Module, ptr, length uint64) ([]byte, bool) {
 	if n > maxStringIn {
 		return nil, false
 	}
-	view, ok := mod.Memory().Read(api.DecodeU32(ptr), n)
+	// The nil check is [noGuestMemory]'s and not `== nil`: a module with no memory
+	// hands back an interface holding a nil pointer, so `Read` would dereference
+	// it. A guest reaching here without memory is one this host should refuse
+	// rather than crash on.
+	mem := mod.Memory()
+	if noGuestMemory(mem) {
+		return nil, false
+	}
+	view, ok := mem.Read(api.DecodeU32(ptr), n)
 	if !ok {
 		return nil, false
 	}
@@ -1947,7 +1955,10 @@ func writeOut(mod api.Module, ptr, capacity uint64, value []byte) int32 {
 	if int(size) > int(api.DecodeU32(capacity)) {
 		return size
 	}
-	if size > 0 && !mod.Memory().Write(api.DecodeU32(ptr), value) {
+	// [noGuestMemory] for readBytes's reason: a memory-less module's Memory() is a
+	// non-nil interface over a nil pointer, and Write would dereference it.
+	mem := mod.Memory()
+	if size > 0 && (noGuestMemory(mem) || !mem.Write(api.DecodeU32(ptr), value)) {
 		return int32(abi.StatusInvalid)
 	}
 	return size

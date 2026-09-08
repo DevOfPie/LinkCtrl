@@ -92,3 +92,10 @@ Thumbs.db
 # (F333). It holds a live session cookie for the test instance and is per-run
 # state, which is what /.playwright-cli/ above is ignored for.
 /tools/agent-browser/.auth/
+
+#  writes its binary here when the output is
+# not named, and `git add -A` swept a 3.6 MB ELF into 27b087e before anything
+# noticed. Nothing references it — the Makefile and the Taskfile both use
+# `go run` — and `COPY . .` would carry it into every builder layer, which is
+# the cost the .dockerignore entry beside this one exists to avoid.
+/gen

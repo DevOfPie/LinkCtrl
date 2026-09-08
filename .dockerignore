@@ -52,3 +52,6 @@ Taskfile.yml
 .vscode/
 .DS_Store
 Thumbs.db
+
+# The abi generator binary, if a build ever leaves one here (see .gitignore).
+/gen

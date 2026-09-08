@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/auth/authtest"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 )
 
@@ -107,6 +109,11 @@ func postAddon(t *testing.T, a *AddonAPI, contentType string, body []byte) *http
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/addons", bytes.NewReader(body))
 	req.Header.Set("Content-Type", contentType)
+	// The caller holds the permission, because every test using this helper is
+	// about what the handler does with a body rather than about who sent it. The
+	// refusal path is TestAnInstallWithoutThePermissionNeverReadsTheBody.
+	req = req.WithContext(context.WithValue(req.Context(), ctxIdentity,
+		authtest.Identity(t, auth.PermAddonsManage)))
 	rec := httptest.NewRecorder()
 	a.Install(rec, req)
 	return rec
@@ -174,6 +181,8 @@ func TestAnInstallRefusesABodyThatIsNotMultipart(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/addons",
 		strings.NewReader(`{"module":"aGk="}`))
 	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(context.WithValue(req.Context(), ctxIdentity,
+		authtest.Identity(t, auth.PermAddonsManage)))
 	rec := httptest.NewRecorder()
 	a.Install(rec, req)
 
@@ -231,8 +240,9 @@ func TestRemovalAnswersWithTheOrphanItLeft(t *testing.T) {
 	}
 }
 
-// The service's refusals reach the caller as themselves, which is what keeps the
-// permission check in one place: this handler asks nothing about who is calling.
+// The service's refusals reach the caller as themselves. The handler's own
+// permission check (review finding 6) is about cost rather than authority — the
+// service's check is still the one that decides, and these are its answers.
 func TestTheLifecycleRefusalsReachTheCaller(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -426,4 +436,56 @@ func TestADigestWithNoURLIsRefusedAsSuch(t *testing.T) {
 	if svc.fetched.SHA256 != "" {
 		t.Error("a digest with no URL reached the service")
 	}
+}
+
+// TestAnInstallWithoutThePermissionNeverReadsTheBody fences review finding 6.
+//
+// `addons.manage` is non-delegable, so an API key can never hold it and every
+// API-key install was always going to be refused — after reading up to 32 MiB of
+// multipart. The route is `signedIn`, so any ordinary member of any workspace
+// could spend that allocation, at the upload rate limit, for a 403 they were
+// never not going to get.
+//
+// The body here is a reader that fails on its first byte: if the handler reads
+// anything at all, the answer is a read error rather than the 403, and that is
+// the assertion.
+func TestAnInstallWithoutThePermissionNeverReadsTheBody(t *testing.T) {
+	a := &AddonAPI{Addons: &recordingLifecycle{}}
+	body := &refusingReader{t: t}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/addons", body)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=xyz")
+	// Signed in, and a member — just not one who may manage add-ons.
+	req = req.WithContext(context.WithValue(req.Context(), ctxIdentity,
+		authtest.Identity(t, "links.write")))
+	rec := httptest.NewRecorder()
+	a.Install(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("a caller without %s answered %d, want 403: %s",
+			auth.PermAddonsManage, rec.Code, rec.Body)
+	}
+	if body.reads > 0 {
+		t.Errorf("the body was read %d times before a refusal that never depended "+
+			"on it; the whole upload is allocated for an answer already decided",
+			body.reads)
+	}
+	svc, ok := a.Addons.(*recordingLifecycle)
+	if !ok {
+		t.Fatalf("the double is a %T", a.Addons)
+	}
+	if len(svc.req.Module) > 0 || len(svc.req.Manifest) > 0 {
+		t.Error("the install reached the service")
+	}
+}
+
+// refusingReader counts reads and fails every one. A body no handler should
+// touch.
+type refusingReader struct {
+	t     *testing.T
+	reads int
+}
+
+func (r *refusingReader) Read([]byte) (int, error) {
+	r.reads++
+	return 0, errors.New("the body was read")
 }

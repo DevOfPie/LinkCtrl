@@ -3,6 +3,7 @@ package httpx
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -82,12 +83,25 @@ type AddonAPI struct {
 // because the body is the same summary a removal answers with, a client can
 // compare what it installed against what it later removed without a second call.
 func (a *AddonAPI) Install(w http.ResponseWriter, r *http.Request) {
+	// **Asked before the body is read, not after** (review finding 6). The host
+	// checks this again in Install and that check is the authority; this one is
+	// about cost. `addons.manage` is non-delegable, so every API-key call was
+	// reading up to MaxUploadBytes of multipart and then refusing — and this route
+	// is `signedIn`, so any ordinary member of any workspace could spend that
+	// allocation, at the upload rate limit, for a 403 they were always going to
+	// get.
+	actor := IdentityFrom(r.Context())
+	if !actor.Can(auth.PermAddonsManage) {
+		WriteError(w, r, fmt.Errorf("%w: installing an add-on requires %s",
+			domain.ErrForbidden, auth.PermAddonsManage))
+		return
+	}
 	req, err := readAddonInstall(w, r)
 	if err != nil {
 		WriteError(w, r, err)
 		return
 	}
-	out, err := req.install(r.Context(), a.Addons, IdentityFrom(r.Context()))
+	out, err := req.install(r.Context(), a.Addons, actor)
 	if err != nil {
 		WriteError(w, r, err)
 		return

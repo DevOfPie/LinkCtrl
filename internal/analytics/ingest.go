@@ -105,8 +105,15 @@ type IngestConfig struct {
 	Returning *ReturningSet
 
 	// Observer is the add-on host, for add-ons holding `redirect.observe` (M66).
-	// Nil is every instance that installed none, and it costs a nil check per
-	// batch.
+	// Nil is every instance running no add-on host at all; an instance that has
+	// one sets this whether or not anything is observing yet, and
+	// [RedirectObserver.Observing] is asked per batch instead.
+	//
+	// **Assigned from the host's existence, never from its contents** (review
+	// finding 2). Whether anything observes is a fact about the running instance
+	// and it changes at every install; a caller that decided it once at boot would
+	// hand a runtime-installed add-on nothing at all, silently, because the
+	// workers it started come up and sit on a channel this field never writes to.
 	//
 	// **The pipeline is where the observe class is fed from, and that is a
 	// placement rather than a convenience.** m66.md's rule for the class is that
@@ -131,6 +138,10 @@ type IngestConfig struct {
 // not make a click batch late.
 type RedirectObserver interface {
 	Observe(ev addon.RedirectEvent)
+	// Observing reports whether anything holds `redirect.observe` at this moment.
+	// Asked per batch rather than cached, so an add-on installed while the process
+	// runs starts receiving events on the next flush.
+	Observing() bool
 }
 
 // Ingester buffers click events and writes them in batches.
@@ -487,7 +498,7 @@ func (i *Ingester) prepare(ctx context.Context, batch []Event) (
 		// resolved now or never.
 		country := i.country(ev.IP)
 
-		if i.cfg.Observer != nil {
+		if i.cfg.Observer != nil && i.cfg.Observer.Observing() {
 			// Built from the same derived values the row below is built from, in the
 			// same iteration, rather than read back out of the row slice: the row is
 			// positional and untyped, and a record assembled by indexing into it

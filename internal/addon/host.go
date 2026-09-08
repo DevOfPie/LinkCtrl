@@ -444,6 +444,11 @@ type Options struct {
 	// returns a nil *Host, constructs no runtime and starts no goroutine.
 	Dir string
 
+	// URLInstallProblem is why installing from a URL cannot work under this
+	// instance's configuration, or "" when it can. `config.InstallFetchNestingProblem`
+	// produces it; this package cannot import internal/config, so it arrives here.
+	URLInstallProblem string
+
 	Logger  *slog.Logger
 	Metrics *observability.Metrics
 
@@ -700,7 +705,7 @@ func (l Loaded) Grants() Grants { return l.grants }
 // MemorySize is the guest's linear memory in bytes, which is the resident cost
 // of holding this add-on instantiated.
 func (l Loaded) MemorySize() uint32 {
-	if l.module == nil || l.module.Memory() == nil {
+	if l.module == nil || noGuestMemory(l.module.Memory()) {
 		return 0
 	}
 	return l.module.Memory().Size()
@@ -829,6 +834,16 @@ type Host struct {
 	// it hands no add-on a socket another one opened, and building one per
 	// invocation would build a TLS configuration per request for nothing.
 	fetcher *fetcher
+	// urlInstallProblem is why a URL install cannot work on this instance, or ""
+	// when it can. Set from config at Open and read by installFromURL.
+	//
+	// **A refusal at the install rather than at the boot** (review finding 14). It
+	// was a fatal configuration error, which refused to start any instance with an
+	// add-ons directory and a request timeout at or under the install fetch's own
+	// bound — breaking an upgrade over a knob that only matters when somebody
+	// installs from a URL, with a remedy the message named that could not help.
+	urlInstallProblem string
+
 	// installFetcher is the same mechanism under M68.6's bounds: [MaxUploadBytes]
 	// instead of the response cap an add-on gets, and [InstallFetchTimeout]
 	// instead of the three seconds a discovery document is allowed. A second
@@ -957,6 +972,15 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	// fetch is bounded by the request it runs inside as well. See
 	// [InstallFetchTimeout].
 	h.installFetcher = newFetcher(InstallFetchTimeout, MaxUploadBytes, log)
+	h.urlInstallProblem = opts.URLInstallProblem
+	if h.urlInstallProblem != "" {
+		// Said once, at boot, so an operator meets it before somebody tries an
+		// install rather than only in the refusal. It is not fatal: everything else
+		// about add-ons works.
+		log.Warn("installing an add-on from a URL is refused on this instance's "+
+			"current configuration; every other add-on operation is unaffected",
+			slog.String("reason", h.urlInstallProblem))
+	}
 	// The runtime is constructed only once there is a directory to read, so the
 	// unset case above costs nothing. WithCloseOnContextDone is set at birth
 	// because it is what lets M66 interrupt a module that will not return: a
@@ -1053,6 +1077,22 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 			// directory entry rather than from a validated manifest.
 			h.metrics.ObserveAddonLoad(labelFor(name), string(le.Outcome))
 			if fatal(le) {
+				// **The set has not been published yet, so Close cannot see what this
+				// loop already started** (review finding 9). Close iterates
+				// `h.current().loaded`, which is still the empty set at this point, so
+				// every add-on loaded before the failing one would keep its
+				// *store.AddonDB — AddonMaxConns each — open with no reference left to
+				// close it by. On a `required` failure the process is exiting anyway,
+				// but Open is also called by a test and by anything that recovers, and
+				// a pool nothing can reach is a pool nothing can reach.
+				//
+				// Closed here rather than by publishing `started` first, because
+				// publishing a set the caller is about to be told does not exist would
+				// make a half-loaded instance briefly readable to anything holding the
+				// host.
+				for _, l := range started {
+					l.storage.Close()
+				}
 				_ = h.Close(ctx)
 				return nil, err
 			}

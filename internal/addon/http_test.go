@@ -259,6 +259,12 @@ func TestTheStatusVocabularyIsClosed(t *testing.T) {
 		{`{"location":"/\evil.test/x"}`, 0, true},
 		{`{"location":"/\/evil.test/x"}`, 0, true},
 		{`{"location":"/\\evil.test/x"}`, 0, true},
+		// TAB is the fourth form and F299's fix missed it (review finding 5): the
+		// WHATWG URL parser strips ASCII tab before parsing, so a browser reads this
+		// as `//evil.test/x` and walks past the scheme-relative check three lines up,
+		// which never runs because `HasPrefix(loc, "/")` returns first.
+		{`{"location":"/\tevil.test/x"}`, 0, true},
+		{`{"location":"/\t/evil.test/x"}`, 0, true},
 		{`{"location":"/landed"}`, http.StatusFound, false},
 		{`{"location":"javascript:alert(1)"}`, 0, true},
 		{"{\"location\":\"/x\\r\\nSet-Cookie: a=b\"}", 0, true},

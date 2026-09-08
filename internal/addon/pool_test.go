@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/tetratelabs/wazero"
 )
 
 // --- reuse happens at all -----------------------------------------------------
@@ -401,4 +403,46 @@ func poolHost(t *testing.T, size int, ttl time.Duration, permissions ...string) 
 	}
 	t.Cleanup(func() { _ = h.Close(context.Background()) })
 	return h
+}
+
+// TestAMemorylessModuleIsRefusedRatherThanDereferenced is review finding 1.
+//
+// Every nil-memory guard in this package was written `mod.Memory() == nil` and
+// none of them could fire. wazero's `(*ModuleInstance).Memory` returns
+// `m.MemoryInstance`, a `*wasm.MemoryInstance`, so a module declaring no memory
+// yields an **interface holding a nil pointer** — non-nil to `==`, and the line
+// after each guard dereferenced it.
+//
+// The comment beside the pool's guard said it existed because *"it always has
+// memory" is an assumption about somebody else's compiler*. Written as `== nil`
+// it was exactly that assumption.
+//
+// It matters most on the observing worker: there is no `recover` anywhere in
+// `internal/addon`, so a nil dereference there takes the process down rather
+// than one request.
+//
+// The premise is asserted first, so this test says something even if wazero
+// changes what `Memory()` returns for such a module.
+func TestAMemorylessModuleIsRefusedRatherThanDereferenced(t *testing.T) {
+	ctx := t.Context()
+	r := wazero.NewRuntime(ctx)
+	defer func() { _ = r.Close(ctx) }()
+
+	// The eight-byte empty module: a valid wasm header declaring nothing at all.
+	mod, err := r.Instantiate(ctx, []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00})
+	if err != nil {
+		t.Fatalf("instantiating the empty module: %v", err)
+	}
+	mem := mod.Memory()
+
+	if mem == nil {
+		t.Skip("wazero now returns a nil interface for a memory-less module, so the " +
+			"`== nil` guards this test is about would have worked; the helper is " +
+			"still correct and this case has stopped being reachable")
+	}
+	if !noGuestMemory(mem) {
+		t.Fatalf("noGuestMemory says a module with no linear memory has one. Every " +
+			"guard in this package reads this answer, and the call after each one " +
+			"dereferences the memory it was promised")
+	}
 }

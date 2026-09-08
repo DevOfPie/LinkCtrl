@@ -453,8 +453,50 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// skew is one step per veto on a weighted rotation that is already approximate
 	// across replicas.
 	//
+	// The gates (M35), and they run here — after the destination is known,
+	// before anything is written, and **before any inline add-on** (review
+	// finding 8).
+	//
+	// After the destination, because a deep link this alias cannot forward is a
+	// 404 and must not spend a one-time link's single click on its way to being
+	// refused. Before the write, because the whole point of a gate is that the 302
+	// does not happen until it has passed.
+	//
+	// Before the add-ons, because every request that merely renders a password or
+	// signature prompt — and every wrong-password POST — used to instantiate every
+	// inline module and hold one of the host's slots for the full inline deadline,
+	// then discard the answer. Prompt views are not rate-limited (the alias
+	// exists, so the probe limiters never charge), and `invokeInline` answers
+	// *allow* when no slot is free. So a flood of prompt views on one link
+	// silently skipped an access-control add-on's vetoes for everybody else's
+	// traffic.
+	//
+	// **Only the challenge half runs here.** The budget gate is the one gate that
+	// spends something, and it runs *after* the add-ons — see
+	// [RedirectHandler.passBudgetGate], which carries the whole argument. A veto
+	// must not retire somebody's one-time link.
+	//
+	// `Gated()` is false for every link on a default instance, so this is one
+	// boolean expression over fields already in hand and nothing else.
+	//
+	// `domainID` is handed over rather than read off the handler inside: the
+	// signature's MAC and the password bucket are both keyed on which namespace
+	// this alias was resolved in, and the boot default is the wrong answer for
+	// every request that arrived on a verified custom hostname.
+	if outcome == redirect.OutcomeRedirect && res.Snapshot.Gated() {
+		if g := h.passGates(w, r, res.Snapshot, canonical, domainID); g.answered {
+			h.Metrics.ObserveRedirect(g.label, string(res.Source), time.Since(start)-addonHeld)
+			return
+		}
+	}
+
 	// Free when nothing is installed, which is every instance until an operator
 	// installs an inline add-on: `h.inline()` is a nil check and a field read.
+	//
+	// After the gates, not before — see the block above. What reaches a module
+	// here is a redirect that has passed everything this product would refuse it
+	// for, which is also what makes the veto below the only refusal an add-on
+	// contributes.
 	if outcome == redirect.OutcomeRedirect && h.inline() {
 		held := time.Now()
 		decided := h.Addons.Inline(r.Context(), addon.RedirectDecision{
@@ -485,23 +527,10 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		target = decided.Destination
 	}
 
-	// The gates (M35), and they run here — after the destination is known,
-	// before anything is written.
-	//
-	// After, because a deep link this alias cannot forward is a 404 and must not
-	// spend a one-time link's single click on its way to being refused. Before,
-	// because the whole point of a gate is that the 302 does not happen until it
-	// has passed.
-	//
-	// `Gated()` is false for every link on a default instance, so this is one
-	// boolean expression over fields already in hand and nothing else.
-	//
-	// `domainID` is handed over rather than read off the handler inside: the
-	// signature's MAC and the password bucket are both keyed on which namespace
-	// this alias was resolved in, and the boot default is the wrong answer for
-	// every request that arrived on a verified custom hostname.
+	// The gate that spends. After the add-ons, so a veto costs a one-time link
+	// nothing — see [RedirectHandler.passBudgetGate].
 	if outcome == redirect.OutcomeRedirect && res.Snapshot.Gated() {
-		if g := h.passGates(w, r, res.Snapshot, canonical, domainID); g.answered {
+		if g := h.passBudgetGate(w, r, res.Snapshot, canonical); g.answered {
 			h.Metrics.ObserveRedirect(g.label, string(res.Source), time.Since(start)-addonHeld)
 			return
 		}

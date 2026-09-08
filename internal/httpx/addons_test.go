@@ -637,6 +637,13 @@ func TestASecondFactorOwedSendsTheVisitorToTheHostsOwnPrompt(t *testing.T) {
 func TestAnAddonsExternalDestinationCannotBecomeTheSignInsNext(t *testing.T) {
 	for _, location := range []string{
 		"https://evil.test/steal", "//evil.test/steal", "/\\evil.test",
+		// TAB, review finding 5. The WHATWG URL parser strips it before parsing, so
+		// a browser reads this as `//evil.test/steal` — the form on the line above,
+		// arriving past the check that refuses that one because `safeNext` returned
+		// early on the leading slash. This is the path the finding calls
+		// load-bearing: the value lands as `next=` on /login/code and reaches
+		// seeOther in web_mfa.go.
+		"/\tevil.test/steal", "/\t/evil.test/steal",
 	} {
 		t.Run(location, func(t *testing.T) {
 			stub := &stubAddonRouter{resp: addon.Response{

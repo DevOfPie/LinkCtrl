@@ -367,9 +367,37 @@ func (h *Host) PurgeData(
 	// because that pair is the whole of the check — this function's own comment
 	// already argues that dropping under a running module *is a failure mode with
 	// no upside*.
+	// **And under the cluster-wide lock as well, because installMu guards one
+	// process** (review finding 12). The decision above reads process-local state
+	// and the act below writes the shared database. On a multi-replica deployment
+	// — which AddonDB.reauthenticate's own warning calls ordinary — an install
+	// lands on replica A while the manager page is served by replica B, where that
+	// add-on was never discovered; B offers it as an orphan and drops its schema
+	// while A serves against it. The mutex cannot see that; the advisory lock can,
+	// because Install takes the same one.
 	h.installMu.Lock()
 	defer h.installMu.Unlock()
 
+	var gone Orphan
+	if err := store.WithAddonLifecycleLock(ctx, h.db, name,
+		func(ctx context.Context) error {
+			var err error
+			gone, err = h.purgeUnderLock(ctx, actor, name)
+			return err
+		}); err != nil {
+		return Orphan{}, err
+	}
+	return gone, nil
+}
+
+// purgeUnderLock is [Host.PurgeData]'s check and act, with both locks held.
+//
+// Split out so the pair cannot drift apart: the check is only a check while
+// nothing can install between it and the drop, and that is what the two locks
+// above buy. F352 is the row about the process-local half of it.
+func (h *Host) purgeUnderLock(
+	ctx context.Context, actor *auth.Identity, name string,
+) (Orphan, error) {
 	if l := h.find(name); l != nil {
 		return Orphan{}, fmt.Errorf("%w: %s is installed, so its data is not orphaned; "+
 			"remove the add-on first and then purge what it leaves", domain.ErrConflict, name)

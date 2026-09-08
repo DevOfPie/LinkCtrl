@@ -66,3 +66,71 @@ func TestAnHTMXRefusalReachesThePage(t *testing.T) {
 		}
 	})
 }
+
+// TestAnHTMXHeaderDoesNotTurnEveryRefusalIntoSuccess is review finding 7.
+//
+// The htmx limb was in [Web.errorPage], which has 77 callers, so a client sending
+// `HX-Request: true` — a header it chooses for itself — turned every 401, 403,
+// 404, 409, 429 and 500 across the dashboard into a `200`. [Web.tooManyRequests]
+// is the `deny` every rate limiter on this surface hands its refusal to, so a
+// throttled request answered success.
+//
+// Two kinds take that path deliberately, and this test is the fence around them.
+func TestAnHTMXHeaderDoesNotTurnEveryRefusalIntoSuccess(t *testing.T) {
+	r, err := ui.New()
+	if err != nil {
+		t.Fatalf("ui.New: %v", err)
+	}
+	h := &Web{UI: r}
+
+	htmx := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/anything", nil)
+		req.Header.Set("HX-Request", "true")
+		return req
+	}
+
+	t.Run("a rate-limit refusal keeps its status", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		h.tooManyRequests(rec, htmx())
+		if rec.Code != http.StatusTooManyRequests {
+			t.Errorf("a throttled htmx request answered %d, want 429. The limiter's "+
+				"whole job is to say no, and a 200 says the opposite to anything "+
+				"reading the status", rec.Code)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"not found", domain.ErrNotFound, http.StatusNotFound},
+		{"unhandled", fmt.Errorf("something broke"), http.StatusInternalServerError},
+	} {
+		t.Run(tc.name+" keeps its status", func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			h.webError(rec, htmx(), tc.err)
+			if rec.Code != tc.want {
+				t.Errorf("an htmx %s answered %d, want %d", tc.name, rec.Code, tc.want)
+			}
+		})
+	}
+
+	// And the two that deliberately do swap, so scoping this did not undo F218.
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"forbidden", fmt.Errorf("%w: nope", domain.ErrForbidden)},
+		{"conflict", fmt.Errorf("%w: not yet", domain.ErrConflict)},
+	} {
+		t.Run("a "+tc.name+" refusal still reaches the page", func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			h.webError(rec, htmx(), tc.err)
+			if rec.Code != http.StatusOK {
+				t.Errorf("an htmx %s answered %d; htmx swaps a 2xx and discards "+
+					"everything else, so the reader sees nothing", tc.name, rec.Code)
+			}
+		})
+	}
+}

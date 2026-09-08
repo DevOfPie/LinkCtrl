@@ -2182,3 +2182,117 @@ func samePageCount(a, b int64) bool {
 	}
 	return d%pageBytes == 0 && d <= 4*pageBytes
 }
+
+// TestClosingAnAddonDBUnderTrafficIsNotARace fences review finding 4.
+//
+// Draining is a designed concurrent state, not a shutdown. When `removeGrace`
+// expires, `unload` calls `AddonDB.Close` while guest calls are still in flight,
+// so `Query` and `Exec` are reading the pool on other goroutines at that moment.
+// Close used to write nil over it, unlocked, and an in-flight `storage_query`
+// could pass the nil check and then dereference nil inside `acquire`.
+//
+// Run under `-race`, the writer and the readers here are the two sides of that
+// report. Without the fix this also panics outright often enough to be seen
+// without the detector.
+//
+// Nothing is asserted about *which* answer a call gets: a query that beats the
+// close returns rows, one that loses gets an error from the closed pool, and both
+// are correct. What is asserted is that neither panics.
+func TestClosingAnAddonDBUnderTrafficIsNotARace(t *testing.T) {
+	name := addonName(t)
+	pool, dsn, _ := newAddonDB(t, name)
+	ctx := t.Context()
+	confined, err := store.OpenAddonDB(ctx, pool, dsn, name,
+		mustResetPassword(t, pool, name), nil)
+	if err != nil {
+		t.Fatalf("opening the add-on's own connection: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for range 25 {
+				// Errors are the expected outcome once the pool is closed. Discarded
+				// deliberately: a test that failed on one would be asserting a race it
+				// cannot win rather than the absence of a panic.
+				_, _ = confined.Query(ctx, `SELECT 1`, nil)
+				_ = confined.Exec(ctx, `SELECT 1`, nil)
+			}
+		}()
+	}
+	close(start)
+	// Mid-flight rather than after, which is the whole point: closing a quiet pool
+	// was never the failure.
+	time.Sleep(5 * time.Millisecond)
+	confined.Close()
+	wg.Wait()
+
+	// And the closed pool still refuses, so removing the nil-out did not turn a
+	// closed add-on database into a usable one.
+	if _, err := confined.Query(ctx, `SELECT 1`, nil); err == nil {
+		t.Error("a query on a closed add-on database succeeded")
+	}
+}
+
+// TestAFatalLoadClosesThePoolsAlreadyStarted fences review finding 9.
+//
+// `Open` accumulates loaded add-ons in a local slice and publishes the set only
+// once every one of them has loaded. On a `required` failure it called
+// `h.Close`, which iterates the *published* set — still empty — so every add-on
+// that had already loaded kept its `*store.AddonDB` open, AddonMaxConns each,
+// with no reference anywhere left to close it by.
+//
+// Measured at the database, because that is where a leaked pool is visible: the
+// add-on's role has its own login, so backends belonging to it can be counted
+// exactly. The first add-on runs a migration, which is what forces its pool to
+// have opened a connection at all by the time the second one fails.
+func TestAFatalLoadClosesThePoolsAlreadyStarted(t *testing.T) {
+	// Load order is directory order, so the prefixes decide which fails second.
+	good := "a_" + addonName(t)[2:]
+	bad := "z_" + addonName(t)[2:]
+	pool, dsn, dir := newAddonDB(t, good, bad)
+
+	installAddon(t, dir, good, addonFixture(t, "storage"),
+		[]string{abi.PermissionStorage},
+		map[string]string{"00001_own.sql": ownSchemaMigration})
+	// Required, and broken: installAddon writes ClassRequired, and a module that
+	// is not a module fails the digest the manifest just recorded.
+	installAddon(t, dir, bad, addonFixture(t, "storage"),
+		[]string{abi.PermissionStorage}, nil)
+	if err := os.WriteFile(filepath.Join(dir, bad, bad+".wasm"),
+		[]byte("not a module"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, _, err := openAddonHost(t, dir, pool, dsn); err == nil {
+		t.Fatal("a boot over a broken required add-on started; this test's premise " +
+			"is that it does not")
+	}
+
+	// The role is the add-on's own, so this counts that add-on's connections and
+	// nothing else. Polled, because pgxpool closes its connections from the
+	// background goroutine Close signals rather than synchronously.
+	role := store.AddonSchema(good)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var n int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT count(*) FROM pg_stat_activity WHERE usename = $1`, role).
+			Scan(&n); err != nil {
+			t.Fatalf("counting the add-on's backends: %v", err)
+		}
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connections belonging to %s are still open after a required "+
+				"add-on stopped the boot; the pool that opened them was started before "+
+				"the failure and nothing holds a reference to it any more", n, role)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}

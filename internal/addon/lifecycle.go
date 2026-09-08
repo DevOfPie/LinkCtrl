@@ -20,6 +20,7 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
+	"github.com/DevOfPie/LinkCtrl/internal/store"
 )
 
 // This file is M67: an add-on arrives and leaves without a reboot.
@@ -220,6 +221,35 @@ func (h *Host) install(
 	h.installMu.Lock()
 	defer h.installMu.Unlock()
 
+	// **And the cluster-wide lock too, when there is a database to take it in**
+	// (review finding 12). installMu serializes this process; the schema it is
+	// about to build is shared, and a purge running on another replica is deciding
+	// whether that schema is an orphan from a discovered set this install is not
+	// in yet. The two acts take the same key, so one waits for the other.
+	//
+	// An instance with no add-on database has no shared state to race over, and
+	// takes nothing.
+	if h.db == nil {
+		return h.installUnderLock(ctx, actor, m, req)
+	}
+	var out Installed
+	if err := store.WithAddonLifecycleLock(ctx, h.db, m.Name,
+		func(ctx context.Context) error {
+			var err error
+			out, err = h.installUnderLock(ctx, actor, m, req)
+			return err
+		}); err != nil {
+		return Installed{}, err
+	}
+	return out, nil
+}
+
+// installUnderLock is [Host.install]'s work, with installMu held and — on an
+// instance with an add-on database — the cluster-wide lifecycle lock for this
+// name as well. Split out so the two lock shapes have one body between them.
+func (h *Host) installUnderLock(
+	ctx context.Context, actor *auth.Identity, m Manifest, req InstallRequest,
+) (Installed, error) {
 	old := h.current()
 	if slices.ContainsFunc(old.loaded, func(l Loaded) bool { return l.Manifest.Name == m.Name }) {
 		return Installed{}, fmt.Errorf("%w: %q is already installed; remove it before "+

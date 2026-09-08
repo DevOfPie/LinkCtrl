@@ -914,6 +914,12 @@ func addonFailureMessage(code string) string {
 		return "That is not an address this instance will fetch from. A bundle URL " +
 			"is https, names a host, and carries no username or password. Nothing " +
 			"was written."
+	case addon.CodeURLUnavailable:
+		return "This instance is configured so that it cannot fetch a bundle at " +
+			"all: LINKCTRL_HTTP_REQUEST_TIMEOUT is at or below the ten seconds a " +
+			"fetch is given, so the request would be cancelled before it finished. " +
+			"Raise it above ten seconds, or upload the bundle instead — uploading " +
+			"is unaffected. Nothing was written."
 	case addon.CodeDigestInvalid:
 		return "The expected digest is not a sha256. Paste the 64 hex characters " +
 			"sha256sum prints for the bundle file. Nothing was written."

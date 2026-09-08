@@ -177,6 +177,16 @@ func run(cfg config.Config, _ io.Writer) error {
 			"acceptable only for local HTTP development")
 	}
 
+	// A bound the operator never set, lowered so the one they did set can stand.
+	// Said out loud for the same reason the removed variables below are: a knob at
+	// a value nobody chose is only defensible if the instance admits to choosing
+	// it (review finding 14).
+	if clamped, to := cfg.AddonRouteDeadlineClamped(); clamped {
+		log.Warn("ADDON_ROUTE_DEADLINE lowered to nest inside HTTP_REQUEST_TIMEOUT",
+			slog.Duration("route_deadline", to),
+			slog.Duration("request_timeout", cfg.HTTP.RequestTimeout))
+	}
+
 	// Variables that used to exist. Warned about rather than ignored: an operator
 	// who still has the line believes it does something, which is the same defect
 	// as a knob that parses and changes nothing.
@@ -323,8 +333,12 @@ func run(cfg config.Config, _ io.Writer) error {
 		Dir:     cfg.Addons.Dir,
 		Logger:  log,
 		Metrics: metrics,
-		DB:      pools.App,
-		DSN:     cfg.DB.URL.Reveal(),
+		// Whether a URL install can work at all under this configuration, answered
+		// here rather than refused at startup (review finding 14): a bound that only
+		// binds one operation must not stop an instance that never performs it.
+		URLInstallProblem: config.InstallFetchNestingProblem(cfg),
+		DB:                pools.App,
+		DSN:               cfg.DB.URL.Reveal(),
 		// M67. Installing code into a running server without a record of who did it
 		// is the one thing that surface must not be able to do quietly, so the host
 		// is handed the same auditor every other write in this program uses.
@@ -924,12 +938,17 @@ func run(cfg config.Config, _ io.Writer) error {
 	// The observe class (M66), fed from the pipeline because that is the one place
 	// off the request path where a redirect's derived fields exist at all.
 	//
-	// Assigned only when something is actually watching, for the reason
-	// ingestCfg.Geo is: a nil *addon.Host in an interface is not a nil interface,
-	// and the pipeline's per-click "is anyone observing" check would then rest on
-	// the host's nil-tolerance rather than saying what it means — on the loop that
-	// runs once per recorded click.
-	if len(addons.ObservingAddons()) > 0 {
+	// Assigned when there is a host, not when the host currently has observers
+	// (review finding 2). The set of observing add-ons changes at every install,
+	// and a boot-time sample of it would hand an add-on installed an hour from now
+	// nothing at all — for ever, with its workers running and no error anywhere.
+	// The pipeline asks `Observing()` per batch instead.
+	//
+	// Still guarded on the host itself, for the reason ingestCfg.Geo is: a nil
+	// *addon.Host in an interface is not a nil interface, and the per-batch check
+	// would then rest on the host's nil-tolerance rather than saying what it
+	// means.
+	if addons != nil {
 		ingestCfg.Observer = addons
 	}
 

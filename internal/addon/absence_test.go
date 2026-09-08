@@ -179,6 +179,16 @@ var httpSurfaceMentioningAddOns = []string{
 	// the second half of this test is what says the *prefix* still is not here.
 	"internal/httpx/redirect.go",
 	"internal/httpx/redirect_addon_test.go",
+	// The gates, added at M70 for review finding 8. **A deliberate change, and a
+	// small one**: this file names add-ons in a comment and in nothing else. It is
+	// here because the ordering it documents is the point — `passGates` is split so
+	// the challenge gates run before an inline add-on and the budget gate runs
+	// after it, which is the only arrangement in which a prompt view spends no
+	// add-on slot *and* a veto spends no one-time click. A reader who finds
+	// `passBudgetGate` and cannot see why it is separate from `passGates` would
+	// reasonably fold them back together and reintroduce both defects, so the
+	// reason lives where the split is.
+	"internal/httpx/redirect_gates.go",
 	// The lifecycle surface and its tests (M67). **The second deliberate change
 	// this list has taken, and it is a larger one than M66's**: until now every
 	// file here served an add-on's *own* pages, and this one changes which add-ons

@@ -1733,7 +1733,10 @@ was never on the redirect promise. It is a bound *inside*
 `LINKCTRL_HTTP_REQUEST_TIMEOUT`, which already cancels the same request context at
 fifteen seconds and starts first — the milestone's first attempt set this to
 fifteen as well and it therefore never fired, which is why the instance now
-refuses a route deadline that is not shorter. What the five-second margin buys is a
+requires a route deadline shorter than it. A route deadline *you* set that is not
+shorter is refused at start-up; the default is instead lowered to fit, with a
+warning, so a request timeout you chose is never a reason the instance will not
+start. What the five-second margin buys is a
 host still able to answer when it kills a guest; what the bound buys outright is an
 instance slot back from a module that will not return, including on a deployment
 that has set the request timeout to zero.

@@ -436,22 +436,27 @@ a general tidy-up.
   for as long as the visitor waits, and those slots are shared with the redirect
   path.
 
-  **Two nesting rules are now enforced at start-up**, so a bound that cannot fire
-  is refused rather than shipped: `LINKCTRL_ADDON_ROUTE_DEADLINE` must be under
+  **Two nesting rules are checked at start-up**, so a bound that cannot fire is
+  not shipped: `LINKCTRL_ADDON_ROUTE_DEADLINE` must be under
   `LINKCTRL_HTTP_REQUEST_TIMEOUT`, and `LINKCTRL_ADDON_FETCH_TIMEOUT` must not
-  exceed the route deadline. If you have raised either, raise the one above it too
-  or the instance will tell you which line to change.
+  exceed the route deadline. **If you set both numbers and they collide, the
+  instance refuses to start** and names the line to change — two chosen values,
+  and only you can say which was meant.
 
-  **This is the one upgrade break in this release, and it is narrow.** If you run
-  add-ons — `LINKCTRL_ADDONS_DIR` is set — **and** you have set
-  `LINKCTRL_HTTP_REQUEST_TIMEOUT` to `10s` or less, this instance will not start
-  until `LINKCTRL_ADDON_ROUTE_DEADLINE` comes down below it. Both values were
-  accepted before, because the route deadline did not exist; the pair is refused
-  now because a route deadline at or over the request timeout never fires, and a
-  bound that cannot fire is worse than no bound. The remedy is to lower
-  `LINKCTRL_ADDON_ROUTE_DEADLINE`, not to raise a request timeout you set for a
-  reason. An instance with `LINKCTRL_ADDONS_DIR` unset is not held to the rule and
-  starts exactly as it did.
+  **There is no upgrade break here.** If you have set
+  `LINKCTRL_HTTP_REQUEST_TIMEOUT` to `10s` or less and have *not* set
+  `LINKCTRL_ADDON_ROUTE_DEADLINE`, the instance starts: the route deadline you
+  never chose is lowered to one second under your request timeout, and a warning
+  at start-up says so. Your setting stands; the default gives way. An instance
+  with `LINKCTRL_ADDONS_DIR` unset is not held to either rule and starts exactly
+  as it did.
+
+  **Installing an add-on from a URL is the exception**, because that fetch does
+  not nest — it needs `LINKCTRL_HTTP_REQUEST_TIMEOUT` above ten seconds to
+  complete. Below that, the instance still starts and still runs every add-on it
+  has; a URL install is refused with `url_unavailable` and the reason, and
+  start-up warns once. A bound that binds one operation does not stop an instance
+  that never performs it.
 
   **You can see it happening.** `linkctrl_addon_fetch_total{addon,outcome}` counts
   every attempt and every refusal by add-on, with a closed eleven-word vocabulary
