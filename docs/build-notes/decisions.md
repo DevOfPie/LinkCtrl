@@ -514,6 +514,7 @@ file. Append a row when you append an entry.
 | [M70's documentation batch: what three append-only entries now get wrong](#2026-09-04--m70s-documentation-batch-what-three-append-only-entries-now-get-wrong) | D229's *an add-on cannot store what it is never handed* is a conclusion its own premise does not support — the surface bounds the host, not the module — and the sentence is corrected at five sites and here. D181 and D182's *at every level* went loose when D187 made the level a floor and `L` unreachable. And `LINKCTRL_ADDON_LOAD_TIMEOUT`, which `internal/config` reasoned about, has never existed |
 | [M70's documentation pass: the fold, the 1.0 gate, and a cost that did not move](#2026-09-06--m70s-documentation-pass-the-fold-the-10-gate-and-a-cost-that-did-not-move) | D438: the audit count is folded thirty-nine to forty-six and the *cannot drift without a failing build* clause is corrected rather than carried — it stopped being true at M65, which is when D313 removed the tie. D439: 1.0 now means the add-on contract is stable rather than that identity is built in; identity shipped as a module, so the old condition discharged itself. D440: the always-read contract grew 1217 bytes — one rule in workflow.md, whose realized read ratio is 0.96 — defended against the three test attempts and the one reverted fix that earned it. This entry claimed zero and was corrected in the same pass |
 | [PR #11's code review: fifteen findings, and the four that changed a rule rather than a line](#2026-09-08--pr-11s-code-review-fifteen-findings-and-the-four-that-changed-a-rule-rather-than-a-line) | D441: a defaulted `ADDON_ROUTE_DEADLINE` is clamped to fit an operator's request timeout rather than refusing the boot, and only an explicitly set one is still refused — the upgrade break in CHANGELOG.md is withdrawn. D442: the pipeline asks the host *is anything observing* per batch instead of sampling the answer at boot, which is the same reasoning `jobs.go` already applied. D443: an add-on lifecycle act takes a cluster-wide advisory lock keyed on the add-on's name, because `installMu` guards one process and the schema is shared. D444: inline add-ons run after the gates, not before. Plus `internal/auth/authtest`, a package whose only power is to conjure a permission, made visible by being an import |
+| [The OIDC fixture moves to the release M70 owed another repository](#2026-09-08--the-oidc-fixture-moves-to-the-release-m70-owed-another-repository) | No new decision — D414's discharge. The nine pins move from `v0.1.0` to `v0.2.0`, and the digests measured from a local build before the release matched the published assets byte for byte, which is the reproducibility F348's toolchain pin was bought for and this is its second independent confirmation |
 
 ---
 
@@ -42506,4 +42507,41 @@ constructor so that the ability to conjure a permission has to be named in an
 import block — visible in a way a method on a type already in scope is not. Every
 constructor in it demands a `*testing.T`, which production code has nowhere to
 get.
+
+---
+
+## 2026-09-08 — the OIDC fixture moves to the release M70 owed another repository
+
+Not a decision. D414 made this one — the published example is built against the
+*released* SDK rather than a pseudo-version of an unreleased commit — and this is
+the entry that says it was carried out, because a cross-repository obligation with
+no record is the one discovered by a reader of the published example.
+
+`LinkCtrl-OIDC` `v0.2.0` was tagged by the owner at `6fc9ed1` and published by its
+own workflow on 2026-09-08. Nine sites move from `v0.1.0` to it: four in
+`scripts/oidc-fixture.sh`, four constants in `test/integration/addon_oidc_test.go`,
+and the comment above them. The `0.1.0` strings in `docs/addon-abi.md` are ABI
+versions and are untouched.
+
+**The digests did not change between the local build and the release, and that is
+the part worth recording.** Both were measured here before the tag existed —
+module `243df738…`, bundle `7fcf1ffb…` — and both come back identical from the
+published assets, from the release's own `SHA256SUMS`, and from `addon.json`. Then
+`scripts/oidc-fixture.sh` rebuilt the module from the module proxy at `v0.2.0` and
+reproduced `243df738…` a third time.
+
+That is [F348](deferred-findings.md)'s fix confirmed on a second release rather
+than on the one it was written for. F348 was the OIDC module failing to reproduce
+on the CI runner because `GO_VERSION: "1.26"` resolved to 1.26.7 there and 1.26.5
+here, and D397's answer was to pin the toolchain **in the fixture** — read from
+the released module's own `go.mod` — rather than in the CI workflow, so the module
+reproduces on any machine and not only on the runner. A second release cut months
+later, from a different commit, against a different SDK version, reproducing on
+the first attempt is the evidence that answer was the right one.
+
+The obligation m70.md carries is now discharged in all four parts: that
+repository's `go.mod` names `github.com/DevOfPie/LinkCtrl v0.4.0`, its CI is green
+on the bump, its changelog says the SDK moved from a pseudo-version to a release,
+and — the part the milestone could not write down as a gate — this tree's fixture
+consumes the result.
 
