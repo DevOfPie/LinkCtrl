@@ -50,15 +50,15 @@ cd "$(dirname "$0")/.." || exit 1
 # The add-on, pinned at the release. Bumping this means bumping all four lines
 # together: the tag, the bundle it published, and the two digests.
 MODULE=github.com/DevOfPie/LinkCtrl-OIDC
-VERSION=v0.1.0
-BUNDLE=linkctrl-oidc-0.1.0.tar.gz
+VERSION=v0.2.0
+BUNDLE=linkctrl-oidc-0.2.0.tar.gz
 # The release's own SHA256SUMS line — the digest an operator types beside the URL
 # in the Add-on manager, and what M68.6's install refuses to proceed without.
-BUNDLE_SHA256=68f2d0c5794a042e28868efa2d01eb64fe56d97f888b08f04fdf0290d9515c02
+BUNDLE_SHA256=7fcf1ffb863f5b43d4e3ff172d0275fdf015f278a1dff39fd7615d7fe09bd4c9
 # sha256 of the module the release published, which is also what its addon.json
 # names and what M60's loader verifies before it instantiates anything.
 # Reproduced by the build below; a mismatch is a refusal.
-MODULE_SHA256=695385a1a796a689ad2b3b4f910f93c102adfe304728c5081ed215837cb4477e
+MODULE_SHA256=243df738a5aefe4c552910f2668619a0eee457e8bdf05a18ea79d074a5ac3643
 
 BUNDLE_URL="https://github.com/DevOfPie/LinkCtrl-OIDC/releases/download/$VERSION/$BUNDLE"
 

@@ -120,9 +120,16 @@ const (
 	oidcFixtureDir = "testdata/oidc"
 	oidcCACert     = "testdata/idp/tls/idp.crt"
 
-	// The release this fixture *is*: `DevOfPie/LinkCtrl-OIDC` v0.1.0, published
-	// 2026-08-28 by its own workflow from the tag, with a SLSA build provenance
+	// The release this fixture *is*: `DevOfPie/LinkCtrl-OIDC` v0.2.0, published
+	// 2026-09-08 by its own workflow from the tag, with a SLSA build provenance
 	// attestation over the module.
+	//
+	// **0.2.0 rather than 0.1.0 because M70 required it** (D414): the published
+	// example is built against the *released* SDK rather than a pseudo-version of
+	// an unreleased commit, so it could not be cut until LinkCtrl v0.4.0 existed.
+	// Both digests below were measured from a local build before the release and
+	// again from the published assets after it, and they matched — the build is
+	// reproducible, which is the property the second copy below exists to defend.
 	//
 	// The three values below are that release's published facts — the tag, the
 	// line its `SHA256SUMS` carries for the bundle, and the module digest its
@@ -130,10 +137,10 @@ const (
 	// scripts/oidc-fixture.sh pins. Two copies is what makes this an assertion
 	// rather than a variable: a pin moved without the release moving fails here,
 	// and so does a release re-cut over the same tag.
-	oidcReleaseTag          = "v0.1.0"
-	oidcReleaseBundle       = "linkctrl-oidc-0.1.0.tar.gz"
-	oidcReleaseBundleSHA256 = "68f2d0c5794a042e28868efa2d01eb64fe56d97f888b08f04fdf0290d9515c02"
-	oidcReleaseModuleSHA256 = "695385a1a796a689ad2b3b4f910f93c102adfe304728c5081ed215837cb4477e"
+	oidcReleaseTag          = "v0.2.0"
+	oidcReleaseBundle       = "linkctrl-oidc-0.2.0.tar.gz"
+	oidcReleaseBundleSHA256 = "7fcf1ffb863f5b43d4e3ff172d0275fdf015f278a1dff39fd7615d7fe09bd4c9"
+	oidcReleaseModuleSHA256 = "243df738a5aefe4c552910f2668619a0eee457e8bdf05a18ea79d074a5ac3643"
 )
 
 // oidcFixture is a stock instance with the released OIDC add-on installed, and a
