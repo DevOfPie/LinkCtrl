@@ -131,6 +131,18 @@ tags:
       review of disputed destinations on other accounts, and a holder of that
       review may not confer it onwards. None of these permissions is delegable
       to an API key, and no organization role carries any of them.
+  - name: addons
+    description: >
+      Administering add-ons — WebAssembly modules this instance executes. What
+      is installed, what each module costs the redirect path, what it is
+      configured with, and the data left behind by modules that are gone. Every
+      operation requires `addons.manage`, which only the instance principal
+      holds and which no API key can hold at all: an add-on carries whatever
+      permissions its own manifest declares, so a credential that could install
+      one would have widened its reach past every scope it was issued with. A
+      module arrives in the request body, or is fetched from a URL the operator
+      types with the digest they expect beside it. Both shapes land at the same
+      address and take the same path from the digest check onward.
   - name: feeds
     description: >
       Whether this instance sends destinations to a third party, and to whom.
@@ -149,6 +161,461 @@ tags:
     description: The API describing itself
 
 paths:
+  /addons:
+    get:
+      tags: [addons]
+      operationId: listAddons
+      summary: What add-ons this instance runs, and what each one costs
+      description: |
+        Every installed add-on, in discovery order, with what the Add-on manager
+        draws beside it: its declaration class, the permissions it holds, the
+        size of the schema it owns, how many of its declared settings have a
+        value, and its own latency on the redirect path.
+
+        **The performance figures are read off this process's own metrics.**
+        They are cumulative since it started, not a rate over a window — there is
+        no time series here to take a rate of — and `p99` is the estimate
+        `histogram_quantile` makes from the same buckets `/metrics` publishes, so
+        this answer and a Prometheus dashboard agree. A class this add-on has
+        never run in is **absent** rather than zero, which is what lets a client
+        tell *no observations* from *fast*.
+
+        **This is not a public inventory.** An add-on's name, version and
+        declared permissions describe what this box executes, which is why
+        `/metrics` is not published either.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      responses:
+        "200":
+          description: Everything installed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [addons]
+                properties:
+                  addons:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ManagedAddon"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    post:
+      tags: [addons]
+      operationId: installAddon
+      summary: Install an add-on and start it without restarting the instance
+      description: |
+        Uploads a WebAssembly module and the `addon.json` that describes it. The
+        host parses the manifest and checks the module against the manifest's
+        `sha256` **before anything is written to disk**, then writes the pair
+        into the instance's add-ons directory and loads it — verification,
+        permission resolution, the add-on's own schema, and instantiation, in
+        the same order and with the same refusals a module placed by hand meets
+        at boot.
+
+        **Two shapes, and they are mutually exclusive.** The body is
+        `multipart/form-data`, at most 32 MiB, and it carries either the
+        `manifest` and `module` parts — the module and the `addon.json` that
+        describes it, as files — or the `url` and `sha256` fields, which name a
+        bundle for this instance to fetch. A body carrying fields from both is
+        refused, and the schema below says so rather than this paragraph.
+
+        **What a URL install fetches is one object.** A bundle is a `.tar`, a
+        `.tar.gz` or a `.zip` holding `addon.json` and the module it names, and
+        nothing else; there is no separate manifest fetch, because a manifest
+        and a module fetched separately can come from two different moments.
+
+        **The container is read from the bytes, never from the URL.** An
+        extension is typed by whoever supplied the address, so it is a claim
+        rather than a fact — a `.tar.gz` that is really a zip installs, and a
+        `.tar` that is really an HTML error page is refused as not a bundle. All
+        three carry the same member rule: exactly two plain files with bare
+        names, so no directory entry, no symbolic link, no path and no duplicate
+        name. A compressed bundle is bounded again after it is decompressed, and
+        one that expands implausibly is refused as a decompression bomb.
+
+        **The digest is yours and never the URL's.** `sha256` is what the
+        fetched bundle must hash to, and it is checked before anything inside is
+        parsed. A checksum published beside the module proves nothing — whoever
+        can serve the one can serve the other — so a manifest fetched from the
+        URL is never the only source of its own module's digest. What this
+        bounds is that the bundle is the bundle you meant; it cannot make a
+        digest you copied off the same page mean anything.
+
+        **What the fetch may reach.** https only. Addresses are checked after
+        resolution, on every address a name resolves to, and only globally
+        routable unicast space is dialled — loopback, link-local, private and
+        carrier-grade NAT ranges are refused, which is what makes this something
+        other than a request-forgery endpoint. A redirect that leaves the origin
+        you typed is not followed. Each of those refusals is its own `422` code
+        in the field errors, so a caller can tell a bad address from a bad
+        digest from a bad archive. Until M68.6 this endpoint took no URL at all
+        and said it never would; that stance was nobody's decision, and the
+        address policy and the operator-supplied digest are what answer the
+        argument behind it.
+
+        **What it cannot install.** An add-on whose manifest declares migration
+        files ships `.sql` alongside its module, and those files are not part of
+        this upload; such an add-on is refused with `migrations_unsupported` and
+        is installed by placing its directory in the add-ons directory and
+        restarting. An add-on that owns a schema and creates its tables from its
+        own code installs here.
+
+        `409` means the name cannot be taken — by a running add-on, by a
+        directory this instance did not load, or because it overlaps a name the
+        add-ons directory already claims: two names where one plus an underscore
+        is a prefix of the other share a cookie prefix and a settings prefix, so
+        `oidc_x` cannot be installed beside `oidc`, or the other way round. That
+        check reads what the directory claims rather than what is running, which
+        is the same set the boot check reads — a directory whose manifest parses
+        and names itself claims its name even if the add-on behind it was refused,
+        and allowing the install would make the *next* start refuse both. Removal
+        is the path to replacing an add-on: this version has no upgrade-in-place.
+        `503` means the instance has no add-ons directory configured, or has one
+        it cannot write to, which is what a read-only mount produces.
+
+        Recorded as an **instance-wide** audit event, `addon.installed`, naming
+        the module, its version and its digest.
+
+        Rate-limited separately from the rest of this API — see
+        `UPLOAD_RATE_PER_MIN` — and it is **the same bucket a QR code's logo
+        upload spends**, because what the bucket is about is a body whose cost is
+        set by its content. So a `429` here can arrive while other calls are
+        still being served, and an address that has just uploaded logos has less
+        of it left. Removing an add-on carries no body and is not charged.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AddonInstall"
+      responses:
+        "201":
+          description: The add-on is installed and running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Addon"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /addons/orphaned-data:
+    get:
+      tags: [addons]
+      operationId: listOrphanedAddonData
+      summary: Add-on schemas no installed module owns
+      description: |
+        Removing an add-on never deletes its data, so what it owned is still
+        there. This is the enumeration: every `addon_*` schema in this database
+        that no installed module owns, with its size measured **now** rather than
+        read from the gauge the maintenance job publishes on a schedule — a
+        figure an hour old beside a delete button is worse than no figure.
+
+        `large_objects`, `identity_links` and `stored_settings` count three of the
+        four things a purge will **not** delete — the fourth is the login role,
+        which has no count because there is exactly one. A large object belongs to a role rather than to a schema, so it
+        survives the drop; it is zero for every add-on that behaves, and an add-on
+        that owns one is refused at its next load. An identity link belongs to the
+        host and is keyed on the add-on's *name*, so it survives the drop too — and
+        whatever is installed under that name next inherits it. Stored settings
+        are the same shape: keyed on the name, inherited by the successor, and
+        deleted by nothing in this product.
+
+        The path segment cannot collide with an add-on: a name matches
+        `^[a-z][a-z0-9_]{1,30}$`, and a hyphen is not in it.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      responses:
+        "200":
+          description: What is left behind
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [orphans]
+                properties:
+                  orphans:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AddonOrphan"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /addons/orphaned-data/{name}:
+    delete:
+      tags: [addons]
+      operationId: purgeAddonData
+      summary: Drop an orphaned add-on's schema and everything in it
+      description: |
+        **The only operation in this product that deletes an add-on's data**, and
+        it is deliberately not part of removing one: removal leaves the schema
+        standing so that this is always a second, explicit act taken against
+        something whose size the caller has just been told.
+
+        `DROP SCHEMA … CASCADE` — every relation, sequence, function, view and
+        type the add-on created. Four things survive and each is named because
+        a purge that quietly left them would be worse than one that says so: the
+        `addon_<name>` **login role**, with its password, so re-installing under
+        the same name works as it did; **large objects** the role owns, which
+        live outside every schema; any `addon_identity_links` rows written
+        under this name, which are the host's rather than the add-on's; and the
+        **stored settings** an operator typed, which this response counts as
+        `stored_settings` and which are keyed on the name the same way — so
+        whatever is installed under it next inherits them.
+
+        `409` means the add-on is installed, so its data is not orphaned — remove
+        it first. `404` means no such schema, which is what a mistyped name gets
+        rather than a success nobody could tell from one.
+
+        The answer carries what was deleted, because after the drop there is
+        nothing left to measure. Recorded as an **instance-wide** audit event,
+        `addon.data_purged`, carrying the same figure.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: The add-on the schema belonged to, not the schema name.
+      responses:
+        "200":
+          description: The schema is gone, and this is what went
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddonOrphan"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /addons/{name}/settings:
+    put:
+      tags: [addons]
+      operationId: saveAddonSettings
+      summary: Configure an add-on's declared settings
+      description: |
+        Writes the values an operator chose for the settings this add-on's
+        manifest declares. The module reads them through `config_get` on its
+        **next** invocation — one already inside the guest reads whatever it
+        read, and there is no transactional relationship between this call and a
+        module's flow.
+
+        **A replace of what was sent.** A value that arrives empty means *unset*,
+        and the add-on then falls back to its declared default; a setting the
+        body does not mention keeps whatever it had. That is why this is `PUT`
+        and not `PATCH`: the manager posts every editable setting, so an absent
+        one is a caller that did not carry it rather than a caller asking for it
+        to be left alone.
+
+        **A setting the environment answers is refused, not overridden.**
+        `LINKCTRL_ADDON_<NAME>_<SETTING>` wins over anything stored here, so a
+        write to one would be accepted and change nothing an add-on reads —
+        `422` says which variable to edit instead.
+
+        `422` also covers a key the manifest does not declare, a `toggle` that is
+        not `true` or `false`, and a `select` outside its options.
+
+        Recorded as an **instance-wide** audit event, `addon.settings_saved`,
+        naming which settings the save wrote and **never their values**.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: The add-on's name, as its manifest declares it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [values]
+              properties:
+                values:
+                  type: object
+                  additionalProperties: { type: string }
+                  description: >
+                    Declared setting names to values, as strings for every
+                    declared type including `toggle` and `select`.
+      responses:
+        "200":
+          description: The settings as they now stand
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [settings]
+                properties:
+                  settings:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AddonSetting"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Validation"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /addons/{name}:
+    get:
+      tags: [addons]
+      operationId: getAddon
+      summary: One add-on, with its declared settings resolved
+      description: |
+        Everything the list carries for this add-on, plus `settings`: what its
+        manifest declares, where each value came from, and — for everything but a
+        `secret` — what it is.
+
+        **A secret's value is never in this answer.** `configured` is the whole
+        of what is said about one, whichever route set it. That is structural
+        rather than careful: the field is not populated for that type.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: The add-on's name, as its manifest declares it.
+      responses:
+        "200":
+          description: The add-on
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedAddon"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [addons]
+      operationId: removeAddon
+      summary: Remove an add-on and unload it without restarting the instance
+      description: |
+        Takes the add-on out of the running set, then out of the add-ons
+        directory, then releases what it held: its pooled instances, its
+        compiled module and its database connections. Invocations already inside
+        the module are allowed to finish; ones that have not finished within a
+        few seconds are interrupted, and the answer says so in `draining`.
+
+        A removed add-on's directory is gone before anything is unloaded, so an
+        add-on whose `failure_class` is `required` cannot leave an instance that
+        will not start: the next boot has nothing to stop for.
+
+        **The data stays.** An add-on that owned a Postgres schema leaves it
+        behind, and the answer names it in `schema` — the one moment at which
+        somebody can decide what to do about it. Nothing here deletes it.
+
+        `404` means no add-on of that name is running on this instance.
+
+        Recorded as an **instance-wide** audit event, `addon.removed`, naming
+        the module, its version and its digest.
+
+        Requires `addons.manage`. Not delegable to an API key.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+          description: The add-on's name, as its manifest declares it.
+      responses:
+        "200":
+          description: The add-on is removed, and what it left behind
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Addon"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+  /addons/{name}/identities/{id}:
+    delete:
+      tags: [addons]
+      operationId: disconnectAddonIdentity
+      summary: Sever one account's link to this add-on
+      description: |
+        The operator's half of the same capability the account page offers
+        (`DELETE /account/identities/{id}`), and it is a separate operation
+        because it acts on **somebody else's credential**: it costs the
+        instance's non-delegable `addons.manage`, and the audit record it writes
+        says the removal came from an operator rather than from the account.
+        That distinction is the first question the person asks when they find
+        they can no longer sign in this way.
+
+        The account is resolved from the link itself rather than taken from the
+        request, so an identifier that does not belong to this add-on is a `404`
+        rather than a removal somewhere else.
+
+        **Removing the add-on does not do this.** These rows are keyed on the
+        add-on's name and survive a removal, so whatever is installed under that
+        name next inherits them — which is why this exists as an act of its own.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: >-
+            Severed. That account can no longer be signed in by this add-on.
+            Sessions it already started remain until they expire.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /auth/setup:
     post:
       tags: [auth]
@@ -779,10 +1246,12 @@ paths:
         person, not the credential.
 
         **What happens immediately, in one transaction.** Sessions, API keys,
-        memberships, notifications, outstanding password-reset tokens and any
-        instance-level grants are removed; the account is marked deleted; the
-        address becomes available for a new account. When this returns, no
-        credential reaches the account.
+        memberships, notifications, outstanding password-reset tokens, any
+        instance-level grants, second-factor recovery codes, any unanswered
+        second-factor prompt and every connected external identity are removed;
+        the account is marked deleted; the address becomes available for a new
+        account. When this returns, no credential reaches the account. Nine
+        tables, which is every one `DeleteAccountDependents` names.
 
         **What happens within the hour.** Records *about* you that ending the
         account does not remove keep their rows, because they are records of
@@ -835,6 +1304,77 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/RateLimited"
+
+  /account/identities:
+    get:
+      tags: [auth]
+      operationId: listConnectedIdentities
+      summary: The sign-in providers connected to the authenticated account
+      description: |
+        Each row here is a **standing credential**: it signs this account in
+        with no password and no second factor of this product's, for as long as
+        it exists. That is why ending the account removes them, and why this
+        endpoint and its sibling below exist at all — until 0.4.0 a connection
+        could be created and never undone, and deleting the whole account was
+        the only thing that reliably severed one.
+
+        **The provider's identifier for the person is not returned.** What a
+        caller chooses between is which add-on, which provider, and when it was
+        last used; an opaque external id on a surface of ours invites a caller
+        to treat it as one of ours.
+
+        `last_used_at` is null for a connection that has never signed anybody
+        in. Not paginated: a person's connections are a handful of rows.
+      responses:
+        "200":
+          description: The connected providers, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConnectedIdentity"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /account/identities/{id}:
+    delete:
+      tags: [auth]
+      operationId: disconnectIdentity
+      summary: Disconnect one sign-in provider from the authenticated account
+      description: |
+        Acts on the **calling account and no other**: the identifier is matched
+        against this account's own connections, so one belonging to somebody
+        else is a `404` rather than a removal. An operator severing somebody
+        else's uses `DELETE /addons/{name}/identities/{id}`, which costs a
+        different permission and is recorded differently.
+
+        Requires an interactive session, for the reason deleting the account
+        does: the subject is the person rather than the credential.
+
+        **This is not a sign-out.** Sessions the connection already started
+        stay valid until they expire or the account signs them out — a separate
+        act with its own record. What this removes is the standing way back in.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Disconnected. The provider can no longer sign this account in.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /me:
     get:
@@ -4806,6 +5346,45 @@ components:
             $ref: "#/components/schemas/Problem"
 
   schemas:
+    ConnectedIdentity:
+      type: object
+      required: [id, addon, issuer, created_at, last_used_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: This connection, for the operation that severs it.
+        addon:
+          type: string
+          description: >-
+            The add-on that owns the connection, by manifest name. These rows are
+            keyed on that name and survive the add-on's removal, so whatever is
+            installed under it next inherits them.
+        issuer:
+          type: string
+          description: >-
+            The provider as it named itself. Not an identifier of a person, and
+            not guaranteed unique across add-ons.
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            When this connection last signed the account in, or null if it never
+            has. The question an operator asks about a credential they are
+            considering removing.
+        email:
+          type: string
+          description: >-
+            Whose account this is. Present only on an add-on's listing, where the
+            reader is deciding about accounts that are not their own; absent from
+            the account's own list, where it would always be the caller's.
+        name:
+          type: string
+          description: The account holder's display name, present under the same rule as `email`.
     MFAStatus:
       type: object
       required: [available, enabled, recovery_codes_remaining]
@@ -7210,17 +7789,21 @@ components:
           minItems: 1
           items: { type: string }
           description: |
-            Permission slugs you hold. Nine are never grantable to a key:
+            Permission slugs you hold. Ten are never grantable to a key:
             `apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`,
             `webhooks.write`, `automation.write`, `instance.admin`,
-            `destinations.decide` and `audit.read.instance`. A key that can mint
+            `destinations.decide`, `audit.read.instance` and `addons.manage`.
+            A key that can mint
             keys or delete an organization needs a human behind it; a webhook or
             an automation rule outlives the credential that created it; the audit
             log and its instance-wide surface disclose who acted from which
             network; deciding a disputed destination lifts an instance-wide
-            blocklist entry, widening what the deciding key may point at; and
+            blocklist entry, widening what the deciding key may point at;
             `instance.admin` confers instance-level review, so a key holding it
-            could grow the set that may delegate.
+            could grow the set that may delegate; and a key that could install an
+            add-on would carry whatever that add-on's own manifest declares —
+            including deciding who is signed in — past every scope the key was
+            issued with.
         expires_at:
           type: string
           format: date-time
@@ -7558,6 +8141,478 @@ components:
           type: string
           description: Opaque keyset cursor; present when `has_more`.
         has_more: { type: boolean }
+
+    AddonInstall:
+      type: object
+      additionalProperties: false
+      title: An install
+      description: |
+        One install, in one of two shapes, and never in both.
+
+        **An upload** carries `manifest` and `module` as file parts: the add-on's
+        `addon.json` verbatim, and the `.wasm` its `sha256` describes.
+
+        **A fetch** carries `url` and `sha256`: a bundle for this instance to
+        download, and what it must hash to. A bundle is a `.tar`, a `.tar.gz` or
+        a `.zip` holding `addon.json` and the module it names, and which of the
+        three it is comes from its leading bytes rather than from the URL.
+
+        The exclusivity is in the `oneOf` below rather than in this paragraph —
+        each branch requires its own pair and forbids the other's, so a body
+        carrying three or four of these fields matches neither and is refused by
+        the schema as well as by the server.
+      properties:
+        manifest:
+          type: string
+          format: binary
+          description: The add-on's `addon.json`, verbatim.
+        module:
+          type: string
+          format: binary
+          description: The `.wasm` the manifest's `sha256` describes.
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: |
+            Where the bundle is. `https` only, no credentials, and the address it
+            resolves to has to be on the public internet.
+        sha256:
+          type: string
+          pattern: "^[0-9a-fA-F]{64}$"
+          description: |
+            What the fetched bundle must hash to, lowercase hex — the digest of
+            the whole archive, not of the module inside it. Supplied by the operator
+            and never read out of anything this instance fetched. Required
+            whenever `url` is sent: an install that fetched whatever the URL
+            happened to serve would be a request forgery with the answer
+            executed, and this is what stops that.
+      oneOf:
+        - title: An upload
+          required: [manifest, module]
+          not:
+            anyOf:
+              - required: [url]
+              - required: [sha256]
+        - title: A fetch
+          required: [url, sha256]
+          not:
+            anyOf:
+              - required: [manifest]
+              - required: [module]
+    Addon:
+      type: object
+      additionalProperties: false
+      required: [name, version, abi_version, sha256, failure_class, permissions]
+      description: |
+        One add-on, as a lifecycle operation reports it.
+
+        The same shape both ways. What is worth recording about an install —
+        which module, at which version, with which digest, holding which
+        permissions — is exactly what is worth recording about the removal of
+        one, and a client that installed something can compare the two answers
+        without a second call.
+      properties:
+        name:
+          type: string
+          description: The add-on's name, which is also its directory and its schema.
+        version:
+          type: string
+          description: The version its manifest declares. This host does not compare versions.
+        abi_version:
+          type: integer
+          description: The host ABI generation the module was built against.
+        sha256:
+          type: string
+          description: >
+            The module's digest, checked against the uploaded bytes before they
+            were written. It protects against the file changing after it was
+            published and against nothing else — a manifest and a module
+            replaced together verify perfectly.
+        failure_class:
+          type: string
+          enum: [required, degrade]
+          description: >
+            What this host applies, which is the manifest's answer only when
+            neither the operator's override nor the authentication-path default
+            outranked it. `required` means a future boot stops if the add-on
+            will not load.
+        permissions:
+          type: array
+          items: { type: string }
+          description: >
+            What the add-on *holds*, which is not what its manifest declared: a
+            permission the vocabulary carries and no host grants yet is
+            declarable and not held.
+        schema:
+          type: string
+          description: >
+            The Postgres schema the add-on owns, absent for one that declared
+            none. On a removal this is the orphan that has just been created —
+            the data is still there and nothing here deletes it.
+        draining:
+          type: boolean
+          description: >
+            Present on a removal whose in-flight invocations had not finished
+            when the grace expired, so they were interrupted. A statement about
+            what this instance did, not something to act on.
+
+    ManagedAddon:
+      type: object
+      additionalProperties: false
+      required:
+        [name, version, abi_version, sha256, failure_class, permissions,
+         declaration, declared_permissions, declared_settings, configured_settings]
+      description: |
+        One installed add-on, as the Add-on manager sees it.
+
+        Every field the lifecycle's `Addon` carries, plus what administering one
+        needs: which class it is on the redirect path, how much disk its schema
+        holds, how many of its settings are configured, and — on the single-add-on
+        read — the settings themselves.
+
+        The two shapes are one schema rather than an `allOf`, because a client
+        reading this document should be able to see the whole answer in one place
+        and because the lifecycle's own answer is deliberately narrower: an
+        install reports what it installed and does not measure a schema.
+      properties:
+        name:
+          type: string
+          description: The add-on's name, which is also its directory and its schema.
+        version:
+          type: string
+          description: The version its manifest declares. This host does not compare versions.
+        abi_version:
+          type: integer
+          description: The host ABI generation the module was built against.
+        sha256:
+          type: string
+          description: The module's digest, as the manifest declares it and the host checked it.
+        failure_class:
+          type: string
+          enum: [required, degrade]
+          description: >
+            What this host applies. `required` means a future boot stops if the
+            add-on will not load.
+        permissions:
+          type: array
+          items: { type: string }
+          description: >
+            What the add-on *holds*, which is not what its manifest declared.
+        declared_permissions:
+          type: array
+          items: { type: string }
+          description: >
+            What its manifest asked for. Identical to `permissions` today, and
+            both are answered because they are different questions: what an
+            operator agreed to when they installed the add-on, and what this build
+            will let it do. A permission this build publishes and grants to nobody
+            is declarable and not held — `redirect.inline` was, for a whole phase.
+        schema:
+          type: string
+          description: The Postgres schema the add-on owns, absent for one that declared none.
+        draining:
+          type: boolean
+          description: Never present here; it is a fact about a removal.
+        declaration:
+          type: string
+          enum: [none, redirect-observe, redirect-inline]
+          description: >
+            How this add-on relates to the redirect path, derived from what it
+            *holds* rather than from what it declared. `redirect-inline` runs
+            inside the redirect, on the visitor's own latency; `redirect-observe`
+            runs after the visitor has been answered; `none` is not on the path
+            at all. An add-on holding both is `redirect-inline`, because that is
+            the fact worth surfacing.
+        schema_bytes:
+          type: integer
+          format: int64
+          description: >
+            Every relation in the add-on's schema that has storage, with its
+            indexes and its TOAST, measured when this call was served. Absent for
+            an add-on that owns no schema.
+        memory_bytes:
+          type: integer
+          description: >
+            The load-time instance's guest linear memory. What an operator sizes
+            a host by.
+        declared_settings:
+          type: integer
+          description: How many settings the manifest declares.
+        configured_settings:
+          type: integer
+          description: >
+            How many of them have a value from either route. The pair is what
+            lets a client say *3 of 5 set* without reading a value it may not see.
+        settings:
+          type: array
+          description: >
+            Present on the single-add-on read and absent from the list, because
+            resolving them costs a query per add-on and the list does not draw
+            them.
+          items:
+            $ref: "#/components/schemas/AddonSetting"
+        performance:
+          type: object
+          additionalProperties: false
+          required: [kills, fetch]
+          description: >
+            What this module cost, cumulative since this process started: its
+            invocations on the redirect path, and its **outbound** requests, which
+            are a different path and sit beside the redirect figures rather than
+            inside them. **Absent entirely** for a module with no record of either
+            kind, which is what lets a client tell *no observations* from *fast*.
+            A module that has only ever fetched is here with an empty `classes`:
+            it has made no redirect-path observation, and that is the same
+            statement one level down.
+          properties:
+            classes:
+              type: array
+              description: >
+                One entry per class this add-on has actually been observed in. A
+                class with no observations is absent rather than zero, for the
+                same reason the whole object is.
+              items:
+                type: object
+                additionalProperties: false
+                required: [class, count, p99_seconds, sum_seconds]
+                properties:
+                  class:
+                    type: string
+                    enum: [inline, observe]
+                  count:
+                    type: integer
+                    format: int64
+                    description: >
+                      How many invocations are behind the estimate. Read it beside
+                      the estimate: a p99 over four observations is a number with
+                      no meaning.
+                  p99_seconds:
+                    type: number
+                    description: >
+                      The estimate `histogram_quantile` makes from the same buckets
+                      `/metrics` publishes, so this and a dashboard agree. It cannot
+                      exceed the last finite bucket boundary, which is what a rank
+                      in `+Inf` answers with.
+                  sum_seconds:
+                    type: number
+                    description: Total time observed, so a mean needs no second call.
+            kills:
+              type: object
+              additionalProperties: false
+              required: [instantiate, call]
+              description: >
+                Invocations the host stopped waiting for, split by the bound that
+                was missed. `call` is the add-on holding a redirect past its
+                deadline; `instantiate` is this host failing to *start* the module
+                in time, which is hardware rather than the publisher.
+              properties:
+                instantiate: { type: integer, format: int64 }
+                call: { type: integer, format: int64 }
+            fetch:
+              type: object
+              additionalProperties: false
+              required: [count, refused, p99_seconds, sum_seconds]
+              description: >
+                What this module's **outbound** requests cost, cumulative since
+                this process started. A different path from the redirect figures
+                beside it and a different scale: a redirect invocation is priced
+                against a deadline this product sets, and an outbound request is
+                priced against a server somebody else runs.
+
+
+                Present with zeroes for a module that has never made one, unlike
+                `classes` above — the object here is fixed rather than absent,
+                because `count` and `refused` together already say *nothing has
+                happened* without a client having to tell a missing object from a
+                slow one.
+              properties:
+                count:
+                  type: integer
+                  format: int64
+                  description: >
+                    Requests this host attempted, which is the population the
+                    estimate below is over. A refusal this host decided itself —
+                    an unnamed origin, an address the policy will not dial — is in
+                    `outcomes` and deliberately not here.
+                refused:
+                  type: integer
+                  format: int64
+                  description: Every outcome but `ok`, added up.
+                p99_seconds:
+                  type: number
+                  description: >
+                    The same estimate the redirect figures use, over the same
+                    buckets `/metrics` publishes.
+                sum_seconds:
+                  type: number
+                  description: Total time observed, so a mean needs no second call.
+                outcomes:
+                  type: array
+                  description: >
+                    Each outcome this add-on has actually produced, most frequent
+                    first and alphabetical inside a tie. An outcome that has never
+                    happened is absent rather than zero.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [outcome, count]
+                    properties:
+                      outcome:
+                        type: string
+                        enum:
+                          - ok
+                          - unconfigured
+                          - origin_refused
+                          - class_refused
+                          - invalid_request
+                          - dns_failed
+                          - address_refused
+                          - redirect_refused
+                          - too_large
+                          - timeout
+                          - connect_failed
+                        description: >
+                          A closed vocabulary, and the same words the add-on
+                          itself branches on and `/metrics` labels
+                          `linkctrl_addon_fetch_total` with. `unconfigured` means
+                          no origin has been named for this add-on, so it reaches
+                          nothing; `origin_refused` means it asked for one nobody
+                          named.
+                      count:
+                        type: integer
+                        format: int64
+
+    AddonSetting:
+      type: object
+      additionalProperties: false
+      required: [name, type, source, configured]
+      description: |
+        One setting on an add-on's configuration surface, and where its value
+        came from. Every one is declared by the add-on's manifest except
+        `sign_in_link`, which this server declares on behalf of an add-on that
+        asked for a link on the sign-in page — see `sign_in` below.
+
+        **`value` is never populated for a `secret`**, whatever answered it. That
+        is the whole of the treatment a secret gets on this surface, and it is
+        structural: `configured` says whether there is one, and nothing says what
+        it is.
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [text, secret, select, toggle]
+        options:
+          type: array
+          items: { type: string }
+          description: The choices, for a `select` and for nothing else.
+        default:
+          type: string
+          description: What the manifest declares the add-on reads when nothing is set.
+        source:
+          type: string
+          enum: [unset, stored, environment]
+          description: >
+            `stored` is a value saved through this API. `environment` is
+            `LINKCTRL_ADDON_<NAME>_<SETTING>`, which **outranks** a stored value
+            and cannot be written here — the deployment has already answered, and
+            a control whose write nothing would read is worse than none.
+        value:
+          type: string
+          description: >
+            The effective value, for a `text`, `select` or `toggle`. Absent for a
+            `secret`, and absent for anything the environment answers.
+        configured:
+          type: boolean
+          description: Whether anything has answered this setting.
+        env_var:
+          type: string
+          description: >
+            The variable that answered it, present only when `source` is
+            `environment`, so an operator knows what to edit.
+        updated_at:
+          type: string
+          format: date-time
+          description: When the stored value was last written. Absent for any other source.
+        origin:
+          type: boolean
+          description: >
+            Whether this setting names the **origins** the add-on may make
+            outbound requests to. Present and `true` only for such a setting;
+            absent otherwise.
+
+            It is not a formatting hint. The manifest declares that the add-on
+            needs egress and can never declare a destination — a setting marked
+            this way carries no `default` and no `options`, and a manifest naming
+            a host anywhere is refused at load — so this field is the only place a
+            destination enters, and writing one authorizes a **server-side
+            request from this instance** to it. The value is one origin or several
+            separated by spaces: scheme, host and port, and no path. Empty means
+            the add-on reaches nothing at all.
+        sign_in:
+          type: boolean
+          description: >
+            Whether this setting is the operator's consent to this add-on's link
+            appearing on the instance's sign-in page. Present and `true` only for
+            that one setting, which is named `sign_in_link`; absent otherwise.
+
+            It is the one setting on this surface **this server** declares rather
+            than the add-on, and that is deliberate: a manifest-declared toggle
+            would carry a manifest-declared default, so an add-on's author could
+            turn it on for every instance that installed them. A manifest
+            declaring a setting by that name is refused at load. It is a `toggle`
+            whose default is `"false"`, and turning it on draws the add-on's
+            declared label as a link on `/login`, below this server's own sign-in
+            form and never in place of it. The destination is composed by this
+            server from the add-on's own route prefix and cannot leave it.
+
+    AddonOrphan:
+      type: object
+      additionalProperties: false
+      required: [name, schema, bytes, large_objects, identity_links, stored_settings]
+      description: |
+        An add-on schema no installed module owns — what a removal left behind.
+      properties:
+        name:
+          type: string
+          description: >
+            The add-on it belonged to, which is the string an operator
+            recognises, rather than the schema they have never typed.
+        schema:
+          type: string
+          description: The schema itself, which is what a purge drops.
+        bytes:
+          type: integer
+          format: int64
+          description: Its size on disk, measured when this call was served.
+        large_objects:
+          type: integer
+          format: int64
+          description: >
+            How many large objects the schema's role owns. They live outside every
+            schema, so a purge does **not** delete them. Zero for every add-on
+            that behaves.
+        identity_links:
+          type: integer
+          format: int64
+          description: >
+            How many `addon_identity_links` rows were written under this add-on's
+            name. A purge deletes none of them, and they are keyed on the **name**,
+            so an add-on installed under it later inherits those account mappings
+            and can mint a session against them. The Add-on manager's confirmation
+            states this beside the size, which is where it can still be acted on.
+        stored_settings:
+          type: integer
+          format: int64
+          description: >
+            How many `addon_settings` rows were saved under this add-on's name —
+            values an operator typed into the manager, which may include a
+            `secret`. A purge deletes none of them either, they are keyed on the
+            **name** the same way, and **nothing in this product deletes one**: a
+            settings write is refused for a name that is not loaded. So an add-on
+            installed under this name later reads whatever its predecessor was
+            configured with. The confirmation states this too, for the same reason.
 
     InstanceReviewer:
       type: object

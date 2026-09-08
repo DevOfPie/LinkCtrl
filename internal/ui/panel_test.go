@@ -31,6 +31,53 @@ import (
 // it with a different class string, and both are failures.
 var panelOpen = regexp.MustCompile(`(?s)<div id="([a-z0-9-]+)" popover="auto"\s+class="([^"]*)">`)
 
+// anyPopover is the general form, and it is what the absence assertions actually
+// need (F237).
+//
+// [panelOpen] matches exactly one spelling — a `<div>`, with `id` before
+// `popover="auto"`, before `class` — which was exact while `panel_open` was the
+// only thing emitting a popover inside <main>. M50.7 widened what those
+// assertions *mean* (no panel, then no popover except the row menus), and a
+// matcher tuned to one emitter cannot support a general claim: a popover on a
+// `<button>` or a `<dialog>`, with the attributes in another order, with an
+// uppercase letter in its id, or with a bare `popover` rather than `popover="auto"`
+// was invisible to every one of them. Nothing in the tree escapes panelOpen today,
+// so this closes a gap between the guard and the sentence beside it rather than a
+// live hole.
+//
+// Two captures, because a caller needs the element's id to say which popover it
+// found; the panel is still told apart by [panelSheet], read out of the element's
+// class list wherever it sits in the tag.
+//
+// The lookahead is load-bearing: without it `\bpopover` matches the prefix of
+// `popovertarget`, which is the *invoker* attribute and sits on a button that is
+// not a popover at all. Caught by the existing assertions the moment this matcher
+// was written, which is the same failure this row is about arriving from the
+// other side — a pattern that matches more than it means.
+var anyPopover = regexp.MustCompile(
+	`(?is)<(?:div|button|dialog|span|section|ul|p)\s[^>]*\bpopover(?:="(?:auto|manual|hint)")?(?:\s|>)[^>]*>?`)
+
+// popoverID pulls the id out of whatever anyPopover matched, or "" if it carries
+// none — an unnamed popover is still a popover, and reporting it as `""` is more
+// use than dropping it.
+var popoverID = regexp.MustCompile(`(?i)\bid="([^"]*)"`)
+
+// popoversIn is every popover in a rendered page, by id, in the general form.
+func popoversIn(body string) []string {
+	var out []string
+	for _, tag := range anyPopover.FindAllString(body, -1) {
+		id := ""
+		if m := popoverID.FindStringSubmatch(tag); m != nil {
+			id = m[1]
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// popoverClasses is the class list of whatever anyPopover matched.
+var popoverClasses = regexp.MustCompile(`(?i)\bclass="([^"]*)"`)
+
 // panelSheet is what tells the panel mechanism from any other popover, and it
 // exists because those stopped being the same set at M50.7.
 //
@@ -97,11 +144,21 @@ const (
 // call of this, and a panel and a stray popover fail for different reasons.
 func strayPopoversIn(body string) []string {
 	var out []string
-	for _, m := range panelOpen.FindAllStringSubmatch(body, -1) {
-		if strings.Contains(m[2], panelSheet) || qrListPopover(m[1]) {
+	// [anyPopover] rather than [panelOpen] (F237): this function's sentence is
+	// about *any* popover, and matching one spelling could not support it.
+	for _, tag := range anyPopover.FindAllString(body, -1) {
+		id := ""
+		if m := popoverID.FindStringSubmatch(tag); m != nil {
+			id = m[1]
+		}
+		classes := ""
+		if m := popoverClasses.FindStringSubmatch(tag); m != nil {
+			classes = m[1]
+		}
+		if strings.Contains(classes, panelSheet) || qrListPopover(id) {
 			continue
 		}
-		out = append(out, m[1])
+		out = append(out, id)
 	}
 	return out
 }
@@ -333,5 +390,57 @@ func TestEveryPanelIsAlsoACompletePage(t *testing.T) {
 					"pass on a page that had lost the list")
 			}
 		})
+	}
+}
+
+// TestThePopoverMatcherSeesEverySpellingOfOne is F237's own evidence, kept.
+//
+// The absence assertions on the link page's tabs and on the panel route say "no
+// popover here". They routed through [panelOpen], which matches exactly one
+// spelling — a `<div>`, `id` before `popover="auto"` before `class` — so the popup
+// they exist to refuse could return in a shape none of them could read. Nothing in
+// the tree escaped it, which is why this was a row and not a rejection: the guard
+// was narrower than the sentence beside it.
+//
+// Each case below is a real way to write a popover, and each was invisible to the
+// old matcher. The last case is the trap the general form introduces and is the
+// reason this test exists rather than a comment: `popovertarget` is the *invoker*
+// attribute, it begins with the same eight letters, and a matcher that counts it
+// reports every button that opens a menu as a stray popup.
+func TestThePopoverMatcherSeesEverySpellingOfOne(t *testing.T) {
+	for _, tc := range []struct{ name, html string }{
+		{"the spelling panelOpen was written for", `<div id="x" popover="auto" class="sheet">y</div>`},
+		{"on a button", `<button id="b" popover="auto" class="c">y</button>`},
+		{"on a dialog", `<dialog id="d" popover="auto" class="c">y</dialog>`},
+		{"attributes in another order", `<div popover="auto" id="e" class="c">y</div>`},
+		{"a bare popover attribute", `<div id="f" popover class="c">y</div>`},
+		{"an id carrying an uppercase letter", `<div id="G" popover="auto" class="c">y</div>`},
+		{"popover=manual", `<div id="h" popover="manual" class="c">y</div>`},
+	} {
+		if got := popoversIn(tc.html); len(got) != 1 {
+			t.Errorf("%s: the popover matcher found %d, want 1. A popup written this way "+
+				"would pass every absence assertion on every tab", tc.name, len(got))
+		}
+	}
+	if got := popoversIn(`<button type="button" popovertarget="qr-add">Add</button>`); len(got) != 0 {
+		t.Errorf("an invoker was counted as a popover: %v. `popovertarget` opens one and "+
+			"is not one, and counting it makes every menu button a stray popup", got)
+	}
+
+	// And the half that actually guards the pages: [strayPopoversIn] is what every
+	// absence assertion calls, so it is the function that has to see the general
+	// form. Testing the matcher alone would leave the assertions free to keep using
+	// the narrow one, which is the state this row found them in.
+	stray := `<main><dialog id="surprise" popover class="whatever">a second popup</dialog></main>`
+	if got := strayPopoversIn(stray); len(got) != 1 || got[0] != "surprise" {
+		t.Errorf("strayPopoversIn found %v in a page holding a popover written on a "+
+			"<dialog> with a bare attribute; the absence assertions on seven tabs and "+
+			"the panel route all read this function, and a popup they cannot see is a "+
+			"popup they permit", got)
+	}
+	// The panel itself is not a stray, whichever spelling it arrives in.
+	panel := `<dialog id="panel-x" popover class="` + panelSheet + ` more">the panel</dialog>`
+	if got := strayPopoversIn(panel); len(got) != 0 {
+		t.Errorf("the panel mechanism was reported as a stray popover: %v", got)
 	}
 }

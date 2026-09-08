@@ -621,7 +621,19 @@
        form it does not sit inside, so the two elements below stay here, out of
        the grid, and the controls they own render in it. The wrapper is what
        the section *is*, which is why it has an id: a test asserting the file
-       input is inside the style section has to have something to be inside. */}}
+       input is inside the style section has to have something to be inside.
+
+       **Nothing here renders when the code could not be read** (F217). On that
+       path `linkQRView` returns before it assigns anything, so `QRSize`,
+       `QRMinSize` and `QRMaxSize` are all still zero — and the section went on
+       offering a slider with no stops, a number box pre-filled with `0`, and a
+       Save that would post it. The flash above already says the code could not
+       be read; the defect was that the rest of the panel kept talking.
+
+       The guard wraps the section rather than each number, which is the choice
+       this row left open: a style form for a code that does not exist is not a
+       form with a wrong default in it, it is a form with no subject. */}}
+  {{if not .QRUnreadable}}
   <div id="qr-style" class="flex-1">
 {{- /* The two forms that write a logo on the code being edited (M50.5), inside
        the style section since M50.8 (F238f). **They carry no visible control
@@ -1046,5 +1058,6 @@
 
   </div>
   {{end}}
+  {{end}}{{/* closes the QRUnreadable guard that opens the style section (F217) */}}
 </div>
 {{end}}

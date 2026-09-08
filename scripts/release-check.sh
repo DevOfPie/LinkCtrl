@@ -24,6 +24,66 @@ require() { # require DESCRIPTION command...
   if "$@" >/dev/null 2>&1; then ok "$desc"; else bad "$desc"; fi
 }
 
+# Which stack the compose questions below are about, derived here rather than
+# taken from the environment.
+#
+# `docs/releasing.md` offers `scripts/release-check.sh v0.3.0` as the equal
+# alternative to `make release-check VERSION=v0.3.0`, and it was not equal: the
+# integration step asks `docker compose` whether Postgres is up, that question
+# only resolves when COMPOSE_PROJECT_NAME and COMPOSE_ENV_FILES are set, and only
+# the Makefile set them. So the last gate before a tag printed `skip  Postgres is
+# not running` on a machine where it was running, and a skip reads as information
+# rather than as a third of the gate not running (F253).
+#
+# The owner's answer was that this script derives them, taking the drift pair
+# knowingly: a Makefile change to either variable has to reach here. The step
+# named "the Makefile and this script agree" below is what makes that drift a
+# failure instead of a discovery. An already-exported value wins, so `make
+# release-check` and CI keep passing theirs.
+INSTANCE="${INSTANCE:-test}"
+PROJECT="linkctrl-$INSTANCE"
+ENV_FILE=".env.$INSTANCE"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$PROJECT}"
+export COMPOSE_ENV_FILES="${COMPOSE_ENV_FILES:-$ENV_FILE}"
+
+# The DSNs are the same story one layer down, and the reason the Makefile's own
+# comment at `release-check` exists: knowing Postgres is up buys nothing if the
+# tests are then run with no connection string. Unset, `test/integration` falls
+# back to a literal guess at the password on port 55432 — which is the *demo*
+# instance's port, so the direct form did not merely skip, it aimed elsewhere.
+#
+# Templates, compared literally against the Makefile's below rather than expanded
+# there: a password may hold characters that make a `sed` replacement mean
+# something else.
+# shellcheck disable=SC2016  # make's references, kept literal on purpose
+DSN_TEMPLATE='postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable'
+# shellcheck disable=SC2016  # same
+REDIS_TEMPLATE='redis://localhost:$(REDIS_PORT)/0'
+
+# One value out of the instance's env file, stripping inline comments the way
+# compose does — whitespace, then `#` — so a `#` inside a password is kept.
+# Deliberately the same rule as the Makefile's `envval`.
+envval() {
+  sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null |
+    head -1 | tr -d '\r' |
+    sed -e 's/[[:space:]][[:space:]]*#.*$//' -e 's/[[:space:]]*$//'
+}
+
+POSTGRES_USER="${POSTGRES_USER:-linkctrl}"
+POSTGRES_DB="${POSTGRES_DB:-linkctrl}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(envval POSTGRES_PASSWORD)}"
+POSTGRES_PORT="${POSTGRES_PORT:-$(envval POSTGRES_PORT)}"
+REDIS_PORT="${REDIS_PORT:-$(envval REDIS_PORT)}"
+
+if [ -z "${TEST_DATABASE_URL:-}" ] && [ -n "$POSTGRES_PASSWORD" ] && [ -n "$POSTGRES_PORT" ]; then
+  TEST_DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:$POSTGRES_PORT/$POSTGRES_DB?sslmode=disable"
+  export TEST_DATABASE_URL
+fi
+if [ -z "${LINKCTRL_REDIS_URL:-}" ] && [ -n "$REDIS_PORT" ]; then
+  LINKCTRL_REDIS_URL="redis://localhost:$REDIS_PORT/0"
+  export LINKCTRL_REDIS_URL
+fi
+
 step "working tree"
 if [ -z "$(git status --porcelain)" ]; then
   ok "clean"
@@ -143,6 +203,26 @@ step "documentation links"
 require "every link and anchor resolves, and every table row matches its header" \
         scripts/check-links.sh
 
+step "continuous integration"
+# The gate that was missing. Every other check in this file, and every check
+# workflow.md names, runs on this machine — so a build that is red only on the
+# runner is invisible to all of them, and one was: twelve consecutive red CI runs
+# across a phase, two adversarial reviews and a release candidate, while local
+# `make check` reported 0 issues at every push. The owner found it on the release
+# PR (F255).
+#
+# Run rather than required, because the three outcomes are not two: exit 2 is
+# "could not ask", which must not read as a failing build. It is reported and
+# does not count against the tag — an offline machine cannot answer this question
+# and pretending otherwise would make the gate a coin toss rather than a check.
+ci_out=$(scripts/check-ci.sh 2>&1); ci_rc=$?
+printf '%s\n' "$ci_out"
+case "$ci_rc" in
+  0) : ;;
+  1) fails=$((fails + 1)) ;;
+  *) printf '  skip  CI'\''s verdict is unknown, not green — this check did not run\n' ;;
+esac
+
 step "generated code matches its source"
 # sqlc and the OpenAPI document are both hand-triggered. A release built from a
 # tree where they were not regenerated ships a binary whose behaviour does not
@@ -159,6 +239,35 @@ if command -v sqlc >/dev/null 2>&1; then
 else
   printf '  skip  sqlc not installed\n'
 fi
+
+# The SDK, which is the third generated artifact and which this step did not know
+# existed (F271). `make check-generate` regenerates it and diffs, so CI covers it;
+# nothing else did — this step checked internal/store/dbgen alone, so a tag could
+# be cut from a tree whose committed sdk/ does not match internal/addon/abi. The
+# residual protection was CI's own job reached through check-ci asking whether the
+# branch is green, which is F255's shape one layer up: a gate holding because a
+# different gate asks a third one.
+#
+# The other two files this row names are not this script's: workflow.md's gate
+# table is a process change that commits on its own, and .github/workflows/ goes
+# to ci/proposed/.
+before=$(git status --porcelain sdk docs/addon-abi.md)
+if make --no-print-directory abi-sdk >/dev/null 2>&1; then
+  if [ "$(git status --porcelain sdk docs/addon-abi.md)" = "$before" ]; then
+    ok "the generated SDK and the published ABI table are current"
+  else
+    bad "make abi-sdk produced a diff — commit it"
+    git --no-pager diff --stat sdk docs/addon-abi.md | sed 's/^/        /'
+  fi
+else
+  bad "make abi-sdk failed; the generated SDK cannot be checked against its source"
+fi
+
+# This step's own comment claimed to cover *sqlc and the OpenAPI document* and has
+# never checked OpenAPI. Pre-existing and named rather than quietly fixed: the
+# check would be `make openapi` and a diff, and whether the pre-tag gate should
+# run it is a question about what that target costs at a tag rather than an
+# oversight to patch inside a findings batch.
 
 # The version sqlc stamps into every file it emits has to match the version CI
 # installs, or CI regenerates, sees only that comment change, and fails with an
@@ -186,7 +295,12 @@ step "assets the binary embeds"
 # Windows is a supported path — it is why a Taskfile exists — and a release gate
 # that only runs on Linux is a gate that gets skipped by the people most likely
 # to need it.
-mkvar() { sed -n "s/^$1 *:*= *//p" Makefile | head -1 | tr -d '\r'; }
+# All three assignment forms, because the compose variables F253 is about are
+# written `?=` and `=` while the asset pins are `:=`. Unexpanded: a value holding
+# `$(OTHER)` comes back with the reference in it, which is what the agreement step
+# below wants to compare.
+mkvar()    { sed -n "s/^$1 *[:?+]*= *//p" Makefile | head -1 | tr -d '\r' | sed 's/[[:space:]]*$//'; }
+mkexport() { sed -n "s/^export  *$1 *[:?+]*= *//p" Makefile | head -1 | tr -d '\r' | sed 's/[[:space:]]*$//'; }
 
 htmx_version=$(mkvar HTMX_VERSION)
 htmx_sha=$(mkvar HTMX_SHA256)
@@ -218,7 +332,23 @@ fi
 step "tests and lint"
 require "go build ./..."            go build ./...
 require "go vet ./..."              go vet ./...
-require "unit tests (race)"         go test -race -count=1 ./...
+
+# No add-on fixture step here, deliberately. The WASM modules internal/addon's
+# tests load are gitignored and never committed — m60.md refuses a checked-in
+# binary — and this script once built them so the unit-test step below would not
+# fail on a clean clone. internal/addon's own fixture() now builds what is missing,
+# which is the only form that also reaches the two callers no make target and no
+# script can wire: the release workflow's direct `go test ./...`, and the CI
+# `image` job (M60, F262). Building them a second time here would be a second
+# enumeration of the fixture set, free to disagree with the Makefile's.
+# -timeout 30m, which is the Makefile's `test` target's, because Go's default is
+# ten minutes and the add-on package does not finish in it under `-race`: wazevo
+# compiles a WebAssembly module per fixture and the race detector multiplies what
+# that costs. Without this the pre-tag gate cannot pass a suite `make check`
+# passes, which is F261's shape — the gate diverging from the target it is
+# supposed to be the stricter form of — and it was found by this gate refusing
+# 0.4.0.
+require "unit tests (race)"         go test -race -count=1 -timeout 30m ./...
 require "OpenAPI matches the routes" go test -count=1 -run TestOpenAPI ./internal/httpx/
 if command -v golangci-lint >/dev/null 2>&1; then
   require "golangci-lint" golangci-lint run
@@ -226,11 +356,60 @@ else
   printf '  skip  golangci-lint not installed\n'
 fi
 
+step "the Makefile and this script agree about which stack"
+# The accepted cost of F253's answer, made into a gate. This script derives the
+# compose project and env file itself so that the form `docs/releasing.md` offers
+# is not a weaker gate than `make release-check`; the price is two derivations of
+# one fact, and a price is only accepted if something notices when it is not paid.
+# Compared as written, references unexpanded — `$(INSTANCE)` substituted with the
+# instance this run is about and nothing else.
+agree() { # agree DESCRIPTION expected actual
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1: Makefile says '$3', this script builds '$2'"; fi
+}
+mk_instance=$(mkvar INSTANCE)
+agree "default instance ($INSTANCE)"        "$INSTANCE" "$mk_instance"
+agree "env file ($ENV_FILE)"                "$ENV_FILE" "$(mkvar ENV_FILE | sed "s/\$(INSTANCE)/$mk_instance/g")"
+agree "compose project ($PROJECT)"          "$PROJECT"  "$(mkvar PROJECT  | sed "s/\$(INSTANCE)/$mk_instance/g")"
+# shellcheck disable=SC2016  # $(PROJECT) and $(ENV_FILE) are make's, compared as text
+agree 'COMPOSE_PROJECT_NAME is the project' '$(PROJECT)'  "$(mkexport COMPOSE_PROJECT_NAME)"
+# shellcheck disable=SC2016  # same
+agree 'COMPOSE_ENV_FILES is the env file'   '$(ENV_FILE)' "$(mkexport COMPOSE_ENV_FILES)"
+agree "the database DSN"                    "$DSN_TEMPLATE"   "$(mkvar DEV_DATABASE_URL)"
+agree "the Redis URL"                       "$REDIS_TEMPLATE" "$(mkvar DEV_REDIS_URL)"
+
 step "integration tests"
-if docker compose ps --status running --services 2>/dev/null | grep -qx postgres; then
-  require "integration tests (race)" go test -tags=integration -race -count=1 ./test/integration/
+# Three outcomes, not two. A skip that cannot say which of "the stack is down"
+# and "I could not build a DSN" it means is the shape of F253: the direct form
+# reported one while the other was true.
+#
+# And not `docker compose ps … | grep -qx postgres`: `grep -q` exits at the first
+# match, the writer upstream takes SIGPIPE, and `pipefail` — `set -uo pipefail`
+# above — reports 141 for a pipeline that matched. That is a third cause for the
+# same false skip, and it cuts a release with the integration tests silently
+# unrun. This is F291's shape at a second gate; F304 tracks the sites that are
+# left, and deliberately no longer names this one. The herestring has no writer
+# to kill.
+if [ -z "${TEST_DATABASE_URL:-}" ]; then
+  bad "no TEST_DATABASE_URL and none could be built from $ENV_FILE (make env INSTANCE=$INSTANCE)"
+elif grep -qx postgres <<<"$(docker compose ps --status running --services 2>/dev/null)"; then
+  # The same three package trees `make test-integration` runs (F261). This ran
+  # ./test/integration/ alone, and what that dropped is the one that matters most
+  # at a tag: cmd/lctl's integration test is demoCoverage(), which M33.5 built to
+  # fail when a listed feature has no seeded rows — so the release gate could not
+  # claim the demo shows what this release ships. It was enforced at every commit
+  # through the Makefile and not on the tree being tagged.
+  #
+  # Slower, and deliberately: this seeds a demo database. That cost is what the
+  # divergence was buying, and it is not worth an unasked claim at a release.
+  # -timeout 30m for the reason the unit step above carries it, and this is the
+  # step that actually needs it: the package list widened at M70 (F261) and the
+  # suite seeds a demo database inside it. Fixing only the unit step left this one
+  # failing on the very next run, which is why the comment is here as well as
+  # there rather than once.
+  require "integration tests (race)" go test -tags=integration -race -count=1 -timeout 30m \
+    ./test/integration/ ./cmd/lctl/... ./cmd/linkctrl/...
 else
-  printf '  skip  Postgres is not running (docker compose up -d)\n'
+  printf '  skip  Postgres is not running in project %s (docker compose up -d)\n' "$COMPOSE_PROJECT_NAME"
 fi
 
 step "release artifacts build"

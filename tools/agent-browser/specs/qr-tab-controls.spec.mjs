@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+
+// A row in the codes list, addressed by where it points.
+//
+// **It stopped being `/qr?code=` at M50.8's third reopening.** Every row went to
+// the panel route on both surfaces; the link page names the code on itself now —
+// `?tab=qr&code=` — so that picking one swaps the tab strip instead of loading a
+// page. `code=` is what the two spellings still share, and it is on nothing else
+// in the row: the download entries are API paths.
+const codeRowLink = 'a[href*="code="]';
 
 // M50.8: the five claims on the QR tab that only a browser can make.
 //
@@ -85,45 +92,23 @@ import { fileURLToPath } from 'node:url';
 // wrong cause on every file rather than on the one that added it. Counted from
 // the tree rather than remembered; F242 is the row for the headroom itself.
 
-const instancesDoc = fileURLToPath(
-  new URL('../../../docs/dev-notes/instances.md', import.meta.url),
-);
 
-// A row in the codes list, addressed by where it points.
+// The suite signs in once, in global-setup.mjs, and every context starts from
+// that storage state (F333, D435). This is what is left: a navigation that
+// proves the shared session reached this spec, so a state that failed to load
+// fails here rather than three assertions later on a page that redirected to
+// /login.
 //
-// **It stopped being `/qr?code=` at M50.8's third reopening.** Every row went to
-// the panel route on both surfaces; the link page names the code on itself now —
-// `?tab=qr&code=` — so that picking one swaps the tab strip instead of loading a
-// page. `code=` is what the two spellings still share, and it is on nothing else
-// in the row: the download entries are API paths.
-const codeRowLink = 'a[href*="code="]';
-
-function credentials() {
-  const { LINKCTRL_UI_EMAIL: email, LINKCTRL_UI_PASSWORD: password } = process.env;
-  if (email && password) return { email, password };
-  const doc = readFileSync(instancesDoc, 'utf8');
-  const address = doc.match(/\|\s*Address\s*\|\s*`([^`]+)`\s*\|/);
-  const pass = doc.match(/\|\s*Password\s*\|\s*`([^`]+)`\s*\|/);
-  if (!address || !pass) {
-    throw new Error(
-      'no credentials: set LINKCTRL_UI_EMAIL and LINKCTRL_UI_PASSWORD, or keep ' +
-        'the Address/Password table in docs/dev-notes/instances.md current',
-    );
-  }
-  return { email: address[1], password: pass[1] };
-}
-
+// It performs no sign-in. Twenty specs signing in as one address against a
+// ten-per-minute limiter is what made the tail of a full run fail at /login and
+// report it as a broken instance.
 async function signIn(page) {
-  const { email, password } = credentials();
-  await page.goto('/login');
-  await page.fill('#email', email);
-  await page.fill('#password', password);
-  await page.click('button[type="submit"]');
+  await page.goto('/dashboard');
   await page.waitForURL('**/dashboard', { timeout: 10000 }).catch(() => {
     throw new Error(
-      'sign-in did not reach /dashboard — if the test instance was rebuilt, ' +
-        'update the account table in docs/dev-notes/instances.md or export ' +
-        'LINKCTRL_UI_EMAIL / LINKCTRL_UI_PASSWORD',
+      'the shared signed-in state did not reach /dashboard — global-setup.mjs ' +
+        'writes it once per run, so this is that state failing to load rather ' +
+        'than a sign-in being refused',
     );
   });
 }
@@ -1164,16 +1149,18 @@ test.describe('with scripts disabled', () => {
   test('the size control still saves', async ({ page: plain }) => {
     // Deliberately shadowing the shared, signed-in page above: this case needs a
     // context with scripts disabled, which is a fixture rather than a setting,
-    // so it takes Playwright's own page and signs in for itself.
+    // so it takes Playwright's own page.
+    //
+    // It no longer signs in for itself (F333). `javaScriptEnabled: false` is a
+    // context option and the storage state from global-setup.mjs is another, so
+    // this context inherits the shared session and starts signed in — which is
+    // all this case ever needed the sign-in for. What it is about is the size
+    // control saving with `qr-size.js` never running.
     const page = plain;
-    const { email, password } = credentials();
-    await page.goto('/login');
-    await page.fill('#email', email);
-    await page.fill('#password', password);
-    await page.click('button[type="submit"]');
+    await page.goto('/dashboard');
     await expect(
       page.locator('main'),
-      'sign-in did not work without scripts, so nothing below is reachable',
+      'the shared signed-in state did not reach a scripts-disabled context',
     ).toBeVisible();
 
     await page.goto('/links');

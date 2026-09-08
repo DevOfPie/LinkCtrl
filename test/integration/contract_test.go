@@ -5,6 +5,8 @@ package integration
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +30,8 @@ import (
 
 	"github.com/DevOfPie/LinkCtrl/api"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
+	"github.com/DevOfPie/LinkCtrl/internal/httpx"
+	"github.com/DevOfPie/LinkCtrl/internal/observability"
 	"github.com/DevOfPie/LinkCtrl/internal/recovery"
 )
 
@@ -231,6 +236,108 @@ func (c *contract) upload(
 	// The same substitution `call` makes: a bearer replaces the session on a
 	// client with no cookie jar, so a call made as an API key is provably made
 	// as one.
+	client := c.f.client
+	if c.bearer != "" {
+		client = &http.Client{}
+	}
+
+	resp, err := client.Do(newReq())
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	if resp.StatusCode != wantStatus {
+		c.t.Fatalf("%s %s = %d, want %d\n%s", method, path, resp.StatusCode, wantStatus, respBody)
+	}
+
+	vreq := newReq()
+	route, pathParams, err := c.router.FindRoute(vreq)
+	if err != nil {
+		c.t.Fatalf("%s %s is not in openapi.yaml: %v", method, path, err)
+	}
+	opts := &openapi3filter.Options{
+		IncludeResponseStatus: true,
+		AuthenticationFunc:    openapi3filter.NoopAuthenticationFunc,
+	}
+	rvi := &openapi3filter.RequestValidationInput{
+		Request: vreq, PathParams: pathParams, Route: route, Options: opts,
+	}
+	if checkRequest {
+		if err := openapi3filter.ValidateRequest(c.t.Context(), rvi); err != nil {
+			c.t.Errorf("request %s %s violates the spec: %v", method, path, err)
+		}
+	}
+	if err := openapi3filter.ValidateResponse(c.t.Context(), &openapi3filter.ResponseValidationInput{
+		RequestValidationInput: rvi,
+		Status:                 resp.StatusCode,
+		Header:                 resp.Header,
+		Body:                   io.NopCloser(bytes.NewReader(respBody)),
+		Options:                opts,
+	}); err != nil {
+		c.t.Errorf("response %d from %s %s violates the spec: %v\n%s",
+			resp.StatusCode, method, path, err, respBody)
+	}
+
+	c.hit[route.Operation.OperationID] = true
+	return respBody
+}
+
+// uploadParts replays a multipart operation carrying more than one file part
+// (M67).
+//
+// [contract.upload] above sends one part and is written around that: it takes a
+// field, a filename and a declared type, because M50.5's claim is that the server
+// reads none of them. An install carries two files and no text fields, so what
+// this needs is a map and nothing else — and keeping it separate leaves that
+// milestone's assertion about a single part exactly where it was.
+func (c *contract) uploadParts(
+	method, path string, parts map[string][]byte, wantStatus int, checkRequest bool,
+) []byte {
+	c.t.Helper()
+
+	build := func() (string, []byte) {
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		// Sorted, so a body this test sends is the same body every run. Map order
+		// is not a thing to make a request out of.
+		names := make([]string, 0, len(parts))
+		for name := range parts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			part, err := w.CreateFormFile(name, name+".bin")
+			if err != nil {
+				c.t.Fatal(err)
+			}
+			if _, err := part.Write(parts[name]); err != nil {
+				c.t.Fatal(err)
+			}
+		}
+		if err := w.Close(); err != nil {
+			c.t.Fatal(err)
+		}
+		return w.FormDataContentType(), buf.Bytes()
+	}
+
+	newReq := func() *http.Request {
+		contentType, payload := build()
+		req, err := http.NewRequestWithContext(c.t.Context(), method,
+			c.f.server.URL+path, bytes.NewReader(payload))
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", contentType)
+		if c.bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+c.bearer)
+		}
+		return req
+	}
+
 	client := c.f.client
 	if c.bearer != "" {
 		client = &http.Client{}
@@ -1165,6 +1272,169 @@ func TestAPIMatchesItsContract(t *testing.T) {
 	c.do("GET", p+"/instance/audit?limit=10", nil, http.StatusOK)
 	c.do("GET", p+"/instance/audit?cursor=not-a-cursor", nil, http.StatusUnprocessableEntity)
 
+	// --- add-ons (M67) ------------------------------------------------------
+	//
+	// The whole lifecycle, against a real WebAssembly module, because every claim
+	// the document makes here is about what the host did rather than about a
+	// row: that the digest is checked, that the answer names the permissions the
+	// add-on *holds*, and that removing one answers with what it left behind.
+	//
+	// The session is the account that claimed the instance, so it is the
+	// principal and holds `addons.manage`. That the scope cannot reach an API key
+	// is asserted in addon_lifecycle_test.go, where a key can be minted to try.
+	module := addonFixture(t, "minimal")
+	manifest := contractAddonManifest(t, "contract", module)
+	installed := c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": module,
+	}, http.StatusCreated, true)
+	if got := field(t, installed, "name"); got != "contract" {
+		t.Errorf("the install answered for %q", got)
+	}
+	// A module whose bytes are not the bytes the manifest describes, refused
+	// before anything is written — the one refusal on this endpoint that is about
+	// the upload rather than about the manifest.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": append([]byte{0x00}, module...),
+	}, http.StatusUnprocessableEntity, true)
+	// One name, one add-on: replacing is a removal and an install.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": module,
+	}, http.StatusConflict, true)
+	// --- and the second shape at the same address (M68.6) --------------------
+	//
+	// What is replayed here is the *document*: that the endpoint takes a `url` and
+	// a `sha256` instead of the two file parts, that the two shapes are exclusive
+	// in the schema rather than in prose, and that a refused fetch is a 422 with
+	// field errors the document describes. What is **not** replayed is a fetch that
+	// succeeds — this instance dials globally-routable addresses only, so a test
+	// server on loopback is refused by the address policy at dial time, which is
+	// the policy working rather than a gap. The fetch itself is driven against a
+	// real origin in internal/addon, where the address check is a field a test can
+	// relax without relaxing the policy.
+	//
+	// So the address below is a documentation range: it parses, it resolves to
+	// itself, and it is carved out — which makes this one call an assertion about
+	// the schema *and* about the bound.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"url":    []byte("https://192.0.2.1/contract.tar"),
+		"sha256": []byte(strings.Repeat("ab", 32)),
+	}, http.StatusUnprocessableEntity, true)
+	// Both shapes at once is refused, and `checkRequest` is false because that is
+	// exactly what the document's `oneOf` refuses: validating the request against
+	// the spec would fail before the server ever answered, which proves the schema
+	// and not the handler. Both are worth having and this is the one that is about
+	// the server.
+	c.uploadParts("POST", p+"/addons", map[string][]byte{
+		"manifest": manifest, "module": module,
+		"url":    []byte("https://192.0.2.1/contract.tar"),
+		"sha256": []byte(strings.Repeat("ab", 32)),
+	}, http.StatusUnprocessableEntity, false)
+	// The manager's reads and its two writes (M68), against the module that is
+	// installed right now. Every one of them is replayed against the document, which
+	// is what the inherited *every UI feature has API support* rule buys here: the
+	// page drives exactly these.
+	c.do("GET", p+"/addons", nil, http.StatusOK)
+	detail := c.do("GET", p+"/addons/contract", nil, http.StatusOK)
+	if got := field(t, detail, "declaration"); got != "none" {
+		t.Errorf("the fixture's declaration class is %q; it holds no redirect grant", got)
+	}
+	c.do("GET", p+"/addons/nosuch", nil, http.StatusNotFound)
+	// The empty save: a write through the same transaction and the same audit
+	// record, carrying nothing. It runs first so that the save below has something
+	// to differ from.
+	c.do("PUT", p+"/addons/contract/settings", map[string]any{
+		"values": map[string]string{},
+	}, http.StatusOK)
+	// And a save that actually stores something, one value per declared type. Both,
+	// because the empty one validates `AddonSetting` against `[]`, which is a schema
+	// exercised in name only.
+	saved := c.do("PUT", p+"/addons/contract/settings", map[string]any{
+		"values": map[string]string{
+			"endpoint": "https://contract.example/token", "client_secret": "s3cret",
+			"mode": "slow", "verbose": "true",
+		},
+	}, http.StatusOK)
+	// The one field this response must not carry. It is asserted here rather than
+	// left to internal/addon's tests because the *document* says a secret's value is
+	// never in an answer, and a contract test that replayed the operation without
+	// looking would agree with a server that had started echoing it.
+	if bytes.Contains(saved, []byte("s3cret")) {
+		t.Error("the settings response echoed a stored secret back")
+	}
+	// And a key it does not declare is refused rather than ignored, for the reason
+	// an unknown multipart part is.
+	c.do("PUT", p+"/addons/contract/settings", map[string]any{
+		"values": map[string]string{"nosuch": "x"},
+	}, http.StatusUnprocessableEntity)
+	c.do("PUT", p+"/addons/nosuch/settings", map[string]any{
+		"values": map[string]string{},
+	}, http.StatusNotFound)
+
+	// The orphan list while the add-on is installed: empty, and that is an answer
+	// worth replaying, because an empty array and an absent field are different
+	// documents.
+	if n := len(orphanRows(t, c.do("GET", p+"/addons/"+httpx.AddonOrphanPath, nil,
+		http.StatusOK))); n != 0 {
+		t.Errorf("the orphan list has %d rows while the only add-on is installed", n)
+	}
+	// Purging the data of an add-on that is installed is a conflict, and purging a
+	// name that owns nothing is a 404 rather than a success nobody could tell from
+	// one.
+	c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/contract", nil, http.StatusConflict)
+	c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/nosuch", nil, http.StatusNotFound)
+
+	c.do("DELETE", p+"/addons/contract", nil, http.StatusOK)
+	c.do("DELETE", p+"/addons/contract", nil, http.StatusNotFound)
+
+	// **And now the orphan replays that need something to have been left behind.**
+	// A removal deliberately keeps the schema, so this is the only point in the run
+	// where `AddonOrphan` is a row rather than an empty array and where
+	// `purgeAddonData` has a name it can answer `200` for. Running them before the
+	// removal — which is where they used to be — validated two new schemas and a
+	// success status against nothing at all.
+	left := orphanRows(t, c.do("GET", p+"/addons/"+httpx.AddonOrphanPath, nil,
+		http.StatusOK))
+	if len(left) != 1 || left[0].Name != contractAddonName {
+		t.Fatalf("after the removal the orphan list is %+v; the removed add-on owned a schema", left)
+	}
+	// **The count of what the purge will not take.** Four settings were saved above
+	// and the removal deleted none of them — they are keyed on the add-on's *name*,
+	// so whatever is installed under it next reads them. This is the number the
+	// manager's confirmation puts in front of whoever presses the button.
+	if left[0].StoredSettings != 4 {
+		t.Errorf("the orphan reports %d stored settings; four were saved and a removal "+
+			"deletes none of them", left[0].StoredSettings)
+	}
+	purged := c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/contract", nil, http.StatusOK)
+	// The purge does not take them either, which is the claim four documents make
+	// and the reason the confirmation says *four things*.
+	if got := orphanRow(t, purged).StoredSettings; got != 4 {
+		t.Errorf("the purge answered with %d stored settings left; it drops the schema "+
+			"and nothing else", got)
+	}
+	// Gone, and the second purge is the 404 a typo gets rather than a success.
+	if n := len(orphanRows(t, c.do("GET", p+"/addons/"+httpx.AddonOrphanPath, nil,
+		http.StatusOK))); n != 0 {
+		t.Errorf("the purge left %d orphan rows", n)
+	}
+	c.do("DELETE", p+"/addons/"+httpx.AddonOrphanPath+"/contract", nil, http.StatusNotFound)
+
+	// **`ManagedAddon.performance` is the one new schema no operation here can
+	// produce, and it is validated against the document rather than left unchecked.**
+	// It is present only for a module that has actually run on the redirect path,
+	// which needs a `Redirect` handler, a link, and a metrics registry shared
+	// between the two — none of which this fixture has, because it is built for the
+	// API surface and the redirect path is `newRedirect`'s. Wiring one in to make a
+	// field appear would be a second server in the fixture every other replay then
+	// runs against.
+	//
+	// So the object comes out of the **producer** rather than out of a struct
+	// literal here: a registry, three observations and two kills, read back through
+	// the same `AddonPerformance()` the manager calls. A literal would assert that
+	// the schema matches whatever this file typed; this asserts that it matches what
+	// the code emits, which is what the replay would have bought.
+	c.validateSchema("ManagedAddon", "performance", addonPerformanceSample())
+
 	// --- reputation feeds ---------------------------------------------------
 	// One operation, and the fixture has no feed configured — which is the
 	// shipped default and the answer this replay validates against the schema:
@@ -1463,6 +1733,28 @@ func TestAPIMatchesItsContract(t *testing.T) {
 		"password": "a-brand-new-longer-password",
 	}, http.StatusConflict)
 
+	// --- connected sign-in providers (M70, F315) ----------------------------
+	//
+	// The list is empty on this account and that is the shape being replayed:
+	// nothing here connects a provider, because doing so needs a loaded
+	// authentication add-on and this fixture has none. What the contract owes is
+	// that the operation exists, answers 200, and answers with the envelope the
+	// spec documents — the rows themselves are driven end to end in
+	// addon_auth_test.go, against a real link and a real assertion.
+	c.do("GET", p+"/account/identities", nil, http.StatusOK)
+
+	// And the two removals, each against an identifier that names nothing. A 404
+	// is the documented answer for a link this account does not hold, and it is
+	// the one this fixture can reach — the successes are asserted in
+	// addon_auth_test.go, where a link exists to remove.
+	//
+	// The add-on's own path is exercised with a name no add-on has, which is the
+	// same 404 for the same reason: the row is resolved before anything is
+	// deleted, so an identifier that resolves to nothing never reaches a
+	// statement.
+	c.do("DELETE", p+"/account/identities/"+uuid.NewString(), nil, http.StatusNotFound)
+	c.do("DELETE", p+"/addons/none/identities/"+uuid.NewString(), nil, http.StatusNotFound)
+
 	// --- account recovery (M51) ---------------------------------------------
 	//
 	// Last of the authenticated flow on purpose: the reset revokes every session
@@ -1733,3 +2025,139 @@ func (c *contract) yamlSpecEndpoint() {
 	}
 	c.hit["getOpenAPIYAML"] = true
 }
+
+// contractOrphan is one row of an orphan listing, read back as a client would.
+//
+// Declared here rather than reusing addon.Orphan, because what these replays check
+// is the *document*: a field renamed in Go and in the spec together would still
+// round-trip through the producing type and would be a broken client.
+type contractOrphan struct {
+	Name           string `json:"name"`
+	Schema         string `json:"schema"`
+	StoredSettings int64  `json:"stored_settings"`
+	IdentityLinks  int64  `json:"identity_links"`
+}
+
+// orphanRows reads an orphan listing, in the order the server returned it.
+//
+// A helper rather than `field`, because what these replays assert is how many rows
+// there are and which — the two things an empty array cannot tell you apart from a
+// full one, and the whole reason the listing moved after the removal.
+func orphanRows(t *testing.T, raw []byte) []contractOrphan {
+	t.Helper()
+	var body struct {
+		Orphans []contractOrphan `json:"orphans"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("orphan listing is not the documented shape: %v", err)
+	}
+	return body.Orphans
+}
+
+// orphanRow reads the single orphan a purge answers with.
+func orphanRow(t *testing.T, raw []byte) contractOrphan {
+	t.Helper()
+	var o contractOrphan
+	if err := json.Unmarshal(raw, &o); err != nil {
+		t.Fatalf("purge answer is not the documented shape: %v", err)
+	}
+	return o
+}
+
+// validateSchema checks one document against a property's schema inside a named
+// component.
+//
+// For the one new schema no operation in this replay can produce. It is the same
+// validator every response above goes through — `openapi3.Schema.VisitJSON` is
+// what the response validator calls — reached directly because there is no
+// response to attach it to. A property rather than a component because that is how
+// the document declares this one: `performance` is written inline in
+// `ManagedAddon`, so this walks to it rather than making the document change shape
+// to suit a test.
+func (c *contract) validateSchema(component, property string, v any) {
+	c.t.Helper()
+	ref, ok := c.doc.Components.Schemas[component]
+	if !ok {
+		c.t.Fatalf("the document has no %s schema", component)
+	}
+	prop, ok := ref.Value.Properties[property]
+	if !ok {
+		c.t.Fatalf("%s declares no %s property", component, property)
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		c.t.Fatalf("marshal a %s.%s: %v", component, property, err)
+	}
+	var doc any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		c.t.Fatalf("re-read a %s.%s: %v", component, property, err)
+	}
+	if err := prop.Value.VisitJSON(doc); err != nil {
+		c.t.Errorf("%s.%s does not satisfy its own schema: %v\n  %s",
+			component, property, err, raw)
+	}
+}
+
+// addonPerformanceSample is what the manager reads for a module that has run
+// inline three times and been killed twice.
+//
+// Through the real metrics rather than as a literal, so the `p99_seconds` and
+// `sum_seconds` fields the wire carries are filled in by the function that fills
+// them in production. Two classes are deliberately not exercised: `observe` has
+// the same shape, and the schema is per-entry.
+func addonPerformanceSample() observability.AddonPerformance {
+	m := observability.NewMetrics()
+	for _, d := range []time.Duration{time.Millisecond, 2 * time.Millisecond, 3 * time.Millisecond} {
+		m.ObserveAddonRedirect("contract", "inline", d)
+	}
+	m.ObserveAddonRedirectKill("contract", "instantiate")
+	m.ObserveAddonRedirectKill("contract", "call")
+	return m.AddonPerformance()["contract"]
+}
+
+// contractAddonManifest describes a module honestly, which is what makes the
+// mismatched-module replay above a refusal about the *bytes* rather than about
+// anything else in the file.
+//
+// # It declares storage and it declares settings, and neither is decoration
+//
+// A schema is what makes the orphan replays possible at all: a removal leaves the
+// schema standing, so without `storage.own_schema` there is nothing for
+// `GET /addons/orphaned-data` to list and no name `purgeAddonData` could answer
+// `200` for — both schemas would only ever be validated against an empty array and
+// a pair of refusals. The settings are the same argument one document along:
+// `AddonSetting` is only reachable when a manifest declares one, and a fixture
+// declaring none validated the schema against `[]`.
+//
+// The four types are all four the host renders, because the spec's `type` is an
+// enum and one value exercised is not the enum exercised. The `select` carries no
+// default deliberately — that is the state the manager draws an empty option for.
+func contractAddonManifest(t *testing.T, name string, module []byte) []byte {
+	t.Helper()
+	sum := sha256.Sum256(module)
+	m := map[string]any{
+		"schema_version": 1,
+		"name":           name,
+		"version":        "1.0.0",
+		"abi_version":    1,
+		"module":         name + ".wasm",
+		"sha256":         hex.EncodeToString(sum[:]),
+		"failure_class":  "degrade",
+		"permissions":    []string{"storage.own_schema"},
+		"settings": []map[string]any{
+			{"name": "endpoint", "type": "text", "default": "https://example.test"},
+			{"name": "client_secret", "type": "secret"},
+			{"name": "mode", "type": "select", "options": []string{"fast", "slow"}},
+			{"name": "verbose", "type": "toggle", "default": "false"},
+		},
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// contractAddonName is the one add-on this test installs. Named so api_test.go's
+// role cleanup and this file cannot come to disagree about it.
+const contractAddonName = "contract"

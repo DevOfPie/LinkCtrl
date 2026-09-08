@@ -9,6 +9,8 @@ import (
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/domain"
 	"github.com/DevOfPie/LinkCtrl/internal/link"
+
+	"github.com/google/uuid"
 )
 
 // keyRow is APIKeyInfo plus the derived flags the template needs.
@@ -216,6 +218,13 @@ type accountPageData struct {
 	ShowMFA bool
 	MFA     auth.MFAStatus
 
+	// ConnectedIdentities draws the connected-providers section (M70, F315). Empty
+	// on the ordinary account, which is most of them: an instance running no
+	// authentication add-on has nobody with a link, and the section is drawn only
+	// when there is something in it — a heading explaining an absent capability is
+	// the prose four QR reports asked this product to stop writing.
+	ConnectedIdentities []auth.ConnectedIdentity
+
 	// ShowDelete draws the account-deletion section (M52). False on an instance
 	// wired without the service, where the route is not registered either.
 	ShowDelete bool
@@ -294,6 +303,15 @@ func (h *Web) accountPage(r *http.Request) accountPageData {
 			data.MFA = st
 		}
 	}
+	if h.Auth != nil {
+		// A failed read draws no section, on the same trade the MFA summary above
+		// makes and domainSections makes below: a panel is not worth replacing the
+		// page over, and an empty one is what an account with no links looks like
+		// anyway.
+		if links, err := h.Auth.ConnectedIdentities(r.Context(), IdentityFrom(r.Context())); err == nil {
+			data.ConnectedIdentities = links
+		}
+	}
 	for _, ws := range data.Workspaces {
 		if ws.Default {
 			data.WorkspacePinned = true
@@ -320,6 +338,11 @@ func (h *Web) AccountPage(w http.ResponseWriter, r *http.Request) {
 	// Where a completed disable lands (M53). Said here rather than on the page
 	// that performed it, because with the factor gone that page is an offer to
 	// enrol again, and a success notice above an offer reads as an undo button.
+	if r.URL.Query().Get("disconnected") == "1" {
+		data.Notice = "That provider is disconnected. It can no longer sign you in. " +
+			"Sessions it already started stay signed in until they expire or you " +
+			"sign them out below."
+	}
 	if r.URL.Query().Get("mfa") == "off" {
 		data.Notice = "Two-factor authentication is off. The authenticator entry and " +
 			"every recovery code have been removed."
@@ -512,4 +535,32 @@ func (h *Web) AccountDelete(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, ClearSessionCookie(h.Config.SecureCookies))
 	seeOther(w, r, "/login?deleted=1")
+}
+
+// IdentityDisconnect severs one of the signed-in person's connected providers.
+//
+// **F315's account half.** M65 wrote the linking table and shipped no way to undo
+// a row, so somebody who connected a provider was connected for the life of the
+// account — and a link signs them in with no password and no second factor of
+// this product's, which is exactly why account deletion already removes these
+// rows. This is the same removal, on purpose rather than as a side effect of
+// deleting everything.
+//
+// The service carries the actor's own user id into the statement's predicate, so
+// an id belonging to somebody else is a 404 rather than a removal.
+func (h *Web) IdentityDisconnect(w http.ResponseWriter, r *http.Request) {
+	if h.Auth == nil {
+		h.webError(w, r, domain.ErrNotFound)
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.webError(w, r, domain.ErrNotFound)
+		return
+	}
+	if err := h.Auth.DisconnectIdentity(r.Context(), IdentityFrom(r.Context()), id); err != nil {
+		h.webError(w, r, err)
+		return
+	}
+	seeOther(w, r, "/account?disconnected=1#identities")
 }

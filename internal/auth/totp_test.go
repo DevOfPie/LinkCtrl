@@ -430,10 +430,15 @@ func TestNoModuleDependencyJoinedTheSetForTheSecondFactor(t *testing.T) {
 		"github.com/pressly/goose/v3":             true,
 		"github.com/prometheus/client_golang":     true,
 		"github.com/redis/go-redis/v9":            true,
-		"golang.org/x/crypto":                     true,
-		"golang.org/x/net":                        true,
-		"golang.org/x/sync":                       true,
-		"gopkg.in/yaml.v3":                        true,
+		// Added at M60 and not by this milestone: the WASM host the add-on
+		// foundation is built on. CGO_ENABLED=0 leaves one production runtime with
+		// no cgo, which is why it was named at planning rather than at the build
+		// (D211). It is on no login path and M53's claim is unaffected.
+		"github.com/tetratelabs/wazero": true,
+		"golang.org/x/crypto":           true,
+		"golang.org/x/net":              true,
+		"golang.org/x/sync":             true,
+		"gopkg.in/yaml.v3":              true,
 	}
 	for _, path := range mfaDirectRequires(t) {
 		if !want[path] {

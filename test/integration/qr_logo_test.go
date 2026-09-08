@@ -1451,3 +1451,45 @@ func TestTheShorthandsLogoLandsOnTheDefaultCodesOwnRow(t *testing.T) {
 			"does not carry one:\n%.300s", svg)
 	}
 }
+
+// TestRestoreDefaultsOnALogodCodeWritesH is F234.
+//
+// `ResetQRStyleBySlug` marshalled `decodeQRStyle(nil)` — the defaults, which name
+// no level — with no `ForLogo` branch beside it, unlike `storeQRStyle`. So
+// **Restore defaults** on a code carrying a logo wrote a row saying nothing about
+// the level while the renderer draws it at `H`, and m50.6.md's contract is that a
+// logo'd code's *row* holds H.
+//
+// The column rather than the service's view of it, for
+// [TestALogoRaisesTheCodeToLevelHAndSaysSo]'s reason: `qrCodeFrom` applies
+// `ForLogo` on read, so the service reports H either way and the disagreement is
+// invisible from there.
+//
+// It predates M50.6 — before that release the same statement wrote `"level":"M"`
+// onto a logo'd row, which is the same distance from H wearing a different string.
+func TestRestoreDefaultsOnALogodCodeWritesH(t *testing.T) {
+	f := newRules(t)
+	f.claim()
+	id := f.createLink("resetlogo", "https://example.com/x")
+
+	if status, body := f.uploadLogo(
+		t, id, "", "brand.png", "image/png", logoPNG(t, 64, 0x5a),
+	); status != http.StatusOK {
+		t.Fatalf("the upload answered %d: %s", status, body)
+	}
+	if got := f.storedQRLevel(t, id, "").Level; got != qr.LevelH {
+		t.Fatalf("the row holds level %q after the upload, want H; the fixture is not "+
+			"in the state this test is about", got)
+	}
+
+	if err := f.links.ResetQRStyleBySlug(t.Context(), f.owner, id, ""); err != nil {
+		t.Fatalf("restore defaults: %v", err)
+	}
+
+	if got := f.storedQRLevel(t, id, "").Level; got != qr.LevelH {
+		t.Errorf("after Restore defaults the `qr_codes` row holds level %q and the "+
+			"picture is still drawn at H. Nothing is unreadable — the renderer forces "+
+			"it whatever the row says — but the row and the picture disagree, which "+
+			"is the claim M50.6 made about the row (F234)", got)
+	}
+}

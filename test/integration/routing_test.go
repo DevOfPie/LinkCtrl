@@ -632,7 +632,8 @@ func TestNoMatchingRuleFallsBackToTheLinksOwnDestination(t *testing.T) {
 // Postgres for a cached redirect on a link that has rules and one that does not.
 func TestALinkWithoutRulesTakesTheUnchangedFastPath(t *testing.T) {
 	counter := &redirectQueries{}
-	f := newRulesOn(t, newTracedDB(t, counter), nil,
+	pool, _ := newTracedDB(t, counter)
+	f := newRulesOn(t, pool, nil,
 		fixedGeo{country: "GB", region: "ENG", city: "Fictionbury"}, false)
 	f.claim()
 

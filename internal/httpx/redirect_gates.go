@@ -103,8 +103,41 @@ func (h *RedirectHandler) passGates(
 	if res := h.signatureGate(w, r, snap, alias, domainID); res.answered {
 		return res
 	}
-	if res := h.passwordGate(w, r, snap, alias, domainID); res.answered {
-		return res
+	return h.passwordGate(w, r, snap, alias, domainID)
+}
+
+// passBudgetGate is the half of the gates that **spends** something.
+//
+// Split from [RedirectHandler.passGates] so an inline add-on can run between the
+// two, which is the only ordering that holds both properties this path has to
+// have (review finding 8, against F87's sibling and the veto rule M66 states):
+//
+//   - **A request that only renders a challenge must not spend an add-on.** The
+//     signature and password gates refuse or challenge without cost, and a prompt
+//     view is not rate-limited — the alias exists, so the probe limiters never
+//     charge. Running the modules ahead of them meant every prompt view and every
+//     wrong-password POST instantiated every inline module and held one of the
+//     host's shared slots for the full inline deadline, then discarded the
+//     answer. Since `invokeInline` answers *allow* when no slot is free, a flood
+//     of prompt views on one link silently skipped an access-control add-on's
+//     vetoes for everybody else's traffic.
+//   - **A veto must not spend a one-time link's only click.** The budget gate is
+//     the one gate that writes, and an add-on that refuses traffic to a link must
+//     not thereby retire it. TestAVetoDoesNotSpendAOneTimeLinksClick is that
+//     property, and it is why the whole block was ahead of the gates to begin
+//     with.
+//
+// So: challenge, then the add-ons, then the budget. Each gate keeps the position
+// it needs and neither property is traded for the other.
+func (h *RedirectHandler) passBudgetGate(
+	w http.ResponseWriter, r *http.Request, snap *redirect.Snapshot, alias string,
+) gateResult {
+	if h.Gates == nil {
+		// Unreachable in practice — passGates refused above — and kept because this
+		// is a second entry point and fail-closed is not a property to infer from a
+		// caller.
+		h.unavailable(w, r)
+		return gateResult{answered: true, label: "error"}
 	}
 	return h.budgetGate(w, r, snap, alias)
 }

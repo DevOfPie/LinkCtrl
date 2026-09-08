@@ -1,11 +1,14 @@
 package httpx
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 )
 
 // maximalDeps returns a Deps with every optional dependency present, so that
@@ -25,8 +28,34 @@ func maximalDeps() Deps {
 	fillPointers(reflect.ValueOf(&d).Elem(), map[reflect.Type]bool{})
 	// The one registration gated on configuration rather than on a dependency.
 	d.Config.DocsEnabled = true
+	// The one dependency that is an interface rather than a pointer, so
+	// fillPointers cannot make one (M64). Set by hand, and the check below was
+	// widened to interfaces in the same change: an interface field left nil takes
+	// its routes out of both guards below without either of them failing, which is
+	// precisely the silence patternFloor and TestMaximalDepsFillsEveryDependency
+	// exist to break.
+	d.Web.Addons = nopAddonRouter{}
+	// The second interface field, for the same reason and with the same
+	// consequence if it is forgotten (M67). Since M68 it also gates the Add-on
+	// manager's pages, which is why the same value is set on Web: one interface,
+	// two surfaces, and a nil on either takes its half out of both guards below.
+	d.AddonAdmin = nopAddonLifecycle{}
+	d.Web.AddonAdmin = nopAddonLifecycle{}
+	// The third, and it is the one that gates no *pattern* (M69.5): it decides
+	// what `/login` renders rather than whether a route exists. Filled anyway
+	// rather than exempted the way Authenticator is, because an exemption is a
+	// standing hole and this one is cheap to close — and because a nil here would
+	// mean the sign-in page is rendered without it in every guard below, which is
+	// the one page that must be checked *with* an add-on offering something.
+	d.Web.AddonSignIn = nopAddonSignIn{}
 	return d
 }
+
+// nopAddonSignIn is a host that offers nothing, which is what every instance
+// running no add-ons has.
+type nopAddonSignIn struct{}
+
+func (nopAddonSignIn) SignInLinks(context.Context) []addon.SignInLink { return nil }
 
 // fillPointers allocates every nil pointer field of a struct, recursing into
 // the ones whose type this package declares. Deps.Web is why the recursion
@@ -82,7 +111,20 @@ func TestMaximalDepsFillsEveryDependency(t *testing.T) {
 	for _, v := range []reflect.Value{reflect.ValueOf(d), reflect.ValueOf(*d.Web)} {
 		for i := range v.NumField() {
 			f := v.Field(i)
-			if f.Kind() == reflect.Pointer && f.IsNil() {
+			// Interface as well as pointer since M64: Web.Addons is an interface, and
+			// a nil one is exactly as invisible to the two guards below as a nil
+			// pointer was.
+			//
+			// Deps.Authenticator is the one interface field exempt, and it is exempt
+			// because it gates no *pattern*: NewRouter reads it to build the session
+			// middleware, so registerAppRoutes — which is what both guards below run
+			// — registers exactly the same set with it nil. Named rather than
+			// skipped silently, so an interface that does gate a route cannot join it
+			// by looking similar.
+			if v.Type().Field(i).Name == "Authenticator" {
+				continue
+			}
+			if (f.Kind() == reflect.Pointer || f.Kind() == reflect.Interface) && f.IsNil() {
 				t.Errorf("%s.%s is nil after maximalDeps: the routes gated on it are never "+
 					"registered, so nothing checks that they are mounted or reserved",
 					v.Type().Name(), v.Type().Field(i).Name)

@@ -11,11 +11,29 @@ Two contracts, deliberately separate:
 | The REST API | The path: `/api/v1` | A new path, `/api/v2`. Never a change to `v1`. |
 | The product | The release version | A new major version. |
 
-The product is pre-1.0 while account lifecycle and identity are incomplete —
-there is no SSO, OAuth, OIDC or SCIM, and each of those moves the sign-in surface
-and adds tables — so releases stay in the `0.x` range until that has settled.
-`0.x` says "the product surface may still move", not "unfinished". Everything
-documented as built is tested and exercised end to end, and the SLO is measured.
+The product is pre-1.0 **while the add-on contract is still moving**, and that is
+the whole of the gate from 0.4.0 on. `0.x` says "the product surface may still
+move", not "unfinished": everything documented as built is tested and exercised
+end to end, and the SLO is measured.
+
+**What changed at 0.4.0, and it is a narrowing rather than a slip.** This
+sentence said pre-1.0 while *account lifecycle and identity* were incomplete —
+no SSO, OAuth, OIDC or SCIM, each of which moves the sign-in surface and adds
+tables. Identity arrived, and it arrived as a **module**: an add-on asserts that
+somebody authenticated and the host mints the session, so the sign-in surface
+moved once, in this release, and the tables it added are the host's. Somebody
+tracking 1.0 for single sign-on gets it at 0.4.0 and gets it as an add-on, which
+the owner decided knowing that is not what they were watching for.
+
+So the gate is now the **add-on ABI**. 1.0 means a publisher can build against
+this contract and have it hold: the function set, the permission vocabulary, the
+records and the statuses stay as documented, and anything removed goes through
+the deprecation window [addon-abi.md](addon-abi.md) fixes at two minor releases
+and 90 days, whichever ends later. That window is a promise this project has
+made and has never had to keep — the first deprecation it announces will be the
+first exercise of the machinery that announces it — and 1.0 is where it stops
+being provisional. Until then a `0.x` bump may move the contract, with the
+changelog saying so.
 
 *(This read "pre-1.0 while Phase 2 is outstanding — shared workspaces, folders and
 custom domains will move the dashboard and add tables" until 0.3.0. All three
@@ -24,7 +42,8 @@ whole release.)*
 
 The database schema only changes additively within a minor version. Migrations run
 at boot, and `LINKCTRL_MIGRATE_ON_START=false` makes them a deliberate step for
-change-controlled deployments.
+change-controlled deployments — **the product's own, not an installed add-on's**,
+whose DDL the host applies at every boot regardless (F282).
 
 ## Cutting a release
 
@@ -51,10 +70,27 @@ git push origin v0.3.0
 
 `release-check` verifies: the working tree is clean, the tag does not exist, the
 changelog has a section for it, that section is dated today, `[Unreleased]` is
-still there and empty, `sqlc` output matches its SQL, the vendored assets match
-their checksums, the stylesheet is built, the build and tests pass under the race
-detector, the OpenAPI document matches the registered routes, and every release
-platform cross-compiles.
+still there and empty, **the branch's latest CI run is green**, `sqlc` output
+matches its SQL, the vendored assets match their checksums, the stylesheet is
+built, the build and tests pass under the race detector, the OpenAPI document
+matches the registered routes, and every release platform cross-compiles.
+
+The two forms above are equal, and one of them was not. The integration tests run
+only when Postgres is up, that question is asked through `docker compose`, and
+`docker compose` needs `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` to know
+which stack is meant — which the Makefile exported and a plain shell did not. So
+`scripts/release-check.sh v0.3.0` reported `skip  Postgres is not running` on a
+machine where it was, for a whole phase, and a skip reads as information rather
+than as a third of the gate not running (F253). The script derives both variables
+and both DSNs itself now, and a step of its own fails if either derivation stops
+agreeing with the Makefile's.
+
+CI's verdict is asked rather than assumed, because every other check here runs on
+the machine doing the release and a build that is red only on the runner is
+invisible to all of them — one was, for nine days (F255). It has three outcomes,
+not two: green, red, and **could not ask**. The last is reported and does not
+block, since an offline machine cannot answer the question and a gate that
+guessed would be worse than none.
 
 The three changelog checks beyond *a section exists* are there because the section
 existing is what both guards used to ask, and that passes on notes describing the

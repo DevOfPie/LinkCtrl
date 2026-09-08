@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/auth"
 	"github.com/DevOfPie/LinkCtrl/internal/config"
@@ -76,6 +78,26 @@ type Web struct {
 	// the section undrawn and its two routes unregistered, which is the state a
 	// deployment without the queue is already in.
 	Instance *instance.Service
+	// Addons routes a request to an installed add-on's own pages (M64). Nil is
+	// the ordinary state — an instance with no LINKCTRL_ADDONS_DIR has no host at
+	// all — and it leaves the `/addons/` pattern unregistered, which is what keeps
+	// m60.md's "no route is mounted" true for every operator who installs none.
+	Addons AddonRouter
+	// AddonSignIn is what the sign-in page asks for an installed add-on's link
+	// (M69.5). Nil is the ordinary state — an instance with no add-ons host — and
+	// it draws nothing, which is byte-identical to the page every instance
+	// rendered before this existed.
+	//
+	// A field of its own rather than a method on [AddonRouter], because the two
+	// are asked at different moments by different visitors: the router answers a
+	// request *to* an add-on, and this answers what to offer somebody who has not
+	// signed in yet.
+	AddonSignIn AddonSignIn
+	// AddonAdmin backs the Add-on manager (M68) — the same interface the JSON API
+	// holds, so the page and the API cannot diverge. Nil leaves the manager's
+	// pages unregistered and its nav entry undrawn, which is the state of every
+	// instance that configured no add-ons directory.
+	AddonAdmin AddonManager
 }
 
 // shell is what the layout template needs on every page.
@@ -118,6 +140,18 @@ type shell struct {
 	// render — the same trade the unread badge makes — because a switcher that
 	// only appears after a page refresh is worse than the query.
 	Workspaces []auth.Workspace
+	// AddonManager is whether this instance has an add-on host at all, which is
+	// what [Web.AddonAdmin] being non-nil says. The nav entry is drawn from it
+	// **and** from `addons.manage`, and it needs both: the permission is conferred
+	// on the instance principal unconditionally (internal/auth/instance.go), while
+	// the manager's routes are registered only where an add-ons directory is
+	// configured — so a permission check alone drew a menu item that 404s on every
+	// instance that runs no add-ons, which is nearly all of them.
+	//
+	// A field rather than a second permission, because what it reports is how the
+	// process was wired rather than what the reader may do. Same shape the dispute
+	// queue's reviewer section uses for [Web.Instance].
+	AddonManager bool
 	// HasOrganization is false for an account that belongs to nothing, which
 	// D36 made a state a signed-in person can legitimately be in. The header
 	// draws its destinations from it: every one of them leads somewhere that
@@ -156,6 +190,7 @@ func (h *Web) shell(r *http.Request, title, nav string) shell {
 		Identity:        IdentityFrom(r.Context()),
 		Theme:           themeFrom(r),
 		Path:            switchTarget(r.URL.Path),
+		AddonManager:    h.AddonAdmin != nil,
 		HasOrganization: IdentityFrom(r.Context()).HasOrganization(),
 	}
 	// One notification query per page render, served by the partial index the
@@ -253,6 +288,39 @@ func (h *Web) errorPage(w http.ResponseWriter, r *http.Request, code int, headin
 	})
 }
 
+// htmxRefusal answers an hx-post with the refusal as a swappable fragment.
+//
+// **Scoped to two refusal kinds, and that scoping is the whole of the fix for
+// review finding 7.** D430's limb lived in [Web.errorPage], which has 77 callers,
+// so any client sending `HX-Request: true` — a header it chooses — turned every
+// 401, 403, 404, 409, 429 and 500 across the dashboard into a `200`. That
+// included [Web.tooManyRequests], the `deny` for both the login limiter and the
+// add-on page limiter, so a throttled request answered success.
+//
+// What F218 is about is narrower: six destructive controls post over htmx, are
+// refused with a 403 or a 409, and htmx's default response handling reads the
+// 4xx, fires an error event and swaps nothing — so the confirmation is dismissed
+// and the reason is rendered and thrown away. Those two kinds, reached through
+// [Web.webError], are the only ones that take this path.
+//
+// `200` with the flash as the body, because htmx swaps a 2xx and discards
+// everything else. The residue is stated rather than hidden: for these two kinds
+// a machine reading the status sees success where a person sees the refusal. That
+// is the trade D430 took, and it is now confined to the case it was argued for
+// rather than applied to every error the dashboard can produce.
+func (h *Web) htmxRefusal(w http.ResponseWriter, r *http.Request, code int, message string) bool {
+	if !isHTMX(r) {
+		return false
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if err := h.UI.RenderPartial(w, http.StatusOK, "error", "flash_error", message); err != nil {
+		observability.LoggerFrom(r.Context()).Error("render htmx refusal failed",
+			slog.Int("code", code), slog.Any("error", err))
+		http.Error(w, message, code)
+	}
+	return true
+}
+
 // tooManyRequests is the dashboard's counterpart of writeTooManyRequests: a
 // page rather than a problem document, because the client is a person.
 //
@@ -272,12 +340,20 @@ func (h *Web) webError(w http.ResponseWriter, r *http.Request, err error) {
 		h.errorPage(w, r, http.StatusNotFound, "Not found",
 			"This page or link does not exist, or it belongs to a different workspace.")
 	case errors.Is(err, domain.ErrForbidden):
+		// The two kinds F218's six controls are refused with, and the only two that
+		// answer an htmx request with a fragment. See [Web.htmxRefusal].
+		if h.htmxRefusal(w, r, http.StatusForbidden, err.Error()) {
+			return
+		}
 		h.errorPage(w, r, http.StatusForbidden, "Not allowed", err.Error())
 	case errors.Is(err, domain.ErrConflict):
 		// A refusal with a reason the reader can act on — "delete the links
 		// first", "make somebody else an owner first". Pages that can put it
 		// beside the list it is about do so; this is the answer for the ones
 		// that cannot.
+		if h.htmxRefusal(w, r, http.StatusConflict, conflictMessage(err)) {
+			return
+		}
 		h.errorPage(w, r, http.StatusConflict, "Not allowed yet", conflictMessage(err))
 	case errors.Is(err, domain.ErrUnauthorized),
 		errors.Is(err, auth.ErrSessionNotFound),
@@ -353,8 +429,18 @@ func (h *Web) RequireWebAuth(next http.Handler) http.Handler {
 // anything else would make the login form an open redirect, and "//evil.com"
 // is the classic way a naive "starts with /" check gets beaten.
 func safeNext(raw string) string {
+	// TAB joins the set at M70, review finding 5. The WHATWG URL parser strips
+	// ASCII tab, newline and carriage return before parsing, so `/<TAB>/evil.example`
+	// is `//evil.example` to a browser — which is what the `//` prefix test above
+	// refuses and what this one let past.
+	//
+	// It is load-bearing here rather than merely tidy: internal/httpx/addons.go
+	// passes an add-on's own location through this function to clamp it when a
+	// second factor is owed, and the value lands as `next=` on /login/code and
+	// reaches seeOther in web_mfa.go — which that function's comment says must
+	// not send somebody off-origin.
 	if raw == "" || raw[0] != '/' ||
-		strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, "\\\r\n") {
+		strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, "\\\r\n\t") {
 		return "/dashboard"
 	}
 	return raw
@@ -391,6 +477,32 @@ type loginPageData struct {
 	// and for the same reason: recovery is delivered by mail, so an instance with
 	// no relay has no recovery to offer and must not appear to.
 	RecoveryAvailable bool
+	// SignInLinks is what installed add-ons offer (M69.5), and it follows the same
+	// rule the two above do: a link is here only when this instance can actually
+	// honour it — the module is loaded and serving routes, and the operator turned
+	// it on. Empty on every instance that runs no add-ons, which draws nothing.
+	//
+	// Each label is an add-on author's string and is rendered through
+	// html/template like every other value on every other page. Each href is the
+	// **host's** composition, asserted to be inside the add-on's own route prefix
+	// before it reaches here — internal/addon/signin.go.
+	SignInLinks []addon.SignInLink
+}
+
+// AddonSignIn is what this package needs from the add-on host in order to draw
+// the sign-in page. An interface for the reason [AddonRouter] is: the tests that
+// assert what reaches a browser do not construct a wasm runtime.
+type AddonSignIn interface {
+	SignInLinks(ctx context.Context) []addon.SignInLink
+}
+
+// signInLinks is the nil-safe read. An instance with no add-ons host has none,
+// and the page it renders is the one it rendered before add-ons existed.
+func (h *Web) signInLinks(ctx context.Context) []addon.SignInLink {
+	if h.AddonSignIn == nil {
+		return nil
+	}
+	return h.AddonSignIn.SignInLinks(ctx)
 }
 
 func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
@@ -409,6 +521,7 @@ func (h *Web) LoginPage(w http.ResponseWriter, r *http.Request) {
 		shell:             h.shell(r, "Sign in", ""),
 		SignupOpen:        h.signupOpen(),
 		RecoveryAvailable: h.recoveryAvailable(),
+		SignInLinks:       h.signInLinks(r.Context()),
 	}
 	if r.URL.Query().Get("next") != "" {
 		data.Next = safeNext(r.URL.Query().Get("next"))
@@ -452,6 +565,9 @@ func (h *Web) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 			Next:              safeNext(r.PostFormValue("next")),
 			SignupOpen:        h.signupOpen(),
 			RecoveryAvailable: h.recoveryAvailable(),
+			// Also on the refusal, because a failed password is exactly the moment
+			// somebody remembers they sign in with their provider.
+			SignInLinks: h.signInLinks(r.Context()),
 		}
 		switch {
 		case isCredentialFailure(err):

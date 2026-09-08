@@ -12,10 +12,7 @@
 <div class="mb-6">
   <a href="/disputes" class="text-sm text-muted hover:text-ink">← Blocked destinations</a>
   <h1 class="mt-2 text-xl font-semibold tracking-tight">Who reviews disputes</h1>
-  <p class="mt-1 text-sm text-muted">
-    This queue is instance-wide: a decision in it changes what every workspace on this
-    instance may link to.
-  </p>
+  <p class="mt-1 text-sm text-muted">{{template "dispute_reviewers_scope" .}}</p>
 </div>
 
 {{template "flash_ok" .Notice}}

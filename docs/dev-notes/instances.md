@@ -79,7 +79,7 @@ make instances                  # both stacks, and whether they are up
 make up                         # start test
 make logs                       # follow test's application log
 make rebuild                    # test, from nothing: volumes gone, image rebuilt, migrated
-make test-integration           # against test
+make test-integration           # against test, plus the suite's own identity provider
 make up INSTANCE=demo           # start demo, without touching its data
 make demo-update                # the milestone refresh; see below
 ```
@@ -108,6 +108,35 @@ one of them, so a suite that passed before a schema or seed change will report
 `(cached)` and pass again without executing. See the standing rule in
 [workflow.md](../build-notes/workflow.md#standing-rules).
 
+## A third container, and it belongs to neither instance
+
+`make test-integration` starts one more thing: **dex**, on `127.0.0.1:5554`,
+from `docker-compose.integration.yml`. It is the identity provider M69's
+acceptance test signs a person in through, and it is not an instance — it is the
+suite's, under its own compose project (`linkctrl-idp`), so `make down` does not
+take it and `INSTANCE=demo` does not make a second one.
+
+```sh
+make idp-up                     # start it and wait for a discovery document
+make idp-down                   # stop it and remove its volumes
+make oidc-fixture               # rebuild the OIDC add-on the test installs
+```
+
+Both are prerequisites of `make test-integration` and `make ci-integration`, so
+the ordinary path needs neither by hand. Reach for them when a run failed on the
+provider rather than on the product, or after changing the pin in
+`scripts/oidc-fixture.sh`.
+
+Two generated things sit under `test/integration/testdata/` and are gitignored:
+the certificate dex serves, which `scripts/idp.sh` makes with `openssl` on first
+use, and the add-on itself, which `scripts/oidc-fixture.sh` fetches from the
+module proxy at a pinned version and rebuilds. The second prints the digest it
+produced and refuses to hand over anything that does not match what the published
+release names. It rebuilds under the Go toolchain that cut the release — read from
+the module's own `go.mod` and fetched by `GOTOOLCHAIN` if this machine has not got
+it — because Go's output moves between patch releases and a digest that depends on
+the local `go` is a fact about the machine (D397).
+
 ## Ports
 
 The demo keeps the numbers the single stack used, because it is the one opened in
@@ -120,12 +149,56 @@ a browser. Test sits one above on each.
 
 Everything except HTTP is published to `127.0.0.1` only, by the compose override.
 That includes the metrics listener, which the base file deliberately does not
-publish at all: it is unauthenticated and its series describe traffic shape and
-saturation. The development override publishes it on loopback because
+publish at all: it is unauthenticated and its series describe traffic shape,
+saturation, and — with `LINKCTRL_ADDONS_DIR` set — which add-ons are installed
+and at which versions. The development override publishes it on loopback because
 `idle-stop.sh` needs to ask whether anyone is using the instance, and because a
 metrics endpoint you can curl is useful while building one. The production
 procedure in [deployment.md](../deployment.md) runs `-f docker-compose.yml`,
 which does not apply the override.
+
+## Both instances run the sample add-on
+
+`scripts/instance.sh` sets `LINKCTRL_ADDONS_DIR=/addons` for the demo and for the
+test instance, and every image carries a first-party sample at
+`/addons/pageviews` — see [examples/addons](../../examples/addons/README.md) for
+what it is and why the image ships it. So both have an add-on host, an installed
+module, and an Add-on manager page with something on it.
+
+**The test instance gained it at M68 and the reason is the browser gate.** The
+milestone names the browser harness as what asserts that the manager's table does
+not shift when Remove turns each row's chevron into a checkbox, and with no host
+the manager's routes are not mounted at all — so both add-on specs skipped on a
+404, and a skip is the same string as a pass. They run now. The 404 branch stays
+in the spec for the instance that genuinely has no host, which is the state of
+every instance whose operator installed none.
+
+Three consequences while developing.
+
+**The add-ons directory comes from a read-only container filesystem**, on both
+instances, so installing and removing are refused — the documented behaviour of a
+`:ro` mount, and the right posture for an instance anybody can sign into. The
+*page* says so and stays a page: it redirects back to itself with the reason, the
+way every refusal on it does. `503` is the **API's** answer to the same case. The
+specs need neither, because what they drive is the list, select-mode and the two
+confirmations.
+
+**The core SLO column needs the variable gone.** [slo.md](../slo.md) measures
+*core, no add-on* on an ordinary instance, and an instance running an
+observe-class module is not one. Take the line out of `.env.test`, recreate the
+app container, run, and put it back — the same shape the add-on columns already
+use, in the other direction.
+
+**`lctl` runs on the host, where `/addons` does not exist**, and `config.Load`
+refuses a directory it cannot stat. The Makefile's `DEV_ENV` empties the variable
+for that reason, so `make seed`, `make migrate-up` and the rest are unaffected; a
+hand-rolled `go run ./cmd/lctl` that sources the instance file is not, and wants
+`LINKCTRL_ADDONS_DIR=` in front of it.
+
+`.env.demo` and `.env.test` are generated, so an instance created before this
+existed does not have the variable. Add the line by hand or delete the file and
+run `make env INSTANCE=<name>`, which mints new secrets and therefore needs the
+volume recreated — the header of the generated file says so.
 
 ## Creating an instance
 

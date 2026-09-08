@@ -41,6 +41,79 @@ import (
 // bottom — what is deliberately *not* seeded yet — reads as the end of a list
 // rather than as an omission.
 
+// **What M64 deliberately does not add a row for, recorded here because this is
+// where the gate is enforced** (D265). An add-on that serves pages is something
+// somebody can see, and the demo instance shows none of it: an add-on is *files in
+// a directory*, so showing one means building a wasm module, shipping it into the
+// demo image and pointing LINKCTRL_ADDONS_DIR at it — which is a decision about
+// what the demo is, and belongs to M68's manager rather than to the milestone that
+// made a page possible. Every row below is a SQL count against the demo database
+// and there is no table an installed add-on appears in, so a row asserting zero
+// here would be a query about nothing. That is a narrowing of what this list
+// covers, in writing, which is what the paragraph above requires instead of a
+// deletion.
+//
+// **M65 falls under the same narrowing, and it is now not quite true that there is
+// no table.** `addon_identity_links` exists and is LinkCtrl's own, so a row here
+// *could* be written — and would assert zero forever, because a link is written
+// only by an installed add-on holding `session.mint` and the demo installs none.
+// The same is true of the `session.minted_by_addon` audit record. Seeding either by
+// hand would show a connection to a provider that is not there and a sign-in that
+// did not happen, which is a worse demo than an absent feature. When the manager
+// arrives and the demo runs an add-on, both become real rows.
+//
+// **M66 falls under it too, and it is the clearest case of the three.** An add-on
+// on the redirect path leaves no row anywhere: what it produces is a metric series
+// per module and a line in the operator's log, and the demo instance neither
+// installs an add-on nor exposes a scrape to look at. Seeding something would mean
+// fabricating an add-on's effect on redirects that were served without one, which
+// is not a narrowing question at all — there is no query to write. The visible
+// half of this milestone is the per-module performance the Add-on manager renders,
+// which is [M68](../../docs/build-notes/phase-details/m68.md)'s and is named in
+// M66's own file as such.
+//
+// **M67 falls under it as well, and this was the last milestone that did.** The
+// runtime lifecycle adds an API and no page — m67.md defers every surface to M68
+// — so what somebody could see is a `curl` against an instance that has an add-on
+// to install, which the demo does not have for the reason M64's paragraph gives.
+// It does add a table an installed add-on would appear in for the first time:
+// `audit_logs` carries `addon.installed` and `addon.removed`. Seeding one would
+// mean writing a record of an install that did not happen, naming a module that
+// is not there, which is fabricating evidence in the one log whose whole value is
+// that it is not fabricated.
+//
+// **M68 ends the narrowing, and it ends it the way the four paragraphs above said
+// it would.** The demo instance now runs an add-on: `pageviews` is built into the
+// image and `.env.demo` points `LINKCTRL_ADDONS_DIR` at it, which is exactly the
+// decision D265 said belonged here — a wasm module in the image, not a row
+// somebody wrote.
+//
+// So there **is** a row that says the module ran, and it is not one anybody could
+// write by hand: `addon_pageviews` is created by the host at load and `views`
+// inside it by the module's own package initialization. Asserting that table is
+// therefore an assertion about the add-on rather than about the seeder, and it is
+// the first row in this list whose subject is code executing rather than data
+// existing. `loadTheDemosAddon` runs the module against the coverage database the
+// way the demo instance runs it, so `make test-integration` notices the demo's
+// add-on stopping rather than nobody noticing until somebody opens the page.
+//
+// The install's audit record is still absent, and for the original reason: the
+// demo's copy arrives with the image rather than through the API, so no install
+// happened and nothing should say one did.
+//
+// The two remaining zeros — `addon_identity_links` and `session.minted_by_addon` —
+// stay absent for M65's own reason and not for this one: the sample add-on holds no
+// `session.mint`, so a link would still be a sign-in that did not happen.
+//
+// **M68.6 turns the install's absent audit record into a row of its own**, and the
+// row asserts the absence rather than explaining it away. The milestone adds a
+// second install shape — a URL and a digest — and the demo shows the *control*
+// without ever using it: the control is markup, so what asserts it is a template
+// test in internal/ui rather than a count here, and what a count can say is that
+// this instance has fetched and installed nothing. It must stay able to say that.
+// A demo that dialled out to fill a page would be making a scheduled outbound
+// request nobody agreed to, on the one instance strangers are invited to inspect.
+
 // demoFeature is one thing the demo must show, and the query that proves it does.
 type demoFeature struct {
 	// Milestone is the number that shipped the feature, so a failure says which
@@ -1237,6 +1310,116 @@ func demoCoverage() []demoFeature {
 				"and agreed to: it makes the same outbound request, once a day, " +
 				"that docs/SECURITY.md's egress row now counts",
 		},
+		{
+			// The Add-on manager (M68) — the module, not the rows beside it.
+			//
+			// **Nothing the seeder writes can prove this one**, which is why the query
+			// is about a table `lctl` never touches. `addon_pageviews` is created by
+			// the host at load (M63's EnsureAddonSchema) and `views` inside it by the
+			// module's own package initialization through `storage_exec`, so the table
+			// existing means the manifest parsed, the digest matched, the declared
+			// grants were honoured, wazero compiled and instantiated the module, and
+			// its first host call reached Postgres. `loadTheDemosAddon` is what runs
+			// the module against this database, the way the demo instance runs it.
+			//
+			// The row it replaces counted `addon_settings` and asserted nothing about
+			// any of that: the seeder writes those three rows whether or not there is
+			// an add-on host in the world, so a demo whose module had stopped loading
+			// — a bad digest, a permission the host refused, a build that silently
+			// produced a non-reactor — passed it with an empty manager page.
+			//
+			// Bounded above as well as below, because two `views` tables would mean two
+			// schemas answering to one add-on name.
+			Milestone: "M68", Feature: "An add-on that is really loaded and running",
+			Query: `SELECT count(*) FROM pg_tables
+			        WHERE schemaname = 'addon_pageviews' AND tablename = 'views'`,
+			Min: 1, Max: 1,
+			Shows: "the Add-on manager over a module that is really there: a " +
+				"declaration class, held permissions, a schema with a size and " +
+				"per-module redirect figures, instead of an empty table and an " +
+				"upload form",
+		},
+		{
+			// And the half of the same page that *is* a row: what an operator
+			// configured, which is what the detail page's Settings section renders.
+			// Three of the sample add-on's four declared settings are set; the fourth
+			// is a secret, left unset on purpose so the page shows the state a secret
+			// field has before anybody types one.
+			//
+			// Bounded above as well as below, and the bound is the point: a fourth row
+			// would mean somebody seeded the secret, and a demo instance carrying a
+			// credential-shaped value in a table is exactly what an evaluator should
+			// not find.
+			Milestone: "M68", Feature: "An add-on with settings an operator chose",
+			Query: `SELECT count(*) FROM addon_settings WHERE addon = 'pageviews'`,
+			Min:   3, Max: 3,
+			Shows: "the Add-on manager's detail page with three declared settings " +
+				"carrying values somebody picked, and a secret that is not set, " +
+				"which is the state that field has to render",
+		},
+		{
+			// M68.6's install-from-a-URL, and this row is about what the demo does
+			// **not** do.
+			//
+			// The control is on the page unconditionally — it is markup, and
+			// `TestTheInstallControlOffersBothShapes` in internal/ui is what asserts
+			// both shapes render, because a rendered form is not a count and no query
+			// here can be about one. What a query *can* be about is whether this
+			// instance has ever fetched and installed anything, and the answer must
+			// be no: the demo has nothing to fetch from, and a seeder that dialled out
+			// to make a page look busier would be a scheduled outbound request nobody
+			// asked for and docs/SECURITY.md's egress row does not list.
+			//
+			// So it is the zero row M67's paragraph above predicted, kept zero for a
+			// second reason now that the capability exists. `addon.installed` is
+			// still absent because the demo's module arrives with the image, and
+			// after this milestone it is *also* absent because nothing here fetches.
+			// Seeding one would be a record of an install that did not happen, in the
+			// one log whose whole value is that it is not fabricated.
+			Milestone: "M68.6", Feature: "No install this instance performed, and no fetch",
+			Query: `SELECT count(*) FROM audit_logs
+			        WHERE action IN ('addon.installed', 'addon.removed')`,
+			MaxIsZero: true,
+			Shows: "the install control in both its shapes — an upload, and a URL " +
+				"with the digest beside it — over an instance whose add-on came " +
+				"with the image. A row here would mean the demo reached out to " +
+				"somebody's server, or that somebody wrote a record of an install " +
+				"that never happened",
+		},
+		{
+			// M69.5's sign-in link, and this row is the **written exemption** the
+			// milestone's demo bullet asks for rather than a feature the seeder shows.
+			// Owner-answered 2026-08-28.
+			//
+			// The demo's sample module is `pageviews`, which holds no `session.mint`,
+			// so no link is offered on the demo's sign-in page and an evaluator sees
+			// that page exactly as it has always been. What they *can* see is the
+			// operator's half: the Add-on manager's detail page for an add-on that
+			// asked would carry the consent toggle, and `TestTheSignInConsentSaysWhat
+			// TurningItOnDoes` in internal/ui is what asserts it — a rendered control
+			// is not a count, the same reason M68.6's row above gives.
+			//
+			// **Two alternatives were declined, and each for its own reason.** Seeding
+			// a sample module that mints: a public demo running a session-minting
+			// module is a sign-in anybody may start, and a link that goes nowhere in
+			// particular reads as broken rather than as a demonstration. Installing
+			// the OIDC add-on on the demo: m69.md ships an exception saying the demo
+			// does not run it, and reversing a shipped milestone's decision is not
+			// this one's to make.
+			//
+			// So what a count can say is that no add-on has minted anything here, and
+			// that must stay true — a row in either table would mean the demo showed a
+			// connection to a provider that is not there, which is M65's paragraph
+			// above and is why this is the zero row it predicted rather than a new
+			// argument.
+			Milestone: "M69.5", Feature: "No add-on sign-in on the demo, by exemption",
+			Query:     `SELECT count(*) FROM addon_identity_links`,
+			MaxIsZero: true,
+			Shows: "a sign-in page with nothing on it but this product's own form, " +
+				"which is what the demo's add-on — holding no session.mint — offers. " +
+				"A row here would mean somebody seeded an account's connection to a " +
+				"provider the demo does not talk to",
+		},
 	}
 }
 
@@ -1251,6 +1434,10 @@ func TestDemoSeederShowsEveryFeatureItClaimsTo(t *testing.T) {
 	ctx := context.Background()
 	pool := newDemoDB(t)
 	cfg := demoTestConfig()
+
+	// The demo instance runs an add-on host; this database is otherwise a demo
+	// without one, and the M68 row is about what the host leaves behind.
+	loadTheDemosAddon(t, pool)
 
 	owner := claimDemoInstance(t, pool, cfg)
 
@@ -1353,6 +1540,9 @@ func TestTheSecondWorkspaceFillsWhenTheOwnerHasPinnedADefault(t *testing.T) {
 	ctx := context.Background()
 	pool := newDemoDB(t)
 	cfg := demoTestConfig()
+	// This test runs the whole coverage list too, and one row of it is about a
+	// schema the add-on host creates rather than about anything the seeder writes.
+	loadTheDemosAddon(t, pool)
 	owner := claimDemoInstance(t, pool, cfg)
 
 	runDemoSeed(t, ctx, pool, cfg, owner.Email)

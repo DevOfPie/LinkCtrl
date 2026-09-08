@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/mail"
 	"net/netip"
@@ -159,6 +160,13 @@ type Service struct {
 	hasher  *Hasher
 	ttl     SessionTTL
 	lockout LockoutPolicy
+
+	// sessionAuditor records a session minted on an add-on's word (M65), and log
+	// is where the two failures that must not fail a sign-in go. Both are wired
+	// after construction — see SetSessionAuditor — and both are nil-safe, which is
+	// what every test that builds this service directly relies on.
+	sessionAuditor SessionAuditor
+	log            *slog.Logger
 }
 
 type ServiceConfig struct {
@@ -503,7 +511,8 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 	// value with a flag, so a caller that ignores the distinction sets an empty
 	// cookie instead of a valid one.
 	if user.MfaEnabledAt != nil {
-		return s.pendingSecondFactor(ctx, user.ID, in.IP, in.UserAgent)
+		// No provenance: this is the password form, and nothing vouched for anybody.
+		return s.pendingSecondFactor(ctx, user.ID, in.IP, in.UserAgent, nil)
 	}
 
 	return s.mintSession(ctx, user.ID, user.Email, user.Name, in.IP, in.UserAgent)
@@ -515,9 +524,12 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (*LoginResult, error
 // a tidy-up.** A second factor is only worth anything if there is exactly one
 // place a session token comes into existence; two call sites that agree today are
 // how the third one gets added without the factor. Login reaches it when the
-// account has no second factor, and CompleteSecondFactor reaches it when one has
-// been verified. There is no third caller and there is nothing else in this
-// package that calls CreateSession.
+// account has no second factor, CompleteSecondFactor reaches it when one has been
+// verified, and M65 added the third: MintFromAddonAssertion, in addonauth.go,
+// when an add-on holding `session.mint` vouched for somebody the host had already
+// judged. **Three callers, and nothing else in this package calls CreateSession**
+// — which is the property this function exists to keep, and the reason the third
+// caller was written as a caller of it rather than as a second mint beside it.
 func (s *Service) mintSession(
 	ctx context.Context, userID uuid.UUID, email, name string,
 	ip netip.Addr, userAgent string,

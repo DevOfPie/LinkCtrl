@@ -6,10 +6,18 @@ pointed at since Phase 1. It existed as a reference in two files and nowhere
 else until 0.2.0.
 
 **Derived from the migrated schema, not from the migrations.** Every table,
-column count and foreign key below was read out of a database with **all 44**
-migrations applied — the count as of 0.3.0, counted from
-`internal/store/migrations/` rather than recalled. It said *35* until then, and
-was already one short when 0.2.0 shipped with 36; Phase 3 added the other eight.
+column count and foreign key below was read out of a database with **all 48**
+migrations applied, counted from `internal/store/migrations/` rather than
+recalled. It said *35* until 0.3.0 and was already one short when 0.2.0 shipped
+with 36; Phase 3 took it to 44, and it said *44* while the two rows Phase 4 added
+were already on this page — `addon_identity_links` from `04500` and
+`mfa_pending_logins` at ten columns from `04600`, neither of which a 44-migration
+schema has. `04700` added `addons.manage` to `permissions` and creates no table;
+`04800` adds `addon_settings`.
+The number is a fact about this file's own derivation, so it moves with the
+derivation and not with the tag, and it is still hand-maintained —
+[F321](build-notes/deferred-findings.md#open) is the row about tying it to
+something.
 It describes what a running instance has rather than
 what the files appear to say. The distinction matters here: partitions are
 created by application code and never appear in sqlc-visible SQL, so a reader
@@ -111,7 +119,9 @@ appears in sqlc-visible SQL.
 | `mfa_recovery_codes` | 5 | Built | Ten single-use codes per enrolment ([M53](build-notes/phase-details/m53.md), `04100`). SHA-256 only, globally unique so two accounts cannot hold one secret, and kept after being spent so the account page can count what is left. Regenerating deletes the set outright — the previous one is void in full, and a count of leftovers from a void set would be a lie. |
 | `api_keys` | 15 | Built | `user_id` is the owner and is what a revoke keys on. **`organization_id` is nullable since M54 (`04200`)**: NULL is account-wide — the key reaches every organization its owner holds an organization-wide membership in — and non-NULL is pinned to that one. `workspace_id` is the third, narrowest reach, and the two axes are independent, which is why they are two columns and not a `reach` enum. Only an HMAC of the token is stored. **This table was absent from this document until 0.3.0**, while appearing in the diagram above. |
 | `api_key_org_revocations` | 4 | Built | One row per organization an administrator has cut an **account-wide** key out of ([M54](build-notes/phase-details/m54.md), `04200`). A pinned key never has one — its organization is its whole reach. Read on the authentication path to decide where a request lands, and since M58 also to bound what the key may be *told* about ([F183](build-notes/deferred-findings.md)). Also absent from this document until 0.3.0. |
-| `mfa_pending_logins` | 8 | Built | The step between a right password and a session (`04100`). The fourth bearer-token table and the shortest-lived: SHA-256 only, single-use, five minutes. A table rather than a signed cookie because single use needs a server-side record of whether it has been spent, at which point the table is back and the cookie is an optimisation. Carries the sign-in's `ip_prefix` and user agent, so the session it mints records where the sign-in *started*. Swept hourly with no retention window — a spent one is evidence of nothing, because the session it minted is the record. |
+| `addon_identity_links` | 7 | Built | The bridge an add-on's authentication assertion crosses ([M65](build-notes/phase-details/m65.md), `04500`). One row per (`addon`, `issuer`, `subject`), unique-indexed, mapping an external identity to an account. **It is the whole of "account linking is explicit, never guessed"**: an assertion for a subject with no row here mints nothing, and no statement in this product resolves an assertion by any other column — in particular not by the email address the assertion carries, which is the classic account-takeover shape. Written only by `identity_link`, which requires somebody to be signed in already. A link is a standing credential, so `DeleteAccountDependents` takes it with the account; the `ON DELETE CASCADE` beside it never fires, because M52's deletion is an `UPDATE`. |
+| `addon_settings` | 5 | Built | What an operator configured an add-on with, from the Add-on manager ([M68](build-notes/phase-details/m68.md), `04800`). One row per (`addon`, `name`), the value as text for every declared type, with a `secret` boolean saying what the value **was written as**. That column is what makes *a secret is never echoed back* a property of the row rather than of the manifest in hand: replacing an add-on is a removal and an install, so a successor re-declaring the same setting as `text` would otherwise have had its predecessor's credential rendered into the form. **Host-side and not in the add-on's own schema**, which is the whole reason the table exists: an add-on's role can write that schema, so a `secret` kept there would be a credential the module could rewrite and then read back as though an operator had chosen it. Not encrypted, exactly as the environment variable it mirrors is not. Keyed on the add-on's **name**, like `addon_identity_links` and with the same consequence — a different module installed under a used name inherits the values. Read at load and merged under `LINKCTRL_ADDON_<NAME>_<SETTING>`, which outranks it (D347). A row for a setting the manifest no longer declares is not read and is deliberately not deleted. |
+| `mfa_pending_logins` | 10 | Built | The step between a right password and a session (`04100`). The fourth bearer-token table and the shortest-lived: SHA-256 only, single-use, five minutes. A table rather than a signed cookie because single use needs a server-side record of whether it has been spent, at which point the table is back and the cookie is an optimisation. Carries the sign-in's `ip_prefix` and user agent, so the session it mints records where the sign-in *started*. Swept hourly with no retention window — a spent one is evidence of nothing, because the session it minted is the record. Two nullable columns joined at M65 (`04600`): `minted_by_addon` and `minted_by_issuer`, null for a password post and set when an add-on's assertion is what stopped here — the session is minted after the prompt, so the provenance record `session.minted_by_addon` could not otherwise name the add-on for an account with a second factor. Neither column identifies a person; both describe the software in the middle. |
 
 ### Links and routing
 
@@ -145,7 +155,7 @@ appears in sqlc-visible SQL.
 
 | Table | Cols | Status | Notes |
 | --- | --- | --- | --- |
-| `audit_logs` | 12 | Built, partitioned | 39 actions, enumerated by `audit.AllActions` and checked by a test. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). Since M58 the same statement also rewrites `metadata`'s `"email"` key and the `"from"` array beside it, matched on the value because there is no key to match on. **One statement, not several**: two data-modifying CTEs writing one row leave Postgres to apply one and drop the other, which a record that is both the erased actor's and carries their address hits every time. |
+| `audit_logs` | 12 | Built, partitioned | 46 actions, enumerated by `audit.AllActions` and checked by two tests — one that the list is exhaustive, and one that the number every document states is the length of that list. `actor_label` is rewritten to a constant tombstone by the erasure sweep; `actor_user_id` is not (D148). Since M58 the same statement also rewrites `metadata`'s `"email"` key and the `"from"` array beside it, matched on the value because there is no key to match on. **One statement, not several**: two data-modifying CTEs writing one row leave Postgres to apply one and drop the other, which a record that is both the erased actor's and carries their address hits every time. |
 | `notifications` | 9 | Built | Scoped to the reader and the workspace they are standing in, with organization-level news visible from every workspace (D102). Deleted with their own reader's account, and **scrubbed** when somebody else's account is erased: the row telling an inviter that their invitation was accepted names the person who accepted it, in `data` and in `title` alike, and belongs to neither of the two sweeps that would otherwise reach it (M58, D176). |
 | `mail_outbox` | 11 | Built | Optional: an instance with no `SMTP_HOST` never queues. Bodies are blanked when a row finishes (F32). |
 | `webhooks` / `webhook_deliveries` | 10 / 11 | Built | Delivery is instance-wide and arrival-ordered, which is a recorded limitation (F90). |
@@ -181,6 +191,48 @@ because a reader finding the column otherwise concludes the feature is there.
   [phase-3-candidates.md](build-notes/phase-3-candidates.md). *(This row pointed
   at that header for the list until 0.3.0, and the header had never carried
   one.)*
+
+## What is not in this document: an add-on's tables
+
+Everything above is in the `public` schema and is this product's. An installed
+add-on that declared `storage.own_schema` also has tables, in a schema of its own
+called `addon_<name>`, and **none of the add-on's own tables are described here or
+anywhere else in this repository** — they are the add-on author's, they arrive with
+the module, and the host applies their DDL without understanding it. One table in
+that schema is not the author's: `goose_db_version`, which the host creates to
+track the add-on's migrations, and which `docs/operations.md` and
+`docs/SECURITY.md` both describe.
+
+Three consequences worth reading before you meet one:
+
+- **`pg_dump` of the database includes them**, because they are schemas in the
+  same database — but **not the roles that own them**, and that half is
+  load-bearing. `pg_dump` carries no roles at all; `pg_dumpall --roles-only` is
+  what does, which is the command
+  [deployment.md](deployment.md#5-back-it-up)'s backup runs — `--globals-only`
+  carries them too, along with tablespaces and database-level grants a
+  single-database restore does not need. Restore a whole-database dump into a cluster whose roles were not
+  restored first and the `ALTER … OWNER TO` lines fail, the next boot repairs the
+  *schema*'s owner and nothing re-owns the tables, so the add-on's own role is
+  refused on its own rows — measured, and the load says so rather than failing
+  inside a migration. So a backup is whole only if it is two files;
+  [deployment.md](deployment.md) has both and the order to restore them in.
+  `pg_dump --schema=addon_<name>` is the per-add-on form, and that
+  is the whole of this release's backup story for add-ons — there is no tooling
+  beyond what `pg_dump` already is, stated rather than implied. What that per-schema
+  form does **not** carry is a **large object**, which belongs to no schema at all:
+  nothing in LinkCtrl creates one and an add-on's role can, so
+  [operations.md](operations.md#add-ons) carries the gauge that says whether any
+  exist and the purge that removes them. A whole-database dump does carry them, so
+  this is a bound on `--schema=` and not on the backup story.
+- **Nothing this document says about column counts, foreign keys or partitioning
+  covers them.** An add-on's schema has whatever its author wrote.
+- **A schema can outlive its add-on.** Removing a module leaves its schema and its
+  rows; the boot log names one nothing claims. [operations.md](operations.md#add-ons)
+  has what to do about it.
+
+The boundary between the two is a database role rather than a convention, and
+[SECURITY.md](SECURITY.md) is where that is argued.
 
 ## Keeping this true
 

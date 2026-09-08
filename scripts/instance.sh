@@ -115,11 +115,48 @@ cmd_init() {
 # ordering is what makes this line safe here; reversed, a fresh demo serves
 # nothing on its custom hostname and a repeat serves a cached entry naming a
 # domain id the reseed deleted.
-LINKCTRL_DOMAIN_VERIFY_INTERVAL=0'
+LINKCTRL_DOMAIN_VERIFY_INTERVAL=0
+
+# The sample add-on (M68). Every image carries it at /addons/pageviews; this
+# variable is what turns it into a running add-on, and it is set here and on no
+# other instance. Without it there is no add-on host at all, which is the state
+# every operator who installs nothing is in.
+#
+# The demo therefore shows the Add-on manager over a real module — a declaration
+# class, held permissions, a schema with a size, per-module redirect latency and
+# four settings to render — rather than over an empty table with an upload form.
+# examples/addons/README.md argues the decision; D265 is where it was deferred to
+# this milestone.
+#
+# The container filesystem is read-only, so this directory is too: installing and
+# removing are refused on the demo, with the page saying why rather than answering
+# a status. 503 is what the API answers for the same case. That is what a
+# read-only add-ons mount does everywhere and is the right posture for an instance
+# strangers can sign into.
+LINKCTRL_ADDONS_DIR=/addons'
 	else
 		http=$test_http pg=$test_pg redis=$test_redis metrics=$test_metrics
 		restart=$test_restart level=debug
-		extra='LINKCTRL_SERVER_TIMING=true    # Server-Timing headers, for reading the hot path'
+		extra='LINKCTRL_SERVER_TIMING=true    # Server-Timing headers, for reading the hot path
+
+# The sample add-on (M68), the same one the demo runs and from the same place in
+# the image. It is here so the kept browser specs can actually run: the Add-on
+# manager is not mounted at all without this variable, so every add-on spec in
+# tools/agent-browser skipped, and a spec that skips is not an assertion. M68
+# names the browser harness as what asserts that the manager table does not shift
+# when Remove turns each row chevron into a checkbox, and no Go test can measure a
+# laid-out column.
+#
+# The container filesystem is read-only, so installing and removing are refused
+# here as they are on the demo. The specs do not need them: what they drive is the
+# list, select-mode and the two confirmations, none of which writes anything.
+#
+# **The core SLO column needs this line gone.** docs/slo.md measures "core, no
+# add-on" on an ordinary instance, and an instance running an observe-class module
+# is not one. Take the line out and recreate the app container before make load,
+# and put it back after — the same shape the add-on columns already use, in the
+# other direction.
+LINKCTRL_ADDONS_DIR=/addons'
 	fi
 
 	# umask rather than a later chmod: the secrets are in the file from the first

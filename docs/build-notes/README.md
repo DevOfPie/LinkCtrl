@@ -38,6 +38,7 @@ append-only and records which.
 | [commands.md](commands.md) | Every command's contract, stated without assuming this harness | Reaching an agent some other way |
 | [planning.md](planning.md) | How a requested feature becomes planned work | A feature is asked for |
 | [phase-3-candidates.md](phase-3-candidates.md) | What Phase 3 might take, grouped by work area. Schedules nothing | Parking a future-phase feature, or scoping the next phase |
+| [phase-4-candidates.md](phase-4-candidates.md) | The same for Phase 4, plus the record of what the phase collides with on purpose | Parking a future-phase feature, or scoping the next phase |
 | [phase-details/](phase-details/) | One definition of done per milestone, plus the status table | Building one milestone |
 | [decisions.md](decisions.md) | Why. Append-only; a later entry corrects an earlier one, nothing is edited | Wondering why something is the way it is |
 | [deferred-findings.md](deferred-findings.md) | Defects found at the wrong moment, parked rather than fixed | A defect turns up out of scope |
@@ -104,8 +105,8 @@ participants, so the artifacts are the point:
   something no longer matters is itself a decision, and an unrecorded one comes
   back later as a fresh idea with its reasoning lost.
 - **The gates are runnable.** `make check`, `make test-integration`,
-  `make check-links`, `make release-check`. Nothing lands without them, and they
-  do not depend on anybody's judgement.
+  `make check-links`, `make check-ci`, `make release-check`. Nothing lands
+  without them, and they do not depend on anybody's judgement.
 
 ## What it costs
 

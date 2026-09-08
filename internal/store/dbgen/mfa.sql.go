@@ -81,18 +81,22 @@ func (q *Queries) CountUnusedMFARecoveryCodes(ctx context.Context, userID uuid.U
 }
 
 const createMFAPendingLogin = `-- name: CreateMFAPendingLogin :one
-INSERT INTO mfa_pending_logins (id, user_id, token_hash, ip_prefix, user_agent, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, token_hash, ip_prefix, user_agent, created_at, expires_at, consumed_at
+INSERT INTO mfa_pending_logins (id, user_id, token_hash, ip_prefix, user_agent,
+                                expires_at, minted_by_addon, minted_by_issuer)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8)
+RETURNING id, user_id, token_hash, ip_prefix, user_agent, created_at, expires_at, consumed_at, minted_by_addon, minted_by_issuer
 `
 
 type CreateMFAPendingLoginParams struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	TokenHash []byte
-	IpPrefix  *string
-	UserAgent *string
-	ExpiresAt time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	TokenHash      []byte
+	IpPrefix       *string
+	UserAgent      *string
+	ExpiresAt      time.Time
+	MintedByAddon  *string
+	MintedByIssuer *string
 }
 
 // The credential the browser holds between a right password and a session.
@@ -100,6 +104,11 @@ type CreateMFAPendingLoginParams struct {
 // Returned in full so the caller can assert the expiry it asked for rather than
 // recompute it from its own clock — the TTL m53.md wants a test to hold is the
 // one the database wrote.
+//
+// `minted_by_addon` and `minted_by_issuer` (04600) are null for a password post
+// and set when an add-on's assertion is what stopped here. They are carried
+// through the prompt because the session this row becomes is minted by
+// `CompleteSecondFactor`, which would otherwise have no way to say who vouched.
 func (q *Queries) CreateMFAPendingLogin(ctx context.Context, arg CreateMFAPendingLoginParams) (MfaPendingLogin, error) {
 	row := q.db.QueryRow(ctx, createMFAPendingLogin,
 		arg.ID,
@@ -108,6 +117,8 @@ func (q *Queries) CreateMFAPendingLogin(ctx context.Context, arg CreateMFAPendin
 		arg.IpPrefix,
 		arg.UserAgent,
 		arg.ExpiresAt,
+		arg.MintedByAddon,
+		arg.MintedByIssuer,
 	)
 	var i MfaPendingLogin
 	err := row.Scan(
@@ -119,6 +130,8 @@ func (q *Queries) CreateMFAPendingLogin(ctx context.Context, arg CreateMFAPendin
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+		&i.MintedByAddon,
+		&i.MintedByIssuer,
 	)
 	return i, err
 }
@@ -310,6 +323,10 @@ SELECT p.id,
        p.created_at,
        p.expires_at,
        p.consumed_at,
+       -- Read by CompleteSecondFactor, which is where the session an add-on's
+       -- assertion produced actually comes into existence.
+       p.minted_by_addon,
+       p.minted_by_issuer,
        u.email,
        u.name,
        u.status,
@@ -324,19 +341,21 @@ SELECT p.id,
 `
 
 type LockMFAPendingLoginRow struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
-	IpPrefix     *string
-	UserAgent    *string
-	CreatedAt    time.Time
-	ExpiresAt    time.Time
-	ConsumedAt   *time.Time
-	Email        string
-	Name         string
-	Status       string
-	MfaSecret    *string
-	MfaEnabledAt *time.Time
-	MfaLastStep  *int64
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	IpPrefix       *string
+	UserAgent      *string
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	ConsumedAt     *time.Time
+	MintedByAddon  *string
+	MintedByIssuer *string
+	Email          string
+	Name           string
+	Status         string
+	MfaSecret      *string
+	MfaEnabledAt   *time.Time
+	MfaLastStep    *int64
 }
 
 // The pending login behind a presented token, locked.
@@ -363,6 +382,8 @@ func (q *Queries) LockMFAPendingLogin(ctx context.Context, tokenHash []byte) (Lo
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+		&i.MintedByAddon,
+		&i.MintedByIssuer,
 		&i.Email,
 		&i.Name,
 		&i.Status,

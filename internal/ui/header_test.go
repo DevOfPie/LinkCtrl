@@ -174,6 +174,35 @@ func TestTopLevelNavHoldsTwoDestinations(t *testing.T) {
 	}
 }
 
+// The Add-on manager's entry needs a host as well as the permission (M68).
+//
+// `addons.manage` is conferred on the instance principal unconditionally, and the
+// manager's routes are registered only where an add-ons directory is configured —
+// so an entry gated on the permission alone was drawn on every instance that runs
+// no add-ons, and led to a 404 on all of them. The shell carries `AddonManager`
+// for that second fact and the template reads both.
+//
+// Both directions, because either one alone passes on a broken gate: an entry that
+// is never drawn satisfies the first assertion, and one that is always drawn
+// satisfies the second.
+func TestTheAddOnEntryNeedsAHostAndNotOnlyThePermission(t *testing.T) {
+	const entry = `href="/instance/addons"`
+	hosted := renderPage(t, "dashboard", map[string]any{"AddonManager": true})
+	if !strings.Contains(hosted, entry) {
+		t.Error("an instance with an add-on host offers no way to reach the Add-on " +
+			"manager; the fixture's owner holds addons.manage, so the entry is the " +
+			"only thing that could be missing")
+	}
+	// The dashboard fixture leaves the field unset, which is what every instance
+	// without LINKCTRL_ADDONS_DIR renders as.
+	bare := renderPage(t, "dashboard", nil)
+	if strings.Contains(bare, entry) {
+		t.Error("an instance with no add-on host still draws the Add-on manager's " +
+			"nav entry. Its routes are not registered there, so the entry is a menu " +
+			"item that 404s — internal/httpx/router.go registers both from one field")
+	}
+}
+
 // TestTheHeaderOffersNothingToAnAccountThatBelongsToNothing is the layout half
 // of D36.
 //
@@ -313,11 +342,18 @@ func TestHeaderMenusAreScriptFreePopovers(t *testing.T) {
 			"to run it, so the control it belongs to would be dead in a browser and "+
 			"alive in a test", strings.TrimSpace(m))
 	}
-	// **Two script tags since M50.8, and both are external files.** The count is
-	// asserted rather than left open because what this test guards is a
+	// **Three script tags since M68, and all three are external files.** The
+	// count is asserted rather than left open because what this test guards is a
 	// *script-free* header — a menu that grew a handler would still render and
-	// simply not open — and the way that regresses is a third tag arriving with
+	// simply not open — and the way that regresses is another tag arriving with
 	// nobody counting.
+	//
+	// The third is static/js/addon-select.js, which puts the selected count into
+	// the Add-on manager's removal button (M68). Deferred, like htmx and unlike
+	// qr-size.js: it relabels a button after a checkbox changes, so nothing it
+	// does can affect the first paint and there is no reason for it to block one.
+	// It does nothing at all on a page with no `[data-addon-select]` on it, which
+	// is every page but one.
 	//
 	// The second is static/js/qr-size.js, the QR tab's size binding and its
 	// scroll restoration (D191). It is on every page for the reason layout.html
@@ -336,11 +372,11 @@ func TestHeaderMenusAreScriptFreePopovers(t *testing.T) {
 	// **What is asserted is still the whole claim**: no inline script, so the
 	// CSP's `script-src 'self'` is untouched and no `unsafe-inline` waiver is
 	// needed for either file.
-	if got := strings.Count(signedIn, "<script"); got != 2 {
-		t.Errorf("the page renders %d script tags, want 2 (htmx and qr-size, both "+
-			"external files)", got)
+	if got := strings.Count(signedIn, "<script"); got != 3 {
+		t.Errorf("the page renders %d script tags, want 3 (htmx, qr-size and "+
+			"addon-select, all external files)", got)
 	}
-	for _, want := range []string{"js/htmx.min.js", "js/qr-size.js"} {
+	for _, want := range []string{"js/htmx.min.js", "js/qr-size.js", "js/addon-select.js"} {
 		if !strings.Contains(signedIn, want) {
 			t.Errorf("the page does not load %s", want)
 		}
@@ -350,6 +386,9 @@ func TestHeaderMenusAreScriptFreePopovers(t *testing.T) {
 		case strings.Contains(tag, "js/htmx.min.js") && !strings.Contains(tag, "defer"):
 			t.Errorf("htmx is loaded without defer: %q. It blocks the parser for no "+
 				"reason — nothing on the page needs it before the document exists", tag)
+		case strings.Contains(tag, "js/addon-select.js") && !strings.Contains(tag, "defer"):
+			t.Errorf("addon-select.js is loaded without defer: %q. It blocks the parser "+
+				"to relabel a button nobody has pressed yet", tag)
 		case strings.Contains(tag, "js/qr-size.js") && strings.Contains(tag, "defer"):
 			t.Errorf("qr-size.js is deferred again: %q. A deferred script runs after the "+
 				"document is parsed, which is after it is painted, so the save that "+

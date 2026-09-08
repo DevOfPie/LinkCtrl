@@ -1,6 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 // The reopened M47's kept assertion: the tab strip on a link's page does not
 // wrap at 360px. That property is *why* tabs beat the drawn alternatives — a
@@ -24,35 +22,17 @@ import { fileURLToPath } from 'node:url';
 // One sign-in attempt (retries are 0), so a stale table costs one charge
 // against the lockout counter and a red run pointing at the file to fix.
 
-const instancesDoc = fileURLToPath(
-  new URL('../../../docs/dev-notes/instances.md', import.meta.url),
-);
-
-function credentials() {
-  const { LINKCTRL_UI_EMAIL: email, LINKCTRL_UI_PASSWORD: password } = process.env;
-  if (email && password) return { email, password };
-  const doc = readFileSync(instancesDoc, 'utf8');
-  const address = doc.match(/\|\s*Address\s*\|\s*`([^`]+)`\s*\|/);
-  const pass = doc.match(/\|\s*Password\s*\|\s*`([^`]+)`\s*\|/);
-  if (!address || !pass) {
-    throw new Error(
-      'no credentials: set LINKCTRL_UI_EMAIL and LINKCTRL_UI_PASSWORD, or keep ' +
-        'the Address/Password table in docs/dev-notes/instances.md current',
-    );
-  }
-  return { email: address[1], password: pass[1] };
-}
-
 // 360px is the bound the strip was designed against: the width at which every
 // drawn alternative degraded, and the width the horizontal scroll exists for.
 test.use({ viewport: { width: 360, height: 780 } });
 
 test('the link page tab strip scrolls sideways at 360px instead of wrapping', async ({ page }) => {
-  const { email, password } = credentials();
-  await page.goto('/login');
-  await page.fill('#email', email);
-  await page.fill('#password', password);
-  await page.click('button[type="submit"]');
+  // The suite signs in once, in global-setup.mjs, and every context starts from
+  // that storage state (F333, D435). This navigation is what is left: it proves
+  // the shared session reached this spec rather than performing a sign-in, which
+  // twenty specs doing against one address and a ten-per-minute limiter is what
+  // made the tail of a full run fail at /login.
+  await page.goto('/dashboard');
   await page.waitForURL('**/dashboard', { timeout: 10000 }).catch(() => {
     throw new Error(
       'sign-in did not reach /dashboard — if the test instance was rebuilt, ' +

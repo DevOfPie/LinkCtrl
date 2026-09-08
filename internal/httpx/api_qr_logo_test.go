@@ -336,3 +336,56 @@ func TestAnUnresizedUploadSaysNothingExtra(t *testing.T) {
 		}
 	}
 }
+
+// --- the size-raised notice, at M70 (F230) ------------------------------------
+
+// TestTheSizeRaisedNoticeIsTheOnlyPartOfTheRuleAReaderSees covers the branch that
+// turns M49's re-fit arithmetic into words.
+//
+// The arithmetic is covered at both levels — the service and the API — and the
+// dashboard branch that renders it was covered nowhere: no test named `qrNotice`
+// or `sizeParam`, and no test drove `CreateQRCode` through the web handler at all.
+// The behaviour was driven by hand on a running instance when M49 shipped, which
+// is an uncaptured verification rather than an unverified claim.
+//
+// **It is worth a test because the silence is the design.** A re-fit that kept the
+// number says nothing, on the owner's own rule, so a branch that stopped rendering
+// would look exactly like the common case. Nothing else the reader ever sees says
+// their size was raised.
+//
+// Here rather than in the browser suite: what is asserted is which sentence the
+// pair produces, and that is this function's answer rather than a rendering.
+func TestTheSizeRaisedNoticeIsTheOnlyPartOfTheRuleAReaderSees(t *testing.T) {
+	const base = "A second code, with a name and an identity of its own."
+
+	t.Run("a raised size names both numbers", func(t *testing.T) {
+		got := qrNotice(url.Values{"qr": {"added"}, "from": {"86"}, "to": {"94"}})
+		for _, want := range []string{base, "94px", "86px", "raised"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("the notice %q does not carry %q", got, want)
+			}
+		}
+	})
+
+	// Every shape that is not two sizes in range with the second above the first
+	// falls back to the ordinary sentence, and each arrives in a URL anybody can
+	// edit — which is why the handler re-derives them rather than echoing them.
+	for _, tc := range []struct{ name, from, to string }{
+		{"no pair at all", "", ""},
+		{"an equal pair, which is a re-fit that kept the number", "94", "94"},
+		{"an inverted pair", "94", "86"},
+		{"a from outside the range", "1", "94"},
+		{"a to outside the range", "86", "999999"},
+		{"text where a number goes", "eighty-six", "ninety-four"},
+		{"a negative", "-86", "94"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := qrNotice(url.Values{"qr": {"added"}, "from": {tc.from}, "to": {tc.to}})
+			if got != base+" It points at the same destination — what it changes is that "+
+				"a scan of this one is told apart from a scan of the others." {
+				t.Errorf("%s produced the raised-size sentence: %q. Anything that is not "+
+					"a real rise says nothing, which is the rule the owner set", tc.name, got)
+			}
+		})
+	}
+}

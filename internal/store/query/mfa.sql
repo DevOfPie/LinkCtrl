@@ -158,8 +158,15 @@ SELECT count(*)::bigint
 -- Returned in full so the caller can assert the expiry it asked for rather than
 -- recompute it from its own clock — the TTL m53.md wants a test to hold is the
 -- one the database wrote.
-INSERT INTO mfa_pending_logins (id, user_id, token_hash, ip_prefix, user_agent, expires_at)
-VALUES (@id, @user_id, @token_hash, @ip_prefix, @user_agent, @expires_at)
+--
+-- `minted_by_addon` and `minted_by_issuer` (04600) are null for a password post
+-- and set when an add-on's assertion is what stopped here. They are carried
+-- through the prompt because the session this row becomes is minted by
+-- `CompleteSecondFactor`, which would otherwise have no way to say who vouched.
+INSERT INTO mfa_pending_logins (id, user_id, token_hash, ip_prefix, user_agent,
+                                expires_at, minted_by_addon, minted_by_issuer)
+VALUES (@id, @user_id, @token_hash, @ip_prefix, @user_agent,
+        @expires_at, @minted_by_addon, @minted_by_issuer)
 RETURNING *;
 
 -- name: LockMFAPendingLogin :one
@@ -183,6 +190,10 @@ SELECT p.id,
        p.created_at,
        p.expires_at,
        p.consumed_at,
+       -- Read by CompleteSecondFactor, which is where the session an add-on's
+       -- assertion produced actually comes into existence.
+       p.minted_by_addon,
+       p.minted_by_issuer,
        u.email,
        u.name,
        u.status,

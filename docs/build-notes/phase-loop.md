@@ -309,7 +309,15 @@ contradicts on what it *asserts* is still a prompt, and the milestone waits.
 7. `make demo-update` — refuses on a dirty tree, and that refusal means the
    milestone is not finished. Failure → a new worker from step 2; its fix is
    amended into the commit, which has not been pushed. **Do not push.**
-8. `git push` to the phase branch
+8. `git push` to the phase branch, then `make check-ci` — the branch's latest
+   CI verdict, which while this push's run is still going is the *previous*
+   one's. Red is a **prompt**: the next milestone does not get built on top of a
+   build nobody has looked at, and [§4](#4-repeat-or-stop)'s first row is what
+   then ends the run. Exit 2 is *could not ask* — no `gh`, no network, no run yet
+   — and is neither green nor red, so say which it was and carry on. This is the
+   gate F255 filed for: CI was red for nine days across a phase, two adversarial
+   reviews and a release candidate, while every gate the contract named ran on
+   this machine and reported green
 9. Read the note's `Stop:` line before overwriting it — a
    [deferred stop](#stopping-at-the-checkpoint) ends the run here. Then reset
    `.current-task.md` to the next milestone at step 1, check it against

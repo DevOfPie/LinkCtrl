@@ -69,6 +69,7 @@ type Config struct {
 	SMTP      SMTPConfig
 	Feed      FeedConfig
 	Webhooks  WebhooksConfig
+	Addons    AddonsConfig
 	Shutdown  ShutdownConfig
 
 	APIKeyPepper Secret `env:"API_KEY_PEPPER,required,unset"`
@@ -127,8 +128,12 @@ type Config struct {
 	baseURL *url.URL
 	// appBaseURL and linkBaseURL are the parsed effective origins. Never nil
 	// after Load; both fall back to baseURL.
-	appBaseURL  *url.URL
-	linkBaseURL *url.URL
+	appBaseURL *url.URL
+	// addonRouteDeadlineClamped records that Parse lowered a defaulted route
+	// deadline to nest inside the operator's request timeout. Read by main to say
+	// so once at startup.
+	addonRouteDeadlineClamped bool
+	linkBaseURL               *url.URL
 }
 
 type HTTPConfig struct {
@@ -288,11 +293,16 @@ type AuthConfig struct {
 	//
 	// **A bucket of its own because an upload is not an API call.** Every other
 	// request under `/api/v1` carries a body this product caps at 256 KiB and
-	// parses as JSON; an upload carries up to `qr.MaxLogoUploadBytes` and is
-	// decoded, which is the one place a request's cost is set by its content
-	// rather than by its shape. `API_RATE_PER_MIN` defaults to 600, and 600
-	// megabyte uploads a minute is a bandwidth and decoder budget nobody chose
-	// by setting a number about JSON.
+	// parses as JSON; an upload carries a file, which is where a request's cost
+	// is set by its content rather than by its shape. `API_RATE_PER_MIN` defaults
+	// to 600, and 600 megabyte uploads a minute is a bandwidth and decoder budget
+	// nobody chose by setting a number about JSON.
+	//
+	// **Two endpoints charge it since M67**, and they are not the same size: a
+	// logo is `qr.MaxLogoUploadBytes` and is decoded, an add-on install is
+	// `addon.MaxUploadBytes` and is compiled. One bucket for both, because what
+	// the bucket is about is true of both and a second number would be a second
+	// thing to tune. See docs/configuration.md's row for what that costs.
 	//
 	// Thirty is what somebody restyling a poster does — upload, look, upload
 	// again — with room to spare. It charges the *address* like every other
@@ -486,6 +496,268 @@ type WebhooksConfig struct {
 	RetentionDays int `env:"WEBHOOK_RETENTION_DAYS" envDefault:"30"`
 }
 
+// AddonsConfig is where the WASM host looks for add-ons (M60).
+type AddonsConfig struct {
+	// Dir is an operator-owned directory holding one subdirectory per add-on,
+	// each with an addon.json and the .wasm it describes.
+	//
+	// **Unset is the shipped default and it means there is no host**: no WASM
+	// runtime is constructed, no goroutine started, no route mounted, no table
+	// created and no metric series published. That is asserted by tests in
+	// internal/addon rather than promised here, because "off costs nothing" is
+	// the kind of claim that stops being true one milestone after somebody writes
+	// it down.
+	//
+	// Operator-owned rather than a path an add-on or a tenant can influence: a
+	// module in this directory is code this instance executes, so who may write
+	// to it is the whole of the trust boundary. docs/SECURITY.md states that in
+	// the same terms.
+	Dir string `env:"ADDONS_DIR"`
+
+	// InlineDeadline is how long an add-on holding `redirect.inline` may keep a
+	// redirect open before the host stops waiting for it, kills the invocation and
+	// answers the visitor without it (M66).
+	//
+	// **One knob for the instance, with no per-add-on override**, which was fixed
+	// as the shape of this answer a phase before the number existed: a second
+	// number per add-on would be an operator choosing a latency budget per module
+	// with no more information than they had for the first, and the case that
+	// argues for one has not arrived.
+	//
+	// The default is measured rather than chosen — see addon.DefaultInlineDeadline
+	// and the runs in docs/slo.md — and it is deliberately larger than the 20 ms
+	// cached-redirect target. The target is core's, measured with nothing on the
+	// path; this is the point at which the host stops waiting for somebody else's
+	// code, and setting it under the target would kill add-ons that were working.
+	//
+	// It bounds the **guest call and nothing else**. Starting the module is this
+	// host's own cost on this host's machine, so it is bounded separately by
+	// [AddonsConfig.InstantiateDeadline] below. The two shipped as one number and
+	// that was F326: on a machine slower than the one 25 ms was measured on, every
+	// invocation was killed before the add-on's code ran, and the counter blamed
+	// the add-on.
+	InlineDeadline time.Duration `env:"ADDON_INLINE_DEADLINE" envDefault:"25ms"`
+
+	// InstantiateDeadline is how long this instance will spend starting an add-on's
+	// module for a redirect — inline or observing — before it gives up and serves
+	// the redirect without it (M66, reopened; D327).
+	//
+	// **Separate from the deadline above because it is somebody else's cost.** What
+	// a module does is the add-on's and is bounded by a number an operator sets
+	// against their tolerance for latency; what instantiating costs is a property
+	// of this machine, this load and this build, none of which the add-on chose.
+	// Charging it to the add-on's budget made the add-on's budget a function of how
+	// fast the hardware is, which is what F326 found on a CI runner.
+	//
+	// **Wider, and not borrowed from either number that already exists.**
+	// addon.DefaultLoadTimeout bounds a module that hangs at boot at 30 seconds and
+	// no redirect may wait that; the inline deadline is the number that proved too
+	// small. That first bound is a **constant**, not a variable: this sentence
+	// named a `LINKCTRL_ADDON_LOAD_TIMEOUT` until 0.4.0 and no such variable has
+	// ever existed — there is no struct field, no `env` tag, no `.env.example`
+	// line and no row in docs/configuration.md, and `Options.LoadTimeout` is set by
+	// tests and by nothing else (F327). An operator who read the reasoning and
+	// acted on it set nothing, and the module that hangs at boot still held the
+	// boot for thirty seconds. Whether that bound *should* be an operator's is a
+	// question this correction deliberately does not answer, because adding a
+	// configuration surface is not a comment's to decide. 500 ms is eight times instantiation measured under contention on
+	// the machine the figure was taken on, and it is what a module hanging in
+	// package initialization costs the one redirect it arrived on — see
+	// addon.DefaultInstantiateDeadline for the measurement and the arithmetic. It
+	// leans wide on purpose: a bound that is too small stops add-ons running and
+	// blames them for it, which is the defect this variable exists because of.
+	InstantiateDeadline time.Duration `env:"ADDON_INSTANTIATE_DEADLINE" envDefault:"500ms"`
+
+	// PoolSize is how many add-on instances this instance keeps ready, across every
+	// add-on, when nothing is using them (M66.5).
+	//
+	// **It is not a concurrency bound**, and the difference is the whole reason it
+	// is its own variable. How many add-on invocations run at once is fixed at
+	// sixteen in the build and no variable moves it; this is how many of the
+	// instances they run in are kept afterwards instead of being destroyed. An
+	// invocation that finds the pool empty makes an instance, exactly as every
+	// invocation did before this existed.
+	//
+	// What it buys is the startup: a redirect through a pooled instance skips
+	// allocating the module's linear memory and running its package initialization,
+	// which for the fixture measured in docs/slo.md was almost the whole of an
+	// 11.05 ms invocation — 451 µs once it was pooled. What it costs is memory held at rest — up to this many instances
+	// of 8 MiB, on top of the sixteen in flight — which is why the default is small
+	// rather than generous. See addon.DefaultPoolSize for the arithmetic.
+	PoolSize int `env:"ADDON_POOL_SIZE" envDefault:"8"`
+
+	// PoolTTL is how long an unused add-on instance is kept before it is closed
+	// (M66.5).
+	//
+	// It is what makes the idle cost proportional to traffic rather than to the
+	// busiest minute since the process started. On an instance with a redirect an
+	// hour it means the pool holds nothing; on one with a redirect a second it means
+	// the sweep never finds an idle entry at all.
+	PoolTTL time.Duration `env:"ADDON_POOL_TTL" envDefault:"1m"`
+
+	// RouteDeadline is how long one request to an add-on's own page may take
+	// (M68.5), start to finish: instantiating the module, running its handler and
+	// every host call inside it, including an outbound fetch.
+	//
+	// **It is a bound inside HTTP_REQUEST_TIMEOUT, not the first bound a route
+	// handler ever had.** A route runs under the application tree's request
+	// context, which [HTTPConfig.RequestTimeout] already cancels at fifteen
+	// seconds — so this only ever fires if it is shorter, which [Config.Validate]
+	// enforces. Ten seconds leaves the host five to turn a killed guest into a page
+	// and a counter instead of dying with it, holds three fetches at FetchTimeout,
+	// and is the only bound at all on an instance that has set HTTP_REQUEST_TIMEOUT
+	// to zero. See addon.DefaultRouteDeadline for what the earlier fifteen got
+	// wrong and how it was measured.
+	RouteDeadline time.Duration `env:"ADDON_ROUTE_DEADLINE" envDefault:"10s"`
+
+	// FetchTimeout bounds one outbound request an add-on makes (M68.5), connect
+	// through the last byte of the body.
+	//
+	// It is a ceiling and not a reservation: a fetch ends at this or at whatever is
+	// left of RouteDeadline, whichever comes first, so an add-on cannot buy time by
+	// reaching outward. Three seconds is an order of magnitude over what this
+	// capability is for and is what lets three of them fit inside RouteDeadline —
+	// see addon.DefaultFetchTimeout for the documents that were measured.
+	FetchTimeout time.Duration `env:"ADDON_FETCH_TIMEOUT" envDefault:"3s"`
+
+	// FetchMaxBytes is the largest response body an add-on's fetch will carry back
+	// (M68.5). A response over it is refused whole rather than truncated, because a
+	// truncated JSON document is a parse error blamed on the add-on's author.
+	FetchMaxBytes int64 `env:"ADDON_FETCH_MAX_BYTES" envDefault:"262144"`
+}
+
+// Enabled reports whether this instance has an add-on host at all.
+func (a AddonsConfig) Enabled() bool { return a.Dir != "" }
+
+// AddonEnvPrefix is where an add-on's configured settings are read from:
+// LINKCTRL_ADDON_<NAME>_<SETTING>, both halves upper-cased.
+//
+// The same environment every other value in this file comes from, deliberately —
+// m64.md's "config reaches an add-on the way it reaches the product". An add-on's
+// settings cannot be struct fields, because which of them exist is decided by a
+// manifest an operator dropped in a directory rather than by this build, so
+// [AddonSettings] reads them by name instead of by tag. That is the whole of the
+// difference, and it costs two things worth knowing:
+//
+//   - `.env.example` cannot enumerate them, so the reference documents the shape
+//     and surface_test.go carves the prefix out by name rather than by accident;
+//   - the `unset` treatment the env library gives this file's own secrets does not
+//     reach them. A value read here stays in the process environment, because the
+//     add-on host may be opened more than once in one process and a variable
+//     consumed by the first open would be missing from the second. What does reach
+//     them is the [Secret] type: every value comes back wrapped, whatever the
+//     manifest called it, so no value an operator configured can print itself
+//     through fmt, slog or json.
+const AddonEnvPrefix = EnvPrefix + "ADDON_"
+
+// AddonSettingVar is the variable one setting of one add-on is read from.
+func AddonSettingVar(addon, setting string) string {
+	return AddonEnvPrefix + strings.ToUpper(addon) + "_" + strings.ToUpper(setting)
+}
+
+// AddonOverrideNames are the two per-add-on variables that are **not** settings:
+// they are answers an operator gives about an add-on rather than values an add-on
+// reads, and no add-on may declare a setting by either name.
+//
+// They live in the same LINKCTRL_ADDON_<NAME>_<X> namespace deliberately — an
+// operator configuring an add-on should not have to learn a second prefix — which
+// is why the collision has to be closed rather than tolerated: without the
+// reservation, LINKCTRL_ADDON_OIDC_FAILURE_CLASS would be the operator's answer
+// and a declared setting called `failure_class` at the same time, and no lookup
+// could tell which was meant. internal/addon's manifest validation refuses a
+// manifest declaring either name, so the ambiguity does not exist rather than
+// being resolved.
+//
+//   - `failure_class` overrides what the manifest declared. It is the escape hatch
+//     m65.md requires: an add-on holding `session.mint` is treated as `required`
+//     whatever its manifest says, and this is how an operator says otherwise,
+//     knowing that external sign-in then disappears on a failed load while local
+//     sign-in continues.
+//   - `mfa_satisfied` says the provider behind this add-on already met a second
+//     factor. False is the default and the safe reading: an account with TOTP
+//     enrolled meets its factor after an add-on's assertion rather than instead of
+//     it.
+var AddonOverrideNames = []string{"failure_class", "mfa_satisfied"}
+
+// AddonReservedNames are add-on names no manifest may take, because this file
+// already spells a variable that a setting of that add-on would spell too.
+//
+// Five entries. `LINKCTRL_ADDON_INLINE_DEADLINE`
+// ([AddonsConfig.InlineDeadline]) and `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`
+// ([AddonsConfig.InstantiateDeadline]) are instance-wide, and each is also exactly
+// what a setting called `deadline` on an add-on called `inline` or `instantiate`
+// would be read from. `pool` covers two at once —
+// `LINKCTRL_ADDON_POOL_SIZE` and `LINKCTRL_ADDON_POOL_TTL`
+// ([AddonsConfig.PoolSize], [AddonsConfig.PoolTTL]) — which is why both variables
+// keep their second half to one word: `LINKCTRL_ADDON_POOL_IDLE_TIMEOUT` would
+// also be an add-on called `pool_idle` with a setting called `timeout`, and one
+// reserved name could not close both readings. M68.5 added the last two the same
+// way: `route` for `LINKCTRL_ADDON_ROUTE_DEADLINE`
+// ([AddonsConfig.RouteDeadline]), and `fetch` for `LINKCTRL_ADDON_FETCH_TIMEOUT`
+// and `LINKCTRL_ADDON_FETCH_MAX_BYTES` ([AddonsConfig.FetchTimeout],
+// [AddonsConfig.FetchMaxBytes]) — which is one reserved name covering two
+// variables again, and is why the second of them is `max_bytes` and not
+// `maximum_response_bytes`.
+// The collision is the same one [AddonOverrideNames] closes and it is closed the
+// same way — the ambiguity is made not to exist rather than resolved, because a
+// concatenation offers nothing to resolve it with.
+//
+// It is a reserved **name** rather than a reserved setting because the variable
+// is not per-add-on: there is no add-on it belongs to, so refusing the setting
+// `deadline` on every add-on would be a far wider reservation bought for the same
+// collision. internal/addon's manifest validation is where it is refused, for the
+// reason the override names are refused there — this package is imported by that
+// one and not the other way round.
+var AddonReservedNames = []string{"fetch", "inline", "instantiate", "pool", "route"}
+
+// AddonOverrides reads the operator's answers about one add-on.
+//
+// Read by name, exactly like [AddonSettings] and never by scanning the
+// environment for a prefix, and for the same reason: a scan would hand an add-on
+// every variable under its name including a neighbour's. A variable that is set
+// and empty is treated as unset, which is what an operator leaving a line in their
+// .env with nothing after the `=` means.
+func AddonOverrides(addon string) map[string]string {
+	out := make(map[string]string, len(AddonOverrideNames))
+	for _, name := range AddonOverrideNames {
+		if v := os.Getenv(AddonSettingVar(addon, name)); v != "" {
+			out[name] = v
+		}
+	}
+	return out
+}
+
+// AddonSettings reads the values an operator configured for one add-on.
+//
+// Asked for the settings the manifest **declares**, and it reads exactly those —
+// never a scan of the environment for a matching prefix. That is not tidiness: a
+// prefix scan would hand an add-on every variable under its name, including the
+// ones a neighbour's name reaches into, and would have to guess who meant what.
+// An add-on that declared nothing reads nothing.
+//
+// Declaring does not make the *variable* unambiguous, and this comment used to
+// say it did. `LINKCTRL_ADDON_OIDC_X_KEY` is `x_key` of `oidc` and `key` of
+// `oidc_x` — both legal names — whichever way it is looked up, because the
+// variable is a concatenation and the name is one half of it. What resolves it is
+// that the two add-ons cannot both be loaded: names standing in a `name + "_"`
+// prefix relation are refused at load, in nameCollisions (internal/addon), where
+// the same relation closes the cookie namespace. So no two *loaded* add-ons
+// produce one variable, which is the property this function needs and the only one
+// it has.
+//
+// A variable that is set and empty is treated as unset, which is what an operator
+// leaving a line in their .env with nothing after the `=` means. The add-on then
+// gets its declared default, or ErrNotFound.
+func AddonSettings(addon string, declared []string) map[string]Secret {
+	out := make(map[string]Secret, len(declared))
+	for _, name := range declared {
+		if v := os.Getenv(AddonSettingVar(addon, name)); v != "" {
+			out[name] = Secret(v)
+		}
+	}
+	return out
+}
+
 type ShutdownConfig struct {
 	DrainDelay time.Duration `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"5s"`
 	Timeout    time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"15s"`
@@ -615,6 +887,36 @@ func Parse() (Config, error) {
 	if err := env.ParseWithOptions(&c, env.Options{Prefix: EnvPrefix}); err != nil {
 		return Config{}, err
 	}
+	// **A defaulted route deadline yields to an operator's request timeout rather
+	// than refusing the boot** (review finding 14).
+	//
+	// The check in Validate says a route deadline at or above HTTP_REQUEST_TIMEOUT
+	// never fires, which is true, and its own comment already names the problem
+	// with refusing over it: *an operator who deliberately set a short
+	// HTTP_REQUEST_TIMEOUT is being refused over a number they never chose*. Both
+	// defaults are ten seconds, so `HTTP_REQUEST_TIMEOUT=10s` — a value this file
+	// documents as valid — stopped an instance with add-ons from starting at all,
+	// over a knob the operator had not touched.
+	//
+	// So the unset one gives way: it becomes the largest value that still nests,
+	// and the operator's setting is honoured. An **explicitly set** route deadline
+	// is still refused by Validate, because then two numbers were chosen and only
+	// the operator can say which was meant.
+	// An empty value is not a setting: env applies the envDefault to it, so
+	// reading it as "the operator chose ten seconds" would bring the refusal back
+	// for anyone whose orchestrator passes the variable through blank.
+	routeDeadlineSet := os.Getenv(EnvPrefix+"ADDON_ROUTE_DEADLINE") != ""
+	if c.Addons.Enabled() && c.HTTP.RequestTimeout > 0 && !routeDeadlineSet &&
+		c.Addons.RouteDeadline == defaultAddonRouteDeadline &&
+		c.Addons.RouteDeadline >= c.HTTP.RequestTimeout {
+		c.Addons.RouteDeadline = c.HTTP.RequestTimeout - time.Second
+		if c.Addons.RouteDeadline <= 0 {
+			// A request timeout of a second or less leaves nothing to nest inside.
+			// Validate refuses that, with both numbers named.
+			c.Addons.RouteDeadline = defaultAddonRouteDeadline
+		}
+		c.addonRouteDeadlineClamped = true
+	}
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -635,6 +937,7 @@ func Parse() (Config, error) {
 	c.LinkBaseURL = strings.TrimRight(c.LinkBaseURL, "/")
 	c.appBaseURL, _ = url.Parse(c.AppBaseURL)
 	c.linkBaseURL, _ = url.Parse(c.LinkBaseURL)
+
 	return c, nil
 }
 
@@ -771,6 +1074,63 @@ func HostOnly(host string) string {
 //
 // The messages name the variable and say what to do about it. An operator
 // reading them should not need to consult the source.
+// installFetchTimeout mirrors addon.InstallFetchTimeout, which this package
+// cannot import: internal/addon imports internal/config, so the dependency runs
+// the other way and a direct reference is a cycle.
+//
+// Mirrored rather than moved. Making it a configuration field would be a new
+// operator knob, and the reason it is a constant is argued where it is defined —
+// an install is bounded by the request it runs inside, and the number exists to
+// leave room for the hashing and WebAssembly compilation that follow the last
+// byte.
+//
+// TestTheInstallFetchTimeoutMirrorIsTheRealOne in internal/addon holds the two
+// equal, in the package that can see both. A mirror nothing ties is the drift
+// this phase has now found five times (F318, F319, F321, F273, F275).
+// defaultAddonRouteDeadline is `ADDON_ROUTE_DEADLINE`'s envDefault, as a value
+// this file can compare against — which is how Parse tells a knob an operator
+// set from one they never touched. The tag and this constant are one fact in two
+// places and TestTheRouteDeadlineDefaultIsTheOneDeclared holds them equal.
+const defaultAddonRouteDeadline = 10 * time.Second
+
+const installFetchTimeout = 10 * time.Second
+
+// InstallFetchNestingProblem says why a URL install cannot work under this
+// configuration, or "" when it can.
+//
+// **This was a fatal validation error until review finding 14 and should never
+// have been one.** It refused to start any instance with an add-ons directory
+// and `HTTP_REQUEST_TIMEOUT` at or under ten seconds — a value this file names
+// as valid — so an upgrade broke the boot of a deployment that had changed
+// nothing, over a bound that only matters if somebody installs an add-on from a
+// URL. At exactly `10s` it also tripped the route-deadline check below for the
+// *default* route deadline, so one unchanged setting produced two errors, and
+// the remedy the message named — install by upload instead — could not help,
+// because the check fired whether or not URL install was ever used.
+//
+// So it is a question the install path asks at the moment it matters, and the
+// answer is a refusal an operator can act on rather than an instance that will
+// not start. F358's defect is unchanged: at or under this bound the fetch's own
+// deadline never fires and the work after the last byte — hashing, unpacking,
+// compiling — runs under a context that is already cancelled.
+func InstallFetchNestingProblem(c Config) string {
+	if !c.Addons.Enabled() || c.HTTP.RequestTimeout <= 0 ||
+		installFetchTimeout < c.HTTP.RequestTimeout {
+		return ""
+	}
+	return fmt.Sprintf("installing from a URL needs LINKCTRL_HTTP_REQUEST_TIMEOUT "+
+		"above the %s the fetch is allowed, and it is %s: the fetch bound cannot "+
+		"fire, and the hashing, unpacking and WebAssembly compilation after the "+
+		"last byte would run under a context that is already cancelled. Raise it, "+
+		"or install by upload, where the bytes travel on the client's own request",
+		installFetchTimeout, c.HTTP.RequestTimeout)
+}
+
+// InstallFetchTimeoutMirror is [installFetchTimeout], exported for the one test
+// that holds it equal to the constant it mirrors. Not for use in code: the real
+// one is addon.InstallFetchTimeout and this package is the one that cannot say so.
+func InstallFetchTimeoutMirror() time.Duration { return installFetchTimeout }
+
 func (c Config) Validate() error {
 	var errs []error
 	add := func(format string, args ...any) {
@@ -1145,6 +1505,96 @@ func (c Config) Validate() error {
 		}
 	}
 
+	// Refused at parse time rather than survived at boot, matching GEOIP_MMDB_PATH
+	// above and differing from it in one way: a missing GeoIP file disables one
+	// report, while a missing add-ons directory is an operator who believes this
+	// instance is running modules it has never seen. A path that is a file rather
+	// than a directory is the same mistake with a different spelling.
+	if c.Addons.Enabled() {
+		switch info, err := os.Stat(c.Addons.Dir); {
+		case err != nil:
+			add("ADDONS_DIR: %q is not readable: %v; leave it empty to run no "+
+				"add-ons at all", c.Addons.Dir, err)
+		case !info.IsDir():
+			add("ADDONS_DIR: %q is not a directory; it holds one directory per "+
+				"add-on, each with an addon.json", c.Addons.Dir)
+		}
+	}
+
+	// The two add-on egress bounds nest, and the nesting is checked here rather
+	// than described in three comments (M68.5).
+	//
+	// **An instance running no add-ons is not held to all three of these, and the
+	// line is who wrote the value.** ADDON_ROUTE_DEADLINE at zero, ADDON_FETCH_TIMEOUT
+	// over it and ADDON_FETCH_MAX_BYTES at zero each require somebody to have set
+	// that variable, so refusing them costs a deployment nothing it did not ask for
+	// and is outside the Enabled guard below.
+	//
+	// The cross-check against HTTP_REQUEST_TIMEOUT is the one that does not, and it
+	// is the one that is guarded. The two defaults do not collide — ten inside
+	// fifteen — but LINKCTRL_HTTP_REQUEST_TIMEOUT=5s is valid today and nothing has
+	// ever refused it, and without the guard this release would refuse to start on
+	// the *default* value of a variable that operator has never heard of, on an
+	// instance with ADDONS_DIR unset. That is a rule reaching into a deployment it
+	// has no business in. With add-ons enabled the same pair is a real
+	// misconfiguration — the route deadline cannot fire — and the operator hears
+	// about it at the boot where it begins to matter, which is the boot that first
+	// loads an add-on. It is still an upgrade break for an instance that runs them,
+	// and CHANGELOG.md says so rather than leaving it to be discovered.
+	//
+	// **The outer check is the one that had to exist.** A route deadline at or over
+	// HTTP_REQUEST_TIMEOUT never fires: the request context is created first, in
+	// httpx.RequestTimeout, and cancels the same context. M68.5's first attempt set
+	// this to fifteen against a request timeout of fifteen and the knob did nothing,
+	// which is the FEED_TIMEOUT case above reached from the other side — a knob whose
+	// upper half cannot take effect.
+	// A request timeout of zero disables that middleware entirely, and then the route
+	// deadline is the only bound there is, so there is nothing to nest inside.
+	if c.Addons.RouteDeadline <= 0 {
+		add("ADDON_ROUTE_DEADLINE: must be positive, got %s; it is what gives an "+
+			"instance slot back when somebody else's module will not return",
+			c.Addons.RouteDeadline)
+	} else if c.Addons.Enabled() && c.HTTP.RequestTimeout > 0 &&
+		!c.addonRouteDeadlineClamped &&
+		c.Addons.RouteDeadline >= c.HTTP.RequestTimeout {
+		// Both remedies, because the default is the one more likely to be at fault:
+		// an operator who deliberately set a short HTTP_REQUEST_TIMEOUT is being
+		// refused over a number they never chose, and telling them only to raise it
+		// would be telling them to undo the setting they meant.
+		add("ADDON_ROUTE_DEADLINE (%s): must be under HTTP_REQUEST_TIMEOUT (%s), which "+
+			"already cancels the same request context and starts first; at or over it "+
+			"this bound never fires and the host has no budget left to answer with. "+
+			"Lower ADDON_ROUTE_DEADLINE, which you may never have set, or raise "+
+			"HTTP_REQUEST_TIMEOUT above it",
+			c.Addons.RouteDeadline, c.HTTP.RequestTimeout)
+	}
+	if c.Addons.FetchTimeout <= 0 {
+		add("ADDON_FETCH_TIMEOUT: must be positive, got %s; zero would mean no bound "+
+			"on a connection to a server this project does not run", c.Addons.FetchTimeout)
+	} else if c.Addons.RouteDeadline > 0 && c.Addons.FetchTimeout > c.Addons.RouteDeadline {
+		add("ADDON_FETCH_TIMEOUT (%s): must not exceed ADDON_ROUTE_DEADLINE (%s); a "+
+			"fetch happens inside a route invocation and cannot outlast it",
+			c.Addons.FetchTimeout, c.Addons.RouteDeadline)
+	}
+	// The third of the three, and it is here because it was the one that was not.
+	// M68.5 created all three bounds and validated two, so an operator who wrote
+	// `LINKCTRL_ADDON_FETCH_MAX_BYTES=0` meaning *no cap* got 256 KiB and was told
+	// nothing — addon.fetchMaxBytesFrom substitutes the default for anything at or
+	// under zero, the way every other bound in that package treats a zero, and a
+	// default arriving silently where an operator asked for the opposite is the
+	// asymmetry this closes.
+	//
+	// There is no way to ask for no cap, deliberately: the body is read into memory
+	// to hand across the ABI boundary, so an unbounded one is a heap this host
+	// cannot bound from a server it does not run. Refusing the request is the
+	// sentence, rather than a knob whose upper end is a memory exhaustion.
+	if c.Addons.FetchMaxBytes <= 0 {
+		add("ADDON_FETCH_MAX_BYTES: must be positive, got %d; there is no way to ask "+
+			"for no cap, because the response is held in memory to cross the add-on "+
+			"boundary and an unbounded body from a server this product does not run "+
+			"is an unbounded heap", c.Addons.FetchMaxBytes)
+	}
+
 	if c.Alias.Length < 4 || c.Alias.Length > 12 {
 		add("ALIAS_LENGTH: must be between 4 and 12, got %d", c.Alias.Length)
 	}
@@ -1170,4 +1620,17 @@ func (c Config) Validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// AddonRouteDeadlineClamped says Parse lowered a defaulted `ADDON_ROUTE_DEADLINE`
+// so it nests inside `HTTP_REQUEST_TIMEOUT`, and by how much. The second value is
+// zero when it did not.
+//
+// Exported so startup can say it once, rather than an operator finding a bound
+// they did not set at a value they did not choose.
+func (c Config) AddonRouteDeadlineClamped() (bool, time.Duration) {
+	if !c.addonRouteDeadlineClamped {
+		return false, 0
+	}
+	return true, c.Addons.RouteDeadline
 }

@@ -361,6 +361,89 @@ const (
 	ActionMFARecoveryCodesRegenerated = "mfa.recovery_codes_regenerated"
 )
 
+// ActionSessionMintedByAddon is a session minted on an add-on's word (M65).
+//
+// The one action in this vocabulary whose *authority* is not this product's. Every
+// other record here says a person or a key did something; this one says a module
+// an operator installed vouched for somebody and the host believed it, which is a
+// different fact and is why it is a different action rather than a metadata key on
+// something existing.
+//
+// Two events under one action, told apart by `second_factor_required` in the
+// metadata: the mint that produced a session, and the one that stopped at the
+// second-factor prompt. Both are worth a record — the second is where an operator
+// sees that a provider is asserting identities whose accounts then fail to
+// complete — and splitting them into two actions would put the same question in
+// two places.
+const ActionSessionMintedByAddon = "session.minted_by_addon"
+
+// The add-on lifecycle (M67).
+//
+// Declared here and not in internal/addon, for the reason the dispute comment
+// above gives: a vocabulary with two homes makes everything that enumerates it
+// from this package short by however many live elsewhere, which is F18 and is why
+// the count in docs/SECURITY.md was wrong twice. These arrived in internal/addon
+// and moved before the milestone landed.
+//
+// Instance-wide, and not by convention: an add-on is installed once for the whole
+// box and belongs to no organization, so filing the record under whichever tenant
+// the principal happened to be standing in is the misattribution F36 names.
+//
+// Two actions rather than one with a direction in the metadata, because they are
+// two different questions an operator asks — what has been put on this box, and
+// what has been taken off it — and the second is the one asked after an incident.
+const (
+	ActionAddonInstalled = "addon.installed"
+	ActionAddonRemoved   = "addon.removed"
+)
+
+// The Add-on manager's two writes (M68), declared here for the reason the
+// lifecycle pair above is.
+//
+// `addon.settings_saved` records that somebody wrote what an add-on is
+// configured with, naming the settings the save wrote and never their values: one
+// of them may be a `secret`, and the ones that are not are still a deployment's
+// own credentials as often as not. **Wrote rather than changed** — the form
+// carries every editable field on every submission, which is the same reading
+// `updated_at` takes on the row itself (internal/store/query/addonsettings.sql). `addon.data_purged` records the schema drop the manager's
+// orphan list offers — the only act in this product that deletes an add-on's data,
+// and the one an operator will most want to find afterwards.
+//
+// Instance-wide like the lifecycle pair, and for the same reason: an add-on
+// belongs to the box rather than to a tenant.
+const (
+	ActionAddonSettingsSaved = "addon.settings_saved"
+	ActionAddonDataPurged    = "addon.data_purged"
+)
+
+// Connecting and disconnecting an external identity (M70, F320 and F315).
+//
+// **The asymmetry these close.** `addon_identity_links` writes a standing
+// credential: a row there signs somebody into an account with no password and no
+// second factor of this product's, for as long as it exists. Every other
+// credential on an account is audited — `mfa.enabled`, `mfa.disabled`,
+// `mfa.recovery_codes_regenerated`, `apikey.rotated`, `apikey.revoked` — and this
+// one was not, so an operator reading the log of a compromised account could see
+// the sessions an identity minted (`session.minted_by_addon`) and could not see
+// **when the identity was connected**, which is the act that made those sessions
+// possible.
+//
+// Two actions rather than one with a direction in the metadata, for the reason
+// the install/remove pair above gives: they are two questions, and the second is
+// the one asked after an incident.
+//
+// **Tenanted, unlike the four add-on lifecycle actions.** Those are about the
+// box; these are about one person's account, which belongs to an organization,
+// and the account-lifecycle actions beside them are filed the same way.
+//
+// Landing both here rather than one now and one later is D313's own arithmetic:
+// the README count is folded at this release, and adding a second action in a
+// later phase would be a second fold.
+const (
+	ActionAddonIdentityLinked   = "addon.identity_linked"
+	ActionAddonIdentityUnlinked = "addon.identity_unlinked"
+)
+
 // Event is one thing that happened.
 //
 // The actor is not a field: it is taken from the *auth.Identity passed to
@@ -684,6 +767,75 @@ func (s *Service) RecordMFAChange(
 	})
 }
 
+// RecordAddonSessionMint satisfies auth.SessionAuditor.
+//
+// It lives here for the reason RecordAPIKeyRotation and RecordMFAChange do: this
+// package imports internal/auth to resolve an actor into the label it stores, so
+// internal/auth cannot import this one, and the narrow interface is declared on
+// that side.
+//
+// **The metadata carries provenance and no identity.** `minted_by` is the string
+// m65.md names — `addon:<name>` — and `issuer` is the provider as it named itself.
+// The external *subject*, the address the assertion carried and the display name
+// are all deliberately absent: the erasure sweep scrubs this column by the keys it
+// knows about, its coverage was counted site by site when F177 closed, and a
+// writer that put a person's provider identifier here would be a site the sweep
+// does not reach. `addon` repeats the name outside the prefixed label so that a
+// reader filtering by add-on does not have to know how the label is spelled.
+func (s *Service) RecordAddonSessionMint(
+	ctx context.Context, actor *auth.Identity, ev auth.AddonSessionMint,
+) error {
+	var target *uuid.UUID
+	if actor != nil && actor.UserID != uuid.Nil {
+		id := actor.UserID
+		target = &id
+	}
+	return s.Record(ctx, actor, Event{
+		Action:     ActionSessionMintedByAddon,
+		TargetType: "user",
+		TargetID:   target,
+		Metadata: map[string]any{
+			"minted_by":              ev.MintedBy,
+			"addon":                  ev.Addon,
+			"issuer":                 ev.Issuer,
+			"second_factor_required": ev.SecondFactorRequired,
+		},
+	})
+}
+
+// RecordAddonIdentityLink writes the connect and disconnect records (M70, F320).
+//
+// Filed against the account the link is on rather than against the actor, which
+// are different rows whenever an operator severs somebody else's credential —
+// and the account is what a reader is searching by.
+func (s *Service) RecordAddonIdentityLink(
+	ctx context.Context, actor *auth.Identity, ev auth.AddonIdentityLink,
+) error {
+	action := ActionAddonIdentityUnlinked
+	if ev.Linked {
+		action = ActionAddonIdentityLinked
+	}
+	var target *uuid.UUID
+	if ev.UserID != uuid.Nil {
+		id := ev.UserID
+		target = &id
+	}
+	return s.Record(ctx, actor, Event{
+		Action:     action,
+		TargetType: "user",
+		TargetID:   target,
+		Metadata: map[string]any{
+			"addon":  ev.Addon,
+			"issuer": ev.Issuer,
+			// Who reached it, not who they are — the actor columns already carry
+			// that. What this answers is *through which surface*, which is the
+			// difference between somebody removing their own credential and an
+			// operator removing theirs.
+			"by_operator": ev.ByOperator,
+		},
+	})
+}
+
 // mfaActions maps the seam's vocabulary onto this package's.
 //
 // A map rather than a switch with a default, so a kind added on the other side of
@@ -992,5 +1144,12 @@ func AllActions() []string {
 		ActionMFADisabled,
 		ActionMFARecoveryCodeUsed,
 		ActionMFARecoveryCodesRegenerated,
+		ActionSessionMintedByAddon,
+		ActionAddonInstalled,
+		ActionAddonRemoved,
+		ActionAddonSettingsSaved,
+		ActionAddonDataPurged,
+		ActionAddonIdentityLinked,
+		ActionAddonIdentityUnlinked,
 	}
 }

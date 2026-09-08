@@ -53,10 +53,15 @@ type Limiters struct {
 	// **The API limit is not this limit, and the difference is what a request
 	// costs rather than how many there are.** Everything else under `/api/v1` is
 	// a JSON body this product caps at 256 KiB and decodes with the standard
-	// library's parser; an upload is up to `qr.MaxLogoUploadBytes` of somebody
-	// else's bytes handed to an image decoder. `API_RATE_PER_MIN`'s 600 was
-	// chosen about the first kind, and inheriting it for the second would be a
-	// number nobody set for what it would then bound.
+	// library's parser; an upload is megabytes of somebody else's bytes handed to
+	// a decoder or a compiler, bounded by whichever endpoint took them.
+	// `API_RATE_PER_MIN`'s 600 was chosen about the first kind, and inheriting it
+	// for the second would be a number nobody set for what it would then bound.
+	//
+	// **One bucket for every endpoint that takes a file**, whatever the file is
+	// and however much larger one of them may be than another: what the bucket is
+	// about is true of all of them, and a second number would be a second thing
+	// to tune. D345 is where that is argued and what it costs is stated.
 	//
 	// Shared through Redis like Login, because a per-replica budget on a
 	// four-replica instance is four times the limit an operator configured, and
@@ -166,6 +171,28 @@ type Deny func(http.ResponseWriter, *http.Request)
 // with TRUSTED_PROXIES unset, every request carries the proxy's address, all
 // traffic shares one bucket, and the limit applies to the whole world at once.
 func RateLimit(l *ratelimit.Limiter, name string, metrics *observability.Metrics, deny Deny) func(http.Handler) http.Handler {
+	return RateLimitWhen(l, name, metrics, deny, nil)
+}
+
+// RateLimitWhen is RateLimit with a shape test in front of the charge: a request
+// `chargeable` refuses is passed through untouched and spends nothing. A nil
+// test charges everything, which is what RateLimit is.
+//
+// **It exists so that a budget a person needs can only be spent by traffic that
+// reached the thing the budget is about** (D309). The precedent is the 404-probe
+// limiter, which charges a miss and never a hit and is enforced inside the
+// redirect handler for exactly that reason (`Limiters.NotFound`); the difference
+// is only that some routes can tell a real request from a probe *before* the
+// handler runs, from a path value and something the boot already decided. Where
+// that holds, the test sits here, at the registration, where the rule is visible
+// beside the pattern rather than buried in what the pattern serves.
+//
+// The test runs before `Allow`, so a refused shape is never charged and never
+// metered. It must not be the expensive half of the request: it decides whether
+// the request may be *counted*, so anything it does is done by every caller
+// including the one being limited.
+func RateLimitWhen(l *ratelimit.Limiter, name string, metrics *observability.Metrics,
+	deny Deny, chargeable func(*http.Request) bool) func(http.Handler) http.Handler {
 	if l == nil {
 		return func(next http.Handler) http.Handler { return next }
 	}
@@ -174,6 +201,10 @@ func RateLimit(l *ratelimit.Limiter, name string, metrics *observability.Metrics
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if chargeable != nil && !chargeable(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			// The limiter deliberately does not take the request context; see
 			// ratelimit.Shared.take. Charging must not be cancellable by the
 			// client being charged.

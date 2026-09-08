@@ -51,7 +51,7 @@ func TestDocumentedNonDelegableScopesMatchTheMap(t *testing.T) {
 	}{
 		{"docs/SECURITY.md", "are not delegable to a key at all", 40, 900},
 		{"docs/usage.md", "are never grantable to a key", 260, 400},
-		{"api/openapi.yaml", "Nine are never grantable to a key:", 20, 520},
+		{"api/openapi.yaml", "Ten are never grantable to a key:", 20, 560},
 	} {
 		t.Run(doc.path, func(t *testing.T) {
 			body, err := os.ReadFile(filepath.Join(root, doc.path))

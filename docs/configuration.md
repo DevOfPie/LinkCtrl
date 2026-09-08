@@ -86,11 +86,11 @@ Changing it has exactly the effect of losing it.
 | `LINKCTRL_LOG_FORMAT` | `json` | `json` or `text`. |
 | `LINKCTRL_SECURE_COOKIES` | `true` | `false` drops the `__Host-` cookie prefix for plain-HTTP development. Refused in production. |
 | `LINKCTRL_DOCS_ENABLED` | `true` | Serves `/docs` and the OpenAPI document. Public when on. |
-| `LINKCTRL_MIGRATE_ON_START` | `true` | `false` for change-controlled deploys; run `lctl migrate up` yourself. |
+| `LINKCTRL_MIGRATE_ON_START` | `true` | `false` for change-controlled deploys; run `lctl migrate up` yourself. **It governs the product's own migrations and not an add-on's** — a storage add-on's DDL runs at every boot whatever this is set to, and no command applies it out of band (F282). |
 | `LINKCTRL_TRUSTED_PROXIES` | *(empty)* | Comma-separated CIDRs. **Empty means `X-Forwarded-For` is ignored**, which is the safe default: anything listed here can claim any client address. Set it to your proxy and nothing more. |
 | `LINKCTRL_HTTP_READ_HEADER_TIMEOUT` | `5s` | Slowloris guard. |
 | `LINKCTRL_HTTP_WRITE_TIMEOUT` | `30s` | Socket-level backstop; the connection is closed regardless of what the handler is doing. |
-| `LINKCTRL_HTTP_REQUEST_TIMEOUT` | `15s` | Context deadline on the application tree. Queries abort and the client gets `504`. Not applied to the redirect tree, which has `REDIRECT_TIMEOUT` instead. `0` disables it. |
+| `LINKCTRL_HTTP_REQUEST_TIMEOUT` | `15s` | Context deadline on the application tree. Queries abort and the client gets `504`. Not applied to the redirect tree, which has `REDIRECT_TIMEOUT` instead. `0` disables it. With add-ons enabled it must also exceed **10s**, which is what installing an add-on from a URL spends fetching the bundle before it hashes, unpacks and compiles it; the instance refuses to start otherwise, because under that the fetch bound never fires and the install finishes under a cancelled context. |
 | `LINKCTRL_SERVER_TIMING` | `false` | Emits a `Server-Timing` header on the application tree, measuring server time to headers. Off by default because it publishes internal timings to anyone who asks — on a service where "does this alias exist" is the interesting question, a timing difference is an answer. |
 
 ### Two hostnames
@@ -158,6 +158,16 @@ which approaches Postgres's default `max_connections` of 100. It is a validation
 error, not a warning: a pool that cannot get a connection fails requests, and
 finding that out at startup is cheaper than finding it out under load. Raise
 `max_connections` on the server before raising the pools past it.
+
+**Add-ons are not in that sum, and you have to add them yourself.** Each installed
+add-on that declared `storage.own_schema` holds a pool of up to **four**
+connections for as long as it is loaded, plus **one** more at boot while its
+migrations run. The guard runs before any add-on is discovered, so it cannot count
+them — an instance tuned at its ceiling of 90 exceeds 100 with three storage
+add-ons and nothing will say so before the first *sorry, too many clients already*.
+At the defaults of 20 and 6 there is room for several. Budget
+`4 × (storage add-ons)` on top of the two pools, and raise `max_connections`
+accordingly.
 
 ## Cache
 
@@ -519,11 +529,11 @@ saves. See *Per instance, unless the limit is shared* below.
 
 | Variable | Default | Applies to |
 | --- | --- | --- |
-| `LINKCTRL_LOGIN_RATE_PER_MIN` | `10` | The endpoints that verify a credential: login, register, first-run setup, password change — both the API and the dashboard forms, sharing one budget so alternating between them gains nothing. |
+| `LINKCTRL_LOGIN_RATE_PER_MIN` | `10` | The endpoints that verify a credential: login, register, first-run setup, password change — both the API and the dashboard forms, sharing one budget so alternating between them gains nothing. **Every route an installed add-on serves spends it too**, whether or not the add-on behind it can sign anybody in: an add-on holding `session.mint` makes its route a credential endpoint, and a limit that applied only to those would move the moment a manifest's permissions changed. So the cost is paid uniformly and is stated rather than discovered — a dashboard add-on carrying no credential is charged the same as an authentication one, and an instance whose visitors arrive from one address (a NAT, an office egress, a corporate proxy) may need this number raised for add-on pages alone. **A path under `/addons/` that reaches no add-on is not one of those routes and costs nothing**: it is refused on shape and answers 404 without being charged, exactly as the 404-probe limit below refuses `/wp-login.php` before any lookup. Otherwise a scanner walking two well-known paths under a prefix no add-on serves would deny everybody their sign-in — and with `TRUSTED_PROXIES` unset, deny it to every visitor at once. |
 | `LINKCTRL_API_RATE_PER_MIN` | `600` | Everything under `/api/v1`. Dashboard pages, static assets and the health endpoints are not counted. |
 | `LINKCTRL_REDIRECT_404_RATE_LIMIT` | `60` | Misses on the redirect path, and misses only. |
 | `LINKCTRL_LINK_PASSWORD_RATE_LIMIT` | `20` | Submissions to a password-protected link, charged per address **and** per alias. |
-| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | Uploading a QR code's logo — the only thing this product accepts a file for, at three addresses: the API's two logo `PUT`s and the dashboard's upload form on the QR tab. **On top of the API limit, not instead of it** — an API upload spends a token from both buckets — and **one bucket across all three**, so alternating between the dashboard and the API does not double the budget. |
+| `LINKCTRL_UPLOAD_RATE_PER_MIN` | `30` | The two things this product accepts a file for: uploading a QR code's logo, and installing an add-on. **Four addresses, and one bucket across all four** — the API's two logo `PUT`s, the dashboard's upload form on the QR tab, and `POST /api/v1/addons` — so alternating between the dashboard and the API does not double the budget. **On top of the API limit, not instead of it**: an API upload spends a token from both. **The two bodies are not the same size, and they share the budget anyway.** A logo is capped at a megabyte and handed to an image decoder; an install is capped at 32 MiB and compiled. Sharing is deliberate rather than left over — the bucket exists for requests whose cost is set by their *content* rather than by their shape, which is what both of these are, and a second number would be a second thing to tune for an endpoint an instance uses a handful of times in its life. What it costs is stated: from one address, thirty installs and thirty logo uploads a minute are the same thirty. That is a collision only where the two callers share an address as the server sees it — see below — because installing needs `addons.manage` and uploading a logo needs `links.update`, and those are rarely the same person. Removing an add-on carries no body and is not charged. |
 
 Five properties are worth knowing before you tune them.
 
@@ -801,6 +811,806 @@ redirects, and anything queued meanwhile is retried from the outbox.
 A *configuration* mistake is still fatal, as every other one is: an unparseable
 `SMTP_FROM`, an unknown TLS mode, a username without a password, or credentials
 that would go over the wire in clear all refuse to boot.
+
+## Add-ons
+
+**Off unless you set a directory, and off is exact.** With `LINKCTRL_ADDONS_DIR`
+empty no WASM runtime is constructed, no goroutine is started, no route is
+mounted — including the `/addons/` prefix an installed add-on's pages are served
+under — no table is created and no metric series is published. That is asserted
+by tests rather than asserted here, because "off costs nothing" is the kind of
+sentence that stops being true one release after somebody writes it.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `LINKCTRL_ADDONS_DIR` | *(empty — no add-ons)* | A directory holding one subdirectory per add-on. Validated at startup: a path that is not there, or is a file rather than a directory, refuses to boot rather than being read as "no add-ons". **On compose, add the mount before you set this.** The shipped `docker-compose.yml` has no `/addons` volume, so a container path set here is not readable inside the container and the refusal above takes the instance down — add the `volumes:` snippet from [the trust boundary](#the-trust-boundary) below in the same change. `lctl` reads the same `.env`, so it stops starting too, exactly as `GEOIP_MMDB_PATH` does. |
+| `LINKCTRL_ADDON_INLINE_DEADLINE` | `25ms` | How long **an add-on's own code** may hold a redirect open before this instance stops waiting for it, kills the invocation and answers the visitor without it. It applies to no add-on that did not declare a redirect class, so on an instance where nothing did it bounds nothing and costs nothing. **It is deliberately larger than the 20ms cached-redirect target**, which is core's and is measured with nothing on the path — see [the redirect classes](#the-redirect-classes) below. `linkctrl_addon_redirect_kills_total{step="call"}` is what tells you whether it is set where you meant. |
+| `LINKCTRL_ADDON_INSTANTIATE_DEADLINE` | `500ms` | How long this instance will spend **starting** an add-on's module for a redirect — inline or observing — before it gives up and serves the redirect without it. Not the add-on's budget: instantiating is work this host does on this machine, and it costs what the hardware and the load make it cost. Measured here with all sixteen instance slots busy it is a mean of 9.6ms and a worst of 62.7ms, against about 1.6ms for one instantiation on an idle machine, which is why it is both separate and much wider. What it really bounds is a module that hangs in *package initialization* — code that runs while the module is being started, before anything has called it — so it is the longest one visitor waits for one broken module. `linkctrl_addon_redirect_kills_total{step="instantiate"}` moving means this instance could not start an add-on in time, which is a wider bound or a less busy machine, and not an add-on to go and fix. |
+| `LINKCTRL_ADDON_POOL_SIZE` | `8` | How many add-on instances this instance keeps ready, across every add-on, when nothing is using them. **Not how many run at once** — that is sixteen, it is fixed in the build, and no variable moves it. This is how many of the instances they run in are kept afterwards instead of being destroyed. A redirect that finds one waiting skips allocating the module's memory and running its startup code, which for a well-behaved add-on at 2,000 redirects a second was almost the whole of an 11.05ms invocation: pooling took that invocation to 451µs and the visitor's p99 from 44.89ms to 1.08ms, and the run is in [slo.md](slo.md). The cost is memory held while nothing is using it — up to this many instances of 8 MiB, on top of the sixteen that may be in flight — so eight is measured rather than generous: that rate wants about one instance at any moment. Reuse does not leak one visitor's state to the next **through the guest's memory**: the host restores it to what the module's startup left before handing the instance on. It does not restore a mutable WebAssembly global or a table, which it has no way to reach — a module built to keep state there carries it across visitors and workspaces, which no add-on built with this product's SDK can do and an arbitrary module from a URL can. See [SECURITY.md](SECURITY.md). `0` means the default, not "no pool". |
+| `LINKCTRL_ADDON_POOL_TTL` | `1m` | How long an unused add-on instance is kept before it is closed. It keeps the memory above proportional to traffic rather than to the busiest minute since the process started: on an instance with a redirect an hour the pool holds nothing, and on one with a redirect a second the sweep never finds an idle instance at all. `0` means the default. |
+
+**Why there are two numbers and not one.** They price two different parties. What
+a module does with a redirect is the add-on's cost and you set your tolerance for
+it; what it costs to *start* that module is this instance's cost, and it depends
+on the hardware, on how loaded the instance is, and on nothing the add-on chose.
+They shipped as one number in 0.5.0's development and that was a defect: on a
+machine slower than the one the 25ms was measured on, every invocation was killed
+before the add-on's code ran, the redirect completed as though no add-on were
+installed, and the kill counter blamed the add-on. If you only ever touch one of
+these, touch the first; the second exists so that being on slow or busy hardware
+does not silently turn your add-ons off.
+
+**Two names in the add-on variable namespace are this product's own**, and it is a
+consequence of the rows above. `LINKCTRL_ADDON_<NAME>_<SETTING>` is how an add-on's
+settings are read, so an add-on called `inline` or `instantiate` declaring a
+setting called `deadline` would be read from the same variable as one of those.
+There is nothing to resolve that with, so the ambiguity is removed instead: **an
+add-on named `inline` or `instantiate` is refused at load**, naming the
+reservation. It is the same answer
+`failure_class` and `mfa_satisfied` get from the other direction — those are
+setting names no add-on may declare.
+
+### The layout
+
+One directory per add-on, **named for the add-on**, holding a manifest and the
+module it describes:
+
+```
+/var/lib/linkctrl/addons/
+  oidc/
+    addon.json
+    oidc.wasm
+    migrations/          # only an add-on that declares storage.own_schema
+      00001_init.sql
+```
+
+The directory name and the manifest's `name` must match. That is what lets a
+metric label exist for an add-on whose manifest will not parse, and what stops
+two directories claiming one identity — which would be two add-ons contending for
+one Postgres schema.
+
+A directory called `.staging` may appear in here. It is LinkCtrl's own — runtime
+install writes through it — and it is never read as an add-on. Anything left in it
+by an install or a removal that did not finish is deleted at the next start.
+
+### Installing without a restart
+
+Everything above describes the route that has always worked: put a directory in
+this one, start the instance, and the add-on loads. That route is unchanged.
+
+There is now a second one. `POST /api/v1/addons` uploads a module and its manifest
+and starts the add-on in a running instance; `DELETE /api/v1/addons/{name}`
+unloads one and takes its files back out. Both require `addons.manage`, which is
+held by the account that administers the instance and which **no API key can
+hold** — a key that could install an add-on would carry whatever that add-on's
+manifest declares, past every scope the key was issued with. Both are recorded in
+the instance-wide audit log.
+
+**The two routes are one lifecycle**, because both write to this directory. There
+is no second place an installed add-on lives, so what is installed has one answer
+whichever way it got there.
+
+**Which arrangement you want is a decision about the mount**, and both are
+supported:
+
+| Mount | You get | You give up |
+| --- | --- | --- |
+| `:ro` — the recommendation below | The process cannot rewrite the code it runs | Runtime install; the API answers `503` and says so, and the Add-on manager's install and remove are refused with the same reason on the page |
+| writable | Install and remove without a restart | The process can rewrite the code it runs |
+
+Two things about the writable arrangement are worth knowing before you rely on it,
+and neither is a defect to be fixed later — both are properties of where you
+mounted the directory:
+
+- **An install reaches the replica that served the request.** On more than one
+  replica, put the directory on shared storage or keep installing by hand; there
+  is no coordination here and no attempt at one.
+- **A container filesystem that is not a volume loses it on the next deploy.** The
+  add-on is in the directory, and the directory is wherever you mounted it.
+
+**An install spends the upload rate limit**, which is the same bucket a QR code's
+logo spends: [`LINKCTRL_UPLOAD_RATE_PER_MIN`](#rate-limits),
+thirty a minute per address by default, charged on top of the API's own limit.
+That row says why one bucket covers two endpoints of very different sizes.
+
+**Two shapes at one address, and they are mutually exclusive.** The body carries
+either `manifest` and `module` as file parts, or a `url` and the `sha256` the
+bundle at it must hash to; at most 32 MiB either way — and, for a compressed
+bundle, at most 32 MiB again once it is decompressed. A bundle is a `.tar`, a
+`.tar.gz` or a `.zip` holding `addon.json` and the module it names, as two plain
+files with no directory and no symbolic link; which of the three it is comes from
+the file's leading bytes rather than from the URL's extension.
+
+**A URL install fetches, and where it may reach is not configurable.** `https`
+only, addresses checked after resolution against the same globally-routable-only
+policy an add-on's own fetch meets, no redirect off the origin that was typed,
+and ten seconds for the whole transfer. The digest is supplied by whoever is
+installing and is never read out of anything this instance fetched, which is what
+makes the trust bounded: you are trusting the host to serve the bytes the digest
+names, and nothing else. `docs/SECURITY.md` states that trade in full.
+
+**What neither shape can install.** An add-on whose manifest declares
+`migrations` ships `.sql` files that are in neither the upload nor the bundle,
+and it is refused with a message saying so — install that one by placing its
+directory here and restarting. An add-on that owns a schema and creates its
+tables from its own code installs fine.
+
+**There is no upgrade-in-place.** Installing over a name that is already taken is
+refused; replacing an add-on is a removal and then an install. A name that
+*overlaps* one already here is refused for the same reason it is refused at boot —
+`oidc_x` cannot be installed beside `oidc`, because the two share a cookie prefix
+and a settings prefix. **Already here means already claimed, not already
+running**: a directory whose `addon.json` parses and names the directory it sits
+in has claimed that name, even if the add-on behind it was refused for a bad
+digest or an ABI this build does not serve. Installing the overlapping name would
+be allowed by a check that only looked at what was running, and the *next* start
+would then refuse both — which stops the instance if either is `required`. So the
+install check reads what the boot check reads, and refuses the same pairs.
+
+A directory the boot check ignores refuses nothing: an `addon.json` that will not
+parse, one naming some other directory, and anything that is not a directory are
+invisible to both. At boot both members of a claimed pair are refused; here the
+arrival is refused and what was already here — running or not — is left
+untouched.
+
+**Removing an add-on leaves its data.** The schema stays, and the removal's answer
+names it. Nothing here deletes it.
+
+### The manifest
+
+`addon.json`, and every field is required unless marked otherwise. Unknown fields
+are **refused**, not ignored: `schema_version` is checked for equality, so a field
+this host does not know means a manifest written for a schema this host does not
+implement.
+
+**A key is spelled exactly as it appears below, and appears once.** `Permissions`
+is not `permissions`, and a key given twice is a refusal rather than a rule about
+which one wins. This is not pedantry about JSON: nothing hashes `addon.json`
+itself — the `sha256` field is the digest of the `.wasm`, and each `migrations`
+entry carries the digest of its own `.sql` — so this file is the trust root, and
+the only thing that makes it trustworthy is that everyone reading it reads the same
+thing. A JSON parser given `{"permissions": ["session.mint"], "permissions": []}`
+keeps the **last** occurrence, and one given `"SCHEMA_VERSION"` binds it to
+`schema_version` anyway; both would have loaded as something no reader of the file
+would have predicted. Both are refused, at every level of the document, and the
+error names the spelling you should have used.
+
+**A manifest is at most 64 KiB**, and a larger file is refused without being
+parsed. The whole file is held in memory and read twice — once as the record
+below, once key by key for the rule above — so the bound is what stops a directory
+deciding how much of this instance's memory boot spends. The largest thing this
+schema can honestly describe, a `migrations` list of a few hundred entries, is
+under 40 KiB; a manifest near the bound is carrying something that is not a
+description of an add-on.
+
+```json
+{
+  "schema_version": 1,
+  "name": "clickstats",
+  "version": "0.4.0",
+  "abi_version": 1,
+  "module": "clickstats.wasm",
+  "sha256": "5f2b…64 lowercase hex characters…",
+  "failure_class": "degrade",
+  "permissions": ["storage.own_schema", "redirect.observe"],
+  "cookie_prefixes": ["clickstats_"],
+  "settings": [
+    {"name": "retention_days", "type": "text",   "default": "30"},
+    {"name": "api_token",      "type": "secret"},
+    {"name": "granularity",    "type": "select", "options": ["hour", "day"], "default": "day"},
+    {"name": "count_bots",     "type": "toggle", "default": "false"}
+  ]
+}
+```
+
+| Field | Notes |
+| --- | --- |
+| `schema_version` | Must be `1`. Not "at least 1" — a newer manifest is refused rather than partially understood. |
+| `name` | 2–31 characters, lowercase letters, digits and underscores, starting with a letter. It has to be three things at once: a metric label, a directory name, and a Postgres schema name. |
+| `version` | The add-on's own version. Its author's business; this only refuses what would make a log line unreadable. |
+| `abi_version` | Which **ABI generation** the module was built against, and it is checked at load, before any of the module is read. A module built against a newer generation than this build serves is refused; so is one built against a generation whose deprecation window has closed. What the integer means, and what a change to the ABI is allowed to break, is [addon-abi.md](addon-abi.md). |
+| `module` | The `.wasm` file, as a **bare filename** inside this directory. A separator or a `..` is refused rather than cleaned. |
+| `sha256` | The digest of that file, 64 lowercase hex characters — what `sha256sum` prints. Verified before the module is compiled; a mismatch means it is never parsed, let alone run. |
+| `failure_class` | `required` or `degrade`. No default. |
+| `permissions` | Optional, and **enforced**: it is the whole of what the add-on may do. Every host function names the permission it costs and a call whose permission is not here is refused, counted in `linkctrl_addon_refusals_total`, and logged. The vocabulary is closed — a token outside it refuses the add-on at load — and it is the nine below. |
+| `cookie_prefixes` | Optional. The cookie names this add-on may read and set, as prefixes, and **each has to begin with the add-on's own name and an underscore**. The names are the add-on's; the cookies a browser holds are not — LinkCtrl carries the whole set inside one cookie of its own, described [below](#the-pages-an-add-on-serves). An add-on serving a route sees the cookies matching one of them and no others, so an authentication add-on gets its own state cookie and can never ask for this instance's session cookie — sessions here are server-side and opaque, which makes that cookie the credential itself. Deriving the namespace from the name is what stops an add-on being denied its own by whichever installed first; it does not on its own stop `oidc` declaring `oidc_x`, so the other half of the rule is at load — two installed add-ons whose names stand in a `name + "_"` prefix relation are **both refused**, counted as `name_collision`, and the boot log names the pair. Rename one directory and its manifest. |
+| `migrations` | Optional, and **required in practice for any add-on that declares `storage.own_schema`** — the host applies only what this list names. Each entry is a `file` inside the `migrations/` directory beside the manifest and the `sha256` of its bytes, verified before a schema exists. A file listed but absent, present but unlisted, or whose digest disagrees each refuse the add-on. Filenames follow goose's convention. Declaring migrations without `storage.own_schema` is refused. **This row was missing until 2026-08-20**, so a publisher following this page shipped no `migrations` key and their DDL never ran, while the sentence above told them the field they needed was illegal (F285's review, M64.9) |
+| `settings` | Optional. Each has a `name`, a `type` of `text`, `secret`, `select` or `toggle`, and an optional `default`. A `select` carries at least two `options` and its default must be one of them; a `toggle`'s default is `"true"` or `"false"`; a **`secret` may not carry a default**, because a default secret is one every installation shares. A setting may also carry `"origin": true`, which marks it as naming the outbound origins that add-on may reach — only a `text` setting may, and it is what `network.fetch` is bounded by. |
+| `sign_in_label` | Optional, and only for an add-on declaring **both** `session.mint` and `routes.own_prefix`. The words this add-on asks to have drawn on this instance's sign-in page — *Sign in with Contoso*, at most 64 bytes and no control characters. Declaring it is the add-on **asking**; nothing is drawn until an operator turns on the `sign_in_link` setting the host adds for it, which is off until they do. An empty or absent label draws nothing, so no add-on can put itself on the sign-in page by omission. |
+| `sign_in_path` | Required when `sign_in_label` is set, refused without it. The page **inside your own `/addons/<name>/` prefix** the link should reach — `start`, or `auth/begin`. It is a path and never a target: the host composes the href from your prefix and this value and refuses the result if it is no longer under that prefix, so a leading `/`, a `..`, a `//`, a scheme, a query and a fragment are each refused at load. A label alone was declined deliberately, because it would have made the prefix root mean *sign in here*, which is a meaning nothing else in this contract gives it. |
+
+#### The permissions an add-on may declare
+
+Nine, and the list is closed: adding one is a change to LinkCtrl, not something a
+manifest can do. [addon-abi.md](addon-abi.md) says which function each one gates
+and generates the same table from the host's own definition.
+
+| Permission | Lets the add-on |
+| --- | --- |
+| `config.read` | Read its own declared settings — the `settings` list above, and nothing else |
+| `storage.own_schema` | Read and write the Postgres schema it owns, whole. Not finer, and not another add-on's |
+| `routes.own_prefix` | Serve requests under the path prefix it owns — `/addons/<name>/`, on the dashboard and never on the link host — and have what it answers rendered by this product |
+| `session.context` | Ask who is signed in on the request it is answering: the account, its email and display name, the workspace and organization the request landed in, and the role held there. Nothing else, and nothing that could be replayed — no cookie, no token, no session identifier. It is separate from `routes.own_prefix` deliberately: an add-on that draws a page has not thereby asked to know who is looking at it |
+| `session.mint` | Tell this instance that somebody authenticated, and ask for a session, and connect an external identity to the account of whoever is signed in. The highest-value grant here — an add-on holding it decides who is signed in, subject to this instance's own rules about whether an account exists for the assertion, is active, is not locked out and still owes a second factor. **An add-on declaring it is treated as `required`**, whatever its manifest says; see [When an add-on signs people in](#when-an-add-on-signs-people-in) |
+| `redirect.observe` | Watch redirects **out of band**. Your module is called once per recorded redirect, after the visitor has been answered and after the click is durable, so nothing it does can delay or fail a redirect — and nothing it does can affect one. What it sees is bounded to what `click_events` may carry: country-level, and no client address in any form |
+| `redirect.inline` | Run **inside** the redirect path itself, after this instance has decided where the visitor goes and before anything is written. You see the decision and may let it stand or veto it; a veto refuses the visitor with the same page a blocked bot gets. Your latency is added to theirs, and it is yours — see [the redirect classes](#the-redirect-classes) |
+| `redirect.rewrite_query` | Alter the **query string** of the destination an inline module was handed, and nothing else about it. A token of its own on top of `redirect.inline`, because declaring *run on the redirect path* is not declaring *and edit where the visitor goes*. Useless without it |
+| `network.fetch` | Make outbound requests **from this server**, to origins **you** named and to no others. The manifest declares the need and never a destination: an add-on holding this and pointed at nothing reaches nothing. What you name goes in a setting the add-on declared as carrying origins, and naming one authorizes a server-side request to it — see [When an add-on reaches outward](#when-an-add-on-reaches-outward) |
+
+Four functions cost nothing and need no declaration: asking the host its ABI
+version, writing a line to your log, drawing random bytes, and reading the clock.
+The last two are ungated because a module reads the same two sources through
+`crypto/rand` and `time.Now` anyway — gating them would refuse an add-on the
+documented spelling of something it can still have. Everything else costs one of
+the nine.
+
+**A refused call is `ErrDenied`, and it is refused before the host says whether it
+implements the function at all** — so an add-on that declared nothing cannot use
+the availability status to find out what this build can do.
+
+### What an add-on can reach
+
+**One list, and nothing outside it.** An add-on imports a fixed set of functions
+from the host and has no other route into this instance: no socket, no file, no
+database connection, no environment. One of them makes an outbound request,
+which is not an exception to that sentence — the module opens nothing
+itself, and what the host will dial for it is bounded by the permission it
+declared and by an origin **you** named; see
+[When an add-on reaches outward](#when-an-add-on-reaches-outward). [addon-abi.md](addon-abi.md) is that list, the
+version it is published under and the promise attached to it — and it is generated
+from the same definition the host registers, so it cannot describe a function the
+host does not serve.
+
+Some of those functions do not work yet. They are declared so that an add-on can
+be written against the whole contract now, and each answers a refusal a module can
+branch on until the release that implements it arrives. What works today is
+logging, reading the add-on's own declared settings, reading and writing its own
+Postgres schema, answering HTTP requests under its own prefix, asking who is
+signed in on one, and signing somebody in — and each of those, apart from the ABI
+version, the log, the clock and the random source, is
+behind one of the permissions above. **No function hands an add-on a client's address**, in
+any form, which is why an add-on that watches redirects cannot store one — and none
+hands it a credential of this instance's either, which is what `cookie_prefixes`
+above is for: see [SECURITY.md](SECURITY.md).
+
+### What happens when an add-on will not load
+
+**The add-on declares it and you outrank it.** A manifest saying `required` stops
+the instance with the reason on stderr; one saying `degrade` logs an error,
+increments `linkctrl_addon_loads_total`, and the instance serves without it. That
+is the publisher's answer, and it is not the last word: `LINKCTRL_ADDON_<NAME>_FAILURE_CLASS`
+is read **before** the manifest's class for **every** add-on, not only the
+authentication ones the section below is about, so any add-on can be made
+`required` or `degrade` from the environment. A value that is neither stops the
+instance rather than falling back, because the setting that decides whether this
+add-on may be skipped is the one that could not be read. [operations.md](operations.md)
+says the same thing from the other side.
+
+**A module that never returns is a failure like any other**, and it did not use to
+be. Package initialization runs while the module is being instantiated, so a module
+that spins there returns nothing and traps nothing; with no deadline on the load,
+no listener came up, no metric was written, and the class the manifest declared was
+never consulted at all. Each add-on's module now gets **30 seconds to compile and
+30 seconds to start**, after which it is refused as `load_timeout` — logged,
+counted, and handed to the class above like any other failure. The budget is **per
+add-on**, so one that hangs does not spend anybody else's; boot pays it once for
+each add-on that hangs.
+
+**It bounds the add-on's own code and not this host's work with your database.** An
+add-on's migrations wait on the migration lock for as long as this product's own
+do, because a replica arriving mid-migration should wait rather than fail into a
+crash loop — so a slow migration is `storage_failed` or nothing, never
+`load_timeout`. Nothing bounds how long one *statement* in a migration runs.
+
+**A manifest this host cannot parse stops the instance too**, whatever the file
+may have been about to declare. There is no class to honour in that case, and
+guessing the forgiving one would boot an instance with an authentication add-on
+silently missing.
+
+An `abi_version` this build does not serve is a refusal like any other and the
+declared class decides what it costs you, because the manifest parsed and the class
+is therefore readable. The log line names both versions, which is the number you
+need to decide whether to upgrade LinkCtrl or to fetch a different build of the
+add-on; `linkctrl_addon_loads_total{outcome="abi_unsupported"}` is the same fact for
+a scrape.
+
+A `permissions` entry this build does not know is a refusal too, and the declared
+class decides what it costs you. The vocabulary is closed for the reason unknown
+manifest fields are refused — an add-on asking for a capability this build cannot
+name is asking for behaviour that will not happen — and the error names every token
+that *is* allowed, which is the fix. A permission this build knows and grants to
+nobody is **not** a refusal: the add-on loads without it, and the boot log says so.
+
+**An entry that is not itself a directory is ignored with a warning**, so a
+`README` you left in there is not an outage — and a **symlink is one of those
+entries**, including a symlink pointing at a perfectly good add-on directory. The
+versioned-install pattern `current -> oidc-1.2.0` therefore loads nothing, and the
+instance boots without that add-on: the entry is skipped before its manifest is
+read, so a manifest saying `required` does not turn the silence into the outage it
+would otherwise be. Install by copying or moving a directory into place.
+
+The asymmetry is worth knowing because it is not obvious: the add-ons directory
+**itself** may be a symlink — that path is followed — and the add-ons inside it may
+not be. Whether an install should be allowed to follow one is not a documentation
+question and is open: following a symlink means loading a module from outside the
+directory this boundary is drawn around, and *who may write to the directory* is
+the whole of that boundary.
+
+### When an add-on reaches outward
+
+An add-on holding `network.fetch` may ask this instance to make an HTTPS request
+on its behalf. **It reaches nothing until you say where.**
+
+The manifest declares the *need* and never the destination: an add-on marks one of
+its settings as carrying origins, and a manifest that names a host anywhere — a
+default, a list of options, a URL in a permission token — is refused at load. So
+the publisher cannot widen the add-on's reach and a new version of it cannot
+quietly reach somewhere the old one did not. You are the only one who can.
+
+Fill the field in on the Add-on manager's page for that add-on, or from the
+environment like any other setting:
+
+```
+LINKCTRL_ADDON_<NAME>_<SETTING>="https://idp.example.com"
+```
+
+One origin, or several separated by spaces — scheme, host and port, and no path.
+Several is ordinary rather than exceptional: some identity providers serve
+discovery, the token endpoint and the signing keys from three different hostnames,
+and the add-on's own documentation should tell you which. A value that is not an
+origin authorizes nothing and is logged as such; it does not take the good entries
+in the same field with it.
+
+**What you are authorizing** is this server connecting to that origin, with a
+request body the add-on composed, and handing the response back to code you did
+not write. That is why the field says so on the page rather than reading like a
+URL box. `docs/SECURITY.md`'s *Add-on egress* is the full statement, including
+what an add-on holding this **and** `storage.own_schema` can do.
+
+**What the host enforces regardless of you or the publisher:** https only; `GET`
+or a form-encoded `POST`; no request header the add-on chose; every address the
+name resolves to checked at the moment of dialling against an allowlist of
+globally-routable unicast space, so loopback, link-local, the cloud metadata
+service, unique-local, the private ranges and anything outside that space are
+refused however the name got there — if an origin you named will not resolve for
+an add-on, grep this instance's log for `address_rule=`, which says which rule
+refused it; no redirect followed off the origin it started on; a response
+size cap; and a request timeout. A fetch is callable from an add-on's own page and
+from nowhere else — **both redirect classes are refused**, so nothing here can
+reach the redirect path.
+
+Three variables bound it, and their defaults are in
+[`.env.example`](../.env.example):
+
+| Variable | Default | Bounds |
+| --- | --- | --- |
+| `LINKCTRL_ADDON_ROUTE_DEADLINE` | `10s` | One request to an add-on's own page, whole — including any fetches inside it |
+| `LINKCTRL_ADDON_FETCH_TIMEOUT` | `3s` | One outbound request, connect through the last byte |
+| `LINKCTRL_ADDON_FETCH_MAX_BYTES` | `262144` | The largest response body carried back; over it is refused whole rather than truncated |
+
+**All three are refused at zero, and the first two also have to nest.** An
+instance whose bounds do not hold does not start.
+`LINKCTRL_ADDON_ROUTE_DEADLINE` must be under `LINKCTRL_HTTP_REQUEST_TIMEOUT`
+(`15s`), which already cancels the same request context and starts first — a route
+deadline at or over it never fires. That one rule applies **only when `ADDONS_DIR`
+is set**: an instance running no add-ons is not refused over a route deadline it
+never uses and its operator never chose. `LINKCTRL_ADDON_FETCH_TIMEOUT` must not
+exceed the route deadline, because a fetch happens inside a route invocation and
+cannot outlast it; that one applies always, because it takes a value you wrote to
+break it. Raising one therefore means raising the one above it — or lowering the
+one below it, which is the remedy to reach for if you deliberately run a short
+`LINKCTRL_HTTP_REQUEST_TIMEOUT`: at `10s` or under — the rule refuses a route deadline that is not *strictly* under the request timeout, so 10s against the 10s default is refused too, an instance that runs add-ons
+will not start until `LINKCTRL_ADDON_ROUTE_DEADLINE` comes down with it. The
+exception is
+`LINKCTRL_HTTP_REQUEST_TIMEOUT=0`, which disables that middleware outright: the
+route deadline is then the only bound an add-on's page has, and nothing constrains
+it from above. `LINKCTRL_ADDON_FETCH_MAX_BYTES=0` is refused rather than read as
+*no cap*: there is no way to ask for one, because the response body is held in
+memory to cross the add-on boundary and an unbounded body from a server this
+product does not run is an unbounded heap. **The response headers are bounded by
+the same argument and are not a knob**: 64 KiB, fixed, which is eight times what
+an ordinary server will emit and far more than any discovery document or token
+response carries. Go's own default is 10 MiB — forty times the body cap — and no
+legitimate provider needs it raised, so there is nothing here to turn. A response
+whose headers exceed it is `connect_failed`, because the exchange failed below
+the response; `too_large` stays what it says, which is that the body was over the
+cap.
+
+**What it is doing is visible without reading logs.**
+`linkctrl_addon_fetch_total{addon,outcome}` counts every attempt and every
+refusal, `linkctrl_addon_fetch_duration_seconds{addon}` times the ones this
+instance actually attempted — a refusal it decided itself is counted and not
+timed — and the Add-on manager renders both beside the redirect
+figures — `unconfigured` there means you have not named an origin yet, and
+`origin_refused` means the add-on asked for one you did not name.
+
+### When an add-on signs people in
+
+An add-on holding `session.mint` is an **authentication** add-on: it tells this
+instance that somebody authenticated and this instance decides what that means.
+Three things about it are yours rather than the publisher's.
+
+**It is `required` whatever its manifest says.** The rule everywhere else is *the
+add-on decides* — the publisher knows whether the instance is still the product
+without it. That rule inverts here, because the publisher of an authentication
+add-on cannot know whether *your* instance has another way in, and the failure
+mode of guessing wrong is an instance that boots with external sign-in silently
+missing. So a manifest saying `degrade` is treated as `required`, and if that is
+wrong for you, say so:
+
+```
+LINKCTRL_ADDON_<NAME>_FAILURE_CLASS=degrade
+```
+
+**The consequence is stated rather than implied**: with `degrade`, an add-on that
+will not load takes external sign-in with it and the instance keeps serving.
+Anybody who signs in with a password still can; anybody who only ever signed in
+through that provider cannot, until it loads. That is a real answer for an
+instance where the provider is a convenience, and the wrong answer for one where
+it is the only door. The variable takes `required` or `degrade`; **anything else
+stops the instance**, naming the variable, because the value that decides whether
+this add-on may be skipped is the one that could not be read.
+
+**A second factor is still asked for.** An account with TOTP enrolled meets it
+after an add-on's assertion rather than instead of it — the assertion gets the
+person as far as the code prompt and no further. If the provider behind this
+add-on already performed a second factor and you want this instance to accept
+that:
+
+```
+LINKCTRL_ADDON_<NAME>_MFA_SATISFIED=true
+```
+
+Only the exact word `true` turns it off. Anything else — `yes`, `1`, `TRUE` — is
+read as no, deliberately: this is the one setting in this product that can stop a
+second factor being asked for, so the safe reading is the default and turning it
+off has to be unambiguous.
+
+**These two names are reserved.** They live in the same
+`LINKCTRL_ADDON_<NAME>_<X>` namespace as an add-on's settings, so a manifest
+declaring a setting called `failure_class` or `mfa_satisfied` is refused at load —
+one variable cannot be your answer and the add-on's value at the same time.
+
+**Somebody can start it from the sign-in page — once you say so.** An
+authentication add-on's flow is reachable at a URL under its own prefix, and
+until you agree that is the only way to reach it. An add-on asks for a link by
+declaring `sign_in_label` and `sign_in_path` in its manifest; you agree by
+turning on **`sign_in_link`** on its detail page in the Add-on manager, and it is
+**off until you do**. Then this instance's sign-in page draws that add-on's words
+as a link, below its own form and never in place of it.
+
+Three things about that link are this instance's rather than the publisher's, and
+each is a refusal rather than a promise:
+
+- **Where it goes.** The href is composed here — your prefix, plus the path the
+  manifest named — and held against that prefix afterwards. A manifest cannot
+  name a host, a scheme, or a path that climbs out.
+- **Whether it appears at all.** The toggle is yours, it is off by default, and
+  an add-on cannot declare a setting by that name to answer it for you. A new
+  version of an add-on **can** change the words, though: the toggle is stored
+  against the add-on's name, removal does not clear it, and there is no
+  upgrade-in-place — so whatever is installed under that name next inherits your
+  consent and draws its own label, which nothing records and no page shows you.
+- **Whether it points anywhere real.** The link is drawn from what this instance
+  **loaded**, not from what a directory claims — an add-on that failed to load
+  draws no link rather than a link that 404s.
+
+The words themselves are the add-on's, and they are the only thing about that
+page an add-on decides: no icon, no colour, no position, and no say in the order
+when two add-ons offer one. The order is this instance's, by add-on name.
+
+**Signing in is not the same as connecting.** An assertion for an external
+identity nobody has connected signs nobody in. The mapping from a provider's
+subject to an account on this instance is written only while the person it belongs
+to is signed in, in their own browser, and never on an add-on's say-so; there is
+no matching on the email address an assertion carries, which is the classic
+account-takeover shape and is absent by design.
+
+**Both sides can see and sever a connection**, which they could not before 0.4.0
+— until then the table was `addon_identity_links` and removal was a `DELETE` by
+hand. A person sees what is connected to their account on **Account**, and can
+disconnect any of it; an operator sees every account one add-on can sign in on
+that add-on's page in the **Add-on manager**, and can sever any of them. Both are
+audited and the records are distinguishable, because *I removed my own* and
+*somebody removed mine* are different events. The API carries the same three
+operations: `GET /account/identities`, `DELETE /account/identities/{id}` and
+`DELETE /addons/{name}/identities/{id}`.
+
+**Disconnecting is not signing out.** Sessions a connection already started stay
+valid until they expire or are signed out; what a disconnection removes is the
+standing way back in. Ending the account removes the connections either way, and
+always has.
+
+What the manager also says about these rows is what survives a purge: the
+confirmation counts the mappings a `DROP SCHEMA` leaves standing, because they are
+keyed on the add-on's **name** and whatever is installed under it next inherits
+them. Severing them is the act that stops that.
+
+**A provider that offers only `response_mode=form_post` cannot be used.** An
+add-on's callback has to arrive as a GET redirect carrying `code` in the query,
+which is OIDC's authorization-code default. A form-post callback is a cross-site
+POST, and this product refuses every cross-site request that uses an unsafe
+method, with no exemptions — so the callback never reaches the module.
+[addon-abi.md](addon-abi.md) says the same thing to the publisher.
+
+### Running with the OIDC add-on
+
+The first-party authentication add-on is
+[`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC): an OpenID
+Connect relying party, published separately, consuming only this product's
+published SDK. Its own README is what tells you which settings it declares. What
+belongs here is what running one costs *you*, and it is five things.
+
+**What you are trusting.** Two parties and no more. The identity provider, which
+decides who somebody is — an assertion it makes is an assertion this instance
+acts on, for whoever has connected that identity to an account here. And the
+add-on's release: you give the Add-on manager a bundle and a `sha256`, this
+instance refuses to write anything that does not hash to what you typed, and the
+manifest inside then names the module's own digest, which is checked again before
+anything is instantiated. **A digest read off the release page the URL
+came from authenticates nothing** — whoever can change the one can change the
+other, which is what the install form itself says. That page's `SHA256SUMS` is
+not a second channel, and until the add-on publishes its digests somewhere else,
+**`gh attestation verify` below is the channel that works**: the attestation is
+signed by GitHub's workflow identity and logged publicly, so it is not something
+whoever served you the page can forge. `v0.1.0` is the first release, and its bundle is
+`linkctrl-oidc-0.1.0.tar.gz`.
+
+The release also publishes **build provenance**, so you can ask who built the
+module rather than only whether it is the one somebody named. The attestation is
+over the module's digest and says which workflow, which tag and which commit
+produced it:
+
+```sh
+gh attestation verify oidc.wasm --repo DevOfPie/LinkCtrl-OIDC
+```
+
+Nothing on this instance checks that for you: the digest is what the install
+enforces, and the attestation is a question you ask GitHub before you type one.
+
+**What happens when the provider is down.** Local sign-in is unaffected: a
+password and a second factor are this instance's own and reach no other machine.
+What stops is sign-in *through the provider* — the add-on's pages report what the
+outbound request answered, in the same vocabulary as the
+`linkctrl_addon_fetch_total` counter, so `timeout` and `connect_failed` say the
+provider did not answer and `origin_refused` says this instance was never told it
+could ask. Sessions already minted keep working until they expire; they are this
+instance's rows and nothing revalidates them against the provider.
+
+**The provider has to be reachable, and reachable means routable.** Every address
+a name resolves to is checked at dial time against globally-routable unicast
+space, so an identity provider on `localhost`, on an RFC 1918 range or on any
+other private address **cannot be used** — that is the egress policy above
+applied, not an OIDC-specific rule, and the refusal is greppable as
+`address_rule=`. A provider on your own network needs a name that resolves to a
+public address.
+
+**It is `required` by default**, per the section above, and that is the right
+default for it: an instance whose external sign-in silently does not exist is
+worse than one that refuses to start.
+
+**The demo instance does not run it**, deliberately: there is no identity provider
+behind the public demo and a sign-in flow against a throwaway one demonstrates
+nothing a visitor can use. What the demo shows about add-ons is the Add-on
+manager and the sample module.
+
+### Configuring an add-on
+
+**Two routes, and the dashboard is the ordinary one.** Since 0.4.0 an add-on's
+declared settings are edited on its page in the Add-on manager —
+`/instance/addons/<name>`, behind `addons.manage` — where the host draws the
+input each declared type asks for and saves the value into a table of its own. A
+secret is never shown again after it is saved; the field says whether one is set,
+and clearing it is a deliberate act rather than an empty box. The row records what
+the value was written as, so a *replacement* add-on installed under the same name
+cannot get its predecessor's credential drawn back into the form, or returned by
+the API, by re-declaring the setting as plain text. **That bounds the page and not
+the module.** Settings are keyed on the add-on's name, so the replacement's own
+code still reads the value through `config_get` — the same inheritance the
+external-identity mappings have, and the reason
+[SECURITY.md](SECURITY.md) says installing a module under a name somebody else's
+module used is not a safe thing to do casually.
+
+The environment route below is the other one, and it still exists for the
+deployment that wants a setting pinned outside the product: a value in your
+environment is what the add-on reads, and the manager renders a sentence naming
+the variable instead of a field it could not honour. **The environment wins**, and
+a save aimed at such a setting is refused with a message saying which variable to
+edit rather than accepted and ignored — the same answer the first-run update-check
+prompt gives when `LINKCTRL_UPDATE_CHECK` has already settled it.
+
+One variable per setting:
+
+```
+LINKCTRL_ADDON_<NAME>_<SETTING>
+```
+
+Both halves upper-cased. An add-on called `oidc` declaring a `client_id` setting
+reads `LINKCTRL_ADDON_OIDC_CLIENT_ID`, and the `_FILE` convention this product
+uses for its own secrets does **not** apply here.
+
+Three rules, and each is a refusal you will not see:
+
+- **Only declared settings are read.** A variable naming a setting no manifest
+  declares does nothing at all — it is not a warning, because two add-ons whose
+  names are prefixes of each other would make "did you mean this one" a guess.
+  The add-on's own documentation is what lists its settings; the manifest is what
+  proves the list.
+- **A value here outranks the manifest's default**, exactly as every other value
+  in this file outranks the default beside it. A setting with neither is absent,
+  which is what a `secret` always is until you set one — a manifest may not carry
+  a default for one.
+- **A value set to nothing is unset.** A line with nothing after the `=` means the
+  add-on gets its default, not an empty string.
+
+Values are held in memory the way this product's own secrets are: typed so they
+cannot print themselves into a log, a panic or a config dump, whatever the
+manifest called the setting. The boot log says how many settings an add-on has
+configured and never which or what.
+
+**Changing a variable here takes a restart. Changing a value in the manager does
+not** — the add-on reads it on its next invocation, and one already running reads
+what it read. Both routes are resolved once when the add-on loads, which is why
+the environment needs the restart: nothing re-reads it per call, because
+`config_get` is on a request's path.
+
+**Where the manager's values are kept, and what that is not.** A host table,
+`addon_settings`, keyed on the add-on's name — never the add-on's own schema,
+because the add-on's database role can write that schema and a `secret` kept
+there would be a credential the module could rewrite and then read back as though
+you had chosen it. It is **not encrypted**, exactly as the environment variable it
+mirrors is not: the key would live beside the database in the same environment.
+What protects it is that nothing echoes it back and that reading the table needs
+the database. And because the key is the add-on's *name*, a different module
+installed under a name you have used before inherits the values you typed for the
+last one — the same inheritance its external-identity links have, and the reason
+the manager counts them on the purge confirmation. **Nothing in LinkCtrl deletes
+them**: saving settings is refused for a name that is not installed, so a removed
+add-on's values are unreachable from the pages and the API alike, and
+`DELETE FROM addon_settings WHERE addon = '<name>'` is the way to be rid of them.
+
+### The pages an add-on serves
+
+An add-on holding `routes.own_prefix` answers requests under `/addons/<name>/`,
+on the **dashboard** host only. The link host serves short links and nothing else,
+and no add-on route reaches it.
+
+Three things worth knowing before you install one:
+
+- **Those pages are reachable without signing in.** They have to be: an add-on
+  that authenticates somebody is answering a request from a person who does not
+  have a session yet. What such an add-on learns about who *is* signed in is the
+  `session.context` grant above, and it learns nothing when nobody is.
+- **The add-on does not write the HTML.** It answers text, and LinkCtrl draws the
+  page around it, escaped. An add-on cannot put a script, an inline handler or an
+  external reference into your dashboard, and the Content-Security-Policy is
+  unchanged from every other page — which is a property of how the page is built
+  rather than of a filter. An add-on may also answer `text/plain` or
+  `application/json` for its own endpoints; `text/html` is refused.
+- **It may send a visitor off this origin.** Redirecting to an identity provider
+  is the point of an authentication add-on, so an add-on holding this grant can
+  redirect a visitor to almost any address — any `http` or `https` URL, or a path.
+  A scheme-relative `//host`, any other scheme, and a control character are each
+  refused, and it is never permanent, which this product enforces. That is one of the reasons the directory is a trust boundary.
+
+Sixteen add-on invocations are served at once across the whole instance; a
+seventeenth page request waits for one of them to finish and gives up when the
+request's own timeout does. The budget is shared with the redirect path — see
+[the redirect classes](#the-redirect-classes) for what an
+invocation that cannot get a slot does there, which is not to wait. Each in-flight
+invocation gets an instance of the module to itself,
+and each instance is bounded at **8 MiB** of memory — which is why an add-on
+cannot keep anything in memory between two requests of one flow, and has to keep
+it in the schema it owns.
+
+**Since 0.4.0 an instance is also kept after the redirect that made it.** The
+redirect path pools its instances (`LINKCTRL_ADDON_POOL_SIZE` below), so guest
+memory is no longer held only while something is running: sixteen in flight plus
+eight kept warm, each of 8 MiB, is a ceiling of **192 MiB** of guest memory —
+plus, since reuse needs something to reset an instance *to*, a host-side copy of
+each live instance's memory under the same per-instance cap, so **384 MiB**
+resident in the worst case. That is a ceiling
+rather than an estimate — a module asking for more is stopped by the runtime, its
+request answers 502, and the instance goes on serving. A typical module holds far
+less — the test fixtures measure 2.4 MB at load, and the redirect fixture 3.4 MB —
+but what an operator sizes a host by is the ceiling. Reuse does not let one
+visitor's state reach another: the host restores the module's memory to what its
+package initialization left before the instance is handed on, so an add-on still
+cannot keep a flow's state in memory across two requests.
+
+**An add-on's cookies live in one cookie of the host's.** Whatever a module names
+its cookies, LinkCtrl packs them into `linkctrl_addon_<name>` — a second,
+`…_kept`, when the module asked for a lifetime that outlives the browser being
+closed — scoped to the add-on's own path. So an add-on occupies at most two slots
+of a visitor's cookie store however many cookies it sets and however many times
+it is visited, and cannot crowd out this instance's session cookie. Each jar
+holds up to 3 KiB; past that an add-on's oldest values are dropped and the log
+says which add-on ran out of room.
+
+### The redirect classes
+
+**An add-on may run on the redirect path, and what that costs is yours to know
+before you install one.** Two grants, and they are separate so that a module
+cannot acquire the sharper one by accident.
+
+`redirect.observe` is **off the path**. Your module is handed each recorded
+redirect after the visitor has already been answered and after the click is in
+the database, from the pipeline that writes the click. It can delay nothing,
+because nothing waits for it — the queue is bounded and an observation that
+cannot be delivered in time is dropped and counted rather than allowed to hold
+anything up. It can also affect nothing: there is no answer to give.
+
+`redirect.inline` is **on the path**, and this is the one to read carefully.
+
+**What it changes about this product's promise.** [slo.md](slo.md)'s measured
+figure — a cached redirect's p99 under 20 ms — is *core*, with no inline add-on
+on the path, and installing one means it no longer describes your instance. That
+is deliberate and it is stated rather than hidden: an add-on's latency is the
+add-on's. The boot log warns when a module is on that path, for exactly this
+reason.
+
+**What stays this product's.** Availability. An invocation is bounded twice — the
+module's own code by `LINKCTRL_ADDON_INLINE_DEADLINE` and this host's work
+starting it by `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`; the runtime kills whichever
+overruns; the redirect completes without it; and the kill is counted per module
+with the step that was missed, because *your add-on is slow* and *this instance
+cannot start add-ons* are different problems with different fixes. A module that
+fails, is killed, or cannot be given an instance always means *allow, unchanged* —
+never a refusal — so a bug in an add-on cannot take your links down.
+
+**What an inline module may do.** It sees the decision: the link, the alias and
+the destination the visitor is about to be sent to, with routing rules, split
+arms, the deep-link path and any forwarded query already applied. It may let that
+stand, veto it, or — with `redirect.rewrite_query` as well — replace its query
+string. It sees nothing about the visitor: watching visitors is the observe
+class's job, off the path, under a grant you would have to install separately.
+
+**What an inline module may not do**, whatever its manifest declares: reach its
+own storage, read the request, ask who is signed in, or render a template. An
+inline invocation reaches only the redirect-safe subset of the ABI and everything
+else answers `ErrDenied` there. The redirect path does no session lookup, no CSRF
+check and no template rendering, and an add-on does not get to be the exception.
+
+**Where the point sits, and why.** After the destination is decided and **before**
+the gates that spend a link's budget. So a veto costs nobody a click on a one-time
+or max-clicks link. One write is not undone by a veto: a split test's rotation was
+advanced when the arm was chosen, so a vetoed redirect costs one step of it.
+
+**What to watch.**
+
+| Series | What it tells you |
+| --- | --- |
+| `linkctrl_addon_redirect_duration_seconds{addon,class}` | What each add-on costs a redirect, separate from `linkctrl_redirect_duration_seconds` so core's latency and each module's are different curves. Separate in both directions: the redirect histogram *excludes* the time an add-on held the request, so installing one does not move it |
+| `linkctrl_redirects_total{outcome="vetoed"}` | Redirects an add-on refused. Zero until you install a module that vetoes, and every one of them is a visitor who got a 403 instead of their link — worth an alert if the add-on is not meant to refuse routinely. The refusal records no click, so the link's own analytics show the drop too |
+| `linkctrl_addon_redirect_kills_total{addon,step}` | Invocations killed for overrunning a bound. `step="call"` is the add-on overrunning `LINKCTRL_ADDON_INLINE_DEADLINE` and is an add-on to go and fix; `step="instantiate"` is this instance failing to *start* the module inside `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, which is your machine and not the add-on — the module's own code never ran |
+| `linkctrl_rate_limited_total{limit="addon_inline"}` | Redirects served with the add-on **skipped**, because every instance slot was busy. A high rate beside a high kill rate is the host protecting itself from a module that hangs |
+| `linkctrl_rate_limited_total{limit="addon_observe"}` | Observations dropped because the out-of-band queue was full |
+
+### The trust boundary
+
+**A module in this directory is code this instance executes.** Who may write to
+the directory is the whole of the boundary; the digest in the manifest protects
+against the file changing after it was published, and against nothing else — a
+manifest and a module replaced together verify perfectly. Own the directory, and
+mount it read-only:
+
+```yaml
+services:
+  app:
+    volumes:
+      - /var/lib/linkctrl/addons:/addons:ro
+```
+
+**`:ro` and runtime install are the two ends of one trade**, and dropping the `ro`
+is a deliberate act rather than a typo. Read-only means the only way code arrives
+in this directory is somebody with filesystem access putting it there; writable
+means the server itself can, on the word of whoever holds `addons.manage`. That
+permission is the instance principal's and reaches no API key, so the set of
+people who can is the set of people who administer the box either way — what
+changes is whether they need a shell. See [installing without a
+restart](#installing-without-a-restart).
+
+What a loaded module is handed is covered in [SECURITY.md](SECURITY.md).
 
 ## Shutdown
 

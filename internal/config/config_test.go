@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // validEnv is a minimal environment that must load cleanly. Tests mutate a
@@ -198,6 +199,9 @@ func TestValidateReportsEveryProblemAtOnce(t *testing.T) {
 }
 
 func TestValidateIndividualRules(t *testing.T) {
+	// The rows that turn add-ons on need a directory that exists, because ADDONS_DIR
+	// is stat'd. Which rows those are is the point of the comment beside them.
+	addonsDir := t.TempDir()
 	tests := []struct {
 		name        string
 		mutate      map[string]string
@@ -237,6 +241,48 @@ func TestValidateIndividualRules(t *testing.T) {
 			"LINKCTRL_DB_MAX_CONNS": "100", "LINKCTRL_DB_REDIRECT_MAX_CONNS": "20",
 		}, "max_connections"},
 		{"redirect pool zero", map[string]string{"LINKCTRL_DB_REDIRECT_MAX_CONNS": "0"}, "DB_REDIRECT_MAX_CONNS"},
+
+		{"addons dir that is not there", map[string]string{
+			"LINKCTRL_ADDONS_DIR": "/nonexistent/addons",
+		}, "ADDONS_DIR"},
+
+		// The three add-on egress bounds. The two durations have to nest or the
+		// outer one is a knob that does nothing — M68.5 shipped a route deadline
+		// equal to the request timeout and it never fired once, and these rows are
+		// what makes that a failing test rather than something a reader has to
+		// notice. The byte cap has no nesting to assert and one thing to refuse:
+		// zero, which an operator writes meaning *no cap* and which silently became
+		// the 256 KiB default until the third review of this milestone found the
+		// only one of the three with nothing said about it.
+		//
+		// The two cross-checks against HTTP_REQUEST_TIMEOUT set ADDONS_DIR as well,
+		// and that is not scaffolding: the rule is guarded on add-ons being enabled,
+		// because with the guard off a deployment running none of this refused to
+		// start over the *default* route deadline the moment its operator had set a
+		// short HTTP_REQUEST_TIMEOUT. The row below this pair holds that.
+		{"route deadline equal to the request timeout", map[string]string{
+			"LINKCTRL_ADDONS_DIR":           addonsDir,
+			"LINKCTRL_ADDON_ROUTE_DEADLINE": "15s",
+		}, "ADDON_ROUTE_DEADLINE"},
+		{"route deadline over the request timeout", map[string]string{
+			"LINKCTRL_ADDONS_DIR":           addonsDir,
+			"LINKCTRL_ADDON_ROUTE_DEADLINE": "60s",
+		}, "HTTP_REQUEST_TIMEOUT"},
+		{"route deadline of zero", map[string]string{
+			"LINKCTRL_ADDON_ROUTE_DEADLINE": "0s",
+		}, "must be positive"},
+		{"fetch timeout over the route deadline", map[string]string{
+			"LINKCTRL_ADDON_FETCH_TIMEOUT": "11s",
+		}, "ADDON_FETCH_TIMEOUT"},
+		{"fetch timeout of zero", map[string]string{
+			"LINKCTRL_ADDON_FETCH_TIMEOUT": "0s",
+		}, "must be positive"},
+		{"fetch cap of zero, which an operator writes meaning no cap", map[string]string{
+			"LINKCTRL_ADDON_FETCH_MAX_BYTES": "0",
+		}, "ADDON_FETCH_MAX_BYTES"},
+		{"negative fetch cap", map[string]string{
+			"LINKCTRL_ADDON_FETCH_MAX_BYTES": "-1",
+		}, "must be positive"},
 
 		{"batch exceeds queue", map[string]string{
 			"LINKCTRL_INGEST_BATCH_SIZE": "100", "LINKCTRL_INGEST_QUEUE_SIZE": "10",
@@ -646,5 +692,245 @@ func TestAuditRetentionDefaultsToKeepingEverything(t *testing.T) {
 	if c.Analytics.RetentionDays == c.Audit.RetentionDays {
 		t.Error("the audit and analytics windows have the same default; they are " +
 			"separate policies and the whole point is that their defaults differ")
+	}
+}
+
+// The claim M68.5's first attempt got wrong, asserted rather than commented.
+//
+// A route invocation runs under the application tree's request context, which
+// httpx.RequestTimeout cancels at HTTP_REQUEST_TIMEOUT. Whichever of the two
+// deadlines is earlier is the one that fires, and the earlier one starts first —
+// so a route deadline that is not strictly shorter is a bound that never binds.
+// The first attempt shipped both at fifteen seconds and the new knob did nothing;
+// what makes that not recur is this test plus the two rules in Validate, because
+// a comment saying "keep these ordered" is what was there before.
+//
+// The three-fetch relationship is asserted here too. It is the sizing argument for
+// both defaults — discovery, token exchange, key set — and it was previously
+// arithmetic in a doc comment against a budget that did not exist.
+func TestTheAddonEgressBoundsNestInsideTheRequestDeadline(t *testing.T) {
+	setEnv(t, validEnv())
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if c.Addons.RouteDeadline >= c.HTTP.RequestTimeout {
+		t.Errorf("ADDON_ROUTE_DEADLINE defaults to %s and HTTP_REQUEST_TIMEOUT to %s; "+
+			"the request context is created first and cancels the same context, so a "+
+			"route deadline at or over it never fires",
+			c.Addons.RouteDeadline, c.HTTP.RequestTimeout)
+	}
+	if c.Addons.FetchTimeout > c.Addons.RouteDeadline {
+		t.Errorf("ADDON_FETCH_TIMEOUT defaults to %s inside a route deadline of %s",
+			c.Addons.FetchTimeout, c.Addons.RouteDeadline)
+	}
+	if got := 3 * c.Addons.FetchTimeout; got > c.Addons.RouteDeadline {
+		t.Errorf("three fetches at the default timeout are %s against a route deadline "+
+			"of %s; the defaults are documented as holding an authorization-code flow's "+
+			"discovery, token exchange and key set", got, c.Addons.RouteDeadline)
+	}
+	// A deployment that has turned the request timeout off leaves the route
+	// deadline as the only bound, so there is nothing above it to nest inside and
+	// Validate must not invent one.
+	env := validEnv()
+	env["LINKCTRL_HTTP_REQUEST_TIMEOUT"] = "0s"
+	env["LINKCTRL_ADDON_ROUTE_DEADLINE"] = "60s"
+	setEnv(t, env)
+	if _, err := Parse(); err != nil {
+		t.Errorf("with HTTP_REQUEST_TIMEOUT disabled a 60s route deadline was refused: %v", err)
+	}
+}
+
+// **The nesting rule may not refuse to start an instance that runs no add-ons.**
+//
+// LINKCTRL_HTTP_REQUEST_TIMEOUT=5s is valid today and nothing has ever refused it.
+// M68.5's rule, written without the guard, then refused that instance at boot over
+// the *default* value of ADDON_ROUTE_DEADLINE — a variable its operator had never
+// set, on a deployment with ADDONS_DIR unset and no add-on anywhere. An upgrade
+// that will not start is the most expensive failure this file has, and it was
+// being spent on a subsystem the deployment does not use.
+//
+// The other half is the rule still doing its job — but not by refusing. Turn
+// add-ons on with the same pair and the defaulted route deadline gives way: it
+// is lowered to nest inside the request timeout, so the bound the operator did
+// choose is honoured and the one they never set stops being a reason to refuse
+// the boot. A route deadline set by hand is still refused, and
+// TestAnExplicitRouteDeadlineIsStillRefused holds that half.
+func TestTheNestingRuleIgnoresAnInstanceThatRunsNoAddons(t *testing.T) {
+	env := validEnv()
+	env["LINKCTRL_HTTP_REQUEST_TIMEOUT"] = "5s"
+	setEnv(t, env)
+	if _, err := Parse(); err != nil {
+		t.Errorf("an instance with ADDONS_DIR unset and a 5s request timeout was "+
+			"refused: %v. It runs no add-ons; the route deadline it is being held to "+
+			"is a default nobody chose", err)
+	}
+
+	env["LINKCTRL_ADDONS_DIR"] = t.TempDir()
+	setEnv(t, env)
+	cfg, err := Parse()
+	if err != nil {
+		t.Fatalf("with add-ons enabled a 5s request timeout was refused: %v. The "+
+			"number it collides with is a default the operator never set", err)
+	}
+	// The knob is not a knob in name only: it still nests, at a value that fires.
+	if cfg.Addons.RouteDeadline != 4*time.Second {
+		t.Errorf("route deadline is %v inside a 5s request timeout; it has to be "+
+			"under it or it never fires", cfg.Addons.RouteDeadline)
+	}
+	if clamped, to := cfg.AddonRouteDeadlineClamped(); !clamped || to != 4*time.Second {
+		t.Errorf("AddonRouteDeadlineClamped() = %v, %v; want true, 4s — startup has "+
+			"to be able to say it, or the operator meets a bound they never chose",
+			clamped, to)
+	}
+}
+
+// Unset is the shipped state and has to stay cheap to express: no host, and no
+// validation of a path nobody gave.
+func TestAddonsAreOffByDefault(t *testing.T) {
+	setEnv(t, validEnv())
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if c.Addons.Enabled() {
+		t.Error("add-ons are enabled with LINKCTRL_ADDONS_DIR unset")
+	}
+	if c.Addons.Dir != "" {
+		t.Errorf("ADDONS_DIR defaulted to %q", c.Addons.Dir)
+	}
+}
+
+// A file where a directory belongs is the same operator mistake with a different
+// spelling, and it has to be refused at parse time rather than met at boot: the
+// operator believes this instance is running modules it has never seen.
+func TestAddonsDirMustBeADirectory(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "addon.wasm")
+	if err := os.WriteFile(file, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	env := validEnv()
+	env["LINKCTRL_ADDONS_DIR"] = file
+	setEnv(t, env)
+
+	_, err := Parse()
+	if err == nil {
+		t.Fatal("a file was accepted as the add-ons directory")
+	}
+	if !strings.Contains(err.Error(), "is not a directory") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// And a real directory loads, so the rule above is refusing the mistake rather
+// than the feature.
+func TestAddonsDirAcceptsADirectory(t *testing.T) {
+	env := validEnv()
+	dir := t.TempDir()
+	env["LINKCTRL_ADDONS_DIR"] = dir
+	setEnv(t, env)
+
+	c, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse with a real add-ons directory: %v", err)
+	}
+	if !c.Addons.Enabled() || c.Addons.Dir != dir {
+		t.Errorf("ADDONS_DIR parsed as %q, enabled=%v", c.Addons.Dir, c.Addons.Enabled())
+	}
+}
+
+// TestAShortRequestTimeoutDoesNotBreakTheBoot is review finding 14.
+//
+// The install-fetch nesting rule was a fatal validation error, so an instance
+// with an add-ons directory and `HTTP_REQUEST_TIMEOUT` at or under ten seconds
+// refused to start — over a bound that only binds installing an add-on from a
+// URL. `10s` is a value this file's own documentation names as valid, so an
+// upgrade broke deployments that had changed nothing, and at exactly `10s` it
+// also tripped the route-deadline check, producing two errors from one setting.
+//
+// The condition is real and is still reported; what changed is that it refuses
+// the operation rather than the process.
+func TestAShortRequestTimeoutDoesNotBreakTheBoot(t *testing.T) {
+	env := validEnv()
+	env["LINKCTRL_ADDONS_DIR"] = t.TempDir()
+	env["LINKCTRL_HTTP_REQUEST_TIMEOUT"] = "10s"
+	setEnv(t, env)
+	cfg, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("an instance with add-ons and a 10s request timeout does not "+
+			"start: %v\n\nThat bound governs URL installs alone, and an instance "+
+			"that never performs one is stopped by it", err)
+	}
+	// And the condition is still detectable, at the surface it belongs to.
+	if InstallFetchNestingProblem(cfg) == "" {
+		t.Error("a 10s request timeout reports no problem with URL installs, so " +
+			"the refusal moved off the boot path and out of existence")
+	}
+	// A configuration that can install says nothing.
+	cfg.HTTP.RequestTimeout = 15 * time.Second
+	if got := InstallFetchNestingProblem(cfg); got != "" {
+		t.Errorf("a 15s request timeout reports %q, and it is the shipped default", got)
+	}
+	// And an instance with no add-ons directory is never asked.
+	cfg.Addons.Dir = ""
+	cfg.HTTP.RequestTimeout = 10 * time.Second
+	if got := InstallFetchNestingProblem(cfg); got != "" {
+		t.Errorf("an instance running no add-ons reports %q", got)
+	}
+}
+
+// TestTheRouteDeadlineDefaultIsTheOneDeclared holds the constant Parse compares
+// against equal to the `envDefault` tag it stands for. They are one fact in two
+// places: if the tag moves and the constant does not, Parse stops recognising a
+// defaulted route deadline and the boot refusal comes back for operators who
+// never set one.
+func TestTheRouteDeadlineDefaultIsTheOneDeclared(t *testing.T) {
+	env := validEnv()
+	env["LINKCTRL_ADDONS_DIR"] = t.TempDir()
+	setEnv(t, env)
+	cfg, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Addons.RouteDeadline != defaultAddonRouteDeadline {
+		t.Fatalf("ADDON_ROUTE_DEADLINE defaults to %v but Parse compares against "+
+			"%v, so a defaulted deadline is read as one an operator chose",
+			cfg.Addons.RouteDeadline, defaultAddonRouteDeadline)
+	}
+}
+
+// TestAnExplicitRouteDeadlineIsStillRefused fences the clamp: it applies to the
+// default alone. When both numbers were chosen, only the operator can say which
+// was meant, so the refusal stands.
+func TestAnExplicitRouteDeadlineIsStillRefused(t *testing.T) {
+	env := validEnv()
+	env["LINKCTRL_ADDONS_DIR"] = t.TempDir()
+	env["LINKCTRL_HTTP_REQUEST_TIMEOUT"] = "10s"
+	env["LINKCTRL_ADDON_ROUTE_DEADLINE"] = "10s"
+	setEnv(t, env)
+	if _, err := Parse(); err == nil {
+		t.Fatal("a route deadline set to the request timeout by hand is accepted, " +
+			"so the clamp swallowed a collision the operator built themselves")
+	}
+
+	// And the clamp reports itself, rather than an operator finding a bound they
+	// did not set at a value they did not choose.
+	env["LINKCTRL_ADDON_ROUTE_DEADLINE"] = ""
+	delete(env, "LINKCTRL_ADDON_ROUTE_DEADLINE")
+	setEnv(t, env)
+	cfg, err := Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	clamped, to := cfg.AddonRouteDeadlineClamped()
+	if !clamped || to != 9*time.Second {
+		t.Fatalf("AddonRouteDeadlineClamped() = %v, %v; want true, 9s", clamped, to)
 	}
 }

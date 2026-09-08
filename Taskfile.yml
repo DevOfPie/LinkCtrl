@@ -18,6 +18,10 @@ vars:
   # Must match the version stamped into internal/store/dbgen. Keep in sync with
   # the Makefile, which is the reference.
   SQLC_VERSION: v1.31.1
+  # The add-on host's WASM test fixtures, built and never committed. Keep in sync
+  # with the Makefile, which is the reference.
+  ADDON_FIXTURE_SRC: internal/addon/testdata/modules
+  ADDON_FIXTURE_DIR: internal/addon/testdata/build
   IMAGE: '{{.IMAGE | default "linkctrl:ci"}}'
   IMAGE_VERSION: '{{.IMAGE_VERSION | default "ci"}}'
   VERSION:
@@ -138,8 +142,49 @@ tasks:
     cmds:
       - rm -rf {{.BIN}} {{.DIST}} cover.out coverage.html
 
+  # Built rather than committed, for the reason the Makefile's own comment at this
+  # target gives at length: a blob in the tree is a build input nobody reviews.
+  # -buildmode=c-shared is load-bearing and not a flag — it makes the entry point
+  # _initialize, so the module is a reactor that stays instantiated.
+  #
+  # A dependency of every target that runs the add-on host's tests or drives the
+  # single-instance gate, rather than something to remember. It is the fast path
+  # and not the contract: internal/addon's fixture() builds what it needs when it
+  # is missing, so a contributor on Windows told to use this file gets a green
+  # `task test` either way (M60).
+  #
+  # Globbed over the source directories rather than naming the modules, for the
+  # reason the Makefile's comment gives at greater length: the set was written out
+  # in three places and a third module would have been built by one of them and by
+  # nothing else.
+  # sources: and generates: are F266's fix on this side. This task rebuilt every
+  # module on every run while the Makefile's pattern rule watched each module's
+  # main.go alone — two builders, two staleness rules, one target name — and the
+  # asymmetry became live when M61 rebuilt the fixtures on top of the generated SDK.
+  # The sets below are the Makefile's prerequisites, expressed in Task's own terms:
+  # every .go file in a module's directory, and every .go file in the SDK.
+  addon-fixtures:
+    desc: Build the WASM test modules the add-on host is tested against
+    env:
+      GOOS: wasip1
+      GOARCH: wasm
+    sources:
+      - '{{.ADDON_FIXTURE_SRC}}/*/*.go'
+      - sdk/*.go
+    generates:
+      - '{{.ADDON_FIXTURE_DIR}}/*.wasm'
+    cmds:
+      - |
+        set -e
+        mkdir -p {{.ADDON_FIXTURE_DIR}}
+        for src in {{.ADDON_FIXTURE_SRC}}/*/main.go; do
+          mod=$(dirname "$src")
+          go build -buildmode=c-shared -o "{{.ADDON_FIXTURE_DIR}}/$(basename "$mod").wasm" "./$mod"
+        done
+
   test:
     desc: Unit tests with the race detector
+    deps: [addon-fixtures]
     cmds:
       - go test -race -covermode=atomic -coverprofile=cover.out ./...
 
@@ -166,6 +211,7 @@ tasks:
     env:
       TEST_DATABASE_URL: "{{.DEV_DATABASE_URL}}"
       LINKCTRL_REDIS_URL: "{{.DEV_REDIS_URL}}"
+      TEST_OIDC_FIXTURE: "required"
 
   cover:
     desc: Open the coverage report
@@ -179,9 +225,19 @@ tasks:
       - golangci-lint run
 
   check-links:
-    desc: Verify every relative link and anchor in tracked markdown
+    desc: Verify tracked markdown — links and anchors resolve, rows match their headers, row-table links land on their row
     cmds:
       - bash scripts/check-links.sh
+
+  # Deliberately not in `check` below. Every other gate there runs offline and
+  # answers a question about this working tree; this one asks GitHub about a push
+  # that already happened, so it belongs where the answer can change a decision —
+  # release-check, and the phase loop's land sequence. Exit 2 is "could not ask"
+  # and is not a red build. See F255.
+  check-ci:
+    desc: Is the branch's latest CI run green? (asks GitHub; needs gh)
+    cmds:
+      - bash scripts/check-ci.sh
 
   shellcheck:
     desc: Lint every shell script
@@ -230,6 +286,11 @@ tasks:
       - go install github.com/sqlc-dev/sqlc/cmd/sqlc@{{.SQLC_VERSION}}
       - sqlc generate
       - git diff --exit-code -- internal/store/dbgen
+      # Not `task: abi-sdk`: that task is up-to-date-aware and would skip on a tree
+      # whose sources have not changed since the last run, which is exactly the
+      # tree this check is suspicious of.
+      - go run ./internal/addon/abi/gen
+      - git diff --exit-code -- sdk docs/addon-abi.md
 
   check-version-stamp:
     desc: Fail if a built binary does not report its version stamp
@@ -237,12 +298,25 @@ tasks:
     cmds:
       - bash scripts/check-version-stamp.sh {{.BIN}}/linkctrl {{.BIN}}/lctl
 
+  # verify-assets and css lead, for the reason the Makefile's `check` target
+  # spells out (F350, M69.5): without them this task measures whatever assets
+  # happen to be on disk, and `app.css` is gitignored and built.
+  # check-links rather than nothing (F259) and check-tidy rather than tidy (F360),
+  # both because this task carries the Makefile's name and has to carry its
+  # meaning: W41 wired the link gate into `check` precisely so it would run
+  # without anybody remembering, and the mirror did not follow, so a contributor
+  # without `make` ran a gate one check short under the same name. `tidy` repairs
+  # and reports success; `check-tidy` reports the difference, which is what CI
+  # takes.
   check:
     desc: Everything CI runs, short of integration tests
     cmds:
-      - task: tidy
+      - task: verify-assets
+      - task: css
+      - task: check-tidy
       - task: lint
       - task: shellcheck
+      - task: check-links
       - task: test
 
   # Deliberately NOT called by `check` above, by any ci- task, or by
@@ -289,6 +363,7 @@ tasks:
 
   ci-test:
     desc: Unit tests with the race detector, uncached — what CI runs
+    deps: [addon-fixtures]
     cmds:
       - go test -race -count=1 ./...
 
@@ -336,21 +411,29 @@ tasks:
       # scheduler's tests in cmd/linkctrl never ran on a runner — neither can
       # live in test/integration, because that package cannot import package
       # main, which is why they were easy to leave out and hard to notice.
-      - go test -tags=integration -race -count=1 ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
+      - TEST_OIDC_FIXTURE=required go test -tags=integration -race -count=1 ./test/integration/... ./cmd/lctl/... ./cmd/linkctrl/...
 
   ci-image-smoke:
     desc: Check a built image reports its version and serves everything on Postgres alone
     cmds:
+      - task: addon-fixtures
+        ignore_error: true
       # The single-instance guarantee first, for the reason the Makefile gives:
       # the version stamp is the cheaper failure and the conformance is the one
       # somebody's milestone will break.
-      - bash scripts/single-instance-check.sh "{{.IMAGE}}"
+      - bash scripts/single-instance-check.sh "{{.IMAGE}}" "{{.ADDON_FIXTURE_DIR}}/minimal.wasm"
       - bash scripts/ci-image-smoke.sh "{{.IMAGE}}" "{{.IMAGE_VERSION}}"
 
+  # The fixture build is attempted and its failure tolerated, mirroring the
+  # Makefile: without a module the script skips its add-on limb and says so, and a
+  # conformance gate that cannot run at all because a WASM toolchain is missing is
+  # the worse of the two outcomes (F262).
   single-instance:
     desc: One container, no Redis, no load balancer — the whole surface
     cmds:
-      - bash scripts/single-instance-check.sh "{{.IMAGE}}"
+      - task: addon-fixtures
+        ignore_error: true
+      - bash scripts/single-instance-check.sh "{{.IMAGE}}" "{{.ADDON_FIXTURE_DIR}}/minimal.wasm"
 
   workflow-proposals:
     desc: Which ci/proposed/ workflow proposals the owner has not applied yet
@@ -362,9 +445,25 @@ tasks:
     cmds:
       - task: sqlc
       - task: openapi
+      - task: abi-sdk
 
   sqlc:
     cmds: [sqlc generate]
+
+  # The add-on ABI's generated faces: the SDK an add-on imports and the function
+  # table in docs/addon-abi.md. Committed like sqlc's dbgen, and held to the same
+  # no-diff property by check-generate — the Makefile's comment at this target
+  # gives the reason at length.
+  abi-sdk:
+    desc: Regenerate the add-on SDK and the ABI's documented function table
+    sources:
+      - internal/addon/abi/*.go
+      - internal/addon/abi/gen/*.go
+    generates:
+      - sdk/abi_gen*.go
+      - docs/addon-abi.md
+    cmds:
+      - go run ./internal/addon/abi/gen
 
   sqlc-vet:
     desc: Prepare every query against a live database

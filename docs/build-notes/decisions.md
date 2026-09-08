@@ -375,6 +375,145 @@ file. Append a row when you append an entry.
 | [The records collapse in the diff view and the definitions of done do not](#2026-08-18--the-records-collapse-in-the-diff-view-and-the-definitions-of-done-do-not) | D210 — `decisions.md`, `deferred-findings.md` and `doc-cost.md` are marked `linguist-generated=true` in `.gitattributes`, so GitHub collapses them behind *Load diff* and a code PR shows code. GitHub-only and display-only: `git diff` is untouched and nothing is hidden. `-diff` was rejected — it makes git treat the file as binary, so the local diff of the records an audit reads would print *Binary files differ*. `phase-details/**` is deliberately not marked, because an edit to a definition of done after its milestone shipped is what an audit most needs to see |
 | [Two released phases leave the scope contract, and the headings stay behind](#2026-08-18--two-released-phases-leave-the-scope-contract-and-the-headings-stay-behind) | Why 216 KB of finished-phase record left `Plan.md` for `phase-details/phase-N.md`; why the seven section headings stayed behind, and how that keeps 178 links resolving without editing this append-only file; why both *Not in Phase N* signposts name the candidate files as well as the archive; why no new parked-scope list was created; what the cut is *not* worth, measured against `doc-cost.md`; the three claims that went stale in the same move; and why `Last updated` is gone |
 | [Phase 4 planned: the spine and the fourteen slots](#2026-08-18--phase-4-planned-the-spine-and-the-fourteen-slots) | D211 — fourteen milestones, M59–M70, one dependency chain rather than areas; capabilities land in rising order of what a defect would cost; the mid-phase review sits **before** sessions and the redirect path, not at the numeric middle; wazero named at planning because `CGO_ENABLED=0` leaves one candidate; the *AI optimization, smart routing, predictive analytics* limbs move to *future* rather than riding along; two slots deliberately unspent |
+| [M59, the two repair shapes chosen at the plan's review](#2026-08-18--m59-the-two-repair-shapes-the-owner-chose-at-the-plans-review) | D212 — `release-check` **derives** `COMPOSE_PROJECT_NAME`, `COMPOSE_ENV_FILES` and the two DSNs itself rather than the documentation dropping the direct form, taking the drift pair knowingly and turning it into a step that fails on a mismatch; the DSN limb was forced by what the skip was hiding — unset, the integration suite guesses a password on the *demo* instance's port. D213 — the release-time gate is **named in workflow.md's Docs row**, so a worker between the fold and the tag meets the rule at the moment it binds them; the conflict is documented rather than removed and a post-fold reopening still re-folds by hand |
+| [M59, the F248 population was 83 and not 17](#2026-08-18--m59-the-f248-population-was-83-and-not-17) | D214 — an amendment on a **fact**: F248's count of 39 was taken over links carrying an explicit path to `deferred-findings.md` and so never looked inside that file, where 63 more were. 83 wrong links across 14 maintained files, 99 corrected once M59's own four rows closed. The assertion is unchanged, which is why it is an amendment and not a prompt; `deferred-findings.md` is not exempt as a source, and the recurring cost — closing a row means correcting every citation of it — is stated |
+| [M60, the Makefile line the phase's own first commit moved](#2026-08-18--m60-the-makefile-line-the-phases-own-first-commit-moved) | D215 — an amendment on a fact: M60's `CGO_ENABLED=0` citation read `Makefile:682` and the line is 692, moved by M59's own `check-ci` target. Logged rather than corrected in silence, because the rule requiring it carves out no arithmetic and a citation moved by one commit is what plan drift looks like before it looks like anything |
+| [M60, the manifest is the first artifact that leaves this repository](#2026-08-18--m60-the-manifest-is-the-first-artifact-that-leaves-this-repository) | D216 — the add-on manifest: JSON, one directory per add-on named for the add-on, `schema_version` checked for **equality** and unknown fields refused because the format crosses a repository boundary before the ABI settles. Six of the owner's answers of 2026-08-18 take their numbers here. A manifest nobody can parse **stops the instance**, deliberately: there is no failure class left to honour and assuming the forgiving one boots an instance with sign-in silently missing. Four validation rules are decisions rather than syntax — a bare-filename module refused rather than cleaned, no default failure class, no default on a secret setting, a lowercase digest. Permission names are checked for shape and not vocabulary, which stays M62's |
+| [M60, the host loads a reactor and grants it nothing](#2026-08-18--m60-the-host-loads-a-reactor-and-grants-it-nothing) | D217 — `-buildmode=c-shared` and `_initialize` rather than `_start`, so a module stays instantiated and package init runs *during* instantiation, which is what makes a failure class mean anything. Nothing is granted: no filesystem, no environment, discarded output, and wazero's **fake** clock and random source — recorded as a hazard for M61 rather than a feature. `WithCloseOnContextDone` set at birth for M66's deadline. The measured cost M66 prices against: 383 ms to compile, 1.9 ms to instantiate, 2.4 MB of guest memory. Fixtures built by `make addon-fixtures` and never committed, with the CI toolchain cost stated. The single-instance gate's third limb, sabotage-verified against the shipped image |
+| [M60, D215 was wrong before the commit carrying it was made](#2026-08-18--m60-d215-was-wrong-before-the-commit-carrying-it-was-made) | D218 — corrects D215: the line is **724**, not 692, moved another 32 lines by M60's own fixture block before the commit carrying the amendment existed. The citation is **withdrawn** rather than corrected a third time — the bullet and `host.go`'s package doc name the `dist` target instead. Generalises: an amendment made at step 1 asserts something about a tree the milestone then edits, so it is re-checked at 3.4 rather than inherited |
+| [M60, a label from a directory entry is a crash risk, not a cardinality one](#2026-08-18--m60-a-label-from-a-directory-entry-is-a-crash-risk-not-a-cardinality-one) | D219 — the refusal path's `addon` label was the raw directory entry, contradicting two comments that said no filename reaches a label. The harm is not the obvious one: client_golang **escapes** a newline in a label value and the exposition survives, but it **panics** on one that is not valid UTF-8 — at the observation, inside `addon.Open`, at boot, with no recover above it. Bounded by `labelFor` to `nameRe` or `InvalidName` (`<invalid>`, which `nameRe` cannot produce). Generalises to M63's schema names and M68's setting names: an operator-derived label on a boot path is a liveness question |
+| [M60, a fixture only make can build is a gate only make can run](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run) | D220 — `internal/addon`'s `fixture()` **builds** the missing module rather than instructing a caller to run `make addon-fixtures`, because two callers cannot be wired from this repository: `release.yml`'s direct `go test ./...` and the CI `image` job. The Makefile target stays as the fast path, not the contract. `single-instance` tolerates a fixture build that fails and the script **skips** its add-on limb rather than hard-failing, which closes F262 and restores the one-argument invocation against a published image that is F257's closing evidence. The fixture set is globbed rather than named, in the two files that still enumerate it |
+| [M60, no entry in this log will cite that line again](#2026-08-18--m60-no-entry-in-this-log-will-cite-that-line-again) | D221 — corrects D218, which corrected D215: the line is **741**, and D218's own citation of the fixture block was wrong too. The rule is replaced, not restated — **a decision entry does not cite a line number in a file the current phase is editing**; it names a target, a recipe, a function, or what to grep for |
+| [M60, the gate asks the image what it is before asserting what it does](#2026-08-18--m60-the-gate-asks-the-image-what-it-is-before-asserting-what-it-does) | D222 — the single-instance gate's add-on limb reads the image's **own version** from `linkctrl_build_info` and skips below the release the host arrives in, because pointed at the published `0.3.0` it failed a conformant artifact. Corrects [D220](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run): the fixture-path skip did **not** restore the one-argument invocation against a published image — that fixture is a `make test` prerequisite, so the skip can never fire where it was needed. The predicate fails closed: a current image missing the series still fails, and `ci`, `dev`, a prerelease or no series at all all assert |
+| [M60, the two answers that unparked the milestone](#2026-08-18--m60-the-two-answers-that-unparked-the-milestone) | D223 — the gate's add-on limb skips only on a **bare** semver triple below the floor, so a `-N-g<sha>` describe build asserts; a false red is visible and a false skip is silent, and both earlier predicates failed by being silent. Corrects D222's premise. D224 — a record cites **content, not a coordinate**, extending D221 past this log to findings rows and milestone files; the 72 already-stale citations are knowingly left, and the gate that would have caught them is priced as a milestone |
+| [M60, one duration over two steps priced neither](#2026-08-18--m60-one-duration-over-two-steps-priced-neither) | D225 — `TestInstantiationCostIsMeasured` timed the whole of `Open` in one `time.Since`, so the compile and instantiate figures [D217](#2026-08-18--m60-the-host-loads-a-reactor-and-grants-it-nothing) hands M66 were not reproducible from the tree. Compilation and instantiation are now timed one at a time, twice for the second instance, with `Open`'s duration kept as a third number. Three of D217's four numbers stand; the host-heap figure is corrected from 3.1 MB to **5.4 MB**. The plain figures and the `-race` ones differ elevenfold, which is stated because `make check` prints the second set. Shown red by a busy loop in the fixture's `init`: 15 seconds of instantiation, which the old single assertion passed |
+| [M60, the shipped milestone file this diff edited](#2026-08-18--m60-the-shipped-milestone-file-this-diff-edited-and-what-d224-conceded-too-widely) | D226 — the amendment to M59's F255 bullet, quoted both ways, recorded late after M60's sixth review asked for the trail; and the correction to D224, whose *nothing already written is fixed* was stated too widely. Narrower rule: a citation this diff **moves**, in a file it **already edits**, is corrected by content and recorded if the file is a shipped milestone's — every other stale citation stays, and findings rows are still not edited |
+| [M61, the set of imports is the ABI](#2026-08-18--m61-the-set-of-imports-is-the-abi-and-one-slice-is-where-it-lives) | D227 — ten host functions in one slice, `abi.Functions`, from which the SDK, the documented table and the wazero host module are all derived; three live, seven **declared and refused** with a status a module branches on, because the add-on repository compiles against the boundary from its first commit. `registerABI` panics when the live flag and the implementation map disagree. One `linkctrl` module per runtime, scoped per call by the *calling* module's name, with state registered **before** instantiation because package init runs during it. One convention: i32 result, (pointer, length) in, guest-owned buffer out, no host allocation in the guest — a guest-exported allocator was rejected as a way to run guest code at a moment the guest did not choose |
+| [M61, an integer in a manifest, and which half of SemVer breaks](#2026-08-18--m61-an-integer-in-a-manifest-and-which-half-of-semver-breaks) | D228 — the manifest's `abi_version` is the ABI's **generation**, the component a break moves: the minor while the ABI is `0.x`, the major from 1.0. The ABI is **0.1.0**, because m61.md refuses a stability promise beyond `0.x`. The window is two minor releases and 90 days, whichever ends later, and `MinimumGeneration` is where a closed one becomes behaviour. What a manifest cannot express — the patch a module was built against — is left as a loud unresolved import rather than paid for with a schema change. *Is this minor or major* is a table, and a case it cannot decide is a defect in the document; a deprecation reaches a consumer through the SDK's generated Go `Deprecated:` marker. `abi_unsupported` is a sixth load outcome |
+| [M61, the stance crosses the boundary as a property, not a review](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review) | D229 — the privacy stance binds at the ABI, because this repository cannot audit a module it did not write: no function hands over a client address, every record field and parameter is checked against `AddressBearing` and a shape pattern, and a **click-derived** record's fields must be columns `click_events` actually has — read out of the migration, not copied into Go. `region` and `city` are refused although the columns exist, and their presence in the schema is asserted first so the exclusion cannot quietly stop meaning anything. `HTTPRequest` declares an allowlist of fields rather than a header map, which is where an address would otherwise have crossed |
+| [M61, the SDK is importable or it is a header file](#2026-08-18--m61-the-sdk-is-importable-or-it-is-a-header-file) | D230 — the SDK is `github.com/DevOfPie/LinkCtrl/sdk`, standard library only, proven by building a consumer module in a temporary directory with `GOPROXY=off` and by walking `go list -deps` for wasip1. Native twins for every function, returning an error rather than faking a host, because a package that only builds for wasip1 breaks `go build ./...` and every linter here. Both fixtures are now real consumers, and a new `probe` module calls the host across every class of answer, reporting through the ABI and panicking on a mismatch |
+| [M61, three builders, one staleness rule](#2026-08-18--m61-three-builders-one-staleness-rule-and-the-proof-that-was-almost-stale) | D231 — F266 closed under the deferred-overlap rule, since a fixture that does not rebuild when the SDK changes makes M61's *first proof the SDK compiles a working consumer* a stale artifact. Fixed in all three: `.SECONDEXPANSION:` with a `$(wildcard)` over the stem — which the row's own fix note said was impossible — plus `sdk/*.go`; the Taskfile's first `sources:`/`generates:`; and `fixture()` comparing mtimes, because two callers never reach a make target (F262). Driven on the way in by a test that failed against bytes built minutes earlier. F259's question is still open, and now has three lists rather than two |
+| [M61, an add-on sees the cookies it named and never the host's session](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session) | D232 — owner-answered: `HTTPRequest` carries a **prefix-filtered cookie set**, not the `Cookie` header. Sessions are server-side and opaque, so the header *is* the credential and a routes-granted add-on could act as any signed-in user; m64.md and m65.md already asserted the ABI had no such reach and stay true. Costs a manifest field and needs a **prefix-collision rule**. Asked as a prompt because the policy this milestone wrote makes removing a record field breaking |
+| [M61, two bullets that said more than any tree could](#2026-08-18--m61-two-bullets-that-said-more-than-any-tree-could) | D233 — two fact amendments: the load check moves on the **generation**, not the major, because SemVer puts a break in the minor while the ABI is `0.x` (D228); and the `click_events` column bound reaches **click-derived** records, while the address bound reaches every field and parameter — a request record must carry a method and a path, so the bullet as written was unmeetable rather than asserted |
+| [M61, a cookie namespace comes from the name](#2026-08-19--m61-a-cookie-namespace-comes-from-the-name-not-from-whoever-installed-first) | D234 — the prefix-collision rule D232 left owed: a declared `cookie_prefixes` entry must begin with the add-on's **own name** and an underscore, and may not reach this product's `linkctrl` namespace. Derived rather than registered, because a first-come registry lets a hostile add-on claim `oidc_` and take sign-in down on a `required` add-on — *cannot claim each other's* has to mean *cannot deny each other's* too. Third name-derived namespace after the metric label and M63's schema. Bounds `set_cookie` as well as the read. `schema_version` stays **1**: the field is added to a schema no release has published |
+| [M61, the host's own answer was the one payload nothing described](#2026-08-19--m61-the-hosts-own-answer-was-the-one-payload-nothing-described) | D235 — `session_mint`'s out parameter said *"as a JSON object"* and no record said what the object held, so an M65 answer carrying a token or a cookie would have left every assertion green: both privacy tests walk `Records` fields and parameter **names**, and the parameter is `session`, which D234 deliberately keeps out of `CredentialBearing`. The gap was directional — nothing walked **Functions → Records**. Fixed both halves: a `MintedSession` record carrying `expires_at` and `second_factor_required`, each traced to a sentence m65.md already owns, and a test refusing any parameter that crosses as JSON while describing nothing. The alternative to naming a record is the new `GuestShaped` flag — the add-on's own SQL arguments, rows and template data, which the host does not author |
+| [M61, the policy could not decide the change every milestone after it will make](#2026-08-19--m61-the-policy-could-not-decide-the-change-every-milestone-after-it-will-make) | D236 — the deprecation policy gave two answers: its table made *changing a function's parameters* breaking while *What is not promised* let a refused function's signature *"move within `0.x`"*, and `0.x` is ambiguous between *no version moves* and *the minor moves* — which **is** the generation. Records had no carve-out at all, so M64, M65 and M66 each finishing one would have cost a generation. Now the table's **first** row: while every released host answers `ErrNotAvailable`, that function's parameters and the records only such functions carry move no version. Conditions are *released* and *every carrying function refused*; the cost is a module built against the older SDK failing to instantiate, announced under `Changed` |
+| [M62, a grant is held, and the mechanism is a parallel](#2026-08-19--m62-a-grant-is-held-and-the-mechanism-is-a-parallel-rather-than-a-reuse) | D237 — the add-on permission vocabulary is **six closed tokens** and the `NonDelegableScopes` analogy is **paralleled, not reused**: putting an add-on grant into that map would falsify the shipped claim that it is the only mechanism deciding what a *key* may hold, so `Permission.Grantable` is the same shape over a different principal. Storage is one grant because m62.md excluded anything finer than the schema; routes and templates are one because a template rendered for nobody is not a capability. D18 matched **neither** limb and no 00800 seed migration is owed — an add-on grant is not in this product's permission map. `abi_version` and `log` are ungated deliberately and named by test. `redirect.inline` is declarable and held by nobody, asserted rather than commented, as is the check being a lookup on a set resolved at load |
+| [M62, a refusal that comes before the availability status](#2026-08-19--m62-a-refusal-that-comes-before-the-availability-status) | D238 — three orderings. **Denied before NotAvailable**, because the refusal counter would otherwise count almost nothing while every capability is still declared-and-refused, and because `StatusNotAvailable` is a *probe* answer a module that declared nothing must not get. An **unknown** token refuses the add-on (`DisallowUnknownFields`' argument) and a **known-but-ungrantable** one does not, or M66 would have nothing to turn on — the cost is that a permission added later is a refusal on an older host. Narrowing `config_get` to require `config.read` **moved no version**, because ABI 0.1.0 has never been released; from the release that publishes it, the same change is breaking |
+| [M62, the manager is M68 and two bullets still said M67](#2026-08-19--m62-the-manager-is-m68-and-two-bullets-still-said-m67) | D239 — a fact amendment: M62 cited M67 for the manager UI twice and the plan's review split that into M67 (install/remove) and M68 (the surface). Nothing built changed, which is what makes it a fact. The same stale number in `single-instance-check.sh` stays, per D226. Also records a disclosed near-miss — `git restore` used where the rule says counter-edit, nothing lost, and the rule names *checkout* while covering *restore* |
+| [M62, two functions cost nothing, and what reaches the log is not trusted](#2026-08-19--m62-two-functions-cost-nothing-and-what-reaches-the-log-is-not-trusted) | D240 — owner-answered: `abi_version` and `log` stay **ungated** and the bullet is amended, because gating `log` makes a misdeclared add-on silent in the case an operator most needs it to speak. The answer carried a requirement the question did not: **what an add-on writes to the log is sanitized at the boundary**, before the logger, asserted by test — an ungated `log` is the widest untrusted input this host has, and a forged record or a laundered secret is not something a permission check would have stopped |
+| [M62, how the log is sanitized, and the carve-out a publisher can check](#2026-08-19--m62-how-the-log-is-sanitized-and-the-carve-out-a-publisher-can-check) | D241 — D240 said sanitize at the boundary and left the shape open. **Escaped, not dropped**, because what a module tried to write is evidence; the set is C0 and C1 by `unicode.IsControl` plus an **enumerated** invisible list, since Unicode's category Cf also carries the Arabic number-formatting characters that belong in ordinary text. Bounded at **4 KiB of what is written**, after escaping, which no slog handler does for you — and not delegated to slog at all, though both handlers `NewLogger` builds do quote, because which handler an operator configured is not something a boundary may rest on. Also: the pre-release permission carve-out now sits in `docs/addon-abi.md` where a publisher reads it, conditioned on the generation being unpublished, and it announces nothing because that condition means there is nobody to announce to |
+| [M62, the escape set is inverted rather than extended](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended) | D242 — [D241](#2026-08-19--m62-how-the-log-is-sanitized-and-the-carve-out-a-publisher-can-check)'s **enumerated** invisible list is replaced by a **default-deny**: what is not a graphic character is escaped, which is Cc, Cf, Cn, Co, Zl and Zp in one predicate. The enumeration was incomplete the day it was written — `U+061C`, `U+180E`, `U+FFF9`–`U+FFFB`, the musical and hieroglyphic format controls — and three documents called its set closed. Extending it was the alternative and was measured rather than assumed: default-deny leaves 22 scripts untouched, so the enumeration bought nothing. D241's Cf objection survives as a **named allowlist** — the Arabic, Syriac and Kaithi number signs — and two corrections run the other way: Unicode's graphic default-ignorables, and `U+2800`. The cost is that Cn means *unassigned to this Go*, so a newer code point is escaped until the host is rebuilt: legibility, failing closed, against a security hole failing open. The set is now asserted from Unicode's categories rather than from a second copy of the list |
+| [M62, the allowlist is Unicode's property, not a transcription of it](#2026-08-19--m62-the-allowlist-is-unicodes-property-not-a-transcription-of-it) | D243 — [D242](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended)'s own defect, one function down: the allowlist it left behind transcribed Unicode's **`Prepended_Concatenation_Mark`** property and carried **eleven** of its **thirteen** members, so `U+0890` and `U+0891` were escaped from the day it was written — the staleness `U+061C` was, in the mechanism that replaced it. It is now the property itself, read from the table Go ships, so a toolchain update carries it forward. The test hid it by hand-copying the same eleven; it now asserts the property, that every member is non-graphic and so a real carve-out, and that the set has not shrunk. Supersedes D242's mechanism, not its argument. Also corrects D242's *"nine"*, which described a list of eleven, and the three documents plus the generated `log` doc that overstated the carve-out. **No ABI version moves** |
+| [M62, the escaping is injective, so a reader can tell what was written](#2026-08-19--m62-the-escaping-is-injective-so-a-reader-can-tell-what-was-written) | D244 — `escapeLogRune` left `\` alone because it is graphic, so a module writing `\` and `n` produced the line a real newline produced, and a message could end with the truncation mark itself. Nothing was forged and no document overclaimed; it is fixed because a log read as **evidence** may not be ambiguous, which is why `strconv.Quote` doubles the backslash. Backslash is now the one graphic character escaped, which makes the mark `…\(truncated)` unforgeable for free — a module's copy arrives doubled. Cost is stated for publishers: a Windows path or a regex arrives with doubled backslashes. Asserted at the boundary, through the ABI at **four** backslashes against a real newline's two, and as a counted exception in the shape test. Same entry corrects `U+2800`'s rationale, which was equally true of the seventeen surviving `Zs` code points and read literally licensed escaping spaces |
+| [M63, an add-on's own schema is additive to nobody, because nobody else reads it](#2026-08-19--m63-an-add-ons-own-schema-is-additive-to-nobody-because-nobody-else-reads-it) | D245 — the inherited *DDL is additive within a minor version* rule collides with an add-on owning tables, and the collision is answered rather than waived: within one ABI **generation** an add-on's *host-visible* contract is additive, and inside its own schema it may do what it likes to its own data. The rule protects **readers**, and the schema boundary is what makes *there is no other reader* true rather than hoped — which is also why cross-add-on data access has no vocabulary at all and is not an omission |
+| [M63, a login role is a boundary and SET ROLE is not, measured both ways](#2026-08-19--m63-a-login-role-is-a-boundary-and-set-role-is-not-measured-both-ways) | D246 — confinement is a Postgres **login role per add-on** with its own pool, not a pinned `search_path` and not `SET ROLE` on the application's connection. Measured against Postgres 17.10: a search path is never consulted for a qualified name, and `SET ROLE` escapes twice in one statement each — a `DO` block running `RESET ROLE`, and `SET SESSION AUTHORIZATION`, which is checked against the *session* user and so succeeds from a superuser connection. Costs a new operator requirement (`CREATEROLE`, password auth for the role) and a pool per add-on; no weaker fallback, because the only one available is not a boundary |
+| [M63, the manifest names every migration file with its own digest](#2026-08-19--m63-the-manifest-names-every-migration-file-with-its-own-digest) | D247 — host-run DDL is bound to the add-on author by extending M60's digest to the migration source, as a **list with a digest per file** rather than one aggregate: it uses the `sha256sum` a publisher already ran, and it closes the set, so a `.sql` file the manifest does not list refuses the add-on. Also why the migration filesystem is built in memory from the verified bytes rather than handed to goose as an `os.DirFS` |
+| [M63, a large object is data outside every schema, and the capability is accounted for rather than closed](#2026-08-19--m63-a-large-object-is-data-outside-every-schema-and-the-capability-is-accounted-for-rather-than-closed) | D248 — a confining role can create a Postgres **large object**, which is in no schema and in no `pg_class` row, so the schema-size gauge could not see one and `DROP SCHEMA … CASCADE` did not remove one. Measured: 40 MB in a single statement, and `DROP ROLE` then fails. Revoking the `lo_` family from `PUBLIC` was preferred and is not available — it needs superuser, is a **silent no-op** for the database user this product documents, and does not survive a `pg_dump`/restore by that user. So it is accounted for: the load post-condition refuses an add-on that owns one, `linkctrl_addon_large_objects{addon}` publishes the count, and the purge grew `DROP OWNED BY` |
+| [M63, an add-on may take one of the product's advisory locks and may not hold one](#2026-08-19--m63-an-add-on-may-take-one-of-the-products-advisory-locks-and-may-not-hold-one) | D249 — `pg_advisory_lock` is `EXECUTE` to `PUBLIC`, the job leader-election keys are constants in a public repository, and a session-level lock survives the rollback both storage paths perform, on every replica at once. Revoking is unavailable for D248's reason and because goose's locker takes one *as the add-on's role*. The host releases every advisory lock **synchronously** before the connection is reused — pgxpool's `AfterRelease` runs in a goroutine and was measured to be too late — leaving a residual of one statement's hold, stated rather than closed |
+| [M63, a replica whose add-on credential another replica rotated mints a new one](#2026-08-19--m63-a-replica-whose-add-on-credential-another-replica-rotated-mints-a-new-one) | D250 — a fresh password per load means the newest replica invalidates every other replica's credential; the failure was 28P01 at the next connection, classified as the guest's bad SQL and logged at debug. Fixed by re-minting once on that code through `BeforeConnect`, logged at warn. Deriving the password from `API_KEY_PEPPER` and storing it in a product table were both rejected as design changes rather than repairs, with their costs named |
+| [M63, the confinement asks a shape rather than a list of places](#2026-08-19--m63-the-confinement-asks-a-shape-rather-than-a-list-of-places) | D251 — a **temp table** was the fourth place an add-on could own something the post-condition did not look for, and the exclusion added for TOAST hid it. The enumeration is replaced by a set difference over the catalogues Postgres's own `DROP` statements consult — `pg_shdepend` for what a role owns, `pg_depend` for what is in a schema, `pg_identify_object` to decide *inside* — asked in **both** directions, because `pg_dump` carries no roles and a restore leaves an add-on's tables owned by the application. Measured: TOAST appears in `pg_shdepend` nowhere, and `pg_shdepend` records nothing for the bootstrap superuser, which is what stops the inside direction from using it. `TEMPORARY` is also revoked from `PUBLIC` as a narrowing, with its three limits and its cost to a co-tenant database measured and stated |
+| [M63, a test that measured the clock rather than the claim](#2026-08-19--m63-a-test-that-measured-the-clock-rather-than-the-claim) | D252 — M61's fixture-staleness test set the artifact's mtime to an hour ago and compared against its inputs, so it asserted its claim only while the repo had been edited within the hour: it passed for its author and failed an hour later with nothing changed. Fixed because `make check` failing blocks every commit; recorded because it edits a shipped milestone's test. The rule: **a test asserting A is older than B derives one from the other, never from the clock** |
+| [M63, the load clears every role-level setting before pinning the search path](#2026-08-19--m63-the-load-clears-every-role-level-setting-before-pinning-the-search-path) | D253 — the confined role may `ALTER ROLE CURRENT_USER SET` any user-settable parameter on itself, and a role-level setting is in neither catalogue the post-condition asks and under no gauge. Measured: `work_mem = '4GB'` accepted, inherited by every connection the add-on's pool opens afterwards, one `READ ONLY` query then peaking at 1.37 GB resident against 31 MB at the default. Fixed by `ALTER ROLE … RESET ALL` **before** the search-path pin — the only narrowing in this family conditional on neither superuser nor database ownership, so the only one that holds on every documented deployment shape. The entry also records the two sentences this milestone overclaimed: the shape closes every *catalogued* way out, and the gauges cover *stored* growth (F279) |
+| [M63, the size gauge kept the denylist the confinement had stopped keeping](#2026-08-19--m63-the-size-gauge-kept-the-denylist-the-confinement-had-stopped-keeping) | D254 — `AddonSchemaBytes` summed `relkind IN ('r', 'm')`, which is exactly the enumeration [D251](#2026-08-19--m63-the-confinement-asks-a-shape-rather-than-a-list-of-places) replaced, left standing forty lines below the comment arguing against it. A **sequence** is `relkind 'S'`, in the add-on's own schema, 8192 bytes from creation and outside `pg_total_relation_size` of the table that owns it: 24,000 of them moved `pg_database_size` by 188 MB with the gauge reading **0**. Fixed as a shape — `relkind NOT IN ('i', 'I', 't')`, three exclusions each because it is already counted inside another relation — rather than by adding `'S'`. Measured before shipping against a schema holding every kind at once: the sum equals `sum(pg_table_size)` over every relation in the schema, a different decomposition of the same bytes, which agrees only if nothing with storage is missing and nothing is doubled. **Never only an adversary's case**: goose's version table, created by the host inside that schema, declares an identity column, so every storage add-on has always held 8192 bytes the gauge reported as nothing. Also **corrects D253's *stored* qualifier by append** — the gauges were incomplete on the stored side of the line it drew, which is not what F279 covers |
+| [M63, the schema boundary stops every other add-on and not the add-on itself](#2026-08-19--m63-the-schema-boundary-stops-every-other-add-on-and-not-the-add-on-itself) | D255 — [D245](#2026-08-19--m63-an-add-ons-own-schema-is-additive-to-nobody-because-nobody-else-reads-it) said *no other add-on can read it, and no amount of qualified SQL gets there*, and three other documents said the same. **Measured false**: two statements from the confined role — `GRANT USAGE ON SCHEMA … TO PUBLIC` and `GRANT SELECT, INSERT ON ALL TABLES … TO PUBLIC` — let another add-on read and write those tables, and the post-condition answered **0 rows**, because a grant is not an object and neither catalogue it asked records one. The *host* offers no vocabulary for sharing; the *capability* is the add-on's, over its own data. Corrected by append rather than edit, in seven sites counted rather than listed, and the additive-ness answer now rests on *no reader the add-on did not create itself*. The post-condition gains a **third direction** — `pg_namespace.nspacl` and `pg_class.relacl`, `aclexplode`d, any grantee but the add-on's own role — built rather than filed because it is two branches in a statement that already runs once per load. Not `pg_shdepend`, which records no `'a'` row for a grant to `PUBLIC`; two ACL columns and not five, because schema `USAGE` is necessary for every path and `NULL` in `proacl` means *the default*, which for a function is `EXECUTE` to `PUBLIC`. A narrowing rather than a boundary: an operator's own grant refuses the add-on too, and the remedy is one `REVOKE`. Also **amends m63.md's additive-ness bullet** and settles the roles dump on `--roles-only` across four prose sites |
+| [M63, the orchestrator confirms an amendment a worker made](#2026-08-19--m63-the-orchestrator-confirms-an-amendment-a-worker-made) | D256 — a worker amended m63.md's additive-ness bullet, which phase-loop.md reserves to the orchestrator, and disclosed it. **Confirmed rather than redone**: the three parts are recorded, the tree fact is a measurement, and it is fact-level — nobody could decide Postgres refuses an owner the right to grant. Third disclosed breach of this shape in the phase; the fix, if it recurs, is the **spawn contract saying what a worker does with a fact-level correction it has already proved**, which is a process change and the owner's |
+| [M63, a grant on an add-on's schema refuses the add-on, operator's or not](#2026-08-19--m63-a-grant-on-an-add-ons-schema-refuses-the-add-on-operators-or-not) | D257 — owner-answered: **refuse**, fail-closed and uniform with the check's two ownership directions, accepting that an operator's own deliberate grant breaks the add-on and is told exactly what to revoke. *Warn* would make this the only direction that does not refuse; *`PUBLIC` only* is defeated by one statement, since an add-on can read a sibling's role name from `pg_roles`. Also records the process fact: **an amendment that changes what the tree does carries a decidable half, and that half is a prompt** |
+| [M64, who is signed in costs a token of its own](#2026-08-20--m64-who-is-signed-in-costs-a-token-of-its-own) | D258 — F270's first half: the vocabulary grows a **seventh** token, `session.context`, rather than folding identity into `routes.own_prefix`, because a page-serving grant should not silently be an identity grant. Two mechanisms: dispatch refuses the call, and the record is zeroed before the request |
+| [M64, an add-on returns data and the host renders; templates from a module stay refused](#2026-08-20--m64-an-add-on-returns-data-and-the-host-renders-templates-from-a-module-stay-refused) | D259 — the host owns every byte of HTML: a module answers text, `text/html` is refused, the host wraps and escapes. `template_render` stays declared-and-refused and its `BackedBy` still says M64, which is F283 for the owner rather than the worker's to redefine |
+| [M64, one module instance per request, measured against the page budget](#2026-08-20--m64-one-module-instance-per-request-measured-against-the-page-budget) | D260 — instance per request at ~2 ms and ~2.4 MB, bounded at sixteen in flight; what it buys is that guest memory does not cross requests. A pool saves 2 ms of a 250 ms budget and keeps state across them |
+| [M64, an add-on's routes are reachable without a session](#2026-08-20--m64-an-add-ons-routes-are-reachable-without-a-session) | D261 — public, because an add-on that authenticates somebody has no session to require; `signed_in: false` rather than a failure. Admits an unauthenticated surface running third-party code, which is what D260's bound answers |
+| [M64, the request body says whether it is encoded, and the response body cannot be](#2026-08-20--m64-the-request-body-says-whether-it-is-encoded-and-the-response-body-cannot-be) | D262 — `body_base64` added inbound so *"base64 when it is not UTF-8"* is decidable; outbound the same sentence is corrected, because the content types a module may name are text |
+| [M64, an add-on's settings come from the environment, by declared name](#2026-08-20--m64-an-add-ons-settings-come-from-the-environment-by-declared-name) | D263 — `LINKCTRL_ADDON_<NAME>_<SETTING>`, looked up per declared setting rather than scanned by prefix (`oidc` versus `oidc_x`), held as `Secret` for every setting, and **not** unset from the environment because a host may be opened twice |
+| [M64, no add-on CSS is served, so nothing ships unscanned](#2026-08-20--m64-no-add-on-css-is-served-so-nothing-ships-unscanned) | D264 — the theme gap answered by absence: the milestone takes only the *host wraps the content* limb of its own bullet, so M24.5's scan covers every stylesheet this product serves. Building the scanner first would be a filter with nothing to filter |
+| [M64, the demo shows no add-on page, and the coverage test cannot say so](#2026-08-20--m64-the-demo-shows-no-add-on-page-and-the-coverage-test-cannot-say-so) | D265 — an add-on is files, not rows: showing one on the demo means a wasm module in the demo image, which is M68's question. `demoCoverage()` is SQL-only, so the record is this entry and a comment where the gate is enforced |
+| [M64, a request too large to cross is the client's error, and the host says so before the module runs](#2026-08-20--m64-a-request-too-large-to-cross-is-the-clients-error-and-the-host-says-so-before-the-module-runs) | D266 — the request record is bounded at the ABI's single-value bound and answers **413**. Replaces a comment claiming an alignment that measurement refuted: host→guest is bounded by guest memory, not by 64 KiB, so a module could be handed a record it could not answer about and the visitor got a 502 for a body they chose the size of |
+| [M64, two add-on names in a prefix relation are both refused, and three sentences said they could not be](#2026-08-20--m64-two-add-on-names-in-a-prefix-relation-are-both-refused-and-three-sentences-said-they-could-not-be) | D267 — `nameRe` admits `_`, so `oidc` may declare the cookie prefix `oidc_x` and read every cookie of add-on `oidc_x`; the same relation makes `LINKCTRL_ADDON_OIDC_X_KEY` two settings. **Both** names are refused at load — no winner, since picking one is D234's first-come rule with spelling deciding — which closes the cookie case and the settings case together, because both namespaces are `name + "_" + anything`. Claims read from the manifest, not from directory entries; eighth load outcome, `name_collision` |
+| [A code path only CI runs was tested nowhere](#2026-08-20--a-code-path-only-ci-runs-was-tested-nowhere-and-the-gate-that-caught-it-was-ten-days-old) | No milestone — a task-class fix after `make check-ci` went red. `ci-integration` never took `addon-fixtures` (third instance of the shape F259 and F271 record), and the on-demand fixture builder joined `../..` onto an already-stripped path, writing **two levels above the repository**. Every local gate was green because every local gate made the builder unreachable: **a fallback that only fires when the fast path is absent is only tested where the fast path is absent.** `make check-ci`'s first real failure, one commit after it landed |
+| [M64.9: the mid-phase adversarial review — what it checked, what it found, and what it refuted](#2026-08-20--m649-the-mid-phase-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted) | Six readers in fresh contexts, 37 raw findings, every one put to something that tried to kill it. The four that survived nothing and the two the attempt made worse; two readers reaching the identical-nonce defect by different routes without seeing each other; the cross-repo seam recorded as *not yet checkable* rather than passed; the browser check on a rebuilt image. D268: the contract grew 3123 bytes and is defended, and the headline drop of 65 KB is a charging artefact rather than a trimming |
+| [M64.9's triage: five milestones reopened, and the sanitizer fix that is a decision](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision) | D269: M59, M60, M62, M63 and M64 each carry a finding that falsifies their own shipped claim, so all five reopen; the three declined options and what each would have cost. D270, owner-answered: the log sanitizer computes Default_Ignorable properly and exempts the legitimate emoji case by what precedes the selector, rather than escaping all 260 and making a shipped test's assertion false |
+| [M59, the row-membership check is not a pipeline, and the failure had to be seen first](#2026-08-20--m59-the-row-membership-check-is-not-a-pipeline-and-the-failure-had-to-be-seen-first) | No new D number — the repair D269 scheduled. `cmd \| grep -q` under `pipefail` is 141 when the match comes early, so the gate reported present rows missing and exited 1 on a clean tree; the fix is the file's own idiom, and the evidence is a red run made green under the load that produced it |
+| [M59, the ninth site of F304 is M59's and the other eight are not](#2026-08-20--m59-the-ninth-site-of-f304-is-m59s-and-the-other-eight-are-not) | No new D number — a scope line drawn by M59's own claim. `release-check`'s integration-test guard ran F291's shape, so a false 141 would have printed *skip Postgres is not running* and cut a release with the tests unrun: the third cause of the lie F253 says stopped, and therefore in spec. The eight remaining sites are the same shape with no shipped claim on them, and stay deferred |
+| [M60, a manifest means what it reads as](#2026-08-20--m60-a-manifest-means-what-it-reads-as) | D271 — the repair D269 scheduled for F286. Keys are matched **exactly** and must appear once, at every level of the document, because `encoding/json` keeps the last repeat and binds a case-variant tag anyway: a manifest could say `"permissions": []` to a reviewer and grant four permissions to the host. Exactness rather than only duplicate-refusal, since nothing hashes `addon.json` and a second accepted spelling is a second way to write the format another repository compiles against. The key set is read from the struct tags, so a field added later is covered without anybody remembering |
+| [M60, one add-on's load is bounded, and the budget is its own](#2026-08-20--m60-one-add-ons-load-is-bounded-and-the-budget-is-its-own) | D272 — the repair D269 scheduled for F287. A **per-add-on** 30 s deadline on the context handed to the load, not one for the directory: a shared budget once spent is spent for everything behind the slow module, which converts a `degrade` hang into a `required` refusal to boot — the very bullet being repaired. 30 s is the number the milestone's own measurement test already called the boundary, and the test now reads the constant. Ninth outcome, `load_timeout`. The log flood the same gap produced is bounded but not fixed, and is deferred rather than folded in |
+| [M60, what the load budget bounds is the add-on's own code](#2026-08-20--m60-what-the-load-budget-bounds-is-the-add-ons-own-code) | D273 — the correction to D272, which laid the 30 s budget over the whole load and thereby capped the **five-minute** migration-lock wait M63 chose so a replica arriving mid-migration waits rather than crash-loops. The budget is now given to the two steps that run the add-on's own code — compiling the module, and instantiating it — and to nothing else, so M63's wait stays reachable and F287's hang stays caught. What it does not bound is named rather than implied: an add-on's migration statements, which is F306 |
+| [M60, the compile step was bounded by nothing](#2026-08-20--m60-the-compile-step-was-bounded-by-nothing) | D274 — the correction to D273, which gave `CompileModule` the budget through `runGuest` and did not get it. wazero checks the context while compiling only on its **multi-worker** path; the single-worker branch it takes by default has no check in it, so a compile past the budget returned a nil error and the load finished late while four documents called it bounded. `compileWorkers` is now on the context the compile runs under, and the bound's granularity — between functions of the code section — is stated rather than rounded up |
+| [M60, one defect gets one row](#2026-08-20--m60-one-defect-gets-one-row) | D275 — F267 and F287 were the same defect filed twice and only F287 was closed, leaving an open row asserting that no milestone owns a load-time deadline; F306 was filed at this reopening against a defect F274 already carried. F267 moves to *Closed* against M60, F306 merges into F274, and F274 is rewritten off the premise it was resting on |
+| [M64.9, M62 is parked and M63 and M64 go ahead of it](#2026-08-20--m649-m62-is-parked-and-m63-and-m64-go-ahead-of-it) | D278, owner-answered: why M62 stays reopened while two milestones that name it in their dependency column land, where attempt 2's work is kept and what restoring it will cost, and why D276 and D277 are a deliberate gap |
+| [M63, the reset the load ran cleared one scope of two](#2026-08-20--m63-the-reset-the-load-ran-cleared-one-scope-of-two) | D279 — the correction to D253, whose heading says the load *clears every role-level setting* and whose fix was one statement. `ALTER ROLE … RESET ALL` clears `pg_roles.rolconfig` and not the `pg_db_role_setting` rows an add-on writes with `IN DATABASE`, which survived every load for a phase. Scoping a second reset to `current_database()` is not the repair either — `IN DATABASE` names a database rather than reaching one, accepted against `template0` — so the databases are read from the catalogue, the load's post-condition reports a row that survived, and the boot-time sweep it also built over roles no add-on claims — **which D282 then removed**, so read that entry before acting on this one |
+| [M63, a prefix is not a proof of ownership](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership) | D280 — the correction to D279's last two paragraphs, which argued that a role named `addon_*` that no module claims can only be this product's. A reviewer created `addon_reporting` by hand and the sweep took its settings, so the argument was false and the code was writing outside what this product owns. The sweep now asks the catalogue for the two facts only this product's installer writes; a failure on one role no longer stops the rest; it runs before the load loop and off the directory rather than off what loaded; a database dropped mid-reset no longer fails a load; and docs/deployment.md gains the cluster-wide blast radius it did not state |
+| [M63, a prefix is not a proof of ownership: the amendment](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership-the-amendment) | D281, owner-answered: the sweep's identification clause quoted as it stood and as amended, the hand-made role a reviewer had it wipe, the two catalogue facts an add-on can neither manufacture nor revoke, and the two answers declined — not sweeping at all, and sweeping everything and saying so |
+| [M63, detect and refuse; the sweep is removed](#2026-08-21--m63-detect-and-refuse-the-sweep-is-removed) | D282, owner-answered, reversing D281: `ClearOrphanedAddonRoleSettings` and its boot call are removed, because the `pg_auth_members` fact D281 rested on is written automatically for a `NOSUPERUSER CREATEROLE` creator — measured — so it proves nothing on the shipped privilege. The post-condition's `pg_db_role_setting` branch already refuses an add-on that parked anything, which needs no proof of ownership; the residue an uninstalled add-on leaves is inert and is stated in four documents rather than swept |
+| [M62, strip the variation selectors; there is no base set](#2026-08-21--m62-strip-the-variation-selectors-there-is-no-base-set) | D283, owner-answered, superseding D270's remedy: every variation selector is deleted from an add-on's log message rather than escaped, and there is no exemption for the emoji case. D270's carve-out and the two predicates written under it, D276 and D277, are withdrawn — and never landed, being on the unmerged branch `wip/m62-sanitizer`. Why the threat is legibility rather than confidentiality, why there is no base set that two attempts could have found, what the ~354 monochrome symbols cost, and the proof that nothing rested on the injectivity stripping gives up |
+| [The foundation cannot reach outward, and one constraint nobody chose](#2026-08-25--the-foundation-cannot-reach-outward-and-one-constraint-nobody-chose) | D364: an add-on declares that it needs egress and the operator decides where — why the operator rather than the manifest, and what it costs. D365: *install is an upload, never a fetch* was nobody's decision, so URL install is new function rather than a reopening, and it lands behind the egress milestone. Plus what the two cost the phase's count |
+| [The conversation Plan.md promised, and what it decided](#2026-08-26--the-conversation-planmd-promised-and-what-it-decided) | D366: Phase 4 proceeds at seventeen with one slot left — what was actually weighed (not the count, but that M69 produced insertions before starting), and the two alternatives declined |
+| [M68.5, how an add-on reaches outward: the four shapes the answer took](#2026-08-26--m685-how-an-add-on-reaches-outward-the-four-shapes-the-answer-took) | D367: origins come from a manifest-declared setting the operator fills in, marked by a flag rather than a fifth setting type; the outcome is a closed vocabulary in the record rather than one of the five ABI statuses; the coherence rule is one-directional; and the route deadline is built for every route handler rather than only for the ones that fetch. Plus the measured defaults, the exemption the authentication egress scan gained, and the one thing this milestone deliberately does not carry |
+| [M67 reopened: the leak tripwire measures warm-up](#2026-08-26--m67-reopened-the-leak-tripwire-measures-warm-up) | D368: there is no leak — growth against cycle count, and why a falling per-cycle cost proves warm-up rather than a leak; what the test's window gets wrong; why reopening rather than a loose commit or a wider tolerance. D369: the workload made the defect invisible — wazero dedups identical modules, so the sabotage the tripwire was built for could never have failed, and each cycle now installs distinct bytes |
+| [M68.5, the bound that never fired](#2026-08-26--m685-the-bound-that-never-fired) | D370: the route deadline is a bound *inside* HTTP_REQUEST_TIMEOUT rather than the first bound a route handler ever had — the tree fact that falsifies D367's last paragraph, why the bound is kept at ten seconds rather than removed, the fetch timeout resized to three because the budget it was a third of did not exist, and both nestings moved out of comments into `Config.Validate`. Also the four documents whose count or claim the first attempt left stale, and the two log sites that escaped what the neutralizing handler escapes. D371: the milestone's own *no deadline to spend* clause amended — a fact the plan asserted, the build inherited, and a measurement disproved |
+| [M68.5, what a refusal list claims and what a stored value authorizes](#2026-08-26--m685-what-a-refusal-list-claims-and-what-a-stored-value-authorizes) | D372: an operator's stored value that a *new* manifest marks as naming an origin — why the claim was narrowed rather than the value invalidated, what an `origin` column on `addon_settings` would have bought, and the environment half that no column can reach. D373: the refusal list stops being the mechanism — `2001::/23` refused as a delegated block so the next carve-out is refused before IANA writes it, why the list got shorter while getting wider, and what the block still does not cover. Also `address_refused` leaving the duration histogram, and the third egress bound gaining the validation its two neighbours had |
+| [M68.5, one rule and two refusals, because a document said one](#2026-08-26--m685-one-rule-and-two-refusals-because-a-document-said-one) | D374: an inline redirect invocation is refused `network_fetch` by M66's dispatch gate and gets `ErrDenied`, while the observing class reaches the function and gets the `class_refused` outcome and its counter — one rule, two refusals, and seven places said one. Why `network_fetch` was not put on `abi.InlineSafe` to make the word uniform, what that would have falsified, and the test that could not have caught it because it sits below the gate. Also `TestARedirectIsCheckedForItsAddressToo`, which refused the *first* hop and so asserted nothing about redirects at all |
+| [M68.5, the address policy is inverted](#2026-08-26--m685-the-address-policy-is-inverted) | D375: an address is refused unless it is public — the denylist was found short in three of four reviews, why `fec0::/10` made the shape clear, what inverting buys (a range nobody thought of becomes refused rather than reachable) and what it costs |
+| [M68.5, what "globally routable" is, and a rule that refused an instance running no add-ons](#2026-08-26--m685-what-globally-routable-is-and-a-rule-that-refused-an-instance-running-no-add-ons) | D376: the shape D375's inversion took — `2000::/3` and the nine prefixes covering 1.0.0.0 through 223.255.255.255, why the IPv4 half is honestly weaker than the IPv6 half and what that buys anyway, and `address_rule=` as the greppable half of the cost D375 accepted. D377: the route-deadline nesting rule is guarded on `ADDONS_DIR` being set, reversing the comment that deliberately put it outside the guard — it refused to start an instance that runs no add-ons, over a default nobody chose. Also the two hand-copied enumerations of the outcome vocabulary that nothing checked |
+| [M68.5, an object the API said could not exist, and what a refusal costs to log](#2026-08-26--m685-an-object-the-api-said-could-not-exist-and-what-a-refusal-costs-to-log) | D378: `performance` is published when there is a record of **either** kind — `omitzero` and `Observed()` coincided only while the struct held redirect fields alone, and M69's own add-on is the shape that broke it; why the object is right and the sentence was wrong, and the `IsZero()` that makes it one predicate instead of two that agreed by accident. D379: a guest-drivable refusal warns only when the log is the only channel — three sites drop to `Debug`, and the rule explains the four Warns beside them rather than excusing them. D380: the response headers are bounded at 64 KiB and it is not a knob, why the outcome is `connect_failed` rather than `too_large` |
+| [M68.6, a module arrives from a URL, and what an operator's digest is worth](#2026-08-26--m686-a-module-arrives-from-a-url-and-what-an-operators-digest-is-worth) | D381: the URL names an **uncompressed tar bundle** rather than a bare `.wasm` — the shape the milestone's own bullets forced, why a compressed container was refused, and what it costs a publisher. **Taken by the worker rather than put to the owner**, with the stall that would otherwise have followed named as the reason. D382: the fetch became one mechanism with two callers instead of a second client, which is what let the authentication egress scan keep asserting one door. D383: F337 closed here — Azure's WireServer carved out by name, because *the operator named it* is a weaker bound at this door than at M68.5's |
+| [M68.6, three containers and one member rule](#2026-08-26--m686-three-containers-and-one-member-rule) | D384: tar, tar.gz and zip all accepted, superseding the worker's tar-only choice — the member rule (two bare-named plain files, depth zero) applied identically to all three is what makes decompression affordable, plus detection by content, a ratio bound, and zip's own refusals |
+| [M68.6, the numbers under D384, and a bound the standard library already held](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held) | D385: what D384 delegated, decided and written down — the inflated cap as its own constant at the same value as the fetch cap, a ratio of fifty with a one-mebibyte floor and the measurements at both ends, and `bundle_expands` as a fourteenth entry in a closed vocabulary rather than a fourteenth reason to say `bundle_invalid`. Also the fact that made one test expect a different code than it was written to expect: `archive/zip` refuses a member that outruns its own declared size |
+| [M68.6, a ratio that is a bound rather than a verdict](#2026-08-26--m686-a-ratio-that-is-a-bound-rather-than-a-verdict) | D386: [D385](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held)'s two figures become one limit the gzip reader **stops at**, because a ratio checked after `io.ReadAll` had already spent the 32 MiB it existed to save — the argument was right and the code did not meet it. Also: the exact form of the ratio changes from truncating division to a multiplication, the zip's declared sum is checked by subtraction so a crafted `uint64` cannot wrap it, and the two bounds are told apart by a test rather than by their sharing a code
+| [M68.6, two vocabularies held from the end that was open](#2026-08-27--m686-two-vocabularies-held-from-the-end-that-was-open) | D387: the ratio and the install's refusal codes were each argued in one direction and asserted in the other. A ratio bomb small enough to build cheaply is refused by the floor, so `maxBundleRatio` could be lowered to almost anything and stay green — the test that pins it is built inside the window where it binds and writes fifty out as a literal. And `URLInstallCodes` was held against the page's sentences and against nothing on the wire, so a word added to `fetchFailure` would have reached an operator as the generic refusal. D388: the demo bullet named a `demoFeature` row for a claim a SQL count cannot make — amended as a fact, and the shape the demo rule keeps producing |
+| [M69.5 added: the acceptance test's last inch](#2026-08-27--m695-added-the-acceptance-tests-last-inch) | D389: an add-on that can mint a session gets a way for somebody to start it — why it is worth the phase's last slot, the two declined alternatives, and why D364's manifest-declares-a-need rule is what bounds the design. D390: the manifest gains a label **and** a relative path the host joins and bounds, and `schema_version` stays 1 on D234's ground with D232's counter-argument named |
+
+| [M62, the seventh term: a derivation is not the terms that change an answer](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer) | D284 — the correction to D283's *the finding is unchanged* paragraph, which is corrected in place because both entries are new in one commit, and to `defaultIgnorable`, both of which wrote six of `Default_Ignorable_Code_Point`'s seven terms and so claimed 4190 members where the property has 4174. Behaviour was never wrong; the claim was, in eight places, and the claim is what this milestone ships. The seventh term is the Egyptian hieroglyph format characters; every count the code and six documents state is now pinned as an **equality** rather than a floor, because a floor is what let 4190 sit unnoticed inside an enforcing test. Also here: the block-element bar broke the **first** rejected attempt and not the second, and 260 is the *graphic* difference between the residue property and the derived one, where the difference itself is 398 |
+| [M62, invisible is not a property, so the claim narrows and the residue is stated](#2026-08-21--m62-invisible-is-not-a-property-so-the-claim-narrows-and-the-residue-is-stated) | D285, owner-answered, ending F285's fourth round: the boundary claims the property it enforces — `Default_Ignorable_Code_Point` — and no longer implies it catches everything that renders as nothing, which nothing publishes and no denylist can complete. Carries the amendment to m62.md's sanitization bullet, the eight conceded combining marks and why they are not added to a list, the write-only property that bounds them and the test that drives every ABI function to assert it, the 268 test's shape defect, and the manifest path where the sanitizer was not applied at all |
+| [M62, the boundary is a handler, because a list of log sites is a claim about code nobody has written](#2026-08-21--m62-the-boundary-is-a-handler-because-a-list-of-log-sites-is-a-claim-about-code-nobody-has-written) | D286 — two more log sites were found off the enumerated three, one of them on `store.MigrateAddon`'s **success** path in another package, so the rule *neutralize where you log* became a `slog.Handler` every logger in the subsystem is wrapped in and a single neutralizing exit on `Route`: there is no site to miss and no list to get wrong. Also here: the escaping and the log line's 4 KiB bound split apart, so an operator's aggregated manifest error is neither cut nor run-on; the read-end test's behaviour limb driven with its dependencies satisfied and counting **writes** rather than declarations; and *no preopened file, discarded streams* asserted from inside a guest rather than left resting on wazero's defaults |
+| [M64, an add-on's cookies go in a jar, because a count it can repeat is not a bound](#2026-08-21--m64-an-add-ons-cookies-go-in-a-jar-because-a-count-it-can-repeat-is-not-a-bound) | D287 — F289's fix, and why every threshold shape was wrong: a browser cookie is persistent and the add-on also decides how many responses there are, so the host stopped writing an add-on's cookies at all and carries them inside one cookie of its own, per lifetime class. `Route` empties the module's list as it packs, so the writer has no path to it — asserted by handing the real handler 1200 cookies and getting no header at all. Also here: the 3 KiB jar named as the one threshold, the two-jar partition and why a session cookie cannot share a jar with a year-long one, and what it costs a publisher |
+| [M64, guest memory gets a bound, and the number quoted as one was a measurement](#2026-08-21--m64-guest-memory-gets-a-bound-and-the-number-quoted-as-one-was-a-measurement) | D288 — F290's fix: `WithMemoryLimitPages(128)` on the runtime, 8 MiB an instance, a 128 MiB ceiling with `maxConcurrentRoutes`, and a test that reads the three documents stating that number. Why the 2.4 MB figure was accurate and still false as a bound, why eight rather than sixteen — measured: 4 MiB allocates, 5 MiB traps — and the resident-size measurement that made `docs/deployment.md` say 2 GB under load rather than pretend the guest ceiling was the whole arithmetic |
+| [M64, a sentence is only as true as what checks it, and one bound was not total](#2026-08-21--m64-a-sentence-is-only-as-true-as-what-checks-it-and-one-bound-was-not-total) | D289 — the reopening's second and third passes, and four of the nine findings across them are one defect: a claim resting on nothing. The doc-tie test pinned only the *product* of two constants, so a compensating pair moved neither number an operator reads; *a module declaring more memory is refused at load* shipped in four documents and turned out **false for a declared maximum**, which wazero silently replaces with its own limit rather than refusing. Also here: `max_age` overflowing int64 nanoseconds into an expiry before `now`, refused at the module's own call because the ABI promises `ErrInvalid` and forbids a clamp; and a jar planted at a broader path that shadowed the host's own for good. **Corrected in place before it landed**, three findings later: the doc tie's own *every file* claim was still one file short — `Plan.md`, written by this same diff — so a sweep now checks it rather than a sweeper; the cookie bound's margin is 266x and not four orders of magnitude; and `jarMaxAge` read the jar from before eviction, writing a lifetime for a value the browser was not being handed |
+| [M65, the callback arrives as a redirect, and the guest gets a real random source](#2026-08-21--m65-the-callback-arrives-as-a-redirect-and-the-guest-gets-a-real-random-source) | D291, owner-answered: an add-on's callback is a GET redirect and `form_post` is unsupported, with the two exemptions declined and the cost to publish; D292, owner-answered: the ABI grows a real random source and clock inside M65 rather than as a planned insertion, and what skipping planning.md §7's review on a published contract costs |
+| [M65, what D292 costs a publisher, and four host rules nobody asked for by name](#2026-08-21--m65-what-d292-costs-a-publisher-and-four-host-rules-nobody-asked-for-by-name) | D293–D299, taken while building. The repair for the fake random source and clock goes **underneath** `crypto/rand` and `time.Now` rather than through the new ABI functions — measured, because a fix at one of the two module-config sites leaves the other broken and nothing said so — and the enumeration of sites is closed by a sweep rather than a list. Also: why the ABI moves to 0.1.1 and the generation does not, and what each of the three publisher populations sees; `identity_link` as a fourth function under the same grant, with the preconditions table showing why neither half can do the other's job, and the CSRF defence that is the add-on's rather than the host's; a mint refused on a request that already carries a session, before the lookup, and what that costs; the provenance record carrying no key the erasure sweep does not read, and why that is the only reading of *follows the conventions the sweep covers*; two reserved variable names refused rather than resolved, with `failure_class` fatal and `mfa_satisfied` deliberately not symmetric with it; and the management surface deliberately not built |
+| [M65, two amendments at step 3.4](#2026-08-21--m65-two-amendments-at-step-34) | D300: the provenance bullet named a `session.minted_by` key that does not exist, and the sabotage bullet named a *disabled add-on* this product has no mechanism to disable — both quoted as they stood and as amended, with the tree fact for each |
+| [M65, the rejection closed: a mint the guest was told did not happen, and four counts nothing counted](#2026-08-21--m65-the-rejection-closed-a-mint-the-guest-was-told-did-not-happen-and-four-counts-nothing-counted) | D301–D303, taken while closing M65's rejection. **D301** — `session_mint` checks the out buffer *before* it mints, against the record's maximum, so the convention's *nothing was written* also means nothing happened and the one-mint guard needs no carve-out. **D302** — the provenance record follows the **session**, so an add-on's assertion against a TOTP account carries the add-on through the prompt in two new columns (`04600`) and `CompleteSecondFactor` writes the record. **D303** — the four drifted counts are fixed by two tests that count, not by four edits: the cascade set and the audit vocabulary each get a tie, and the sentences stating them go red when the number moves. |
+| [M65, amending M62's ungated count rather than reopening it](#2026-08-21--m65-amending-m62s-ungated-count-rather-than-reopening-it) | D304: M65's D292 made a shipped M62 guarantee's count false and its guard was edited deliberately; why that is the mechanism working rather than a reopening, why the missing amendment mattered more than the number, and a weakness in the guard which this entry first described wrongly and corrects in place, the real one being filed as F317 |
+| [M65, every add-on route is rate limited, and the counting tests are repaired rather than narrowed](#2026-08-22--m65-every-add-on-route-is-rate-limited-and-the-counting-tests-are-repaired-rather-than-narrowed) | D305, owner-answered, overruling a shape already built: the limiter covers the whole prefix rather than only mint-capable add-ons, because protection keyed on a grant is protection a future grant can move out of reach — with the cost to an add-on carrying no credential stated. D306: the counting tests are repaired rather than narrowed or filed, because a parse that fails silently is the defect the tests exist to close |
+| [M65, what D305 and D306 came to in the tree](#2026-08-22--m65-what-d305-and-d306-came-to-in-the-tree) | D307: D305's rule is unconditional, so the middleware that asked which add-on a request was for became a lookup that always answers yes — deleted, along with the three methods that existed only to answer it, rather than kept as a conditional nothing can fail. D308: `docs/SECURITY.md`'s deletion count and Plan.md's three ABI counts join ties that already exist rather than becoming a fourth and fifth hand-maintained edit, with the argument for why Plan.md is **not** covered by the append-only exclusion that keeps `build-notes` out of every sweep |
+| [M65, what a limiter may charge, and a count claimed complete for the third time](#2026-08-22--m65-what-a-limiter-may-charge-and-a-count-claimed-complete-for-the-third-time) | D309: D305 charges every add-on route, and a path reaching no add-on is not one — refused on shape before the limiter, the 404-probe limiter's own rule, because charging misses made an ordinary scanner a denial of sign-in. D310: the two counting ties this milestone built are made *checkable* by a sweep rather than asserted complete a third time, and `Plan.md` joins both sweeps, which reverses one line of D308 |
+| [M65, a sweep that could not fail in the direction that mattered](#2026-08-22--m65-a-sweep-that-could-not-fail-in-the-direction-that-mattered) | D312: the audit sweep walks the tree behind a named skip list instead of a glob behind a named list — nine files were excluded by nobody's decision and a count appended to one of them passed green — and `CHANGELOG.md` joins it, reversing D308's line about it for five sentences nothing had read. With it, five repairs with one answer each: D302's cookie guarantee moved out of a generated block into the source all three faces are generated from; the function sweep's blindness to a **stale** count, which is D311's table entry for it; the word-gap both sweeps had, worth seven sentences already in this tree, with the regexp widening measured and declined; the cascade scanner collapsing a two-key table to whichever key came first; and why `README.md:111` is left alone under D104 |
+| [The counting problem gets a milestone, after six mechanisms and four phases](#2026-08-22--the-counting-problem-gets-a-milestone-after-six-mechanisms-and-four-phases) | D311, owner-answered: the six mechanisms tabled with what each is blind to, why the failure mode rather than the count tipped it, the two declined options, and the rule that M65 fixes its own instance while the general problem is planned separately |
+| [M65, README is not anchored to a count until the tag](#2026-08-22--m65-readme-is-not-anchored-to-a-count-until-the-tag) | D313, owner-answered, correcting the orchestrator: D104 was applied to one README line and overridden on another in the same diff; README leaves the anchor set and M70 folds the count at the tag, with the deliberate blind spot named and the obligation written into the phase-close milestone rather than left to memory |
+| [M65, the two sweeps become one shape, and a gate stops reading working files](#2026-08-22--m65-the-two-sweeps-become-one-shape-and-a-gate-stops-reading-working-files) | D314: the function sweep's value gate is gone and its reader is the audit sweep's; two live counts in `[Unreleased]` become anchors rather than exemptions; both sweeps read only tracked files; the near-vacuous reach guard becomes a per-anchor one; the cascade scanner stops recommending a repair it cannot see |
+| [M65, amending M60's failure-class bullet, and the fold that owes more than a number](#2026-08-22--m65-amending-m60s-failure-class-bullet-and-the-fold-that-owes-more-than-a-number) | D315: M60's `degrade` limb no longer reaches an authentication add-on, amended rather than prompted because the owner decided the assertion at M65's planning — and the pattern behind the third such case this run. D316: the README fold owes the *cannot drift without a failing build* clause as well as the number, and why it is not fixed by editing README |
+| [M66, an inline add-on may rewrite the query and nothing else](#2026-08-22--m66-an-inline-add-on-may-rewrite-the-query-and-nothing-else) | D317, owner-answered at step 1: the `redirect.inline` class gets veto plus a rewrite bounded to the query string, and the rewrite is a second declared grant rather than a power `redirect.inline` implies. Why the host-and-path bound keeps the tier system's single validation door intact, why free rewrite was declined on the hot path, and the tracking-parameter case that moved the bound off *nothing* |
+| [M66, what the extension point costs and where it sits](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits) | D318–D323, taken while building: the deadline's measured default, why an inline invocation gets a fresh instance rather than a pooled one, why the point sits before the gates, why a veto is a gate refusal that records no click, why a saturated host skips the add-on instead of queueing the visitor, and the add-on name the new variable reserves |
+| [M66, core's histogram excludes what the add-on held](#2026-08-23--m66-cores-histogram-excludes-what-the-add-on-held) | D324, taken on the milestone's second attempt after the first was rejected on it: attribution is two curves that can disagree, so the redirect handler subtracts the whole extension point before observing the SLO series — what that costs, why the excluded amount is the extension point rather than the sum of the invocations recorded, and which four measurements are deliberately left enclosing |
+| [M66, the deadline default put to the owner anyway](#2026-08-23--m66-the-deadline-default-put-to-the-owner-anyway) | D325: 25ms stands, owner-confirmed rather than inferred. Why an escape clause whose trigger did not fire still earned a prompt, and what the ceiling costs a visitor when a module reaches it |
+| [The test timeout, which had been the default all along](#2026-08-23--the-test-timeout-which-had-been-the-default-all-along) | D326: `-timeout 30m` on all four suite targets. Go's 10-minute per-package default had never been chosen, `internal/addon` grew to 429s under `-race`, and the limit announced itself by failing a docs-only commit |
+| [M66 reopened, the deadline stops charging the host's setup to the add-on](#2026-08-23--m66-reopened-the-deadline-stops-charging-the-hosts-setup-to-the-add-on) | D327, owner-answered: instantiation leaves the inline deadline and gets its own wider bound; pooling and a bigger default both declined; what the reopening owes D318, D319 and D325, all decided on best-case measurements; and why the gap is the test environment rather than the code |
+| [M66 reopened, the second bound and what measuring it under contention said](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said) | D328–D331, taken while building the reopening: the instantiation bound's name, its 500ms default and the asymmetry that chose it; the kill counter's `step` label; why the host re-reads the bound instead of trusting the runtime to notice; and what contention did to D318's figures — which is that F326 was never only a CI problem |
+| [M66, the histogram keeps what the deadline gave up](#2026-08-23--m66-the-histogram-keeps-what-the-deadline-gave-up) | D332: why `linkctrl_addon_redirect_duration_seconds` still times instantiation in the milestone that took instantiation out of the add-on's deadline — whose fault it is and what it cost the visitor are different facts, and they belong in different places |
+| [M66.5 added: pooling, because a well-behaved add-on cost 44.89ms](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms) | D333: D319 reversed on the measurement it was taken without — the third k6 column, why a module that does nothing costs 11ms and misses 38.6% of traffic, and where the new milestone sits. D334: what the plan review sent back — the reserved slot spent and Plan.md rewritten to say so, and the 20ms bar the milestone had been missing |
+| [M66.5, the reset is the host's, because a pooled instance keeps what the last visitor left](#2026-08-24--m665-the-reset-is-the-hosts-because-a-pooled-instance-keeps-what-the-last-visitor-left) | D335: how reuse is made safe — a memory image taken after package initialization and written back before the instance is handed on, why the guest is not asked to cooperate, what is evicted rather than reused, and the two bounds on what is held at rest. D336: the ceiling gains a second term, and the sweep that ties it does not gain a fourth word. D337: three figures and one citation the reviewer's read corrected, and the M66 test this diff relaxed on purpose |
+| [M67, an add-on arrives and leaves, and the directory is still the only store](#2026-08-24--m67-an-add-on-arrives-and-leaves-and-the-directory-is-still-the-only-store) | D338: why runtime install writes into `LINKCTRL_ADDONS_DIR` rather than into a table, what that costs a multi-replica deployment, and how atomicity is one `rename(2)` through a staging directory inside it. D339: the installed set becomes an atomic snapshot rather than three fields behind a lock, because the alternative puts a lock on every redirect. D340: the unload answer m67.md asked for — in-flight invocations complete, bounded, and the bound is what interrupts. D341: `addons.manage` is the instance principal's and is non-delegable in D18's widest form. D342: what an upload cannot install, and the two claims of M60 and M64 this milestone narrowed in writing. D343: an audit action is declared in `internal/audit` whatever package records it — the F18 split re-created and undone inside one milestone, and why the single-file parse stays single-file |
+| [M67, the caller's context stops deciding whether a removal finished](#2026-08-24--m67-the-callers-context-stops-deciding-whether-a-removal-finished) | D344: a lifecycle act completes on a context the caller cannot cancel — why `removeGrace` makes removal the one audit call site in this product that detaches, and what wazero does and does not do with a cancelled close. D345: an add-on install spends the QR logo's upload bucket rather than a fourth one, the argument against it, and the three documents that were made false by nobody writing any of this down |
+| [M67, an install reads what the directory claims, not what is running](#2026-08-24--m67-an-install-reads-what-the-directory-claims-not-what-is-running) | D346: the runtime name-collision check runs over the set boot decides from rather than over the running set — the sequence by which the install API could arrange a start that stops, why directory entries are the wrong wider set and the loaded set the wrong narrower one, what the union with the loaded set covers, and what an operator is now refused |
+| [M68, an operator meets the add-on host, and one page is where](#2026-08-25--m68-an-operator-meets-the-add-on-host-and-one-page-is-where) | D347: a declared setting has two sources and the environment wins — the update-check precedent it follows, why a pinned setting is refused rather than overridden, why the values are host-side rather than in the add-on's own schema, and what a save does and does not reach. D348: the manager is at `/instance/addons` because `/addons/` belongs to add-ons, and the orphan path is unclaimable by grammar rather than by a reserved list. D349: a purge is the schema drop and nothing else — what survives it, why an installed add-on's data is a conflict, and why a typo is a 404. **D349 said three survivors and D360 corrects it to four**, `addon_settings` being the fourth; the entry stands as written because this log is append-only, and this row summarises the pair rather than the older half. D350: D265's deferred answer taken — the demo runs a first-party sample built into the image, what the coverage row can honestly assert, and what a read-only mount costs it. D351: one script for one count, and why nothing else on the page needs one. D352: per-module latency is read back off the registry rather than counted twice |
+| [M69's subject does not exist, and who builds it](#2026-08-25--m69s-subject-does-not-exist-and-who-builds-it) | D362: the OIDC add-on is built now, outside the phase loop, by the actor that built the foundation — why §4 stopped the run, the two declined alternatives, the conflict of interest named rather than mitigated, and owed-work #4's MIT licence delegated as an act rather than as a choice. D363: M69's *tagged release* bullet amended to *immutable version*, because the SDK has never been tagged and the first tag carrying it is the one M70 cuts after this milestone |
+| [M68, three answers the rejection needed](#2026-08-25--m68-three-answers-the-rejection-needed) | D353: a menu item is drawn from the wiring as well as from the permission — the nav entry that 404s on every instance without an add-ons directory, the two fixes declined, and the general rule it settles. D354: a stored secret's secrecy is a column rather than a manifest's claim, why it changes the rendered type and not only the value, and why a refusal was the wrong shape. D355: a save drains the add-on's instance pool, because M66.5's kept instances made *on its next invocation* false for up to a pool TTL for the module that caches a value at start-up |
+| [M68, the ABI policy decides its own case, and the drain reaches the busy instance](#2026-08-25--m68-the-abi-policy-decides-its-own-case-and-the-drain-reaches-the-busy-instance) | D356: M61's self-repair clause spent — `config_get` gains a source, the table row that decides it, why it is additive and why the patch moves to 0.1.3. D357: the drain reaches an instance that is **in flight**, which corrects [D355](#d355--a-save-drains-the-add-ons-instance-pool): emptying the idle set reaches the resting half, and an add-on under traffic has its instances out. D358: the demo's coverage row asserts the module *ran*, because `addon_pageviews.views` is a fact no seeder can write |
+| [M68, what a name inherits, and the harness that had never run](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) | D359: a stored secret's withholding bounds the page and not the module, why hiding it from `config_get` was declined, and what the documents now say instead. D360: `addon_settings` is the fourth thing a purge leaves, counted at the point of decision rather than deleted, and F332 is the half that is behaviour. D361: the test instance runs the sample add-on so the browser harness executes at all, and the two costs of that — the core SLO column, and `lctl` on the host. Plus the inherited redirect-path measurement, re-run |
+| [M69, the acceptance test's four answers](#2026-08-27--m69-the-acceptance-tests-four-answers) | D391: a retry of `network_fetch` is answered from the response already fetched — the double token exchange that broke sign-in, why `session_mint`'s check-before-you-change answer does not transfer, and the two declined alternatives. D392: the acceptance test relaxes the address policy and the trust store under `//go:build integration` and nothing else — why routing real public IPv4 to a bridge was declined, and the operator consequence that had never been written down. D393: the add-on is rebuilt from the module proxy at a pinned pseudo-version, reproducing the published artifact byte for byte, rather than vendored or added to this repository's go.mod. D394: dex pinned by digest in a compose file `make up` never reads, health-gated on a discovery document rather than on a started container, and the demo's OIDC exception recorded rather than discovered |
+| [M69, the acceptance test's own amendment](#2026-08-27--m69-the-acceptance-tests-own-amendment) | D395: the *minor bump* clause amended to *patch* — under M61's policy the minor is the generation, and F346 moved the patch exactly as written |
+| [M69, the release arrives and the fixture becomes it](#2026-08-28--m69-the-release-arrives-and-the-fixture-becomes-it) | D396: the fixture is the artifact `LinkCtrl-OIDC` v0.1.0 published, downloaded and checked against that release's own `SHA256SUMS`, with the rebuild from the same tag as what earns the right to install it — why the pin moves off D393's pseudo-version, why both digests are transcribed rather than fetched, why the bundle is downloaded rather than reconstructed, and why the provenance attestation is the operator's question rather than the suite's |
+| [M69 reopened: the digest was a property of this machine](#2026-08-28--m69-reopened-the-digest-was-a-property-of-this-machine) | D397: the fixture pins the Go toolchain the release was cut with, and reads it from that release's own go.mod rather than transcribing it — why the pin goes in the fixture and not in the CI workflow, why a derived value is as immutable as the tag, what the two measured digests were, and why the digest check being the backstop is what makes deriving safe |
+| [M69.5, the last inch: an add-on asks, an operator agrees](#2026-08-28--m695-the-last-inch-an-add-on-asks-an-operator-agrees) | D398: the operator's consent is a toggle the **host** declares, riding M68's settings mechanism — which limb of the *every UI feature has API support* rule applies and why no operation was added and why `api/openapi.yaml` still gained a field, why a manifest-declared toggle would let an author answer for the operator through its default, why `config_get` cannot read it, and the counting cost that names. D399: the link is drawn from what **loaded** rather than what a directory claims — the opposite of M67's D346 and right for the opposite reason — plus the composition asserted on the result, the label bound as a constant, the order **sorted by name** rather than taken from a loaded set a runtime install appends to, and the byte-identical stock page. D400: the demo **states the exemption**, owner-answered, with the two declined alternatives named D401: M68's *manifest-declared* exclusion amended to *declared* — the page now renders one setting no manifest may declare, and why that is a fact rather than an assertion, so M68 is not reopened |
+| [M69.5 reopened: two greens that measured this machine](#2026-08-29--m695-reopened-two-greens-that-measured-this-machine) | D402: the stock sign-in page's golden compares everything except the built stylesheet's fingerprint — why the exception is one token rather than the whole `<head>`, why rebuilding before capturing was declined, and why the *exactly one match* count rather than the pattern is what stops the loosening from becoming a hole. D403: `make check` builds the assets it tests against, mirroring the CI **build** job's `verify-assets css` rather than the lint job's repairing `assets` — and the rule the two red branches share with [D397](#d397--the-fixture-pins-the-toolchain-the-release-was-cut-with-read-from-that-releases-own-gomod): a gate whose inputs are not in the repository measures the machine it runs on. D404: M69.5's *byte-identical* bullet amended to name that one token, a fact rather than an assertion because the page it describes could never have been byte-identical on any machine |
+| [M69.9, the pre-release adversarial review: what it checked, what it found, and what it refuted](#2026-08-30--m699-the-pre-release-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted) | Eight readers in fresh contexts over the whole phase, ten adversarial refuters, ~36 raw findings. Both claimed reopenings refuted to amendments; a finder's new row established as F281 and another folded into F336; one of four false digest sentences shown true; the wasm leak's headline figure shown to be the race detector's shadow. Two findings the attack made worse. The browser check on a rebuilt image with a sign-in add-on installed |
+| [M69.9's triage: the owner's five answers](#2026-08-30--m699s-triage-the-owners-five-answers) | D405, owner-answered: nothing in this repository's gates may *require* another project's artifact, so the OIDC acceptance test skips and the two make targets that build it opt back in. D406: the pool's non-memory leak is disclosed and filed, not patched, because every remedy is a design choice. D407: the add-on mint's audit surface is documented rather than moved. D408: everything documentation-shaped is corrected now. D409: four shipped bullets amended, none reopened. D410: the always-read contract grew 1433 bytes over five milestones and is defended, with the trim named — Phase 4's status table leaves this file at the phase close |
+| [The UI copy review's changes, approved and applied](#2026-09-04--the-ui-copy-reviews-changes-approved-and-applied) | D411: `domains.html`'s button renames a hostname, so the approved label was wrong and `Rename` shipped instead. D412: the rotation paragraph loses its detail but gains no link, because this product serves no documentation route. D413: `icons.html` describes a glyph by what it does rather than by which page calls it, because naming the caller widened a bound M60 asserts by test |
+| [M70's two opening answers](#2026-09-04--m70s-two-opening-answers-the-published-example-and-how-111-rows-get-reviewed) | D414: `LinkCtrl-OIDC` gets a second release in this close, so the published example is built against the released SDK rather than a pseudo-version of an unreleased commit — at the cost of a cross-repository release the owner performs and a re-cut fixture digest. D415: the 111 open findings are triaged as a tiered proposal carrying a recommendation on every row, which is what keeps tier approval a review of rows rather than of tiers |
+| [M70's triage: the tiers, and the eleven answers](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers) | D416: Tiers A and B are both worked into the close and F315 joins them — 62 rows, against a recommendation of A now and B after the release, with the cost stated first. D417: an operator-configurable add-on migration timeout, five minutes by default. D418: role adoption accepted and documented. D419: a byte budget per add-on per minute on the log boundary. D420: `temp_file_limit` becomes a superuser step at install time, against the recommendation. D421: `template_render` deprecated, which is the deprecation machinery's first real exercise. D422: a vetoed redirect gets its own outcome and no prose in the UI. D423: the contrast warning fires on either metric. D424: the QR list sorts on the name that is drawn. D425: the QR shorthand stays API-only and seven view fields go. D426: the row overlay stays and the slug stays unselectable, on the owner's answer. D427: duplicate tooltip descriptions dropped and focusable hosts named, answered on a re-put question |
+| [M70's fix shapes: ten answers, and the picks taken without asking](#2026-09-04--m70s-fix-shapes-ten-answers-and-the-picks-taken-without-asking) | D428: the host records what it discovered separately from what it loaded, which is F281's fix at the source rather than at the page. D429: F315 is built in both halves, operator and person. D430: an htmx 4xx is answered by a shared `webError` limb rather than a global htmx config. D431: `sign_in_label` takes a positive rule, deliberately the shape D285 could not take for the log boundary. D432: `temp_file_limit` is 256 MB. D433: the log budget is 8 MiB per add-on per minute. D434: the SDK's wasm half is vetted under `GOOS=wasip1`, the CI half proposed. D435: the browser suite signs in once and shares the context. D436: the GeoIP sentence is reworded and the predicate untouched — the option not recommended. D437: the fetch hold is keyed to the invocation. Plus eleven picks taken without a prompt, each with what it followed |
+| [M70's documentation batch: what three append-only entries now get wrong](#2026-09-04--m70s-documentation-batch-what-three-append-only-entries-now-get-wrong) | D229's *an add-on cannot store what it is never handed* is a conclusion its own premise does not support — the surface bounds the host, not the module — and the sentence is corrected at five sites and here. D181 and D182's *at every level* went loose when D187 made the level a floor and `L` unreachable. And `LINKCTRL_ADDON_LOAD_TIMEOUT`, which `internal/config` reasoned about, has never existed |
+| [M70's documentation pass: the fold, the 1.0 gate, and a cost that did not move](#2026-09-06--m70s-documentation-pass-the-fold-the-10-gate-and-a-cost-that-did-not-move) | D438: the audit count is folded thirty-nine to forty-six and the *cannot drift without a failing build* clause is corrected rather than carried — it stopped being true at M65, which is when D313 removed the tie. D439: 1.0 now means the add-on contract is stable rather than that identity is built in; identity shipped as a module, so the old condition discharged itself. D440: the always-read contract grew 1217 bytes — one rule in workflow.md, whose realized read ratio is 0.96 — defended against the three test attempts and the one reverted fix that earned it. This entry claimed zero and was corrected in the same pass |
+| [PR #11's code review: fifteen findings, and the four that changed a rule rather than a line](#2026-09-08--pr-11s-code-review-fifteen-findings-and-the-four-that-changed-a-rule-rather-than-a-line) | D441: a defaulted `ADDON_ROUTE_DEADLINE` is clamped to fit an operator's request timeout rather than refusing the boot, and only an explicitly set one is still refused — the upgrade break in CHANGELOG.md is withdrawn. D442: the pipeline asks the host *is anything observing* per batch instead of sampling the answer at boot, which is the same reasoning `jobs.go` already applied. D443: an add-on lifecycle act takes a cluster-wide advisory lock keyed on the add-on's name, because `installMu` guards one process and the schema is shared. D444: inline add-ons run after the gates, not before. Plus `internal/auth/authtest`, a package whose only power is to conjure a permission, made visible by being an import |
 
 ---
 
@@ -30941,3 +31080,11430 @@ answer: the inline deadline's value (M66's, from measurement —
 shapes (M59's, the owner's, asked at planning), the manager's layout (chosen
 from wireframes, the D177 route), and whether *every UI feature has API
 support* binds third-party add-on surfaces (M68 forces it with a real case).
+
+## 2026-08-18 — M59, the two repair shapes the owner chose at the plan's review
+
+Both were asked at Phase 4's planning and answered the same day, on the record in
+[phase-4-candidates.md](phase-4-candidates.md#two-more-answers-given-at-the-plans-review).
+They get their numbers here, on the date they were *used*, which is what
+[upcoming-decisions.md](upcoming-decisions.md) exists to make possible: the answer
+predated the work by nine days and the trail says so.
+
+**D212. `release-check` derives the compose project and env file itself**, rather
+than the documentation dropping the direct form it offers. `docs/releasing.md`
+presents `scripts/release-check.sh v0.3.0` as the equal alternative to
+`make release-check VERSION=v0.3.0`, and it was not equal: the integration step
+asks `docker compose` whether Postgres is up, that question only resolves when
+`COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` are set, and only the Makefile set
+them — so the last gate before a tag printed `skip  Postgres is not running` on a
+machine where it was, and a skip reads as information rather than as a third of
+the gate not running (F253).
+
+The accepted cost is a drift pair: two derivations of one fact, and a Makefile
+change to either variable must reach the script. A price is only accepted if
+something notices when it is not paid, so the milestone adds the step *the
+Makefile and this script agree about which stack* — it reads `INSTANCE`,
+`ENV_FILE`, `PROJECT`, both `export` lines and both DSN templates out of the
+Makefile, unexpanded, and fails on a mismatch. Sabotage-verified in both
+directions: renaming `PROJECT` and hard-coding `COMPOSE_ENV_FILES` each produced
+a named failure, restored by counter-edit.
+
+**What the answer did not say, and the build could not avoid.** Knowing Postgres
+is up buys nothing if the tests are then run with no connection string, and with
+`TEST_DATABASE_URL` unset `test/integration` falls back to a literal guess at the
+password on **port 55432** — the *demo* instance's port. So the direct form did
+not merely skip; had the skip been removed alone, it would have aimed at the
+wrong stack. The script therefore derives the two DSNs by the same rule, from the
+same env file, and an already-exported value still wins so that `make
+release-check` and CI keep passing theirs. *Done* for this limb was defined as
+both documented forms **run** against an up stack, and both were: each ran the
+integration tests green on 2026-08-18.
+
+**D213. The release-time gate is named in workflow.md's Docs row.** Filling
+`CHANGELOG.md`'s `[Unreleased]` is what the per-commit Docs gate requires;
+`release-check` refuses a tag while anything is in it. Between the fold and the
+tag both bind at once, so obeying the first is what fires the second, and neither
+document mentioned the other (F254). The Docs row now says which wins and what to
+do: write the work into `[Unreleased]` as the row requires, and the fold is made
+again before the tag, which `docs/releasing.md` already spells out for whoever
+cuts it.
+
+The cost is accepted and is the point of the shape: the conflict is **documented
+rather than removed**, so a post-fold reopening still refills and re-folds by
+hand, as F251 did. The two shapes not taken — making the fold a step of the phase
+close, or letting `release-check` fold `[Unreleased]` itself — each moved work
+rather than naming an owner, and the second would have a gate editing the file it
+is judging. What changes is that a worker following workflow.md can no longer obey
+one document into violating the other without a sentence telling them which
+binds.
+
+**Neither answer is a product change**, which is why they arrive with a gate each
+rather than with a behaviour. The other two limbs of M59 needed no decision: F248
+was answered at M57.9's triage by D202, and F255's shape — a gate rather than a
+pin — is what its own evidence argued for.
+
+## 2026-08-18 — M59, the F248 population was 83 and not 17
+
+**D214. An amendment, on a fact.** [M59](phase-details/m59.md)'s F248 bullet named
+the population it had to correct. The tree held five times that many, so the
+bullet is amended rather than the work narrowed to fit it.
+
+**As it stood:**
+
+> The 17 wrong links in maintained files (`Plan.md` ×3 and the **ten** milestone
+> files F248 enumerates — its own cell says nine over a ten-file list, counted
+> here rather than trusted) are corrected in the same diff; the 22 in
+> `decisions.md` are left, that file being append-only — each was true when
+> written.
+
+**As amended:**
+
+> The wrong links in maintained files are corrected in the same diff — **83 of
+> them across 14 files**, counted rather than trusted, of which **63 are inside
+> `deferred-findings.md` itself**; the 22 in `decisions.md` are left, that file
+> being append-only — each was true when written.
+
+**The tree fact that forced it.** F248's own count of 39 was taken over links
+carrying an explicit path to `deferred-findings.md`, so it never looked inside
+that file, where a citation carries the bare fragment and no path at all. Sixty-
+three such links were there. Three more moved: `Plan.md` ×3 became
+`phase-3.md` ×3 when `ca8864a` relegated the released phases. Two were the class
+F248 predicted and did not count — `workflow-changes.md#proposed` for rows since
+Made, at `phase-details/m57.5.md:165` and `:170`, whose prose asserted *Proposed*
+and was corrected with them. Closing M59's own four rows made 16 more wrong in
+the same diff, for **99 corrected in total**.
+
+Nothing about the *assertion* changed, which is why this is an amendment and not
+a prompt. The bullet said the maintained files are corrected and the append-only
+one is left, and that is what happened; only the arithmetic was wrong, and it was
+wrong in the direction of the class being larger than the finding that counted
+it. `deferred-findings.md` is not exempt as a source, because it is maintained —
+its rows move between two sections, which is the whole defect F248 named — and
+the script says so in as many words at `scripts/check-links.sh:139-142`. The
+recurring cost is stated here rather than discovered later: **closing a row now
+means correcting every citation of it**, including the ones in that file's own
+cells, and `make check-links` is what will say which.
+
+## 2026-08-18 — M60, the Makefile line the phase's own first commit moved
+
+**D215. An amendment, on a fact, and the smallest kind there is.**
+[M60](phase-details/m60.md)'s first bullet cites where the build sets
+`CGO_ENABLED=0`. It read `Makefile:682`; the line is `Makefile:692`.
+
+**As it stood:** ``The build is `CGO_ENABLED=0` (`Dockerfile:86`, `Makefile:682`)``
+**As amended:** ``The build is `CGO_ENABLED=0` (`Dockerfile:86`, `Makefile:692`)``
+
+**The tree fact that forced it.** `grep -n CGO_ENABLED Makefile` returns 692, and
+it returns it because [M59](phase-details/m59.md) added the `check-ci` target ten
+lines above. The plan was written against the tree of a few hours earlier, and
+the phase's own first milestone moved the citation. `Dockerfile:86` is unchanged
+and correct.
+
+Recorded rather than fixed in silence, because the rule that requires it does not
+carve out arithmetic, and the reason it does not is that *this* is what plan drift
+looks like before it looks like anything: a bullet naming a tree that has moved,
+correct when written, wrong within one commit, and cheap enough to correct without
+telling anyone. A milestone file citing a line number will meet this again — the
+citations are load-bearing for validation, which is why they are checked rather
+than skimmed, and why the check is worth its cost even when the answer is ten.
+
+## 2026-08-18 — M60, the manifest is the first artifact that leaves this repository
+
+**D216. The add-on manifest: JSON, one directory per add-on, versioned from the
+first commit, and strict about what it does not recognise.**
+
+Six of the owner's answers of 2026-08-18 are used here for the first time and take
+their numbers with this entry, per the convention
+[phase-4-candidates.md](phase-4-candidates.md) states: an add-on is a **WASM
+module loaded at runtime**; it is trusted with **declared permissions, enforced**;
+**a Postgres schema per add-on**; **the add-on declares** whether a load failure
+degrades or refuses; **both** published provenance and load-time verification; and
+the **declared settings** the Add-on manager's detail page renders, which was
+owner-added scope at the plan's review. [M60](phase-details/m60.md) parses and
+stores all of it. Only the last limb of the verification answer is discharged
+here — the load-time half; provenance is the add-on repository's release process
+and is M69's.
+
+**The format is JSON, and the directory is the identity.** An add-on is a
+directory named for the add-on, holding `addon.json` and the `.wasm` that manifest
+describes. JSON rather than YAML — which this repository already depends on — for
+one property: `encoding/json` can refuse a field it does not recognise, and a
+versioned schema needs that. The directory name and the manifest's `name` must
+match, which buys two things that are not obvious from the requirement. A metric
+label exists for an add-on whose manifest will not parse, because the label is the
+directory. And two directories cannot claim one identity, which at
+[M63](phase-details/m63.md) would be two add-ons contending for one Postgres
+schema.
+
+**`schema_version` is checked for equality and unknown fields are refused.** This
+is the strict end of a spectrum and it was chosen deliberately, because the
+manifest is the first artifact that crosses a repository boundary — the OIDC
+add-on lives in `DevOfPie/LinkCtrl-OIDC` and will read this format before the ABI
+stabilises. A manifest carrying a field this host does not know was written for a
+schema this host does not implement, and accepting it means instantiating a module
+whose author is expecting behaviour that will not happen. The cost is stated: a
+publisher who needs a new field needs a new schema version, and a host that gains
+a field has to decide whether old manifests still validate. That is the cost of a
+versioned format, paid at the point where the alternative — a field added quietly
+and half-honoured — is what actually breaks somebody.
+
+**A manifest nobody can parse stops the instance, and that is the harsh limb.**
+The failure class is the add-on's declaration, so a manifest that will not parse
+has no declaration to honour. The available answers were to assume `degrade` and
+carry on, or to refuse. Refusing is what landed: the operator who just changed
+this directory gets an error naming the add-on, where assuming `degrade` on an
+authentication module means an instance that boots with sign-in silently missing.
+The cost is real and is taken knowingly — a typo in a manifest is now an outage on
+restart rather than a warning — and it is bounded by the fact that this directory
+changes only when somebody changes it.
+
+**Four validation rules are decisions rather than syntax**, and each is here
+because the alternative is worse than the strictness:
+
+- `module` must be a **bare filename**, and a separator or a dot entry is
+  *refused rather than cleaned*. A manifest naming `../../etc/anything` is not a
+  manifest with a fixable path.
+- `failure_class` has **no default**. The one thing a default here decides is
+  whether an instance boots without a module somebody's sign-in depends on.
+- a `secret` setting **may not carry a default**, because a default secret is a
+  secret every installation of the add-on shares.
+- `sha256` must be **lowercase**, so the string in the manifest is byte-identical
+  to what `sha256sum` prints and a publisher comparing the two by eye is
+  comparing the same string.
+
+**Permission names are checked for shape and not for vocabulary.** Dotted
+lowercase, matching this product's own scopes, because an add-on's declared
+permissions will be read beside API-key scopes in one page at
+[M68](phase-details/m68.md) and two spellings for one idea is a thing somebody has
+to hold in their head forever. Which tokens exist is [M62](phase-details/m62.md)'s
+decision, and inventing a vocabulary here would mean M62 arriving to find its own
+question answered.
+
+## 2026-08-18 — M60, the host loads a reactor and grants it nothing
+
+**D217. The lifecycle: wazero, `_initialize`, no capabilities, and the numbers
+M66 will price against.**
+
+**A module is a reactor, not a command.** Test modules are built
+`GOOS=wasip1 GOARCH=wasm -buildmode=c-shared`, which makes the start function
+`_initialize` rather than `_start`, so package initialization runs during
+instantiation and the instance stays alive afterwards. Started at `_start` the
+module runs `main` and exits, and everything the ABI is for at
+[M61](phase-details/m61.md) would have nothing to call — shown red by sabotage
+rather than reasoned about: pointing `addon.StartFunction` at `_start` makes the
+loaded fixture's exported function trap with `runtime.notInitialized`.
+
+**Package initialization running inside instantiation is what makes a failure
+class mean anything.** It is why an add-on can fail at load time at all, and
+therefore what `required` and `degrade` are deciding about. The `failing` fixture
+panics in `init` for exactly that reason.
+
+**Nothing is granted.** WASI preview 1 is instantiated once per host because a Go
+module cannot start without it, and every capability behind it is left at wazero's
+default — which is not the operating system. No filesystem is preopened, no
+environment or arguments are passed, stdout and stderr are discarded, and the
+clocks and the random source are wazero's **fake** ones
+(`internal/sys/sys.go:151-175` in v1.12.0): a module that reads the wall clock
+sees a frozen one, and a module that reads randomness gets a deterministic stream.
+**That is written down as a hazard for M61 rather than as a feature.** An ABI
+author who assumes a module has a clock will find it has a stopped one, and the
+first add-on to hash something with a map iteration order will find it reproducible.
+Which of those M61 grants is M61's; until it does, an add-on has none of them.
+
+`WithCloseOnContextDone(true)` is set at construction, before anything needs it,
+because [M66](phase-details/m66.md)'s deadline is enforced by cancelling a context
+and a runtime that is not watching for cancellation cannot be interrupted. One
+line now; a change to every call site later.
+
+**The numbers, measured on this machine rather than estimated.** A fixture the
+standard toolchain produces is about 1.85 MB, because a `wasip1` Go module carries
+the whole runtime. Compiling it costs **383 ms** and happens once per module at
+boot. Instantiating it costs **1.9 ms**, and a second instance from the same
+compiled module costs the same again. The guest's linear memory is **2.4 MB** per
+instance, and the Go heap grows about 3.1 MB with it. M66 prices a per-request
+budget against those four numbers rather than against a guess, which is what
+m60.md's first risk asked for. The test that measures them asserts ceilings an
+order of magnitude above — what a shared runner can hold without flaking is a
+regression in the *shape* of the cost, not jitter — and logs the real figures.
+
+**Fixtures are built, never committed**, by `make addon-fixtures`, which is a
+prerequisite of `test`, `ci-test` and `single-instance` rather than something to
+remember. A checked-in 1.8 MB binary is a build input nobody reviews, which is the
+same reason every vendored asset in this repository is checksum-pinned. The stated
+cost: it puts a Go toolchain requirement on the CI `image` job, which has no
+`actions/setup-go` step and relies on the runner image's own Go. If that stops
+being true the job fails loudly, which is the behaviour a gate should have and is
+now something `make check-ci` asks about — [F255](deferred-findings.md#closed)'s
+whole point.
+
+**And the single-instance gate grew its third limb**, which is owed work #5 from
+[phase-4-candidates.md](phase-4-candidates.md). The add-on answer went to modules
+partly *because* a sidecar model would have made two containers the tested shape
+and quietly retired the constraint `scripts/single-instance-check.sh` exists to
+hold; a claim like that owes a case. The new limb stages a manifest and a module
+in a temporary directory, mounts it read-only into the container, boots with
+`failure_class: required` — so the host failing to verify or instantiate means the
+container never answers `/healthz` and there is no silent skip available — and
+then asserts the redirect, the dashboard, the API and `/readyz` are unchanged with
+a WASM module in the process. Sabotaged by flipping one byte of the staged module
+after its digest was taken, the container refuses to start with
+`add-on "minimal": checksum_mismatch`, which is the load-time verification proven
+in the shipped image rather than only in a unit test.
+
+## 2026-08-18 — M60, D215 was wrong before the commit carrying it was made
+
+**D218. A correction to [D215](#2026-08-18--m60-the-makefile-line-the-phases-own-first-commit-moved), and the end of citing that line at all.**
+D215 amended [M60](phase-details/m60.md)'s `CGO_ENABLED=0` citation from
+`Makefile:682` to `Makefile:692`, and offered as its tree fact that
+`grep -n CGO_ENABLED Makefile` returns 692. **It returns 724.** M60's own
+fixture block, `Makefile:452-482`, sits above that line and moved it another 32
+lines — inside the very milestone whose validation wrote the amendment, before
+the commit carrying it existed. Found by M60's reviewer, not by the actor that
+wrote D215.
+
+decisions.md is append-only, so D215's text stands and this entry is the
+correction. What it corrects is not the number:
+
+**The citation is withdrawn.** The bullet now names the Makefile's `dist`
+cross-compile loop, and `internal/addon/host.go`'s package doc does the same. A
+line number in a file the current phase is actively editing is a fact with a
+half-life of about one commit, and D215 spent a whole entry proving that by
+being falsified inside one. Two amendments for one number is the evidence; a
+third would have been a habit.
+
+The rule that produced D215 is unchanged and is not the thing at fault — a
+milestone file citing a tree fact still gets checked at validation, and the check
+is what caught the drift both times. What was wrong was the *kind* of fact
+chosen. A target name, a function name, a filename: each survives an insertion
+above it. `Makefile:682` did not survive the afternoon.
+
+Sharper still, and worth naming because it generalises past line numbers: an
+amendment made at [step 1](phase-loop.md#1-validate) is verified against the tree
+as it stands *before* the milestone is built, and the milestone then edits that
+tree. Anything the amendment asserted about a file the diff touches has to be
+re-checked at [step 3.4](phase-loop.md#3-land) rather than inherited. Nothing in
+the loop said so, because nothing had needed it; D215 is what needed it.
+
+## 2026-08-18 — M60, a label from a directory entry is a crash risk, not a cardinality one
+
+**D219. The refusal path's `addon` label is bounded, and the harm it is bounded
+against is not the one that sounds right.**
+
+M60's review found two comments asserting that nothing derived from a filename
+reaches a metric label — `internal/addon/host.go`'s `Outcome` doc and
+`internal/observability/metrics.go`'s add-on block — while the refusal path passed
+the raw directory entry, because a refusal that failed before the manifest parsed
+has no validated name to use.
+
+**The plausible version of the harm is false, and it was checked rather than
+reasoned about.** A directory name holding a newline or a quote does *not* corrupt
+the Prometheus text exposition: client_golang escapes `\n`, `\"` and `\\` in a
+label value, so those arrive as escapes and the format stays line-oriented. Driven
+on this machine, three label values through a real scrape.
+
+**The real harm is that the process dies.** `WithLabelValues` panics on a label
+value that is not valid UTF-8 — `panic: label value "\xff\xfe" is not valid UTF-8`
+— at the observation and not at the scrape. That observation happens inside
+`addon.Open`, at boot, on a path with no recover anywhere above it, so one
+directory named in some other encoding stops the instance before anything is
+listening. Also driven: the sabotage run of
+`TestARefusalNeverPublishesADirectoryNameAsALabel` panics rather than merely
+mislabelling, which is what that test now exists to catch.
+
+**The bound is `labelFor`:** `nameRe` or `InvalidName`, which is `<invalid>` —
+angle brackets because `nameRe` cannot produce them, so the sentinel cannot
+collide with a real add-on's name. Two badly named directories share one series,
+which is the point rather than a compromise; cardinality returns to installed
+add-ons plus one. The full name still reaches the boot log, where it is not a
+label and bounds nothing.
+
+**What generalises past this label.** A label value derived from operator input on
+a boot path is a liveness question and not an observability one, because
+client_golang's answer to a value it will not accept is a panic and not a dropped
+series. Two more such values are already scheduled: M63 gives each add-on a
+Postgres schema and M68 renders declared setting names. `nameRe`'s doc says it is
+the intersection of three things a name has to be at once; this is the fourth
+reason it is checked before anything is done with a name, and the only one that is
+about staying up.
+
+## 2026-08-18 — M60, a fixture only make can build is a gate only make can run
+
+**D220. `internal/addon`'s test fixtures build themselves, the fixture set is
+enumerated where it cannot disagree with itself, and the single-instance gate's
+add-on limb skips rather than fails when there is no module.** Three changes with
+one cause, found by M60's second review.
+
+**The cause.** `host_test.go`'s `fixture()` called `t.Fatalf` when the built
+`.wasm` was absent, on the argument that a *skip* would be a green run of a
+package whose whole subject is loading wasm. That argument is right and is
+unchanged. What was wrong was the conclusion drawn from it: that every caller of
+`go test` must therefore be wired to build the modules first. Four were wired —
+`make test`, `make ci-test`, the Taskfile's mirrors, and `release-check`. Two
+more exist and **cannot be wired from this repository**, because
+`.github/workflows/` is not pushable from the account this work runs under:
+
+- `release.yml` runs `go build`, `go vet` and `go test -race -count=1 ./...`
+  directly, not through a make target. Nothing there builds a fixture, so the
+  **release gate would have gone red at every tag push** — on a job that has
+  `actions/setup-go` and would otherwise be fine.
+- the CI `image` job, which is [F262](deferred-findings.md#closed), reached
+  `GOOS=wasip1 GOARCH=wasm go build` through `ci-image-smoke` → `single-instance`
+  → `addon-fixtures` while being the one job of four with **no** `actions/setup-go`
+  step.
+
+Both are [F255](deferred-findings.md#closed)'s shape — local green, remote red —
+and neither was reachable by adding a step somewhere.
+
+**So the artifact is the test's to produce.** `fixture()` builds the module when
+it is missing, with the same command and the same `-buildmode=c-shared`, and
+fails with the compiler's own output when it will not build. `make addon-fixtures`
+stays, because [m60.md](phase-details/m60.md) asks for a build step in the
+Makefile beside the other generated artifacts, and stays a prerequisite of `test`
+and `ci-test` — but it is now the **fast path, not the contract**. The build is
+paid for once outside the test binary when a caller came through make, and inside
+it when nobody did. Measured: a cold `go test -race -count=1 ./internal/addon/`
+on a wiped `testdata/build/` is 32s against 28s warm, both modules built.
+
+**The proposal route was considered and refused.** A `ci/proposed/` workflow patch
+adding `actions/setup-go` to the `image` job would have left a red release gate
+standing until the owner applied it, and a gate nobody has looked at is what F255
+cost nine days. The bar was set before the work: if on-demand building had not
+worked, the answer was to stop and report, not to propose.
+
+**F262 is closed by the same change, and named in the commit message** as
+[step 1](phase-loop.md#1-validate)'s in-spec exception. Two things had to be true
+together. `single-instance` now *attempts* `addon-fixtures` and tolerates the
+failure, so the one-container conformance run no longer depends on the runner
+image happening to ship a Go toolchain — an unpinned property of somebody else's
+VM, which is exactly the bar `golangci-lint`, the Tailwind CLI and three vendored
+assets are all pinned against. And `single-instance-check.sh` **skips its add-on
+limb** when there is no module, saying which prerequisite was missing, instead of
+hard-failing on a gitignored relative path. `make addon-fixtures` on its own still
+fails loudly, which is where somebody debugging a fixture is looking.
+
+That skip restores a use the first attempt had retired without noticing. The
+script is documented and *recorded* as a one-argument invocation against a
+**published image** — `ghcr.io/devofpie/linkctrl:0.3.0` is
+[F257](deferred-findings.md#closed)'s closing evidence — and a hard failure on
+`internal/addon/testdata/build/minimal.wasm` made that invocation require a repo
+checkout, a fixture build and the right working directory. `make single-instance`
+builds the module and drives all three limbs exactly as before, so the gate
+[m60.md](phase-details/m60.md) asks for is unchanged; what changed is that the
+operator case fails no more than it used to.
+
+**And the fixture set is enumerated once per file that needs it, by glob.** It was
+written out three times — the Makefile named two modules, the Taskfile named the
+same two, and `release-check` globbed the source directory — so a third fixture
+would have been built by one of them and by nothing else. `release-check`'s block
+is **deleted**, because `fixture()` covers what it was there for; the Makefile and
+the Taskfile both glob `testdata/modules/*/main.go`. Driven with a third module
+present: both build it, and both fail when it will not compile.
+
+**What generalises.** A gate whose prerequisite is a *built* artifact has to
+either build it or tolerate its absence. Requiring it while being unable to reach
+every caller is the failing shape, and it is not visible from the machine where
+the wiring was done — every one of the four wired callers was green here.
+
+## 2026-08-18 — M60, no entry in this log will cite that line again
+
+**D221. A third correction, and the last one, because the citation is gone
+rather than fixed.** [D215](#2026-08-18--m60-the-makefile-line-the-phases-own-first-commit-moved)
+said `Makefile:682` should read 692.
+[D218](#2026-08-18--m60-d215-was-wrong-before-the-commit-carrying-it-was-made)
+said 692 should read 724, and closed with a rule about re-checking an amendment's
+tree facts at [step 3.4](phase-loop.md#3-land). **`grep -n CGO_ENABLED Makefile`
+returns 741.** D218 also placed M60's fixture block at `Makefile:452-482`; it is
+neither — 452 is a `sqlc vet` recipe and 482 is prose inside a comment. Found by
+M60's third reviewer, in the entry whose whole subject was tree facts going
+stale, which is as complete a demonstration as the point could ask for.
+
+Nothing downstream is wrong. D218's *withdrawal* was the correct act and it held:
+[m60.md](phase-details/m60.md) and `internal/addon/host.go` name the `dist`
+target, and neither has needed touching through three moves of the line. What
+kept being wrong is the part of D218 that argued by citation while telling the
+reader not to.
+
+So the rule D218 stated is replaced rather than restated. Re-checking a line
+number at 3.4 is not the fix — three entries have now tried some version of care
+and the number moved anyway, twice inside a single milestone. **A decision entry
+does not cite a line number in a file the current phase is editing.** It names
+the target, the recipe, the function, the variable — something the file itself
+would have to be rewritten to falsify. Where a line is genuinely the only handle,
+it is written as *what to grep for*, so the reader gets a command that stays true
+instead of a coordinate that does not.
+
+This costs precision in exactly one case: pointing at an unnamed line in a long
+file. That case is rare, and three corrections in one day is what the alternative
+costs.
+
+## 2026-08-18 — M60, the gate asks the image what it is before asserting what it does
+
+**D222. The single-instance gate's add-on limb is keyed on the image's own
+version, and skips below the release the add-on host arrives in.** Found by
+M60's third review, driven rather than argued: `single-instance-check.sh` pointed
+at the published `ghcr.io/devofpie/linkctrl:0.3.0` ran its first two limbs green
+and then failed with *the add-on did not load: no `linkctrl_addon_` series at
+all*. Extracting the binary from that image confirms the obvious reason — no
+`linkctrl_addon` and no `ADDONS_DIR` string anywhere in it, because the host did
+not exist when it was built.
+
+**A false red on a conformant artifact is the one direction this gate must not
+fail in.** M57 wrote it to catch a dependency creeping into the product; an
+operator who runs it against the release they are about to deploy and is told the
+image is broken learns to stop running it, and then it catches nothing at all.
+
+**What made it reachable is [D220](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run),
+one milestone earlier, and that entry is wrong where it says otherwise.** D220
+made the limb skip when the *module* is missing and claimed the skip *restored
+the one-argument invocation against a published image that is F257's closing
+evidence*. It did not. The skip is keyed on a fixture path, and the fixture is a
+prerequisite of `make test` — so on any machine that has run the suite it is
+present, the skip can never fire, and the invocation D220 was protecting is
+precisely the one that breaks. What the skip actually protects is the CI `image`
+job, which has no Go toolchain and therefore no fixture, and that half of D220
+stands. F262 stays closed on it.
+
+**Three shapes were available and the version is the only one that fails
+closed.**
+
+- **Treat *no `linkctrl_addon_` series at all* as a skip.** Cheapest, and it
+  disarms the limb: a current image whose host is broken publishes exactly that,
+  so the gate would decline in the one case it was written to catch.
+- **An opt-in flag** — assert only when asked. It moves the default the wrong
+  way. An operator re-running the gate would get two limbs and no reason to know
+  the third had gone, which is the same silence with an extra argument.
+- **The version predicate.** Below the floor, skip with the reason and say the
+  other two limbs ran; at or above it, assert exactly as before. A current image
+  missing the series still fails, which is the whole of the argument.
+
+The version is read from `linkctrl_build_info`, which carries it as a label on
+the same metrics listener limb three already scrapes — so the answer costs no
+extra request and no new mechanism. Anything that is not a semver triple below
+the floor asserts: `ci` and `dev` are what this repository's own images report, a
+prerelease of the floor version carries the host, and a missing series or an
+empty label is not evidence of an old image. Every unrecognised case therefore
+lands on the strict side.
+
+**The floor is `0.4.0`, and it is stated in one place** — `ADDON_HOST_SINCE` in
+the script, beside the predicate that reads it. `0.3.0` is released and the
+add-on host is in `[Unreleased]`, whose own prose commits the rest of the ABI to
+*later releases of the 0.4 line*. The exposure is a patch release: cut `0.3.1`
+from this work and the limb would decline against an image that does have a host.
+That is a version nobody would cut for a feature this size, it fails in the safe
+direction, and the alternative — deriving the floor from the changelog at run
+time — buys a smaller risk with a parser in a shell script.
+
+**What generalises**: a gate that runs against *artifacts* rather than against a
+working tree is versioned whether or not anybody says so. Its assertions have to
+name which artifacts they apply to, or the first release that predates a check
+becomes a bug report about the release.
+
+## 2026-08-18 — M60, the two answers that unparked the milestone
+
+Both asked by the loop after it had been wrong twice, both answered by the owner
+on 2026-08-18, and both recommended by the loop — which is stated because a
+recommendation from the actor that also does the work is the one that needs its
+provenance visible.
+
+**D223. The conformance gate's add-on limb skips only on a bare semver triple
+below the floor.** `scripts/single-instance-check.sh` asserts that a container
+loaded a WASM module. An image predating the host has no such series, ignores the
+add-ons directory as the unknown variable it is, and is otherwise perfectly
+conformant, so asserting against one is a **false red on a good artifact** — the
+direction M57 built this gate to avoid. Two predicates were tried in the loop and
+both failed *silently*, which is the worse direction:
+
+- **Skip when no fixture is present.** The fixture is a `make test` prerequisite,
+  so on any machine that has run the suite it is always there and the skip never
+  fires. It protected the CI `image` job and nothing else.
+- **Skip when the version is a semver triple below the floor.** `make
+  docker-build` passes `git describe`, which on a phase branch reads
+  `v0.3.0-14-g<sha>-dirty`. Stripping the tail leaves `0.3.0`, below the floor, so
+  the gate **skipped against an image that had the host** — a silent green on the
+  developer's own build. This also falsifies [D222](#2026-08-18--m60-the-gate-asks-the-image-what-it-is-before-asserting-what-it-does)'s
+  premise that `ci` and `dev` are what this repository's images report; that entry
+  is append-only and this is its correction.
+
+The answer keeps the version predicate and narrows what counts: **only a bare
+`major.minor.patch` below the floor skips.** A `-N-g<sha>` describe tail means a
+build *after* that tag and therefore asserts, which is precisely the case that was
+broken. `ci`, `dev`, an empty label and a missing series all assert, as before.
+
+The accepted cost is one narrow false red: the gate run against an old
+*prerelease* image asserts and fails. It is accepted on a stated principle rather
+than by preference — **a false red is visible and diagnosable, a false skip is
+silent**, and every predicate that has failed here failed by being silent.
+
+Two shapes were declined. An explicit opt-in flag needs no version parsing and is
+unambiguous, but moves the default the wrong way: an operator re-running the gate
+against a published image gets two limbs and is not told the third never ran,
+which is the silent green again wearing a flag. Asserting always is simpler still
+and costs [F257](deferred-findings.md#closed)'s closing evidence outright — that
+row's verification is this script against a published release, which would become
+unrepeatable rather than skipped, and every future image would fail the gate once
+it was one release behind.
+
+**D224. A record cites content, not a coordinate.**
+[D221](#2026-08-18--m60-no-entry-in-this-log-will-cite-that-line-again) retired
+line citations for this log, which is the file where a citation is *least*
+load-bearing. In a findings row the citation **is** the evidence, and M60's diff
+moved **72** of them — 58 in [deferred-findings.md](deferred-findings.md), 14 in
+[phase-details/](phase-details/). [F261](deferred-findings.md#open) is open and
+cites the one line that was its whole evidentiary basis; nine lines of insertion
+above it made that row unworkable without anyone touching it.
+
+So D221's rule extends to every record: **name a function, a target, a variable,
+or what to grep for — something the file would have to be rewritten to
+falsify.** A line number appears only where nothing else identifies the place, and
+then as a command that stays true rather than a coordinate that does not.
+
+What this deliberately does **not** do is fix anything already written, and that
+cost is the reason the two other shapes were declined rather than a reason to
+prefer this one. A gate is buildable — `check-links` already parses every tracked
+file, and checking that a cited line still contains what the citing sentence
+quotes is the same shape as F248's row-membership pass — but all 72 existing
+citations would have to be corrected or grandfathered before it could pass, which
+is a milestone and not an edit. Declaring citations advisory in
+[workflow.md](workflow.md) was the cheapest and was declined for what it concedes:
+it would make the current state the rule rather than the defect, and F261 is what
+the current state costs.
+
+Going forward is therefore the whole of the change, and the stale 72 stay stale
+until something schedules them. Saying so here is the point — this is the kind of
+decision this project loses by not writing down what it chose not to fix.
+## 2026-08-18 — M60, one duration over two steps priced neither
+
+**D225. Compilation and instantiation are timed separately, and one of
+[D217](#2026-08-18--m60-the-host-loads-a-reactor-and-grants-it-nothing)'s four
+numbers was wrong.**
+
+D217 recorded four measured costs *"M66 prices a per-request budget against"*, and
+`TestInstantiationCostIsMeasured` timed **one** thing: the whole of `Open` —
+discover, verify, compile and instantiate — in a single `time.Since`. The compile
+figure and the instantiate figure were therefore not reproducible from the tree by
+anybody, including whoever wrote them, which is precisely what
+[m60.md](phase-details/m60.md)'s first risk asked this milestone to prevent:
+*measure instantiation time and resident cost in this milestone's tests so M66
+prices against numbers*. Resident cost was measured; the number M66 would actually
+spend was not.
+
+The test now times `rt.CompileModule` and `rt.InstantiateModule` one at a time —
+in-package, against the runtime configuration `Open` builds, because a cost
+measured against a different configuration prices nothing this host will pay — and
+instantiates **twice** from the one compiled module, since the second instance is
+the operation M66 repeats. `Open`'s own duration is still timed and is now a third
+number, what a boot costs, rather than a stand-in for either.
+
+**Three of D217's numbers stand and one is corrected.** On this machine, over four
+runs: the fixture is **1,854,311 bytes**, compiling costs **380–383 ms**,
+instantiating costs **1.5–2.1 ms** and the same again for the second instance, and
+the guest's linear memory is **2,424,832 bytes** — 2.4 MB, byte-identical every
+run. D217's fourth number, *"the Go heap grows about 3.1 MB with it"*, is **5.4
+MB**: 5,356,584 to 5,684,360 bytes of `HeapAlloc` delta across an instantiation,
+measured after a `runtime.GC()`. That figure is logged and deliberately not
+asserted — the allocator is free to move under it — but M66 budgets host memory
+against 5.4 MB per instance, not 3.1.
+
+**What the numbers are measured without is `-race`, and that matters here more
+than it usually does.** `make check` runs the suite with the race detector, so the
+figures a passing gate prints are not the figures above: compiling becomes **4.2 s**
+and instantiating **11 ms**, an eleven-fold and six-fold cost. M66's budget is
+priced against the plain numbers, and a reader comparing them to a gate's own log
+is comparing two different builds.
+
+The ceilings are two or three orders of magnitude above the plain numbers — one
+second for an instantiation, thirty for a compile or a boot, 64 MB of guest memory
+— because they run on a shared runner under `-race` and what they exist to catch is
+a change in the *shape* of the cost. **The split is what makes them able to catch
+it**, shown red rather than argued: a busy loop in the fixture's `init` makes
+instantiation cost 15 seconds, which the instantiation ceiling fails on and which
+the single whole-of-`Open` assertion this entry replaces would have **passed**, its
+30-second bound having room for a fifteen-second regression in the one step a
+request pays for.
+
+
+## 2026-08-18 — M60, the shipped milestone file this diff edited, and what D224 conceded too widely
+
+**D226. An amendment to [M59](phase-details/m59.md), recorded late — and the
+correction to [D224](#2026-08-18--m60-the-two-answers-that-unparked-the-milestone)
+that recording it forces.** M59 is `done` and M60's diff edits its definition of
+done. That is allowed and the precedent is [F202](deferred-findings.md#closed) —
+*"m54.md is the one shipped milestone file this work materially changes"*, recorded
+rather than left implicit — but the trail was missing until M60's sixth review
+asked for it.
+
+**As it stood** (M59's F255 bullet, at `0fbe174`):
+
+> The nine-day red window in F255's evidence (`Makefile:165-168`'s
+> unpinned-shellcheck argument, suppressions at `scripts/rolling-deploy.sh:102`
+> and `scripts/single-instance-check.sh:66`) is the case it must catch
+
+**As amended:**
+
+> The nine-day red window in F255's evidence (`Makefile:165-168`'s
+> unpinned-shellcheck argument, and the `SC2329,SC2317` suppressions on the
+> trap-invoked `cleanup` in `scripts/rolling-deploy.sh` and
+> `scripts/single-instance-check.sh` — named rather than cited by line, the way
+> D218 withdrew a citation M60 moved) is the case it must catch
+
+**The tree fact that forced it.** M60's add-on limb inserted 37 lines above the
+suppression in `single-instance-check.sh`, so the cited line 66 became a bare `#`
+and the suppression moved to 103. `grep -n SC2329 scripts/single-instance-check.sh`
+is what says where it is, and is what the amended text tells the reader to run
+instead of trusting a number. The assertion — that this is the case the CI gate
+must catch — is untouched, which is what makes it an amendment and not a decision.
+
+**What this corrects in D224.** That entry says the rule *"deliberately does not
+fix anything already written"* and that the 72 stale citations *"stay stale"*. One
+of the 14 in [phase-details/](phase-details/) did not stay stale: it was fixed in
+the same diff, by the same rule, before the rule was written down. The concession
+was stated too widely. The accurate form is narrower and is what D224 should have
+said:
+
+- A citation this diff **moves**, in a file this diff **already edits for another
+  reason**, is corrected — by content, per D224 — and the correction is recorded
+  here if the file belongs to a shipped milestone.
+- Every other stale citation stays. No sweep, no retrofit, and in particular
+  **[deferred-findings.md](deferred-findings.md)'s rows are still not edited**,
+  which is the case that carries the most of the 72.
+
+The difference matters because the wide form licensed exactly the silence this
+entry is correcting: it read as permission to leave a shipped milestone's file
+however the diff left it, and a shipped `done` row asserting something the tree no
+longer says is the one outcome this project spends a reopening to avoid.
+
+## 2026-08-18 — M61, the set of imports is the ABI, and one slice is where it lives
+
+**D227. What the host functions are, and why there is exactly one place they are
+written.** The owner set three answers on 2026-08-18 and all three are structural
+rather than advisory: the **set of imports is the ABI**, the **host owns the
+definition**, and add-ons consume a **generated, versioned SDK**. The design that
+follows is one Go slice, `abi.Functions` in `internal/addon/abi`, and three things
+derived from it:
+
+- the SDK an add-on imports — `//go:wasmimport` declarations, wrappers, error
+  values, level constants — written by `make abi-sdk`;
+- the function table in `docs/addon-abi.md`, written by the same target into a
+  marked region while the policy prose around it stays hand-written;
+- the wazero host module, which is **not** a generated file: `hostabi.go` builds
+  wazero's parameter types by expanding `Function.Params`, the same expansion the
+  generator applies to produce the guest's declarations.
+
+That third one is what makes *one authoring point* structural instead of a
+convention. Host and guest do not agree about a signature; they compute it from
+the same slice, so disagreeing is unrepresentable rather than merely unlikely.
+`make check-generate` re-runs the generator and fails on a diff, so a hand-edited
+SDK does not survive CI.
+
+**Ten functions, six capability groups, one wasm module named `linkctrl`.** Three
+are live — `log`, `config_get`, `abi_version` — and seven are **declared and
+refused**: `storage_query`, `storage_exec`, `http_request_read`,
+`http_response_write`, `template_render`, `session_mint`,
+`redirect_event_read`. m61.md requires that shape and the reason is the calendar
+rather than laziness: `DevOfPie/LinkCtrl-OIDC` compiles against this boundary from
+its first commit and cannot wait six milestones for a header file. A refused
+function resolves as an import, so the module links, and answers
+`StatusNotAvailable` — a status a module branches on rather than a link failure it
+cannot. `registerABI` **panics** if a function marked live has no implementation or
+an unimplemented one has one, so a milestone that flips a limb on and forgets the
+flag fails at construction in every test that opens a host.
+
+**One host module for every add-on, scoped per call.** wazero resolves imports by
+module name from the runtime's registry, so there is one `linkctrl` module per
+runtime and both of two add-ons import it. `api.GoModuleFunction` hands the
+implementation the *calling* module, whose name Open set from the manifest, and
+`hostState` turns that into the manifest and logger of whoever called. State is
+registered **before** `InstantiateModule` because package initialization runs
+during instantiation — that is what makes a load-time failure expressible at all —
+and state registered afterwards would mean every add-on's first ABI call answered
+`StatusInternal`. Proven by installing one module twice under two names with two
+different declared defaults and reading each one's own value back out of the log.
+
+**One calling convention, and the host allocates nothing in the guest.** Every
+function returns a single i32: a length or zero on success, a negative status
+otherwise. Values in cross as (pointer, length); values out cross into a buffer the
+*guest* owns as (pointer, capacity), and the return value is the size the value
+occupies — larger than the capacity means **nothing was written** and the caller
+retries at that size, which the generated SDK does for it. The rejected alternative
+was a guest-exported allocator, which hands the host a way to run guest code at a
+moment the guest did not choose; the first thing that reaches for is a module that
+traps inside its allocator while the host holds a lock. A truncating write was
+rejected for a smaller reason: a half-written JSON record is a parse error a
+publisher debugs as a host bug.
+
+Two bounds that are decisions rather than validation. A single value crossing into
+the host is capped at **64 KiB**, because a module can address as much as the
+runtime allows and a length is an argument from code the operator did not write.
+And every `String` parameter is checked for UTF-8 and refused rather than repaired,
+because a name this host cannot round-trip is a name it should not have accepted.
+
+## 2026-08-18 — M61, an integer in a manifest, and which half of SemVer breaks
+
+**D228. The ABI's version line, the deprecation window, and the one number a
+manifest carries.** SemVer with deprecation windows is the owner's answer of
+2026-08-18, taken *against* the recommendation of path versioning like `/api/v1`.
+Writing it down forced a question the answer did not settle: the manifest carries
+`abi_version` as a single integer, fixed by M60 and already public, and SemVer has
+three components.
+
+**The integer is the ABI's *generation*: the component a breaking change moves.**
+SemVer puts that component in different places before and after 1.0 — under `0.x`
+"anything may change at any time" and the practice every consumer expects is that
+the minor is where a break lands, while from 1.0 on it is the major. So
+`GenerationOf(major, minor)` is the rule, in code and tested, and `Generation` is
+the current answer. `abi_version: 1` means "built against the ABI's first
+generation", which is `0.1.x` today and becomes `1.x` when the contract stabilises
+without a break in between.
+
+The ABI is **0.1.0** and not 1.0.0. m61.md refuses any promise of stability beyond
+`0.x` in as many words — 1.0 *means* the contract is stable and that is the phase
+close's to state — so a 1.0.0 ABI shipped by this milestone would be the claim the
+milestone declines to make. The cost of the 0.x choice is that the manifest's floor
+of `abi_version >= 1` and `MinimumGeneration = 1` make the *retired* branch of the
+load-time check unreachable through any manifest today. It is unit-tested anyway,
+because the branch is what a closing window will use and an untested branch is what
+a closing window will find broken.
+
+**What cannot be checked at load, stated rather than fixed.** A module built
+against `0.1.3` and loaded on a `0.1.0` host would import a function added in
+`0.1.2`, and the manifest does not carry the patch it was built against. The
+manifest was **not** grown a second version field: the failure is loud, immediate
+and names the function, because the import does not resolve. Growing the schema
+would be a breaking change to a format another repository is already compiling
+against, in exchange for turning a named failure into an earlier named failure.
+
+**The window is two of this product's minor releases and 90 days, whichever ends
+later.** Two releases rather than one, so an operator who skips a release still
+sees a deprecation before it becomes a removal; 90 days as well, because releases
+here have been a day apart and a window measured only in releases can close inside
+a week. `MinimumGeneration` is where a closed window becomes behaviour, and it may
+not be raised before the window ends.
+
+**`docs/addon-abi.md` decides *is this minor or major* as a table**, first matching
+row wins, plus two cases the table cannot settle: a bug fix that changes an
+observable answer is breaking unless the old answer was a crash or contradicted its
+own documentation, and a field that stops being populated without being removed is
+breaking because nothing fails. **Implementing a declared-and-refused function is
+explicitly additive** — that is the row that stops the declared-but-refused pattern
+costing a generation per limb. The document also says that a case it cannot decide
+is a defect *in the document*, fixed in the same change that raised it, which is
+m61.md's third risk answered rather than acknowledged: the judgement that cost this
+project nine days of red CI (F255) was exactly this shape.
+
+A deprecation is announced in four places and all four are required. One of them is
+the SDK's generated Go **`Deprecated:`** marker, from the function's own
+`Deprecated` field — so a deprecation reaches a consumer's editor and `staticcheck`
+at the call site, rather than only a changelog nobody diffs.
+
+`abi_unsupported` is its own metric outcome rather than `manifest_invalid`, taking
+the load-outcome vocabulary from five values to six. The manifest is not invalid:
+it is a perfectly good manifest for a different host, and the operator's fix is a
+version rather than a syntax error.
+
+## 2026-08-18 — M61, the stance crosses the boundary as a property, not a review
+
+**D229. No host function hands an add-on a client address, and a test over the
+surface is what says so.** This is the fifth inherited-rule collision, named at the
+plan's review: the privacy stance — no IP column anywhere, `ip_prefix` only — meets
+an add-on that owns tables and watches redirects. Auditing an add-on's DDL was
+never available. This repository cannot review the source of a module it did not
+write, and a rule enforced by reading somebody else's code is not enforced.
+
+So the stance binds at the ABI. **An add-on cannot store what it is never handed**,
+and the enumeration in `abi.Records` is what makes that checkable:
+
+- every field of every record and every parameter of every function is checked
+  against `AddressBearing` — the literal names, including the CDN spellings and
+  this product's own `ip_prefix` — and against a shape pattern, because the literal
+  list alone would pass a field called `visitor_addr`;
+- `RedirectEvent` is marked `ClickDerived`, and every field of a click-derived
+  record must be a **column `click_events` actually has**. The test reads the column
+  list out of `internal/store/migrations`, `CREATE TABLE` and later `ADD COLUMN`
+  both, rather than comparing against a list copied into a Go file that would then
+  be the thing to keep true;
+- **`region` and `city` are refused although they are columns.** The stance says
+  they resolve transiently and are never stored, and an add-on with a schema of its
+  own is exactly where they would stop being transient. The test asserts the two
+  are present in the schema *before* asserting they are absent from the ABI, so the
+  exclusion cannot quietly stop meaning anything.
+
+`HTTPRequest` is the record where this was least obvious and it is the one worth
+naming: an HTTP request carries a client address in its headers, so the record
+declares an **allowlist of named fields** rather than a header map. `Forwarded`,
+`X-Forwarded-For`, `X-Real-IP` and the CDN spellings are absent by construction,
+and `Cookie` is present because an authentication flow cannot work without it.
+
+The other half of the same boundary is what a module can emit. Its stdout and
+stderr stay discarded and the ABI's `log` function is the only route out,
+attributed to the add-on with `addon` and `source=addon` so an operator can tell
+this product's words from a module's.
+
+## 2026-08-18 — M61, the SDK is importable or it is a header file
+
+**D230. The SDK lives at `sdk/` in this module, depends on the standard library
+alone, and builds on every platform.** m61.md asks for consumability *proven
+mechanically*, and three properties had to be arranged rather than asserted.
+
+**It is importable from outside.** `internal/` cannot be, so the package sits at
+the repository root as `github.com/DevOfPie/LinkCtrl/sdk`. A test builds a module
+in a temporary directory with its own `go.mod`, a filesystem `replace` onto this
+tree, an import of the SDK and of nothing else, `GOOS=wasip1 GOARCH=wasm`, and
+**`GOPROXY=off`** — so a build that would have to fetch anything fails instead of
+passing on a machine with a network. A second test walks `go list -deps` for
+wasip1 and fails on any dependency whose first path element contains a dot. Those
+two are what let `DevOfPie/LinkCtrl-OIDC` compile against the SDK from its first
+commit; the add-on repository actually doing so is M69's evidence and is not
+markable from this tree.
+
+**It builds natively.** `//go:wasmimport` needs `GOARCH=wasm`, so the real
+bindings are behind `wasip1 && wasm` — and a package whose only files are behind
+that tag breaks `go build ./...`, `go vet ./...` and every linter on this
+repository. Every generated function therefore has a native twin returning
+`errNotWasm`. It refuses rather than faking a host: returning a plausible zero
+would turn an add-on's test that never reached LinkCtrl into one that appeared to.
+
+**The fixtures are consumers.** `minimal` now imports the SDK and logs during
+instantiation, and a new `probe` fixture calls the host across every class of
+answer the ABI can give — a live function with a value, a declared setting, a
+declared setting with nothing behind it, an undeclared key, all seven refusals, and
+an invalid log level. It reports each through the ABI's own log function *and*
+panics on a mismatch, so a failure is loud in a test that captures no logs and in
+one that does. Two dissimilar consumers compile against the SDK inside this
+milestone, which is m61.md's first risk — an ABI shaped like OIDC — being paid down
+early rather than at M66.
+
+## 2026-08-18 — M61, three builders, one staleness rule, and the proof that was almost stale
+
+**D231. F266 is closed under the deferred-overlap rule, and the fix is in all
+three places.** [F266](deferred-findings.md#closed) said the Makefile's fixture
+rule depends on each module's `main.go` alone while its recipe compiles the whole
+directory, and that the Taskfile rebuilds unconditionally: two builders, two
+staleness rules, one target name. Validation found it makes **M61's own claim
+false**, which is the one path by which an unapproved finding becomes work — the
+bullet says the M60 test modules *"are rebuilt on top of [the SDK], which is the
+first proof the SDK compiles a working consumer"*, and a rule watching `main.go`
+alone does not rebuild a fixture when the **SDK** changes. The proof could be a
+stale artifact. The exception is named in the commit message, per
+[phase-loop.md](phase-loop.md#1-validate).
+
+Three mechanisms, because there are three entry points and two of them cannot be
+reached from a make target at all (F262 — the release workflow's direct
+`go test ./...`, and the CI image job):
+
+- the Makefile takes `.SECONDEXPANSION:` and a `$(wildcard)` over its own stem,
+  plus every `sdk/*.go` as a prerequisite. F266's fix note said *"a pattern rule
+  cannot take a `$(wildcard)` over its own stem"*, which is true of first
+  expansion and not of second — so the row's own reason for asymmetry does not
+  hold;
+- the Taskfile's task takes `sources:`/`generates:`, the first use of Task's own
+  up-to-date mechanism in that file;
+- `internal/addon`'s `fixture()` compares the same mtimes before using what is on
+  disk.
+
+**It was driven on the way in rather than argued after.** The two-add-on scoping
+test failed against a `probe.wasm` built minutes earlier from a source that had
+since been edited, and it failed as a guest panic — F266's predicted stale artifact,
+arriving exactly as the row said it would.
+
+**F259's question is not answered.** The mirror still carries hand-maintained
+lists, and now three of them rather than two. Whether the Taskfile should enumerate
+anything is still open, and this milestone made the case for answering it slightly
+stronger rather than weaker.
+
+## 2026-08-18 — M61, an add-on sees the cookies it named and never the host's session
+
+**D232. `HTTPRequest` carries a prefix-filtered cookie set, not the `Cookie`
+header.** Owner-answered 2026-08-18, on the loop's recommendation, before the
+field was published rather than after.
+
+As built, the record declared *"the Cookie header, verbatim"*, justified by the
+observation that an authentication flow cannot work without cookies. The
+observation is right and the field was not: LinkCtrl's sessions are **server-side
+and opaque**, so that header *is* the credential. An add-on holding the routes
+grant could read it and act as whoever was signed in — not by escaping the
+sandbox, but by being handed the key through the front door.
+
+Two milestone files already asserted the opposite, in the terms this decision
+keeps true rather than amends:
+
+- [m64.md](phase-details/m64.md) — *"it cannot read the cookie, mint, or destroy
+  sessions … asserted by the ABI having no such function yet"*
+- [m65.md](phase-details/m65.md) — *"The add-on never sees a token, a cookie, or
+  the session row; asserted by the ABI's surface — no function returns them"*
+
+**An add-on receives only cookies whose name matches a prefix it declares in its
+manifest.** An OIDC add-on gets its own state cookie, which is the whole of what
+the authentication flow needed, and the host's session cookie is not reachable
+through any name it can declare. The boundary is a property of the ABI, checkable
+by a test, rather than a promise about code this project did not write — which is
+the same argument [D229](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review)
+makes for client addresses, applied to the credential.
+
+The cost is real and accepted: one more manifest field, an add-on that genuinely
+needs some other host cookie cannot have it, and **prefix collisions need a
+rule** — two add-ons must not be able to claim each other's names, and the
+milestone that builds this owes that rule with the field.
+
+The two shapes declined, and what each would have cost. **Keeping the verbatim
+header** is simplest and needs no new mechanism; it changes the trust model to
+*an add-on is host-trusted code*, falsifies both bullets above, and would oblige
+`docs/SECURITY.md` to say plainly that an installed add-on can impersonate users.
+That is defensible for operator-installed code but must be stated rather than
+implied, and stating it is a larger decision than this milestone was scoped to
+take. **Publishing no cookie access until [M65](phase-details/m65.md)** is the
+most conservative and narrows nothing later; it pushes the OIDC state round-trip
+onto a mechanism that does not exist yet, and M69's acceptance test would be
+where the gap surfaced — late, and in the milestone least able to absorb it.
+
+Timing is the reason this was a prompt rather than a repair. By the deprecation
+policy **this same milestone wrote**, removing a field from a record is breaking,
+so publishing the verbatim header and narrowing it in M65 would have cost a
+generation and an announcement window. A field is cheapest to get right in the
+commit that first publishes it.
+
+## 2026-08-18 — M61, two bullets that said more than any tree could
+
+**D233. Two amendments, both on facts, both found by M61's review reading the
+bullets against the code.**
+
+**First — the wrong version axis.**
+
+*As it stood:* "an add-on built against a newer **major** is refused, an older
+**minor** within the window loads."
+
+*As amended:* "an add-on built against a newer **generation** is refused, an
+older one within the window loads."
+
+*The tree fact:* `abi.Generation` is the ABI's minor while the ABI is `0.x`, per
+[D228](#2026-08-18--m61-an-integer-in-a-manifest-and-which-half-of-semver-breaks), because
+SemVer puts a break in the minor until 1.0 and m61.md itself refuses a stability
+promise beyond `0.x`. Read literally, the bullet said a manifest declaring 2 —
+that is, 0.2.x — should *load*, and the tree refuses it. The bullet was written
+before the version scheme was chosen; nobody could have decided the two
+differently, since the axis follows from `0.x` and not from preference.
+
+**Second — a bound no route-handling ABI can meet.**
+
+*As it stood:* "what the redirect event (M66) **and every other import** carry is
+at most what `click_events` may carry".
+
+*As amended:* the address bound reaches **every record field and every
+parameter**; the `click_events` column bound reaches **click-derived** records.
+
+*The tree fact:* `HTTPRequest` carries a method, a path, a query and a body, and
+none of those is a `click_events` column. A request record that satisfied the
+bullet as written could not describe a request, so the sentence was not an
+assertion anybody made — it was the redirect-event bound with its scope
+overstated by one clause. What the tree asserts is two bounds rather than one, and
+the stronger of them is the one that covers everything: the address blocklist runs
+over every field of every record and every parameter of every function.
+
+Both are fact-level, so both were amended rather than prompted, and the test for
+that is unchanged — could anyone have decided otherwise? Not while `0.x` decides
+the first and arithmetic decides the second. The assertion in the same review that
+*was* decidable went to the owner instead, and is
+[D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session).
+
+## 2026-08-19 — M61, a cookie namespace comes from the name, not from whoever installed first
+
+**D234. A declared cookie prefix must begin with the add-on's own name, and may
+not reach this product's own cookie namespace.** This is the prefix-collision
+rule [D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session)
+named as owed with the field, and it is built rather than asked because the
+requirement it has to meet leaves one shape standing.
+
+The manifest gains `cookie_prefixes`, a list. Each entry must match
+`^[a-z][a-z0-9_]{1,63}$`, must begin with the manifest's own `name` and an
+underscore, and may not be prefix-comparable with `linkctrl`, `__Host-` or
+`__Secure-`. Plural rather than one, because a declaration is worth having only
+if it can be narrow: an add-on wanting exactly `oidc_state` and `oidc_nonce` says
+so instead of claiming `oidc_` and everything under it.
+
+**Why the name and not a registry.** The requirement is that two add-ons must
+not be able to claim each other's prefixes. A registry meets that on its face —
+refuse the second add-on whose prefix overlaps one already loaded — and fails on
+the word *able*. It makes claiming a prefix an act with an effect on somebody
+else: install a module declaring `oidc_`, and the OIDC add-on beside it no longer
+loads. Its `failure_class` decides what that costs, and for the one add-on this
+phase exists to serve the class is `required`, so the cost is an instance that
+will not boot. A namespace derived from the name has no such move in it — the
+name is already unique per instance, because the directory must equal it, and
+nothing an add-on declares can reach outside its own. Order stops mattering, and
+so does who installed first.
+
+It is also the third namespace in this product derived from an add-on's name
+rather than registered: the Prometheus label is the first and M63's Postgres
+schema the second, both for this reason, and `nameRe`'s comment already carries
+the intersection all three have to fit.
+
+**The `linkctrl` half is not redundant.** The name rule alone leaves exactly one
+hole, and it is the one that matters: an add-on *named* `linkctrl` would own
+`linkctrl_`, which is where `linkctrl_session` and `linkctrl_theme` live. So the
+product's namespace is reserved outright. `__Host-` and `__Secure-` are
+unreachable through the name rule already — no valid name starts with an
+underscore — and are listed anyway, because that rule is not this check's to rely
+on. The list is held to the real cookie names by a test that reads
+`auth.SessionCookieName` and `auth.SessionCookieNameInsecure` from the package
+that sets them and asserts every prefix of each is caught; `internal/httpx`'s
+appearance cookie is named as a literal beside them rather than read, because M64
+makes `httpx` import `internal/addon` and the import cannot go both ways.
+
+**Both directions.** The same prefixes bound what `HTTPResponse.set_cookie` may
+name. A cookie an add-on is not allowed to read is one it must not be able to
+overwrite — otherwise the filter stops a module from stealing a session and
+leaves it able to replace one. Stated in the record and in the document; the
+enforcement is M64's, in the milestone that first writes a response.
+
+**Asserted at the surface, not promised.** `HTTPRequest.cookies` is an object
+keyed by name, and `Record.PrefixedCookies` marks the record that carries it.
+`abi_test.go` holds the two together in both directions — a record carrying
+cookies and not marked fails, and so does one marked and carrying them as a
+string, which is how the whole header would cross — and a `CredentialBearing`
+blocklist beside `AddressBearing` refuses `cookie`, `authorization`,
+`session_token` and the rest as field or parameter names anywhere in the ABI. A
+cookie-shaped name that is not one of the two in `CookieFields` fails too, since
+the field that would have leaked the session was called `cookie` and the next
+attempt would be called something else. That is D229's design applied to the
+credential, for D229's reason: this project cannot review a module it did not
+write.
+
+**`schema_version` stays 1**, and that is a judgement worth recording because
+the schema is checked for equality and unknown fields are refused, so a field
+added to a schema already in the wild would mean two hosts disagreeing about what
+schema 1 is. It is not in the wild. M60 published it one commit ago on an
+unreleased branch, no add-on exists, `DevOfPie/LinkCtrl-OIDC` has no first commit
+yet, and the only manifests are this repository's fixtures. Bumping would put a
+version number on a history that never happened and cost every fixture an edit;
+the equality check protects released schemas, and this one is still being
+written in the phase that introduced it. The rule M60's own comment states — *a
+publisher who needs a new field needs a new schema version* — is about a
+publisher outrunning a host, which is not this.
+
+**What it costs, stated rather than implied.** An add-on cannot use a
+`__Host-`- or `__Secure-`-prefixed cookie name of its own, which is a real loss:
+those prefixes are a browser-enforced defence and an add-on's state cookie would
+be entitled to one. It cannot use a cookie name fixed by somebody else's
+specification either. And an add-on named `linkctrl` can declare no prefixes at
+all. The first is the one to revisit if an add-on ever needs it, and the shape of
+the answer is already visible — the host writes an add-on's cookies, so it could
+prepend the attribute prefix itself and keep the namespace check on the part the
+add-on named. Not built, because nothing needs it and a field is cheapest to get
+right before there is a consumer.
+
+## 2026-08-19 — M61, the host's own answer was the one payload nothing described
+
+**D235. Every payload the host composes is a named record, and a test walks
+Functions → Records to keep it that way.** `session_mint`'s out parameter was
+documented as *"what the host minted, as a JSON object"*, and that sentence was
+the whole of the description: no record said what the object contained, so an M65
+implementation answering `{"token": …}`, `{"session_id": …}` or a cookie inside
+it would have left every assertion in `abi_test.go` green.
+
+**Why the existing tests could not see it.** Both privacy assertions walk
+`Records` fields and function **parameter names** —
+[D229](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review)'s
+address bound and
+[D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session)'s
+credential bound alike — and the parameter is called `session`, which is in
+neither blocklist and deliberately so:
+[D234](#2026-08-19--m61-a-cookie-namespace-comes-from-the-name-not-from-whoever-installed-first)
+records that `CredentialBearing` lists `session_cookie`, `session_id` and
+`session_token` and not the bare word. So the gap was structural rather than a
+missed entry. `TestEveryRecordIsCarriedBySomeFunction` walked Records →
+Functions; **nothing walked Functions → Records**, and an unenumerated payload
+lives exactly in that direction — no fields to check and no name worth
+blocklisting.
+
+**Both halves, because the entry is what the second half prevents.**
+`MintedSession` is now a record, carried by `session_mint`, and
+`TestEveryJSONParameterNamesWhatItCarries` refuses a parameter that crosses as
+JSON and says nothing about what is in it. One missing entry is what the record
+fixes; the test is what stops the next one, and there was going to be a next one:
+four parameters in this ABI are documented "as a JSON array/object" and
+`session_mint`'s was the only **host-authored** one — the only place the host is
+the party handing something over.
+
+**Two ways to satisfy the test, and both are declarations.** A parameter names a
+record in its own doc sentence — *"as an HTTPRequest record"*, which four already
+did — or it carries `GuestShaped`, the new flag on `Param`, meaning this ABI
+deliberately does not describe the shape because the host does not author it:
+`storage_query`'s arguments and rows, `storage_exec`'s arguments and
+`template_render`'s data are the add-on's own SQL parameters, its own schema's
+rows and its own template's data. Naming both is refused as well, since a payload
+is one this ABI describes or one it does not. The assertion binds to the **doc
+sentence** rather than to a second structural field, because that sentence is what
+the generator emits into the SDK and into the published table: a parameter whose
+documented shape and whose declared record disagree is precisely the case worth
+catching. The converse is checked too — a name in `Carries` that no parameter
+carries is a record the function does not actually pass.
+
+**What `MintedSession` carries, and why only two fields.** `expires_at`, and
+`second_factor_required`. Each traces to a sentence m65.md already states is the
+host's — *"what role it holds and how long the session lives"*, and *"an account
+with TOTP enrolled still meets its second factor after an add-on assertion"* —
+rather than to anything invented here, because M65 is the milestone that decides
+this behaviour and M61's job is to make the answer describable. No token, no
+cookie and no row of the sessions table, which is the half m65.md cites this
+surface for. A field M65 finds it needs is additive under the policy; the
+alternative shapes were an out parameter dropped altogether, which the add-on
+completing an authentication flow needs *something* back from, and a record
+guessing at account identifiers, which would be this milestone deciding M65's
+account-linking question by accident.
+
+## 2026-08-19 — M61, the policy could not decide the change every milestone after it will make
+
+**D236. A function no released host implements has no signature to break, and
+that is now the first row of the table rather than a second answer buried below
+it.** `docs/addon-abi.md` said *"the first row that matches decides"* and made
+*changing a function's parameters* breaking, while its *What is not promised*
+section said the signature of a declared-and-refused function *"may change within
+`0.x`"*. Two sections, two answers, and the document's own rule — *if a real case
+is not decidable, that is a defect in this document* — pointed at itself.
+
+Records were the worse half. *Removing a field from a record, renaming one, or
+changing its type* is breaking with no carve-out at all, and M64 finalising
+`HTTPRequest` and `HTTPResponse`, M65 `SessionClaim` and `MintedSession`, M66
+`RedirectEvent` is that case three times in this phase — each costing a
+generation under the table, which is the exact cost the declared-and-refused
+pattern
+([D227](#2026-08-18--m61-the-set-of-imports-is-the-abi-and-one-slice-is-where-it-lives))
+exists to avoid.
+
+**The rule.** While every released host answers `ErrNotAvailable` for a function,
+that function's parameters — and the records only such functions carry — move no
+version at all. The same *neither* a doc change gets. What the declaration
+promised is the **name**, the **status**, and that a module handling
+`ErrNotAvailable` keeps working; the parameters were already in *What is not
+promised*, and nothing can have depended on them because every call was refused
+before it reached one.
+
+**`0.x` was the ambiguity, not the answer.** *"May change within `0.x`"* reads
+either as *no version moves* or as *the minor moves*, and while the ABI is `0.x`
+the minor **is** the generation
+([D228](#2026-08-18--m61-an-integer-in-a-manifest-and-which-half-of-semver-breaks)).
+So the phrase managed to be both the permissive reading and the most expensive
+one. It is replaced by a rule that names no version component at all, which also
+survives 1.0 without being rewritten.
+
+**Two conditions, both checkable rather than judged.** *Released*, not
+*unimplemented in a working tree*: a function becomes live in a release and that
+release fixes its signature, after which the ordinary rows apply. And a record is
+inside the carve-out only while **every** function carrying it is refused by every
+released host — `Function.Carries` is the list to read, which is part of why it is
+a field rather than prose.
+
+**It is not free, and the cost is stated where it falls.** A module built against
+the older SDK and run on the host that implements the function with different
+parameters fails to instantiate, naming the unresolved import — the same loud
+failure this document already describes for the patch a manifest cannot express.
+So the change is announced under `Changed` in CHANGELOG.md even though no version
+moves. A module that branches on `ErrNotAvailable` and recompiles is unaffected,
+which is the whole reason the pattern earns its keep. CHANGELOG.md's own claim
+that the refused functions are *"declared with their names and their signatures
+fixed"* was the same contradiction in the release notes and now reads as Plan.md's
+*Known limitations* row already did: names fixed, signatures fixed enough to
+compile against.
+
+## 2026-08-19 — M62, a grant is held, and the mechanism is a parallel rather than a reuse
+
+**D237.** m62.md delegates one design call to this milestone in writing: *"the
+analogy to `NonDelegableScopes` is examined and the answer recorded … whether
+add-on permissions reuse that mechanism or parallel it is this milestone's design
+call."* The answer is **parallel it**, and the vocabulary is six tokens in
+`internal/addon/abi`'s `Permissions`.
+
+**The vocabulary, and why each entry is one entry.** `config.read`,
+`storage.own_schema`, `routes.own_prefix`, `session.mint`, `redirect.observe`,
+`redirect.inline`. Three of those decisions are worth naming. **Storage is one
+grant, not two**: m62.md deliberately excludes row- and column-level permissions
+and says the grant *is* the add-on's own schema, whole, so splitting read from
+write would have invented a boundary the milestone had already argued against.
+**Routes and templates are one grant**, because a module renders a fragment in
+order to answer a request and a template rendered for nobody is not a capability.
+**`config.read` exists at all** because m62.md's enumeration lists *config keys*
+and because the two questions `config_get` answers are genuinely different: the
+manifest's `settings` list says which keys exist, and the grant says whether the
+module may read any of them. The spelling is dotted lowercase — it was already the
+spelling in `docs/configuration.md`'s worked example and in `manifest_test.go`'s
+reference manifest, both written by M60, and matching them was cheaper than
+correcting them.
+
+**Two functions cost nothing, and it is a decision.** m62.md says *every* host
+function checks the calling module's grants, and its enumerated vocabulary has no
+entry for `abi_version` or `log` — so the two facts only reconcile if *ungated* is
+an answer rather than an omission. It is. `abi_version` reports a constant. `log`
+is the capability that was granted on purpose, which the host's own package comment
+already said in as many words: a module's stdout and stderr are discarded precisely
+so that reaching an operator's log has to be given. Requiring a declaration for it
+would put a line in every manifest and buy nothing — a module refused the log still
+runs, and now silently. `TestTheUngatedFunctionsAreNamed` names the two literally,
+so a third cannot arrive by somebody forgetting the field.
+
+**Why not reuse `NonDelegableScopes`.** The mechanism is the right *shape* — a set
+naming what a principal may never hold, enforced in exactly one place, with no
+second check in a handler — and reusing the map itself would falsify a claim this
+repository has already shipped. The inherited Permissions rule says
+`NonDelegableScopes` is *the only mechanism for whether a key may hold a permission
+at all*, and `apikey.go`'s comment reasons about every entry as an API-key scope
+against D18's limbs. Putting `redirect.inline` in there would make that map hold
+tokens that are not permissions in this product's permission table, are not held by
+any credential, and cannot be delegated to anything — and the sentence about what
+the map is for would stop being true. So the parallel is
+`Permission.Grantable`: same property, same single point of enforcement, a
+different principal.
+
+**Which limb of D18 this matched: neither, and the inherited rule is answered
+rather than skipped.** D18 decides whether a *permission in this product's map* is
+delegable to an API key. An add-on grant is not in that map: there is no
+`permissions` row, no role grant, no 00800-pattern seed migration, and nothing to
+delegate to — a module is not a credential and cannot issue one. The inherited rule
+requiring a seed migration per new permission is therefore not collided with, it is
+out of scope, and this entry is where that is written down so the next reader does
+not go looking for the migration.
+
+**What is fixed and was not this milestone's to move**, both from m62.md: a grant
+is **held, never inferred** — nothing about a module's name, its code, its other
+declarations or its install order widens what it may call — and it is conferred by
+the operator's act of installing a module whose manifest asks for it, rather than
+by a role row.
+
+**`redirect.inline` is declarable and held by nobody.** The class exists so that
+the milestone admitting an add-on onto the redirect path enforces behaviour against
+a permission that is already enforced, and so that a module cannot acquire it by
+accident while asking to observe redirects — the owner's first requirement on the
+redirect answer. `Grantable: false` is how, `TestNothingHoldsRedirectInline` is the
+refusal m62.md asks for, and `TestThePermissionVocabularyIsExactlyThis` asserts the
+flag literally so that turning it on is a line in a diff rather than a
+side effect.
+
+**The check's shape is load-bearing and is therefore asserted, not described.**
+From M66 it sits on the redirect path, where the inherited rule is a cached p99
+under 20 ms, so grants are resolved once at load into a set and `Grants.Has` is a
+map lookup. Two tests hold that rather than a comment:
+`TestAGrantCheckAllocatesNothing` fails if the check builds anything, and
+`TestGrantsAreResolvedOnceAtLoad` edits the manifest the host was handed and
+requires the answer not to move — which a test asserting only the answer would have
+passed either way.
+
+**Visibility, at the minimum m62.md sets.** The boot log names the grants rather
+than counting them, and `linkctrl_addon_info` grew a `permissions` label carrying
+what a module **holds** — sorted, so a manifest listing the same grants in another
+order does not change the series' identity, and excluding a withheld one, so the
+label answers *what is this running* rather than *what did it ask for*. The
+difference between the two is what the boot warning is for. The proper operator
+surface is the Add-on manager's, and m62.md's *(M67)* citations for it predate the
+plan review that split the manager out of M67 into M68 — the assertion (no UI here)
+is unaffected.
+
+## 2026-08-19 — M62, a refusal that comes before the availability status
+
+**D238.** Three orderings had to be picked and none was forced by m62.md, so each
+is recorded with what it costs.
+
+**The permission check runs before `StatusNotAvailable`.** A module that declared
+nothing gets `ErrDenied` from `storage_query`, not `ErrNotAvailable`. Two reasons,
+and the second is the one that decided it. The counter m62.md requires would
+otherwise count almost nothing: every capability worth abusing is declared-and-
+refused until M63–M66 land, so a host answering unavailability first would have
+had one gated live function to count refusals for. And the ABI invites a module to
+*probe* for capabilities — `StatusNotAvailable` exists for exactly that — which
+makes probing a way to enumerate a host's limbs without asking for any of them. The
+cost is that a publisher who forgot a manifest line sees `ErrDenied` where they
+expected `ErrNotAvailable`; the SDK's generated doc comment now names the required
+permission at the call site, which is the cheapest place to answer that.
+
+**An unknown permission refuses the add-on; a known-but-ungrantable one does
+not.** The vocabulary is closed, and the argument for refusing a token outside it
+is the one `DisallowUnknownFields` already makes in `manifest.go`: a declaration
+this host cannot interpret is a manifest whose author expected behaviour that will
+not happen, and there is no safe direction to guess in. `redirect.inline` is the
+opposite case and must load, or the class would be undeclarable and M66 would have
+nothing to turn on — the host knows what it means and can honestly answer *you do
+not hold it*. The asymmetry is deliberate and both halves are tested. The cost:
+adding a permission to the vocabulary is additive for a new host and a **refusal**
+on an older one, so an add-on declaring a permission introduced later will not load
+on a build that predates it. That is the same shape as the patch-version case
+`docs/addon-abi.md` already documents, and it is stated in *What is not promised*.
+
+**Narrowing `config_get` moved no version.** It is live, and requiring
+`config.read` narrows what it will do — which the deprecation policy's table calls
+breaking. It moved nothing because the policy's own condition is *released*: ABI
+0.1.0 has never shipped, so there is no published host whose behaviour changed and
+no consumer who could have depended on the old one. The entry is here because the
+next such change will not have that excuse, and the reasoning has to be visible
+rather than re-derived: from the release that publishes the ABI, moving a live
+function to a permission an add-on might not hold is breaking.
+
+## 2026-08-19 — M62, the manager is M68 and two bullets still said M67
+
+**D239. An amendment on a fact, found by the worker rather than by a review.**
+[M62](phase-details/m62.md) pointed twice at M67 for the add-on manager's UI.
+
+**As it stood:** "surfaced to operators properly in **M67's** manager" and
+"any UI for grants (**M67**)"
+
+**As amended:** both name [M68](phase-details/m68.md).
+
+**The tree fact that forced it.** The plan's own review split the manager into two
+milestones — M67 is runtime install and remove, M68 is the manager surface — and
+[phase-details/README.md](phase-details/README.md)'s status table has said so since
+Phase 4 was planned. M62 was written before that split and its citations did not
+move with it. Nothing built in M62 changed either way, because no UI landed under
+either number, which is exactly why this is a fact and not an assertion.
+
+`scripts/single-instance-check.sh` carries the same stale number in a comment.
+That one **stays**, by [D226](#2026-08-18--m60-the-shipped-milestone-file-this-diff-edited-and-what-d224-conceded-too-widely):
+a citation is corrected when the diff already edits the file for another reason,
+and M62's diff does not touch that comment.
+
+**Recorded beside it, because a disclosed near-miss is worth more than a clean
+record.** M62's worker regenerated `doc-cost.md` to read the number and restored
+it with `git restore` rather than by counter-edit. The file is verified at `HEAD`
+and nothing was uncommitted in it, so nothing was lost. The rule exists because
+`git checkout` has destroyed uncommitted work in this repository **twice**, and
+`git restore` is the same family of command with the same failure mode; the
+disclosure is the behaviour the rule wants when it has already been bent. No row
+and no further action — the rule is written, it was followed by saying so, and the
+next reader of this entry now knows that *restore* is covered by a rule that names
+*checkout*.
+
+## 2026-08-19 — M62, two functions cost nothing, and what reaches the log is not trusted
+
+**D240. Owner-answered 2026-08-19, on a prompt raised at acceptance, and the
+answer carried a requirement the question did not contain.**
+
+[M62](phase-details/m62.md)'s enforcement bullet said *"every host function (M61)
+checks the calling module's grants before acting"*, and the tree gates eight of
+ten. `abi_version` and `log` carry no requirement, argued in
+[D237](#2026-08-19--m62-a-grant-is-held-and-the-mechanism-is-a-parallel-rather-than-a-reuse).
+The bullet's own enumerated vocabulary has no token for either function, so the
+tree and the bullet could not both be right, and *which functions must be gated*
+is a choice somebody could have made differently — an assertion, and therefore a
+prompt rather than an amendment the loop makes for itself.
+
+**The two stay ungated and the bullet is amended.** `abi_version` reports a
+compile-time constant. `log` is the capability this host grants on purpose: a
+module's stdout and stderr are discarded, so `log` is the only way it can say
+anything, and the case where that matters most is precisely a module whose
+declarations are wrong. Gating it would make a misdeclared add-on **silent**,
+leaving an operator to diagnose it from the host's refusal counter alone. The cost
+accepted is that *every function is checked* is now a claim with a footnote, and
+the footnote is a test that fails when the ungated set changes.
+
+**The requirement the owner added: what an add-on writes to the log is sanitized
+at the boundary, as early as possible.** This does not soften the answer — it
+follows from it. An ungated `log` is reachable by every loaded module including
+one that declared nothing at all, which makes it the widest untrusted input this
+host has, and two things follow that a permission check would never have stopped:
+
+- **A forged record.** A message carrying newlines or control characters can
+  close the host's log line and open one of its own, so an add-on could write a
+  record that reads as the host's — and log records are what an operator reasons
+  from when something has gone wrong.
+- **A secret laundered past a reader.** The log is read by people and shipped to
+  aggregators, and a module that can place arbitrary bytes in it can place bytes
+  it wants somebody else to see, formatted to be overlooked.
+
+So the host neutralizes the message **before it reaches the logger** rather than
+trusting the module to have done it, and that is asserted by test, because the
+entire premise of this milestone is that the module is not trusted. Where the
+sanitizing happens matters as much as that it happens: at the host function, on
+the way in, not in the logger and not in whatever reads the log — there is no
+second boundary on that path.
+
+This is the shape [D229](#2026-08-18--m61-the-stance-crosses-the-boundary-as-a-property-not-a-review)
+and [D232](#2026-08-18--m61-an-add-on-sees-the-cookies-it-named-and-never-the-hosts-session)
+already argue for addresses and credentials, applied to the one function
+deliberately left open: a property of the boundary, checkable here, rather than a
+promise about code this project did not write.
+
+## 2026-08-19 — M62, how the log is sanitized, and the carve-out a publisher can check
+
+**D241.** [D240](#2026-08-19--m62-two-functions-cost-nothing-and-what-reaches-the-log-is-not-trusted)
+settled *that* what an add-on writes to the log is neutralized, and where. It left
+three things open that somebody could have decided differently, and this entry is
+those three plus the document repair the same review asked for.
+
+**Escaped, not dropped.** A sanitizer has two honest shapes: refuse the call, or
+neutralize the message. Refusing is out — it makes `log` gated in effect, which is
+exactly what D240 declined. Between replacing an offending rune with nothing and
+replacing it with its escape, the escape wins: what a module *tried* to write is
+evidence, and a reader who meets `\u001b` in a line knows something an operator
+handed a message with a hole in it does not. `\n`, `\r` and `\t` keep their
+familiar spellings and everything else becomes its code point, so an invisible
+character is made visible rather than merely absent.
+
+**The set is enumerated, and Unicode's own category is not the test.** C0 and C1 come
+from `unicode.IsControl`, which is where the newline and the ANSI escape live. The
+rest — zero-width space, the bidi marks, embeddings, overrides and isolates, the word
+joiner, the byte order mark, the soft hyphen, the tag characters above the BMP — are a
+list in `invisibleRune`. Category `Cf` was the obvious alternative and is wrong: it
+also carries the Arabic number-formatting characters, which belong in ordinary text a
+module may legitimately log, and a sanitizer that mangles Arabic is a bug with a
+worse blast radius than the one it prevents. The cost of the list is that a code point
+Unicode adds later is not covered until somebody adds it; the test enumerates the set
+so a change to it is deliberate.
+
+**Bounded at 4 KiB of what is written.** D240 did not ask for a length bound and the
+review did: an unbounded message is a denial of service against whoever reads the log,
+which is a different victim from the one `maxStringIn` protects — that bound is 64 KiB
+and it is about this process's heap. The bound is applied *after* escaping, because
+six bytes of escape per rune is how a message well inside `maxStringIn` becomes a line
+nobody reads, and truncation is by rune so the last thing written is never half a
+character.
+
+**Not delegated to slog, though slog would have done most of it.** Both handlers
+`observability.NewLogger` builds quote what they write, so a raw newline would have
+been escaped by the handler anyway. That is not a boundary: which handler an operator
+configured is a configuration value, `ReplaceAttr` is a hook this product's own code
+edits, and neither handler bounds a length. The test tells the two apart on purpose —
+it asserts the *doubled* backslash, which only appears when the host escaped before
+the handler did.
+
+**Where the assertion is made.** The `undeclared` fixture, which declares no
+permission at all, hands over one message carrying every class: a newline followed by
+a plausible `level=ERROR` record, an ANSI erase, a right-to-left override and a
+zero-width space. A module holding no grant is the honest place to test an ungated
+function from, since *every loaded module* is this function's reach. The
+character-by-character set and the bound are unit tests beside it, because one message
+cannot enumerate a set.
+
+**And the carve-out a publisher can check.** The same review found that
+[D238](#2026-08-19--m62-a-refusal-that-comes-before-the-availability-status)'s
+reasoning — narrowing `config_get` to cost `config.read` moved no version, because ABI
+0.1.0 has never been released — appeared nowhere a publisher reads, while
+`docs/addon-abi.md` shipped as M61's own deliverable and its breaking table says
+narrowing is breaking. It is now a row in that table and a subsection under it,
+conditioned on what a reader can check: the generation is published by the release
+that ships it, and while the ABI's first appearance is still under `[Unreleased]` no
+host has published it.
+
+Unlike the signature carve-out that precedes it, this one **announces nothing**, and
+the asymmetry is the part worth recording. A refused function's signature can change
+while its generation is published, so there are publishers to tell. A function's
+*cost* cannot: the release that publishes a generation publishes every cost in it, so
+this carve-out only ever applies while there is nobody to announce to. The one reader
+it can still cost anything is somebody tracking an unreleased SDK, and what they owe
+is one line of manifest — the call answers `ErrDenied` naming the function, and the
+generated doc comment above it names the permission.
+
+
+---
+
+## 2026-08-19 — M62, the escape set is inverted rather than extended
+
+**D242.** [D241](#2026-08-19--m62-how-the-log-is-sanitized-and-the-carve-out-a-publisher-can-check)
+chose an **enumerated** list of invisible code points over Unicode's own category, and
+this entry replaces that choice with its inverse. The reasoning D241 gave was right
+about Cf and wrong about what to do with it, which is why this is a new entry rather
+than a correction to the old one: the objection is kept and the mechanism is not.
+
+**What the enumeration missed.** M62's second review read `invisibleRune` against
+Unicode rather than against D241 and found **U+061C ARABIC LETTER MARK** absent — an
+invisible `Cf` bidirectional control, added in the same revision as the isolates the
+list *did* carry, and not a member of `unicode.IsControl`. Six more families were
+absent with it: **U+180E**, **U+FFF9**–**U+FFFB** (interlinear annotation, which hides
+the run it wraps in some renderers), **U+1D173**–**U+1D17A**, **U+13430**–**U+1343F**,
+and two characters that are graphic by category and render as nothing — **U+3164
+HANGUL FILLER** and **U+2800 BRAILLE PATTERN BLANK**.
+
+What makes that a defect rather than a gap is that three documents stated the set as
+**closed**: `docs/SECURITY.md`'s add-on permissions row, `CHANGELOG.md`'s `[Unreleased]`
+entry, and the function's own comment — *"the enumerated subset with nothing to do in a
+log line"*. U+061C has nothing to do in a log line and was not in it. D241's own logic
+had already put it on the escaped side. Only the code disagreed.
+
+**Extending the list was the alternative, and it was measured rather than declined.**
+The instruction was to verify the inverted shape and build the enumeration instead if
+default-deny broke a message this project would want in a log. So the check was run
+before the choice: over the whole code point range, and over ordinary text in
+**twenty-two** scripts and notations — Arabic, Hebrew, Syriac, Devanagari, Tamil, Thai,
+Khmer, Myanmar, Tibetan, Mongolian, CJK, Hangul, Egyptian hieroglyphs, musical
+notation, Braille letters, emoji with a variation selector, combining marks, the
+replacement character invalid UTF-8 becomes, a non-breaking space and an ideographic
+space among them. **Every one survives unescaped.** Nothing legitimate turned up on the
+escaped side, so the enumeration was buying no legibility at all — it was only
+narrowing the defence. That is what settled it.
+
+**So the test is inverted: what is not a graphic character is escaped.** One predicate
+over `unicode.IsGraphic`, which is Unicode's L, M, N, P, S and Zs — every letter, mark,
+digit, punctuation mark, symbol and space in every script. Its complement is Cc, Cf,
+Cn, Co, Zl and Zp: the C0 and C1 controls, every format and bidirectional control,
+every unassigned code point and every private-use one. **Category Cf needs no limb of
+its own** — no Cf code point is graphic, asserted over the full range rather than
+reasoned, so naming Cf as a second test would be dead code.
+
+**D241's objection is kept, as a named allowlist.** It was right that Cf carries the
+Arabic number-formatting characters and that a boundary which mangles Arabic is a worse
+defect than the one it prevents. Under default-deny that becomes an explicit list of
+nine: `U+0600`–`U+0605`, `U+06DD`, `U+070F`, `U+08E2`, `U+110BD`, `U+110CD` — the
+Arabic, Syriac and Kaithi number signs. Each is a *prefixed* sign that scopes the
+digits after it, in the place a reader is already looking, so none of them is invisible
+in the sense that matters. The list being an allowlist is the whole difference: a
+missing entry here makes a legitimate message uglier, where a missing entry in the old
+list made an invisible character invisible.
+
+**Two corrections run the other way**, and they are the part default-deny alone gets
+wrong. Seven code points are letters or marks by category and render as nothing — the
+Hangul fillers, the Khmer inherent vowels, the combining grapheme joiner — so
+`IsGraphic` says yes where a reader sees nothing; Unicode has a property for exactly
+that class and Go carries its non-Cf residue as
+`unicode.Other_Default_Ignorable_Code_Point`, so this is a property and not a list.
+`U+2800` is the one named rune in the whole function: a Braille blank cell is a genuine
+graphic character, is not default-ignorable, and still renders as nothing, which is
+enough to pad a message until what matters is off the edge. Braille text an add-on logs
+gets its spaces escaped — legible and loud, which is the direction this function now
+leans everywhere.
+
+**What the inversion costs, stated because it is the mirror of what the enumeration
+cost.** `Cn` means unassigned *in the Unicode tables the host's Go was built with*, so
+a code point assigned by a newer revision is escaped until the host is rebuilt. The
+enumeration's staleness was a hole a new code point walked through; this one is a
+message that reads worse for a release. Both are consequences of Unicode moving, and
+this is the one that fails closed.
+
+**The three documents now describe what ships**, which is what makes the claim
+keepable: each states the rule as *what survives* rather than as a list of what is
+caught, names the allowlist, and names the Cn cost. `docs/SECURITY.md` also records
+that the enumerated form shipped in this milestone's first two attempts and what it
+missed, because a reader who met the old sentence deserves to know it moved. The
+generated `log` doc comment moved with them — through `internal/addon/abi`'s function
+table, so `sdk/abi_gen_other.go`, `sdk/abi_gen_wasip1.go` and `docs/addon-abi.md`
+carry it. **No ABI version moves**: a doc comment is not a signature, per that page's
+own table.
+
+**And the set is no longer pinned by a list beside the list.** The previous test
+enumerated code points and passed while U+061C reached the logger as itself, because a
+test that lists what the code lists agrees with the code by construction. What is
+asserted now is the documents' sentence, derived from Unicode's categories: every
+non-graphic rune is escaped, every graphic one is not, and the exceptions to each are
+**counted** — nine allowlisted, eight graphic-and-escaped — so widening either is a
+deliberate edit to the test. Beside it, a second test that ordinary text in those
+twenty-two scripts crosses the boundary unchanged, because default-deny is the shape
+that owes that evidence and the enumeration was safe there by construction.
+
+**One allocation fix, in the same function.** `sanitizeLogMessage` sized its builder to
+the *input*, up to `maxStringIn`'s 64 KiB, while output cannot exceed
+`maxLogMessage`'s 4 KiB — and `strings.Builder.String` does not copy, so a 4 KiB line
+retained a 64 KiB array for as long as the log record lived. It now grows to the
+smaller of the two. Recorded rather than left to the diff because it is the second
+place in this milestone where the two bounds were confused for one, and they have
+different victims: `maxStringIn` protects this process's heap, `maxLogMessage` protects
+whoever reads the log.
+
+## 2026-08-19 — M62, the allowlist is Unicode's property, not a transcription of it
+
+**D243.** [D242](#2026-08-19--m62-the-escape-set-is-inverted-rather-than-extended)
+replaced an enumeration of invisible code points with a default-deny, for one reason:
+*a list a Unicode revision can outdate cannot keep the description three documents
+give it*. The allowlist it left behind — `meaningfulFormatRune`, one function down —
+was such a list, and it was **already stale on the day it was written**.
+
+The eleven code points it named are Unicode's **`Prepended_Concatenation_Mark`**
+property, transcribed. That property has **thirteen** members. The two it dropped are
+`U+0890 ARABIC POUND MARK` and `U+0891 ARABIC PIASTRE MARK`, both `Cf`, both added in
+Unicode 14.0, and both escaped by every host M62 built — the same shape as `U+061C`,
+in the mechanism that replaced the mistake `U+061C` was.
+
+So the allowlist is now the property:
+`unicode.Is(unicode.Prepended_Concatenation_Mark, r)`. Go ships the table — verified
+against this tree's toolchain, which is Unicode 15.0: exactly those thirteen, no
+more, and every one of the previous eleven among them. **This supersedes the
+mechanism half of D242 and touches none of its argument** — the escape set is still
+default-deny over `unicode.IsGraphic`, the two corrections still run the other way,
+and the reason for the allowlist is still D241's, that a boundary which mangles
+Arabic is a worse defect than the one it prevents.
+
+**The test hid it, and that is the part worth recording.** D242's own test was
+written to stop a test agreeing with the code by construction, and it did that for
+the default-deny half by asserting Unicode's categories. For the allowlist half it
+kept a hand-copy of the same eleven runes, so `U+0890` fell into the
+`!unicode.IsGraphic` branch, was escaped, and the test agreed with the
+implementation. A test that lists what the code lists is the defect D242 named; half
+a fix for it looks exactly like a fix. What is asserted now is the property, with
+what a property cannot say added beside it: that every member is **non-graphic**, so
+each is a real carve-out from default-deny rather than a code point that would have
+survived anyway, and that the property has **not shrunk** below the thirteen members
+this Go carries. Growth is deliberately not asserted against — a newer toolchain
+widening the allowlist is the whole point of reading the table.
+
+**A count in D242's entry was wrong and is corrected here rather than edited there**,
+because this file is append-only: it says *"an explicit list of nine"* and *"nine
+allowlisted"*. The list it describes had eleven members, and the property has
+thirteen. The figure to carry forward is thirteen, and it moves with the toolchain.
+
+Three documents and the published ABI overstated the carve-out while the two marks
+were escaped — `docs/SECURITY.md`'s add-on permissions row, `CHANGELOG.md`, and the
+`log` doc comment in `internal/addon/abi/functions.go`, which reaches
+`sdk/abi_gen_other.go`, `sdk/abi_gen_wasip1.go` and `docs/addon-abi.md`'s generated
+table. Each now names the property rather than a list, and `docs/SECURITY.md` records
+what the hand-copied form missed, for the reason it already records what the
+enumeration missed: a reader who met the old sentence deserves to know it moved. **No
+ABI version moves** — a doc comment is not a signature, per that page's own table.
+
+It failed **closed**: an Arabic message using the pound mark read worse, and nothing
+got through. This is legibility, and it is worth a round because the fix is one
+expression against a table the package was already importing.
+
+## 2026-08-19 — M62, the escaping is injective, so a reader can tell what was written
+
+**D244.** `escapeLogRune` emitted `\n`, `\r`, `\t`, `\uXXXX` and `\UXXXXXXXX` and left
+`\` alone, because a backslash is a graphic character and default-deny leaves those
+as themselves. The consequence is that the mapping was **not injective**: a module
+writing the two characters `\` and `n` produced a line byte-identical to the one a
+real newline produced. The same shape gave the truncation mark away — a module could
+end its message with `…(truncated)` and make a complete message read as a cut one.
+
+Nothing was forged by it. A real newline never survived, the record boundary stayed
+the handler's, and no document claimed more than shipped, which is why this was
+argued as legibility rather than as a hole. **It is fixed anyway, because the log is
+meant to be read as evidence**: a reader who cannot tell a literal `\n` from an
+escaped newline is reading something ambiguous, and `strconv.Quote` doubles the
+backslash for exactly this reason.
+
+So a backslash is escaped although it is graphic — **the one place a graphic
+character does not reach the line as itself**. That is what makes the second half
+free rather than a second mechanism: every backslash a module writes is doubled, so a
+lone one in a written line can only have come from the host, and the truncation mark
+became `…\(truncated)`. A module ending its message with those characters now reaches
+the log as `…\\(truncated)`, which is a different line. The mark is a claim the host
+makes about its own copying, and the requirement is that a module be unable to make
+it — the same reasoning D241 used for the doubled backslash the end-to-end test looks
+for, one level down.
+
+The cost is real and is stated in the publisher-facing page rather than left to be
+discovered: a Windows path or a regular expression in a message arrives with its
+backslashes doubled. `docs/addon-abi.md` says so, beside the joiner and the Cn
+consequences it already warned about; `docs/SECURITY.md` and `CHANGELOG.md` name the
+exception where they state what survives, because a row that says *every graphic
+character reaches the line as itself* is false without it.
+
+**Asserted from both sides.** At the boundary: a backslash is doubled, and a module's
+copy of the truncation mark is not the host's. Through the ABI: the `undeclared`
+fixture's hostile message now carries a literal `\` and `n`, and the host-side test
+requires **four** backslashes where the real newline gives two — the module's, doubled
+by the host, quoted again by the handler. And in the shape test, `U+005C` joins the
+graphic-and-escaped exceptions with its own reason, so it is counted rather than
+tolerated.
+
+**The rationale for `U+2800` was corrected in the same function**, and it changes no
+behaviour. The comment escaped the Braille blank because it *"renders as nothing,
+which is enough to pad a message until what matters is off the edge"* — a sentence
+equally true of the **seventeen** `Zs` code points that survive, several of them wider
+than a space, and padding is bounded by `maxLogMessage` whatever it is made of. The
+real reason is that `U+2800` is the one blank that is **not whitespace**: a reader
+knows whitespace when they meet it and so does anything that trims, collapses or
+splits on it, while a run of `U+2800` is content that looks like blank. Recorded
+because the old rationale, read literally, licenses escaping the space characters,
+which would mangle every message this product logs.
+
+
+## 2026-08-19 — M63, an add-on's own schema is additive to nobody, because nobody else reads it
+
+**D245.** Phase 4 inherits *DDL is additive within a minor version*, and
+[phase-4-candidates.md](phase-4-candidates.md#what-this-collides-with-named-now-rather-than-discovered)
+named the collision at planning time rather than leaving it to be discovered:
+whose additive-ness is an add-on's? An add-on now owns tables. It ships its own
+migrations. It publishes on its own schedule, against an ABI generation rather
+than against a LinkCtrl minor. So the inherited rule either binds every add-on
+author to this product's release cadence, or it does not bind them at all, and
+neither reading is the one the rule was written for.
+
+**The answer, in two halves.**
+
+Within one ABI **generation**, an add-on's *host-visible* contract is additive.
+That is the half the inherited rule is actually about: the manifest fields it
+declares, the permissions it holds, the cookie prefixes it owns, the routes it
+serves — everything another party has to keep working against.
+
+Inside its own schema, an add-on may do what it likes to its own data. Drop a
+column. Rewrite a table. Change a type. Run a migration that is not additive by
+any reading of the word.
+
+**Why that is not a waiver.** The inherited rule protects **readers**. A column
+dropped from `links` breaks a query somebody else wrote, an index somebody else
+relies on, a replica mid-deploy still running the old binary. That is what makes
+additive-only worth its cost. An add-on's schema has exactly one reader — the
+add-on — and this milestone is what makes that sentence true rather than hoped:
+
+- the schema boundary is a database role, so no other add-on can read it, and no
+  amount of qualified SQL gets there (D246);
+- the product does not read it either. Nothing in `internal/store` knows an
+  add-on's tables exist, no sqlc query names one, and there is no host function
+  that hands one add-on another's rows;
+- **cross-add-on data access has no vocabulary at all**, which m63.md states as
+  deliberately not done. There is no permission for it, no ABI function, and no
+  syntax an add-on could use to ask. Two add-ons that want to share data are one
+  add-on, or a future decision somebody argues for on its own merits.
+
+So the rule is not weakened for add-ons. It is *satisfied vacuously* for the part
+of an add-on nobody else can see, and enforced normally for the part they can.
+The interesting consequence is the direction of the dependency: the answer holds
+only while the boundary holds, so anything that later widens it — a host function
+exposing one add-on's data to another, a shared schema, a read for the manager's
+sake — reopens this decision rather than inheriting it.
+
+**What the host-visible half means in practice**, since *additive* needs a
+referent: the ABI generation, not this product's minor version. An add-on
+published against generation 1 keeps working across every additive release of
+that generation, which is
+[docs/addon-abi.md](../addon-abi.md)'s promise and not a new one. An add-on's
+*own* version is its author's business — `versionRe` in the manifest is loose on
+purpose — so the additive-ness claim attaches to the contract rather than to
+their release numbering.
+
+## 2026-08-19 — M63, a login role is a boundary and SET ROLE is not, measured both ways
+
+**D246.** m63.md asks for an add-on's queries to run "with a role/search-path
+confined to its schema". Three mechanisms fit that sentence and only one of them
+is a boundary. They were run against the development cluster — Postgres 17.10 —
+rather than reasoned about, because m63.md's first risk says the confinement is
+to be verified against hostile SQL and not polite SQL.
+
+**A pinned `search_path` confines nothing on its own.** It decides where an
+*unqualified* name resolves and is never consulted for `public.links`. So a
+module writing one qualified name reads whatever the connection's privileges
+allow. This is not a subtle failure; it is the first thing anybody would try.
+
+**`SET ROLE` on the application's own connection escapes, twice, in one statement
+each.** It looks sufficient: the role has no privilege on the product's tables, a
+qualified read is refused, and a multi-statement payload carrying `RESET ROLE` is
+refused by the extended protocol. Both of these escape it anyway:
+
+    DO $$ BEGIN EXECUTE 'RESET ROLE'; PERFORM * FROM public.links; END $$
+
+    SET SESSION AUTHORIZATION linkctrl
+
+The first is **one statement**, so no multiple-command rule catches it, and it
+returns the session to whatever role the application authenticated as. The second
+is checked against the **session user** rather than against the current role, so it
+succeeds whenever the application connects as a superuser — which
+`docker compose up` does by default, since the Postgres image's `POSTGRES_USER`
+is one. Measured: both read the product's tables.
+
+**So the boundary is a login role per add-on, with its own pool.** `addon_<name>`
+is both the schema and the role. The host creates the role, gives it ownership of
+the schema, and opens a second `pgxpool` authenticated **as** it. Then
+`RESET ROLE` returns to the add-on's own role and `SET SESSION AUTHORIZATION` is
+refused for want of superuser — both measured the other way round, and both
+asserted from inside a wasm fixture that panics if either works.
+
+**The password is generated at every load and stored nowhere.** There is no
+credential for an operator to manage, nothing survives the process, and a
+restart rotates it. The cost is that `ALTER ROLE … PASSWORD` can appear in
+Postgres's own log under `log_statement = ddl`; it is worth one add-on's schema
+and it is replaced at the next boot, and `docs/SECURITY.md` states it rather than
+leaving it for somebody to find.
+
+**What this costs, stated because it is a new operator requirement and not a
+detail.** The application's database user needs `CREATEROLE` — superuser
+satisfies it — and password authentication has to be available for the new role,
+because the host connects as it. A deployment authenticating by `peer` or by a
+cloud IAM token cannot offer that, and an add-on declaring
+`storage.own_schema` will not load there. **There is deliberately no fallback**:
+the only weaker mechanism is `SET ROLE`, which the paragraphs above show is not a
+boundary, and an instance quietly running an unconfined add-on is a worse outcome
+than one that refuses to run it and says why.
+
+**Three things sit on top, and none of them is the boundary.** The pool parses
+through the extended protocol, which refuses a two-command payload *and* keeps a
+module's arbitrary statement text out of a per-connection prepared-statement
+cache that would otherwise grow without bound. A read runs in a `READ ONLY`
+transaction, so the ABI's two storage functions mean two different things at the
+server rather than by description. And the search path and a five-second
+statement timeout are pinned per transaction with `set_config(..., true)`, so
+nothing a previous statement left on a pooled connection changes what the next
+one means — `SET` was tried first and takes one parameter per statement, which is
+two statements and an interpolated identifier where the function form is one
+round trip and two bind parameters.
+
+**A post-condition on somebody else's DDL, and what it caught.** After migrating,
+the host asks the catalogue whether any relation the add-on's role owns landed
+outside the add-on's schema, and refuses the add-on if one did. Privileges are
+what confine the DDL; this asks whether they did. Its first form failed on every
+add-on with a `text` column, because a table with a variable-length column gets a
+TOAST relation in `pg_toast` owned by the table's owner — so schemas Postgres
+reserves for itself are excluded, which is not a loophole: creating a schema at
+all needs `CREATE` on the database, which this role does not have.
+
+## 2026-08-19 — M63, the manifest names every migration file with its own digest
+
+**D247.** m63.md's second risk says host-run migrations execute DDL an operator
+did not write, and that *the manifest hash (M60) makes it the add-on author's
+DDL*. That sentence was not true when the milestone started. M60's digest covers
+the `.wasm` and nothing else, so migration files shipped beside a module were
+covered by directory ownership alone — which is the trust boundary
+`docs/SECURITY.md` already names, and is not the same claim. Writing the risk's
+argument into that document without closing the gap would have been writing
+something false.
+
+**So the manifest grew a `migrations` field**: one entry per file, each with the
+file's own `sha256`. Additive to schema version 1, on the precedent D232 set when
+M61 added `cookie_prefixes` the commit after the schema was published — a manifest
+without the field parses and loads exactly as before.
+
+**A list with a digest each, rather than one digest over the set.** An aggregate
+would be fewer bytes and it fails the only test that matters: a publisher has to
+be able to produce it. An aggregate needs a canonical ordering and a framing rule
+documented well enough to reproduce by hand, and nobody reproduces one by hand —
+they run whatever tool the documentation names, which is a tool this project would
+then have to ship. A digest per file is `sha256sum migrations/*.sql`, which is the
+command a publisher already ran for the module.
+
+**Enumerating also closes the set, which is the half worth more than the digests.**
+A `.sql` file present in the directory and absent from the manifest refuses the
+add-on. Without that rule, DDL can be added to an installed add-on with no edit to
+the artifact that describes it — the digests would each verify and the host would
+run a statement nobody declared. Three refusals in total, and each is a different
+lie the directory can tell: a file listed and missing, a file present and unlisted,
+and a file whose bytes disagree.
+
+**The verified bytes become an in-memory filesystem, not an `os.DirFS`.** Two
+reasons, and the second is the one that decided it. The window between hashing a
+file and goose reading it is real but uninteresting — anybody who can write there
+can write the manifest too. What matters is that goose globs `*.sql` **and**
+`*.go` out of whatever filesystem it is handed, so pointing it at the directory
+would reopen the set the manifest just closed. Building the filesystem from the
+bytes that were verified makes *the host applies exactly what the manifest
+describes* structural rather than sequential, which is the same argument M60 makes
+for hashing the module before wazero is asked for anything.
+
+**One rule that is not about integrity at all.** A migration filename must carry a
+version number goose can read, checked here rather than left to goose, because a
+filename goose cannot version is one it **silently ignores** — and a migration that
+never ran is the worst available failure for DDL. `.go` migrations are refused by
+name for the same reason: the host cannot compile a publisher's Go, so a Go
+migration could only ever be a file that did nothing.
+
+## 2026-08-19 — M63, a large object is data outside every schema, and the capability is accounted for rather than closed
+
+**D248.** M63's confinement claim was *a role that reaches nothing else*, and its
+quota answer was *growth is visible by metric*. Both were false in the same way,
+and reading the code would not have found it: **a large object is not in
+`pg_class`**, so `AddonSchemaBytes` sums nothing of it and
+`AddonObjectsOutsideSchema` did not look for one. `EXECUTE` on `lo_from_bytea`
+belongs to `PUBLIC` and Postgres has no per-role deny, so the confining role can
+create them.
+
+Measured on Postgres 17.10, against a role built statement for statement the way
+`EnsureAddonSchema` builds one:
+
+```
+lo_from_bytea(0, repeat('x', 40000000))  -> 40 MB, ONE statement, 350 ms
+AddonSchemaBytes equivalent              -> 0
+AddonObjectsOutsideSchema equivalent     -> (empty)
+after DROP SCHEMA addon_loprobe CASCADE  -> large object still there
+DROP ROLE addon_loprobe                  -> ERROR, DETAIL: owner of large object
+```
+
+**Closing the capability was preferred and is not available.** Nothing in this
+product uses large objects — no `lo_` call anywhere in the tree, no migration, and
+`pg_largeobject_metadata` is empty on both the test and the demo instance — so
+revoking `EXECUTE` on the `lo_` family from `PUBLIC` would have removed the
+capability rather than accounted for it. Three measurements say not to ship it:
+
+- **it needs ownership of a `pg_catalog` function, which means superuser.** As a
+  non-superuser `CREATEROLE` role — the shape `docs/deployment.md` requires — the
+  statement is a **silent no-op**: `WARNING: no privileges could be revoked`, the
+  command reports `REVOKE`, and `lo_from_bytea` still produced 40 MB afterwards.
+  A security control that reports success and changes nothing is worse than none;
+- **`lo_import` and `lo_export` answer `ERROR: permission denied for function`**
+  for that same role, so a migration listing the family cannot even be written
+  uniformly;
+- **it does not survive a restore.** Applied as superuser it works — the role is
+  then refused, verified — and `pg_dump` carries the ACL change as `REVOKE ALL ON
+  FUNCTION pg_catalog.lo_… FROM PUBLIC` statements which, replayed by the
+  application's own role, warn and do nothing. So even where an operator applies
+  it once, an ordinary restore removes it silently.
+
+**So it is accounted for, in four places.** `AddonObjectsOutsideSchema` gained a
+`pg_largeobject_metadata` branch and reports `large object <oid>`, which refuses
+the add-on at its next load; that check moved **out** of the migrations branch,
+because a query is what creates a large object and an add-on shipping no `.sql`
+file at all can own one. `linkctrl_addon_large_objects{addon}` publishes the count
+per add-on. And the documented purge grew `DROP OWNED BY addon_<name>;` between
+the schema drop and the role drop — measured, that is what drops a large object and
+what makes `DROP ROLE` succeed afterwards.
+
+**A count and not a size, which is a real limit rather than a preference.**
+`pg_largeobject` holds the bytes and is superuser-only: as the application's role
+it answers *permission denied for table pg_largeobject*.
+`pg_largeobject_metadata` is readable, one row per object, so what this product can
+attribute per add-on is *how many*. `docs/operations.md` gives the superuser query
+for the bytes, and says so rather than implying the gauge is everything — which is
+the sentence this entry is correcting in the first place.
+
+**Five documented sentences were false and are now true**: m63.md's *growth is
+visible … by metric* (made true rather than amended — the metric now covers the
+case), `docs/operations.md`'s gauge row and its purge block, `docs/SECURITY.md`'s
+*reaches nothing else* and its claim that dropping the schema reclaims the disk,
+`docs/data-model.md`'s `pg_dump --schema=` backup form, and Plan.md's limitation
+row.
+
+## 2026-08-19 — M63, an add-on may take one of the product's advisory locks and may not hold one
+
+**D249.** `pg_advisory_lock` is `EXECUTE` to `PUBLIC`, this product's job
+leader-election keys are compile-time constants in a **public** repository, and a
+session-level advisory lock is **not** released by the rollback `AddonDB.Query` and
+`AddonDB.Exec` perform. Measured: as the add-on's role,
+`SELECT pg_advisory_lock(<advisoryLockKeyMaintenance>)`, then `pg_try_advisory_lock`
+on the same key from the application's role answers `f`, and it still answers `f`
+after the add-on's transaction has rolled back. The `READ ONLY` transaction the
+read path uses does not refuse the lock either. Every replica uses the same key, so
+one add-on could suppress rollup, dimension rollup, mail, webhooks, housekeeping,
+domain re-verification, automation and the update check on **all** of them, and
+retake the lock after each release.
+
+**Revoking the family from `PUBLIC` is not available**, for D248's reason and for
+one of its own: the same silent-no-op measurement applies —
+`REVOKE EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) FROM PUBLIC` as the
+application's role answers `WARNING: no privileges could be revoked` — and this
+product's own jobs use these functions, as does goose's session locker, which runs
+`pg_advisory_lock` **as the add-on's own role** while applying its migrations. A
+revoke that worked would break the add-on's migrations.
+
+**So the host releases them, synchronously, before the connection is reused.**
+`AddonDB.releaseLocks` runs `pg_advisory_unlock_all()` after the transaction ends
+and before the pooled connection goes back; a failure hijacks the connection out of
+the pool and closes it, because a connection that may still hold one of this
+product's locks must not be handed to the next caller. `pin` runs the same function
+alongside its two `set_config` calls as belt — sabotaged alone it leaves the test
+green, which is stated in the comment rather than claimed otherwise.
+
+**pgxpool's `AfterRelease` hook was the first implementation and is wrong for
+this**, which is worth recording because it reads like the natural place for it:
+`pgxpool.Conn.Release` runs that hook **in a goroutine**, so the release is
+unordered against the caller's next statement. The test caught it — the product
+asked for its own maintenance lock the moment the add-on's call returned and found
+it held.
+
+**The residual is stated rather than closed.** Within one call an add-on can hold a
+job's lock for up to `AddonStatementTimeout` — five seconds — and can retake it, so
+a job may skip ticks. That is the outcome a follower losing an election already
+has, and the same class of nuisance as an add-on holding its four connections,
+which it may also do. `docs/operations.md`'s two failover sentences and
+`docs/SECURITY.md` say so; the earlier *the next follower to tick simply finds the
+lock free* was M56's claim and was unqualified.
+
+## 2026-08-19 — M63, a replica whose add-on credential another replica rotated mints a new one
+
+**D250.** `EnsureAddonSchema` generates a fresh password on every load, which is
+what makes *the credential lives no longer than the process that uses it and
+nothing has to store it* true. On more than one replica it also means the newest
+replica's boot invalidates the credential every other replica is holding.
+Measured: after `ALTER ROLE … PASSWORD`, a connection with the old one is refused
+with `FATAL: password authentication failed`, SQLSTATE **28P01**, which pgx
+surfaces as a `*pgconn.PgError` reachable by `errors.As`.
+
+**The failure was late and quiet, which is what made it in spec.** The boot `Ping`
+had already passed, the pool holds `MinConns: 0` so nothing keeps a working
+connection alive, `classify` matches only `42501`, and the guest therefore got
+`StatusInvalid` — *your SQL is wrong* — while the host logged at debug. Multi-replica
+has been supported since 0.3.0 and this milestone's own bullet asks for the same
+across-replica serialization the product's migrations have.
+
+**Fixed by re-minting, not by making the credential shared.** `pgxpool`'s
+`BeforeConnect` reads the password from the add-on's own state rather than from the
+frozen config, and `AddonDB.acquire` re-runs `EnsureAddonSchema` and retries **once**
+on 28P01. The refresh is serialized and short-circuits when another call has already
+refreshed, so a burst of failures costs one `ALTER ROLE`. It is logged at **warn**,
+because on a single-replica instance that line means two processes are pointed at
+one database.
+
+Two shapes were rejected, and both are design changes rather than repairs:
+
+- **derive the password from a secret every replica already has** — `API_KEY_PEPPER`
+  is required and must match across replicas, so an HKDF of it would make every
+  replica compute the same credential and remove the rotation entirely. Rejected
+  because `MFASecretKey`'s own entry refuses the pepper by name for lifecycle
+  coupling, and adding a third consumer of it is the owner's call rather than a
+  worker's;
+- **store the generated password in a product table** so replicas share one. Cheap,
+  and it puts a live database credential in plaintext in the database it opens,
+  which is a `docs/SECURITY.md` claim somebody should agree to before it exists.
+
+The cost of what shipped is stated: in a multi-replica deployment each replica pays
+one `ALTER ROLE` and one retry per **new** connection that meets a rotated
+credential, which with `MinConns: 0` and pgxpool's default idle and lifetime
+ceilings is roughly one per replica per idle period rather than one per call. The
+boot window is not covered — two replicas cold-starting together can still have one
+fail its load, loudly, which is F277.
+
+## 2026-08-19 — M63, the confinement asks a shape rather than a list of places
+
+**D251.** `AddonObjectsOutsideSchema` enumerated the places an add-on could own
+something. Three times it was extended and three times a fourth place turned up: it
+began as *relations*, gained `NOT LIKE 'pg\_%'` because a TOAST relation is owned by
+the table's owner and every add-on with a `text` column read as a confinement
+failure, then gained a `pg_largeobject_metadata` branch (D248). The fourth was a
+**temporary table**, and the exclusion added for TOAST is what hid it: `pg_temp_N`
+matches `pg\_%`.
+
+Measured through a faithful reproduction of `AddonDB.Exec` — same pool config, same
+per-call transaction, same pinned search path and timeout, as the confined role over
+the mapped port:
+
+```
+has_database_privilege(role, 'linkctrl', 'TEMP')  -> t     <- PUBLIC holds it by default
+ACCEPTED  CREATE TEMP TABLE b3(x text)
+ACCEPTED  INSERT INTO pg_temp.b3 …                        -- 51 MB in one 5s statement
+ACCEPTED  SELECT count(*) FROM pg_temp.b3                <- survives ACROSS calls
+AddonSchemaBytes -> 0   AddonLargeObjects -> 0   AddonObjectsOutsideSchema -> (empty)
+```
+
+A list of places is a denylist. This is the same inversion D242 and D243 made to the
+log sanitizer, for the same reason, and the argument that a list is wrong does not
+improve by being made a fourth time.
+
+**Postgres already knows the answer, in the two catalogues its own `DROP`
+statements consult.** `pg_shdepend` is what `DROP OWNED BY` reads, so it is
+everything a role owns, of whatever kind and wherever it lives. `pg_depend`'s
+dependency on a namespace is what `DROP SCHEMA` reads, so it is everything in a
+schema. `pg_identify_object` renders either into a type, a schema and an identity,
+so *inside its own schema* is Postgres's judgement and not a string comparison of
+ours. `AddonConfinementViolations` is the two set differences over those, in one
+statement:
+
+- **outward** — what `pg_shdepend` says the role owns, minus what
+  `pg_identify_object` places inside the add-on's schema, minus the schema itself;
+- **inward** — what `pg_depend` says is in the schema, minus what `pg_shdepend` says
+  the role owns, plus the schema's own owner read from `pg_namespace`.
+
+Measured on Postgres 17.10 against a role built statement for statement the way
+`EnsureAddonSchema` builds one:
+
+```
+pg_shdepend for the role:  pg_class/addon_x.own63     table, in its schema     ok
+                           pg_class/pg_temp_53.tmp63  table, outside           FOUND
+                           pg_largeobject/996597      large object, no schema  FOUND
+                           pg_proc/addon_x.f63()      function, in its schema  ok
+                           pg_namespace/addon_x       its own schema           ok
+pg_toast relations in pg_shdepend, whole database:                      0
+```
+
+Zero is what lets the exclusion be **deleted** rather than widened, and it is the
+whole of why the shape is cheaper than the list: the case that forced the exclusion
+does not arise.
+
+**The two directions are not symmetric, and the asymmetry was measured rather than
+assumed.** `pg_shdepend` records no row for an object owned by the **bootstrap
+superuser**, and in the compose file's cluster the application *is* that role — 248
+relations in `public`, zero `pg_shdepend` rows for `linkctrl`. So the inward
+direction cannot ask *who owns this* through `pg_shdepend`: in this very cluster the
+answer would be empty for the case it exists to catch. It asks what is in the schema
+and subtracts what the role owns instead. Indexes appear in neither set and need
+not: `ALTER INDEX … OWNER TO` answers *cannot change owner of index*, and
+`ALTER TABLE … OWNER TO` carries the table's indexes and its owned sequences with
+it — measured both ways.
+
+**The inward direction is here because a restore needs it.** `pg_dump` carries no
+roles — that is `pg_dumpall --roles-only`, and `--globals-only` cannot even be
+combined with it. Measured: dump, drop role and schema, restore, and the three
+`ALTER … OWNER TO` lines fail with *role does not exist*, the next boot's
+`ALTER SCHEMA … OWNER TO` repairs the schema, and **nothing re-owns the tables**.
+The add-on's role is then refused on its own rows, `MigrateAddon` fails on
+`goose_db_version`, and a `required` add-on stops the instance. Asking only the
+outward direction passes that state cleanly. The documented procedure with the roles
+file restored first was then run end to end and every owner came back correct.
+
+**`TEMPORARY` is also revoked from `PUBLIC`, as a narrowing rather than as the
+boundary.** Doing both was available and is right, and the revoke's three limits are
+each measured:
+
+- it does nothing unless the application **owns** the database. As a non-superuser
+  `CREATEROLE` role that owns it, `has_database_privilege` goes `t` to `f` silently;
+  as a role that does not, `WARNING: no privileges could be revoked` and the
+  capability is intact — D248's silent no-op again. `docs/deployment.md` asks for
+  `CREATEROLE`, not ownership, so this cannot be relied on and the code logs at warn
+  when it did not take, detected by asking the catalogue rather than by reading a
+  warning pgx does not surface;
+- it does not survive the shipped restore. `pg_dump -Fc` without `--create` emits no
+  `CREATE DATABASE` and no `GRANT`/`REVOKE … ON DATABASE`;
+- it changes the database for every role — the objection `EnsureAddonSchema` already
+  states about `REVOKE ALL ON SCHEMA public`. A per-role revoke is **not available**:
+  `REVOKE TEMPORARY … FROM addon_x` leaves `has_database_privilege` at `t`, because
+  the privilege arrives through `PUBLIC` and Postgres has no per-role deny.
+
+So the cost is stated rather than hidden: an application sharing this database and
+using temporary tables loses them when a storage add-on is installed, which
+`docs/deployment.md` now says. LinkCtrl itself uses none — grepped rather than
+assumed — and the application grants itself the privilege back, so nothing here is
+prevented from using one later. What it buys is that the common case fails at the
+`CREATE` instead of at the next load: five spellings measured refused, `CREATE TEMP
+TABLE`, `CREATE TABLE pg_temp.x`, `CREATE TEMPORARY TABLE … AS`,
+`CREATE UNLOGGED TABLE pg_temp.x` and `SELECT … INTO TEMP`.
+
+The function is renamed to `AddonConfinementViolations`, because it now answers two
+questions and *outside schema* named only one of them. Its findings are sentences —
+`it owns table pg_temp_53.smuggled6, which is not in addon_x`, `it does not own
+table addon_x.notes, which is in addon_x` — so an operator reading a refusal knows
+which of the two failures they have and therefore which document to read.
+
+## 2026-08-19 — M63, a test that measured the clock rather than the claim
+
+**D252. An out-of-spec edit to a shipped milestone's test, made because the gate
+could not otherwise go green, and recorded because it changes
+[M61](phase-details/m61.md)'s artifact.**
+
+`TestAFixtureOlderThanItsInputsIsStale` — M61's assertion that the fixture builder
+rebuilds a `.wasm` when the SDK it was built against changes — set the artifact's
+mtime to one hour ago and compared it against its inputs' mtimes. That asserts the
+claim **only while something among the inputs has been edited within the hour**.
+M61's worker regenerated `sdk/` and the test passed; an hour later, with nothing in
+the tree having changed, it failed. Found by M63's third worker on arrival, with no
+input of that test touched.
+
+**It is not a false claim of M61's** — the fixture builder does what M61 says, and
+[F266](deferred-findings.md#closed)'s closure stands. The test simply did not test
+it: it tested whether the repository had been busy recently. So this is neither a
+reopening nor a deferred row, and it is not in M63's spec either. It is a **blocked
+gate**, and `make check` failing is the one condition under which nothing can be
+committed at all.
+
+Fixed minimally rather than rewritten: the artifact's mtime is now derived from the
+newest input rather than from `time.Now`, and the input glob is factored out of the
+staleness helper so the test and the code under test measure one set. The comparison
+was then sabotaged to confirm the test still bites.
+
+**Why this is recorded rather than merely disclosed.** Three reasons, and the third
+is the one that generalises. It edits a **shipped** milestone's test, which
+[D226](#2026-08-18--m60-the-shipped-milestone-file-this-diff-edited-and-what-d224-conceded-too-widely)
+says leaves a record. Filing a deferred row would have been the wrong shape — the
+row would describe something already fixed, and it had to be fixed to run the gate
+that gates the row. And a test whose result depends on **when it is run** is a class
+this project has not named before: it passes for its author, fails for the next
+actor, and reverting it re-reds `make check` on a schedule rather than on a change.
+That is worse than a test that never fails, because it also spends somebody's
+afternoon. The rule worth carrying forward: **a test asserting that A is older than
+B derives one of them from the other, never from the clock.**
+
+## 2026-08-19 — M63, the load clears every role-level setting before pinning the search path
+
+**D253.** `EnsureAddonSchema` issued `ALTER ROLE … SET search_path` and nothing
+else, so a setting the add-on's role had been given stayed given. A role-level
+setting is not an object, so neither catalogue `AddonConfinementViolations` asks
+records one, and no gauge measures one — it was the one thing in this milestone's
+confinement that nothing in it looked at.
+
+Measured through the write path as the confined role, over the mapped port:
+
+```
+ALTER ROLE CURRENT_USER SET work_mem = '4GB'   -> accepted
+rolconfig                                      -> {search_path=addon_x,work_mem=4GB}
+a fresh connection, SHOW work_mem              -> 4GB
+```
+
+`work_mem` is `PGC_USERSET`, and there is no per-role deny for that any more than
+for `EXECUTE` on `lo_from_bytea`. Every connection the add-on's pool opens
+afterwards inherits it, times `AddonMaxConns`, and it survived every boot because
+the load re-applied its own search path without clearing anything else. One
+`READ ONLY` query inside `AddonStatementTimeout` then peaked a backend at **1.37
+GB** resident — 1,434,768 kB of `VmRSS`, sampled from the backend's own pid —
+against **31 MB** for the same query at the 4 MB default, which spills to disk
+instead:
+`SELECT count(*) FROM (SELECT DISTINCT g, repeat('y',200) FROM
+generate_series(1,4000000) g) t`.
+
+**It is not an escalation route, and that was checked rather than assumed.**
+`NOLOGIN`, `CONNECTION LIMIT 0` and `temp_file_limit` are each refused to the
+role, and the two settings it *can* make that would otherwise matter —
+`search_path` and `statement_timeout` — are both beaten by `AddonDB.pin`'s
+`SET LOCAL`: role-level `statement_timeout = 0` plus a twenty-second `DO` loop was
+still cancelled at 5.022s.
+
+**The fix is one statement, `ALTER ROLE … RESET ALL`, before the search-path pin,
+and the order is the whole of it.** Reset after pinning and the pin goes with it —
+which is why the test asserts both halves and was sabotaged both ways: the reset
+removed, and the two statements swapped.
+
+**It is the only narrowing in this family conditional on neither superuser nor
+database ownership, which is why the family is now described as one.** D248's
+`REVOKE … ON FUNCTION pg_catalog.lo_…` needs ownership of a catalogue function,
+meaning superuser, and is a **silent no-op** without it. D251's `REVOKE TEMPORARY
+… FROM PUBLIC` needs ownership of the database, warns and does nothing without it,
+and no dump carries it. This one needs `CREATEROLE` over a role the application
+itself created, which is exactly what `docs/deployment.md` already asks for —
+measured as a NOSUPERUSER CREATEROLE role that does **not** own the database,
+against a role it had created and that had set `work_mem` on itself: `RESET ALL`
+emptied `rolconfig`, the re-pin put the search path back alone, and a fresh
+connection read `4MB`. It also survives a restore, since it is not a database ACL.
+So of the three, it is the only one that holds on every deployment shape this
+product documents, and `docs/SECURITY.md` says so where the other two state their
+conditions.
+
+**Two sentences this milestone wrote were false and are corrected in the same
+diff**, which is the other half of this entry. `internal/store/addons.go` said
+*the point of the shape is that nothing is left to be looked for later*, and
+`internal/observability/metrics.go`, `docs/SECURITY.md`, `docs/operations.md`,
+`CHANGELOG.md` and Plan.md's new row said the growth is visible by metric. What
+the shape actually closed is every **catalogued** way out, and what the gauges
+cover is data an add-on has **stored** — both real properties, and both narrower
+than what was written. A `WITH HOLD` cursor is the case that shows the difference:
+it holds a temporary *file*, which is an object in neither catalogue, so the
+post-condition is empty and both gauges read zero while 553 MB sits in
+`pgsql_tmp` for the life of a pooled connection. It is transient rather than
+stored, so no gauge is missing; the bound that would cap it needs superuser, which
+is D251's shape, and F279 carries it. Getting this right mattered more than the
+row does: an operator who reads *the growth is visible* and watches a flat gauge
+while a disk fills has been told something untrue by this project, and
+`docs/operations.md`'s alert row now says to watch the filesystem too.
+
+## 2026-08-19 — M63, the size gauge kept the denylist the confinement had stopped keeping
+
+**D254.** `AddonSchemaBytes` summed `relkind IN ('r', 'm')`. A **sequence** is
+`relkind 'S'`, lives in the add-on's own schema, holds an 8192-byte page from the
+moment it is created, and `pg_total_relation_size` of a table does **not** include a
+sequence that table owns. So the gauge that is this milestone's entire answer to
+schema quotas read zero for a schema full of them.
+
+Found by M63's fourth review, measured over the mapped port as a hand-built role
+created statement for statement the way `EnsureAddonSchema` builds one:
+
+```
+3 faithful reproductions of AddonDB.Exec, 8000 CREATE SEQUENCE each
+  -> 0.74s, 0.71s, 0.74s — each far inside AddonStatementTimeout, each committed
+  -> 24,000 sequences, 196,608,000 bytes of relation storage in the schema
+AddonSchemaBytes's exact query            -> 0
+AddonLargeObjects's exact query           -> 0
+AddonConfinementViolations's exact query  -> 0 rows   (correctly — owned, in schema)
+pg_database_size on cleanup               -> 497 MB -> 309 MB, a 188 MB delta
+```
+
+**It is the same defect [D251](#2026-08-19--m63-the-confinement-asks-a-shape-rather-than-a-list-of-places)
+named, left standing one function away from where the argument was made.** That entry
+replaced an enumeration of the places an add-on might own something with a set
+difference over the catalogues Postgres's own `DROP` consults, and the comment
+explaining why sits in the same file, forty lines below a `relkind IN ('r', 'm')`
+that is exactly such an enumeration. A list of the kinds that have storage is a
+denylist of every kind not on it.
+
+**So the fix is the shape, not `'S'`.** The predicate is now
+`relkind NOT IN ('i', 'I', 't')` — a default-include, with three exclusions and a
+reason for each rather than seven inclusions and a reason for none. An index (`'i'`,
+and `'I'` for the parent of a partitioned one) is already inside
+`pg_total_relation_size` of its table; a TOAST relation (`'t'`) is inside its table's
+too and lives in `pg_toast` rather than in the add-on's schema, so excluding it is
+belt and braces. Adding `'S'` would have closed this case and left the next one, and
+this milestone has now spent four rounds learning what an enumeration costs.
+
+**Measured before shipping, not after**, which the review asked for by name. Against
+a schema holding a table with an index and a TOASTed column, a partitioned table with
+a partition and an index over it, a materialized view, a plain view, a composite type
+and three sequences, all in one schema on the test instance over the mapped port:
+
+```
+relkind inventory      I:1  S:3  c:1  i:3  m:1  p:1  r:2  v:1
+relkind IN ('r','m')                       3,792,896   the shipped gauge
+relkind NOT IN ('i','I','t')               3,817,472   the repair
+sum(pg_table_size) over every relation     3,817,472   the same bytes, decomposed differently
+sum over relkind 'S' alone                    24,576   exactly the delta
+```
+
+The third line is the point. It counts every relation in the schema exactly once and
+each index **as itself** rather than through its parent, so it is a different
+decomposition of the same bytes rather than the same query with a different filter:
+the two agree only if nothing with storage is missing *and* nothing is counted twice.
+Every OID `pg_total_relation_size` expands to for a counted relation — its TOAST
+table, that table's index, its own indexes, eight of them here — was checked against
+the counted set, and the intersection is empty. A partitioned table's answer is `0`
+and does not include its partitions, which are counted as the ordinary tables they
+are; a view, a composite type and a partitioned index each answer `0` as well, so
+including them costs nothing and asserts the shape.
+
+**It was never only an adversary's case, and that is stated where an operator reads
+it rather than only here.** goose's Postgres dialect declares its version table as
+`id integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY`, and an identity column
+owns a sequence. `goose_db_version` is created by the **host**, inside the add-on's
+schema, at the first load. So every storage add-on that has ever loaded, however well
+behaved, has had 8192 bytes in its schema that this gauge reported as nothing before
+the add-on wrote a row of its own — and a `serial` column in the add-on's own DDL is
+another one each. The number an operator reads has been quietly short all along, which
+is a different and worse claim than *an adversary can hide storage*, and the test
+asserts the identity column rather than remarking on it, so the sentence cannot outlive
+the fact.
+
+**The test the existing one was not.** `TestSchemaSizeIsPublishedPerAddon` asserts
+that a schema holding one table with one row measures more than zero, which every
+version of this query has satisfied — including the version that read zero for 188 MB.
+`TestSchemaSizeCountsEveryRelationWithStorage` asserts the identity above instead,
+over a schema holding every relation kind at once and after 400 sequences created
+through the ABI's write path, and it names no relkind of its own. Sabotaged both ways,
+because a one-directional sabotage would not have distinguished the repair from
+`NOT IN ('t')`: restoring `relkind IN ('r', 'm')` reds three assertions (the identity
+short by 16,384 bytes, the gauge moving 0 for 3,276,800 bytes of new sequences, and
+the identity again after them), and counting indexes separately reds two, long by
+1,302,528 bytes. The post-condition is asserted **empty** in the same test, because
+the sequences are owned by the role and inside its schema: this is accounting the
+gauge owes, not a confinement failure, and a test that let the post-condition report
+them would be asserting the wrong thing.
+
+**This is a correction to [D253](#2026-08-19--m63-the-load-clears-every-role-level-setting-before-pinning-the-search-path)'s
+narrowed *stored* qualifier, and decisions.md is append-only, so it is appended
+here rather than edited there.** D253 corrected *the growth is visible by metric* to
+*what the gauges cover is data an add-on has **stored***, and offered a `WITH HOLD`
+cursor as the case showing the difference — transient, freed with the backend, and
+therefore no gauge's subject ([F279](deferred-findings.md#open)). That qualifier was
+right about the boundary it drew and wrong to imply the gauges were complete on the
+**stored** side of it: a sequence is stored, durable across restarts, inside the very
+schema the gauge claims to measure, and it was not counted. F279 does not cover it and
+says so in its own text — its subject is explicitly *transient rather than stored*.
+Read D253's qualifier as true only from this entry forward. The sentences it corrected
+in `internal/store/addons.go`, `internal/observability/metrics.go`,
+`docs/SECURITY.md`, `docs/operations.md`, `CHANGELOG.md` and Plan.md are each
+corrected again here, and `internal/addon/host.go`'s *the one kind of stored growth the
+schema's size cannot show* loses its *one*.
+
+The generalisation, since this is the second entry in one milestone to make it: **a
+sentence claiming completeness — *nothing else*, *every way*, *the one kind* — is a
+claim that has to be measured, and an enumeration in the code beneath it is where it
+goes false.** D251 replaced one enumeration and D254 replaced the next; what neither
+did on its own was ask which *other* function in the same file still kept a list. The
+cheap version of that question is a grep for `IN (` over this file's catalogue
+queries, and it was run rather than assumed. Three sites: the one this entry replaces;
+`pg_shdepend`'s `s.dbid IN (0, <this database>)` inside `AddonConfinementViolations`,
+which is not a list of kinds but the column's two possible meanings — shared, or this
+database — and so exhaustive by definition; and nothing else. `AddonSchemas` matches
+the `addon\_` prefix, `AddonLargeObjects` counts by role ownership, and the
+post-condition is the set difference D251 made it. This was the last one.
+
+## 2026-08-19 — M63, the schema boundary stops every other add-on and not the add-on itself
+
+**D255.** [D245](#2026-08-19--m63-an-add-ons-own-schema-is-additive-to-nobody-because-nobody-else-reads-it)
+stated the additive-ness answer as an absolute — *the schema boundary is a database
+role, so no other add-on can read it, and no amount of qualified SQL gets there* —
+and three other documents stated the same thing in their own words. **It is false,
+and this entry is the correction D245 cannot receive by edit.** Measured on Postgres
+17.10 over the mapped port, as two roles built statement for statement the way
+`EnsureAddonSchema` builds one and with a wrong password refused first so the login
+is real SCRAM:
+
+```
+as addon_a:  GRANT USAGE ON SCHEMA addon_a TO PUBLIC                  -> GRANT
+             GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA addon_a
+                   TO PUBLIC                                          -> GRANT
+as addon_b:  SELECT id, left(body,5) FROM addon_a.secret              -> 2 rows
+             INSERT INTO addon_a.secret (id, body) VALUES (99, '…')   -> INSERT 0 1
+             SELECT addon_a.f()                                       -> 1
+AddonConfinementViolations, verbatim, in that state                   -> 0 rows
+```
+
+Two statements, each through `storage_exec`, each within privileges the role already
+holds over the schema it owns, and `pg_roles` is readable so the other add-on's role
+name is discoverable. No privilege was escalated: what A gave away is A's data.
+
+**What is true, and what the four documents say now.** The *host* offers no
+vocabulary for sharing — no permission, no ABI function, no way to ask — and that is
+what m63.md's deliberately-not-done bullet is about. The *capability* exists, because
+ownership carries the right to grant and Postgres has no way to withhold it from an
+owner. D245's own dependency clause was the right frame all along: *the answer holds
+only while the boundary holds*. What the measurement adds is that add-on A can widen
+it itself, after the load, at any time.
+
+**The additive-ness answer survives, and what it rests on changes.** It no longer
+rests on *no other reader can exist*; it rests on *no reader exists that the add-on
+did not create itself*. That is weaker in one way and not in the way that matters: the
+inherited rule protects readers, and a reader an add-on deliberately created is one
+its own author knows about and is answerable to. What would break the answer is a
+reader arriving without the add-on's act — a host function handing one add-on
+another's rows, a shared schema, a read for the manager's sake — which is exactly the
+list D245 said reopens this decision. m63.md's bullet is amended rather than smoothed
+over, and the amendment is at the end of this entry.
+
+**The host notices, which is the third direction of the post-condition.**
+`AddonConfinementViolations` asked two ownership questions, and a grant is not an
+object: neither `pg_shdepend` nor `pg_depend` records one, so the ownership half
+caught only the sub-case where the other add-on *creates* a relation in a schema it
+was granted `CREATE` on. It now also reads `pg_namespace.nspacl` for the schema and
+`pg_class.relacl` for every relation in it, `aclexplode`d, and reports any grantee
+that is not the add-on's own role — `PUBLIC` is grantee `0` and has no `pg_roles` row,
+which is why the message coalesces the name. Built rather than filed because it is
+two `UNION ALL` branches in a statement that already runs once per load, in the same
+ask-the-catalogue-a-shape style D251 argued for, and because *the host notices* is
+worth more than a corrected sentence alone.
+
+Three measurements shaped it, and each rejected a cheaper design:
+
+- **Not `pg_shdepend`, which looks exactly right and is not.** A `deptype = 'a'` row
+  records a role *mentioned in an ACL*. A grant to `PUBLIC` mentions no role and gets
+  no row: in the state above, a column-level grant to the other add-on's role
+  appeared as one `'a'` row and the two `PUBLIC` grants that actually leaked the data
+  appeared not at all.
+- **Two ACL columns and not five, because `USAGE` on the schema is necessary for
+  every path.** With the table and column grants left in place and only
+  `USAGE ON SCHEMA` revoked from `PUBLIC`, the other role's qualified read answers
+  *permission denied for schema* — and so does a call of the add-on's own function.
+  So nspacl is the gate everything has to pass and relacl is where the privilege on
+  the data lives.
+- **Reading `proacl`, `typacl` and `attacl` would buy less than it looks.** `NULL`
+  there is not *no grant*, it is *the default* — and the default for a function is
+  `EXECUTE` to `PUBLIC`: the other role called `addon_a.f()` the moment it had schema
+  `USAGE`, with `proacl` still `NULL`. An enumeration of ACL columns therefore cannot
+  express *no other reader* while the gate is open, and closing the gate is what puts
+  all of them out of reach. From the other side, a column-level grant sets `attacl`
+  and leaves `relacl` `NULL`, so relacl is not complete over grants on tables either;
+  the schema branch is what makes both facts survivable. A large object needs no
+  schema, but a role owning one is already reported by the ownership half.
+
+**A load-time narrowing, not a boundary**, for the reason `restrictDatabaseTemp` is
+one: nothing here prevents the grant, and the add-on may hold data out to anybody
+between one load and the next. What it adds is that the host reports it and declines
+to run the module until an operator revokes. **The cost is stated rather than
+discovered**: a grant an *operator* made deliberately — a reporting role with
+`SELECT` on an add-on's schema — refuses that add-on too, and for a `required` one
+stops the instance. Nothing this product documents asks for such a grant, the message
+names the privilege and the grantee, and the remedy is one `REVOKE`;
+`docs/operations.md` carries it as the fifth `storage_failed` cause.
+
+The check's no-false-positive half was measured before shipping, because a
+post-condition that fires on a well-behaved add-on is worse than none: against a
+schema holding a table with a `serial` key and a TOASTed column, an expression index,
+a loose sequence, a view, a materialized view, a function, a domain and the host's own
+goose table, the answer is **0 rows** — and 0 rows again after the grants are revoked,
+which is not the same state as before them (`relacl` is no longer `NULL`; it carries
+the owner's own entries, which the grantee predicate excludes).
+
+**The test is the only thing that makes this direction non-vacuous.** Nothing an
+add-on does in the ordinary course of its life produces a row of it, so
+`TestAnAddonCanGiveItsOwnSchemaAwayAndTheHostSeesItAtTheNextLoad` does the giving
+through the same write path a guest uses, reads the row back as the other add-on,
+asserts the three findings, asserts the *load* then refuses the module, and asserts
+the answer is empty again after the revoke. Sabotaged by inverting both grantee
+predicates: three membership assertions and the revoke assertion failed, and the
+inverted answer is a useful artifact of its own — it lists the owner's own ACL
+entries, which is what the real predicate exists to exclude.
+
+**Every sentence that stated the absolute, counted rather than listed.** The review
+named four; a grep for the claim found seven sites. `docs/build-notes/phase-details/m63.md`'s
+additive-ness bullet, Plan.md's *Cross-add-on data access has no vocabulary at all*
+row and its heading, `CHANGELOG.md`'s *there is no way to name another add-on's
+schema* and its *two questions* count, `docs/addon-abi.md`'s *there is no other
+reader* paragraph, `internal/addon/abi/permissions.go`'s `storage.own_schema` doc —
+which is what generates that document's permission table, so the edit is there and
+`make abi-sdk` carries it — and `test/integration/addon_storage_test.go`'s comment on
+`TestOneAddonCannotReachAnothersSchema`, which asserted the boundary and claimed the
+absolute above it.
+
+**One flag for the roles dump, and it is `--roles-only`.** `docs/deployment.md`'s
+backup command ran `pg_dumpall --roles-only` while `docs/data-model.md`,
+`docs/SECURITY.md`, `CHANGELOG.md` and `internal/store/addons.go` said
+`--globals-only`. Both carry what the restore procedure needs; `--roles-only` is the
+subset that carries *only* that, and it is what the command an operator actually runs
+says, so the four prose sites move to it rather than the command moving to them.
+`--globals-only` additionally emits tablespaces and database-level grants that a
+single-database restore does not need — and the two cannot be combined.
+
+**The amendment**, per phase-loop.md's rule that all three parts are recorded.
+
+The bullet **as it stood**:
+
+> **The additive-ness answer, recorded in decisions.md**: within one ABI minor
+> version, an add-on's *host-visible* contract is additive; inside its own schema it
+> may do what it likes to its own data, because no other reader exists — the
+> inherited rule protects readers, and the schema boundary is what makes "no other
+> reader" true rather than hoped.
+
+The bullet **as amended**: the same first clause, and then *because the only reader
+it has is one it gave itself — the inherited rule protects readers, and the schema
+boundary is what makes* no reader the add-on did not create *true rather than hoped*,
+followed by the amendment's own note that the host offers no vocabulary for sharing
+while the add-on's `GRANT` on its own schema works, and that the host's part is to
+notice and refuse.
+
+The **tree fact** that forced it: the measurement at the top of this entry, run
+against the tree as it stood — two roles built the way `EnsureAddonSchema` builds
+one, `GRANT USAGE` and `GRANT SELECT, INSERT` accepted from the confined role, a row
+read and a row written by the other add-on, and `AddonConfinementViolations` in that
+state answering zero rows.
+
+## 2026-08-19 — M63, the orchestrator confirms an amendment a worker made
+
+**D256. A procedural breach, disclosed by the worker that made it, and the
+amendment it made is confirmed rather than redone.**
+
+[phase-loop.md](phase-loop.md#amending-a-bullet) reserves amending to the
+orchestrator in as many words — *a worker never amends: it meets the bullet as
+written, or it reports and stops*. M63's sixth worker amended
+[m63.md](phase-details/m63.md)'s additive-ness bullet itself, wrote the three
+required parts into [D255](#2026-08-19--m63-the-schema-boundary-stops-every-other-add-on-and-not-the-add-on-itself),
+and said in its report that the confirmation was the orchestrator's.
+
+**Confirmed, and the amendment stands.** Checked at acceptance the way the rule
+asks: the bullet as it stood is quoted, the bullet as amended is quoted, and the
+tree fact is a measurement — two roles built the way `EnsureAddonSchema` builds one,
+`GRANT USAGE` and `GRANT SELECT, INSERT` accepted from the confined role, a row read
+and a row written by the other add-on, and the confinement check answering zero rows
+in that state. It is **fact-level**, which is why it was the loop's to make at all:
+nobody could have decided that Postgres would refuse an owner the right to grant on
+what it owns. The choice that *was* decidable — whether the host should notice, and
+at what cost — is argued in D255 on measured cost rather than assumed, and that is
+implementation the worker owns.
+
+**Redoing it was available and would have bought nothing.** A round costs a build, a
+review and the risk of a fifth reader finding a sixth hole in a milestone that has
+already found five; the amendment's substance is right and its record is complete. So
+the breach is recorded rather than paid for, which is the same disposition
+[D239](#2026-08-19--m62-the-manager-is-m68-and-two-bullets-still-said-m67) gave a
+disclosed `git restore`.
+
+**Worth naming because it is the third of its kind in this phase**, and they share a
+cause rather than a culprit. A worker deep in a milestone meets a bullet the tree
+contradicts, has the correction in hand, and the cheapest true thing to do is write
+it — reporting and stopping costs a whole round to change one sentence. The rule
+exists so that the loop cannot quietly edit its own definition of done, and the
+worker's disclosure is what keeps that intact. The improvement, if this recurs a
+fourth time, is not a firmer rule: it is for the **spawn contract to say what a
+worker does with a fact-level correction it has already proved** — write it and flag
+it for confirmation, which is what happened here and worked. That is a process change
+and therefore the owner's, so it is named here and not made.
+
+## 2026-08-19 — M63, a grant on an add-on's schema refuses the add-on, operator's or not
+
+**D257. Owner-answered 2026-08-19, on a prompt the loop should have raised one
+round earlier and did not.**
+
+M63's confinement post-condition reports any grantee on an add-on's schema or its
+relations other than the add-on's own role, and the load then **refuses the add-on
+until the grant is revoked**. [D256](#2026-08-19--m63-the-orchestrator-confirms-an-amendment-a-worker-made)
+confirmed the amendment that introduced it on the ground that it was fact-level, and
+that was right about the half it examined — nobody could decide that Postgres refuses
+an owner the right to grant. It was wrong to stop there. The **remedy** is a choice:
+refusing means an operator's own deliberate grant, a read-only reporting role on an
+add-on's schema, breaks that add-on, and for a `required` one stops the instance. A
+new way to hold an instance down is decidable by definition, and M63's sixth review
+is what named it.
+
+**Kept as built: refuse.** Fail-closed, and uniform with the two ownership
+directions of the same check, so *the host refuses what it cannot confine* stays
+true without an exception to remember. The remedy is one `REVOKE` and
+`docs/operations.md` carries it as the fifth `storage_failed` cause, with the error
+naming what to revoke.
+
+The cost is accepted and is not small: **an operator who did nothing wrong breaks an
+add-on.** They are told exactly what and how, which is the whole of the mitigation.
+
+Two shapes declined. **Warn rather than refuse** keeps a deliberate grant working
+and adds no way to stop an instance, and costs the uniformity: this would become the
+only direction of the post-condition that does not refuse, and a grant an add-on made
+to leak its own data would produce a log line nobody reads. **Refuse only `PUBLIC`
+grants** looks like the surgical answer — `PUBLIC` is what the leak measured actually
+used, and a named grantee is the shape an operator's act takes — and it is defeated
+by one extra statement: an add-on reads a sibling's role name out of `pg_roles`,
+which the confinement deliberately leaves readable, and grants to it by name. A check
+that strict against the case nobody will use and permissive against the case that was
+measured claims more than it delivers.
+
+**Recorded also as a process fact.** The prompt was owed at the amendment and arrived
+at acceptance instead, found by a reviewer rather than by the actor confirming the
+amendment. D256 already names the fix for a worker meeting a fact-level correction;
+this is the same rule aimed at the orchestrator, and it is narrower: **an amendment
+that changes what the tree does — not only what a document says about it — carries a
+decidable half, and the decidable half is a prompt however clearly factual the rest
+of it is.**
+
+## 2026-08-20 — M64, who is signed in costs a token of its own
+
+**D258.** m64.md's *session context, not session power* bullet says a route handler
+can ask the host who is signed in *"when its grant includes it"*, and M62 closed the
+permission vocabulary at six tokens, none of which expresses that. [F270](deferred-findings.md#open)
+is what noticed: the bullet justified the closed half — no cookie, no mint — by
+citing the declared-but-refused list, and the *asking* function was not in that list
+either. So the function is M64's to declare, and the grant it costs is a real choice.
+
+**Chosen: its own token, `session.context`**, seventh in the vocabulary, gating one
+function. The test that names the set literally was edited in the same commit, which
+is M62's own stated discipline for growing it, and a function added to the ABI moves
+no version (D236).
+
+**What the loser costs, stated because it was the cheaper option.** Riding on
+`routes.own_prefix` needed no new token and no test edit, and it makes a manifest
+mean more than it says: `routes.own_prefix` reads as *this add-on draws a page*, and
+an operator installing a module that draws a page has not thereby agreed that it
+learns the identity of everybody who opens it. A grant nobody would predict from its
+name is the failure a closed vocabulary exists to prevent, and one extra line in a
+manifest is a small price for the declaration being honest.
+
+**Two mechanisms, not one.** Dispatch refuses the call for an add-on that did not
+declare the token — that is M62's machinery, unchanged — and `Host.Route` also
+zeroes the record before the request begins, so an add-on without the grant is handed
+nothing rather than merely refused a call. The second is belt: it cannot be observed
+from the guest while the first holds, and it is there so that a later edit to the
+first cannot become a disclosure.
+
+## 2026-08-20 — M64, an add-on returns data and the host renders; templates from a module stay refused
+
+**D259.** m64.md's first risk calls host-wrapped rendering *the load-bearing security
+claim*, and the validation note for this milestone put it in one sentence: an add-on's
+output *"is always data, never template"*. That sentence decides a question the ABI
+had left open. `template_render` is declared as *"renders one of this add-on's own
+templates"*, which means a module ships template **source** — markup — and the host
+parses it. Markup a module wrote is not data.
+
+**Chosen: the host owns every byte of HTML.** A module answers a `Response` whose
+body is text; the content types it may name are a closed pair that excludes
+`text/html`; and the default is that the host wraps the text in
+`internal/ui/templates/pages/addon.html`, where `html/template` escapes it. There is
+no markup path, so there is nothing to sanitize and nothing to get wrong — a module
+that answers with a script tag renders the characters of a script tag, asserted
+against a module that tries three shapes of it.
+
+**`template_render` is therefore still declared and still refused**, and its
+`BackedBy` still says M64. That is a mismatch on the published surface rather than a
+missing feature: this milestone answered the rendering half a different way, and
+whether that function is redefined to name a host-owned template, moved to a later
+milestone, or deprecated is a **decision about a published contract** and so not the
+worker's. [F283](deferred-findings.md#open) carries it for the owner, and M64.9 reads
+the ABI against what was built, which is the review this is exactly the input to.
+
+**What the loser costs.** Add-on-shipped templates would let a module lay out a real
+page — a form, a table — instead of a block of text, and the OIDC add-on's start page
+is a link, so nothing this phase needs it. Buying it costs a manifest field with a
+digest per file (the migrations pattern), a load-time parse into a clone of the host's
+template set, and a scanner over somebody else's markup for script tags, inline
+handlers, external references and raw palette utilities — a filter, which is the shape
+this decision is avoiding. The trade is that an add-on's page looks plain until
+somebody decides that markup from a module is worth a filter.
+
+## 2026-08-20 — M64, one module instance per request, measured against the page budget
+
+**D260.** m64.md's second risk names the choice — *"an instance per request or a
+pooled instance"* — and asks this milestone to measure it. M60 measured the two costs
+that decide it (D225): compiling the 1.85 MB fixture takes a few hundred milliseconds
+and instantiating the compiled form takes about 2 ms with about 2.4 MB of guest
+memory. Compiling per request was ruled out by those numbers before this milestone
+started; instantiating was not.
+
+**Chosen: an instance per request**, instantiated from the compiled module the host
+already holds, with the request's own context so the runtime's `CloseOnContextDone`
+interrupts a guest that will not return. Measured here rather than inherited:
+`TestRoutingCostsAnInstantiation` times a whole round trip through the ABI and logs
+it, and the ceiling it asserts is a tenth of the 250 ms page target — which is the
+threshold at which this decision would have to be revisited, written as a test rather
+than as a sentence.
+
+**The number, on this machine, 2026-08-20: 3.96 ms** for a whole request — the host
+instantiating, the guest initializing, `http_request_read`, the guest's handler,
+`http_response_write` and the instance closing. M60's own measurement runs in the
+same suite and reports 1.76 ms and 2.42 ms for the two instantiations of the same
+fixture (and 385 ms to compile it, once, at boot), so **the ABI round trip, the JSON
+in both directions and the guest's own work are about two milliseconds on top of the
+instance**. Against 250 ms for a page that is 1.6%, and against the 20 ms cached
+redirect p99 it would be a third of the budget — which is why this is M64's answer
+for the dashboard and not M66's for the redirect path.
+
+**What it buys** is that guest memory does not cross requests. A module cannot leave
+one visitor's state where another visitor's request can read it, which for an
+authentication add-on is the difference between a nonce and a vulnerability; and an
+add-on that needs state between two requests of one flow has to put it in the schema
+it owns, where it survives a restart and is visible to every replica. A per-request
+instance also cannot be poisoned: a guest that traps takes its own instance down and
+nothing else.
+
+**What it costs, and the bound.** About 2 ms per request, and 2.4 MB per request *in
+flight* — which on an unauthenticated surface (D261) is memory exhaustion with no
+session to rate-limit against. So the number in flight is bounded at sixteen across
+the instance, about 38 MB at saturation, and a seventeenth waits on the request's own
+deadline rather than being refused immediately. The bound is a constant and not a
+knob: a knob would need a default anyway, and this one is measured against the cost
+it bounds.
+
+**The loser: a pool, or the loaded instance under a mutex.** Either saves the 2 ms
+and caps memory by construction. Both keep guest state across requests, which makes
+the isolation above a matter of add-on discipline rather than of the host's shape, and
+the singleton form additionally serializes an add-on's pages behind one slow request
+and has no way back from a poisoned instance short of a restart. Two milliseconds
+against 250 is not a price worth that.
+
+## 2026-08-20 — M64, an add-on's routes are reachable without a session
+
+**D261.** Every other dashboard page is behind `signedIn` — a session, and an
+organization to spend it in. An add-on's pages are not, and the reason is M65: an
+add-on that authenticates somebody is answering a request from a person who does not
+have a session yet, so a session requirement on this surface would make the hook
+built for it unreachable through it. The bullet that follows it in m64.md — *an
+add-on route handler can ask the host who is signed in* — reads as an option rather
+than a precondition, which is only coherent if nobody signed in is a state a route
+meets.
+
+So a route is public, and the record says so honestly: `signed_in` is false and every
+other field is empty, rather than the call failing.
+
+**What that admits, stated rather than implied.** An unauthenticated request runs
+third-party code, which is why the concurrency bound in D260 exists and why
+`docs/SECURITY.md` names it. It is not a new *trust* boundary — the add-ons directory
+was already one, and a module in it is code this instance executes — but it is a new
+*reachability* one: before this milestone, nothing an operator installed could be
+provoked by somebody without an account.
+
+**Not chosen: public only for add-ons that declare it.** A per-add-on switch is the
+obvious middle, and it is a manifest field, which at schema version 1 means every
+published manifest keeps working and every *new* one is unreadable to an older host.
+It also answers a question nobody has asked yet: no add-on exists that wants its
+pages behind a session, and M68's manager is where an operator's own answer would
+belong. Left for the milestone that has a case.
+
+## 2026-08-20 — M64, the request body says whether it is encoded, and the response body cannot be
+
+**D262.** The `HTTPRequest` record documented its body as *"the body, base64 when it
+is not UTF-8"*, which is not implementable as written on either side: a guest handed
+a string cannot tell an encoded body from a body that happens to look encoded, and a
+host handed one cannot either.
+
+**Inbound**, the record gains `body_base64`, a boolean that is true exactly when the
+request's own bytes were not valid UTF-8. Additive, so it breaks no consumer that
+ignores it, and it makes the existing sentence decidable rather than replacing it.
+
+**Outbound**, the same sentence is **corrected** rather than implemented: a
+response's body is UTF-8 text and there is no encoded form. The reason is that there
+is nothing for one to carry — the content types a module may name are text, and a
+flag saying *this is base64* with no non-text response to be the base64 of would be a
+field describing a capability that does not exist. A module needing to answer bytes
+is a milestone with a case in front of it, not a field added in advance.
+
+## 2026-08-20 — M64, an add-on's settings come from the environment, by declared name
+
+**D263.** m64.md asks for config to reach an add-on *"the way it reaches the
+product"*: `LINKCTRL_ADDON_<NAME>_<SETTING>`, read through `internal/config`, handed
+to the module at load, bounded by the grant, with secrets getting the `Secret`
+treatment. Three details were the milestone's to decide.
+
+**Read by declared name, never by prefix scan.** `oidc` and `oidc_x` are both legal
+add-on names, so `LINKCTRL_ADDON_OIDC_X_KEY` is ambiguous to a scan and unambiguous
+to a lookup of the variable a declared setting names. The consequence is that a
+variable for a setting no manifest declares is silently not read — no warning,
+because a warning would have to guess which add-on it was meant for — which is the
+same scoping `config_get` already applies to an undeclared key.
+
+**Held as `config.Secret` for every setting, not only the ones a manifest called
+secret.** The type is what makes *must not print* structural rather than careful, and
+applying it uniformly means no site has to ask which kind of setting it is holding.
+Nothing needs the plain value except `config_get` itself, which reveals it at the
+point of use.
+
+**Not unset from the environment after reading**, which is where this deliberately
+differs from the product's own secrets. The env library unsets those once, during a
+single `Parse`; an add-on host can be opened more than once in one process, and a
+variable consumed by the first open would be missing from the second. The cost is
+that an add-on's secret stays in the process environment, which `docs/SECURITY.md`
+states beside the `Secret` treatment rather than leaving to be discovered.
+
+Values are read once at load, for the reason grants are resolved once: `config_get`
+is on a request's path and must not read the environment per call. Changing one
+therefore takes a restart, which `docs/configuration.md` says.
+
+## 2026-08-20 — M64, no add-on CSS is served, so nothing ships unscanned
+
+**D264.** m64.md requires this milestone to answer the theme gap as a decision rather
+than discover it: `internal/ui/theme_test.go` walks the **embedded** templates, a
+module's assets are not in the embed, and the file says the milestone either extends
+the discipline to served add-on CSS as a host-side check or ships add-on CSS
+unscanned and says so.
+
+**Chosen: a third answer the bullet's own wording allows — serve no add-on assets at
+all.** The CSP bullet offers a disjunction ("returns content the host wraps in the
+layout, **or** serves declared static assets from its module"), and this milestone
+takes the first limb only. There is therefore no add-on CSS on this instance: the one
+template M64 added is embedded like every other, so M24.5's scan covers it
+completely, and the sentence *the scan covers the CSS this product serves* stays true
+without an exception.
+
+**What that costs an add-on.** Its page is drawn with the host's theme tokens and the
+host's layout, and it cannot ship a stylesheet, a font or an image. For a text body
+inside the dashboard's own frame that is no loss; for a page that wants a diagram it
+is. The milestone that wants one inherits the question this decision did not answer —
+how a served add-on asset is scanned — with the advantage that it will have a real
+asset to scan rather than a hypothetical one, and `M68`'s manager surface is where an
+operator would be told which add-ons ship what.
+
+**Not chosen: extend the scan to a module's assets now.** It is the answer the bullet
+expects, and it costs a scanner over third-party bytes with nothing to scan: no
+add-on serves an asset, so the check would be a mechanism whose first real input
+arrives in a later milestone and whose correctness nobody could measure until then.
+Building a filter before there is anything to filter is how a filter comes to be
+trusted without evidence.
+
+## 2026-08-20 — M64, the demo shows no add-on page, and the coverage test cannot say so
+
+**D265.** The demo gate applies to a milestone that adds something somebody can see,
+and M64 adds a page. The demo instance shows none of it, and this records why rather
+than leaving the gate looking satisfied.
+
+An add-on is **files in a directory**, not rows in a database. Showing an add-on's
+page on the demo means building a wasm module, shipping it into the demo image and
+pointing `LINKCTRL_ADDONS_DIR` at it — which makes the demo instance execute a module
+for the sake of a screenshot, and makes `make demo-update` depend on a wasm toolchain.
+That is a decision about what the demo *is*, and it belongs to [M68](phase-details/m68.md),
+where the add-on manager gives an evaluator something to look at that is the product's
+own surface rather than a fixture's.
+
+`demoCoverage()` cannot express the gap either: every row is a SQL count against the
+demo database, and there is no table an installed add-on appears in. So the honest
+record is this entry plus a comment where the gate is enforced, and **not** a row
+asserting zero over a query that would be about nothing. The rule's own escape applies
+— *does not apply to work with nothing to look at* — narrowly: there is something to
+look at, and the demo does not install the thing that would draw it.
+
+## 2026-08-20 — M64, a request too large to cross is the client's error, and the host says so before the module runs
+
+**D266.** The comment on `maxAddonRequestBody` justified a 64 KiB read cap by
+claiming *"a module's whole request record crosses the ABI boundary as one value,
+which is bounded at 64 KiB there, so a larger body could not be delivered anyway"*.
+M64's review doubted it and measurement refuted it, in both halves.
+
+**The claim's mechanism does not exist.** `maxStringIn` bounds guest→host, in
+`readString`. The other direction is `writeOut`, which answers the *size* when the
+value does not fit the buffer the guest offered and lets the guest re-ask with a
+buffer that does — so a record is bounded by guest memory and by nothing else. A
+request record of **393,344 bytes** was measured crossing intact and answered 200,
+built from a 64 KiB body of control characters, each of which costs six bytes inside
+the JSON encoding.
+
+**What the false claim was hiding is a real cliff, and it is the response side.** A
+module that reflects what it was sent has to write its answer *back* through
+`readString`, where `maxStringIn` does bind. Measured against the `pages` fixture,
+whose default path echoes the record: a 65,336-byte body answered 200 and a 65,536-byte
+one answered **502**, with an operator-visible `ERROR` line, for a body the client
+chose the size of. `maxResponseBody` at 256 KiB does not save it — that is the second,
+looser bound, and the record is what crosses.
+
+**The bound now sits on the record, and it answers 413.** `Route` encodes the record
+before it takes an instance and refuses anything over `maxStringIn` as
+`ErrRequestTooLarge`, which `internal/httpx` maps to 413 and does not log at error.
+The number is the ABI's own single-value bound, because a record over it is one this
+boundary would not carry in the other direction either.
+
+**What it does not close, and this is measured rather than reasoned.** A module
+reflecting its whole input *plus* anything of its own is over the response bound while
+the request was under it. Against the same fixture: a plain body of **65,350** answers
+200 and one of **65,380** does not — a band about fifty bytes wide, the width of the
+`echo ` prefix and the JSON escaping of the record's own quotes. No request bound can
+close it, because the decoration is the module's and the host does not know it, and
+choosing a number that closed it *for this fixture* would be a bound justified by one
+fixture. Nor is the host mislabelling anything there: `http_response_write` answers
+`StatusInvalid`, so the module has been told its answer was refused and can write a
+smaller one. The fixture returns -1 instead, and a module that turns a documented
+refusal into a refusal of its own route is exactly what a 502 reports.
+
+**What it costs.** The ceiling on a *body* is now a function of its bytes rather than
+a number an operator can read off a constant — the envelope sits beside it, a body
+that is not UTF-8 is base64 first, and JSON escaping is up to six bytes a character.
+That is stated in `docs/SECURITY.md` and in the comment rather than approximated with
+a second constant that would drift from this one. `maxAddonRequestBody` stays at 64 KiB
+as the coarse gate: its job is to stop the host buffering more than could ever be the
+smaller half of a record it will refuse, and its refusal is the same 413.
+
+**Not chosen: lower `maxAddonRequestBody` until the cliff moves out of reach.** It was
+the review's own first suggestion and it cannot be made true. The expansion is the
+*module's* response shape, which the host does not know: a module echoing a 10 KiB body
+three times exceeds the bound with a body a tenth of the cap. A number chosen to make
+the fixture pass would be a bound whose justification is one fixture.
+
+**Not chosen: raise `maxStringIn`, or bound the response separately.** Both move the
+number this milestone was told not to move quietly. `maxStringIn` is a liveness bound
+on the host's own heap across every ABI function, and the milestone that wants an
+add-on to answer with more than 64 KiB should argue for it where that argument belongs.
+
+## 2026-08-20 — M64, two add-on names in a prefix relation are both refused, and three sentences said they could not be
+
+**D267.** D232's whole answer to add-on cookie collisions is that the namespace is
+*structural*: a declared prefix must begin with the add-on's own name and an
+underscore, so — the argument went — no add-on can claim another's and none can be
+denied its own by whichever installed first. D234 fixed that as the rule. M64's
+second review measured the first half false, and this milestone's own diff had just
+extended the same reasoning to a second namespace.
+
+**What was measured, with both add-ons loaded and nothing else changed.** `nameRe`
+is `^[a-z][a-z0-9_]{1,30}$`, so `oidc` and `oidc_x` are both legal names and both
+installable.
+
+- **Cookies.** Add-on `oidc` may declare the prefix `oidc_x` — it begins with
+  `oidc_`, so `Manifest.Validate` accepts it — and every prefix add-on `oidc_x` is
+  allowed to declare begins `oidc_x_`. Inbound filtering (`RequestIn.record`) and
+  outbound authorisation (`checkCookie`) are both `strings.HasPrefix`, so `oidc`
+  read `oidc_x_state` out of the request record and was authorised to set it. On an
+  authentication add-on that is one module reading and overwriting another's
+  session state.
+- **Settings.** `AddonSettingVar("oidc", "x_key")` and
+  `AddonSettingVar("oidc_x", "key")` are both `LINKCTRL_ADDON_OIDC_X_KEY`, and each
+  add-on reads it by asking for a setting it declared. New in this diff.
+
+**Three sentences asserted the impossibility of it**, and the third is the one worth
+naming: `internal/config/surface_test.go` set that variable to `"belongs to oidc_x"`
+and asserted that add-on `oidc` read it. It passed. A test that documents a leak and
+calls it correct defends the defect against the next person who notices, which is
+worse than no test at all.
+
+**In scope by the standing rule, not by choice.** *A recorded abuse path is in a fix
+milestone's scope by default* — a row whose evidence describes something a principal
+can **do**, including when it is found during that milestone. One add-on reading and
+overwriting another's session state is something a principal can do. The review
+itself had judged it a deferred row on the ground that the structural fix belongs to
+M60/M61's validation; the rule outranks that judgement, and the fix turned out to be
+small.
+
+**The fix: two loaded names may not stand in a `name + "_"` prefix relation.**
+`nameCollisions` in `internal/addon/host.go`, checked in `Open` before anything is
+loaded.
+
+That relation is not one case of the ambiguity — it is the whole of it, in both
+places, and the proof is one line. Both namespaces are `name + "_" + anything`. If
+two distinct names produce one string, the concatenations agree character for
+character; the shorter name's characters therefore prefix the longer name, and the
+character after them is the separator. So the shorter plus an underscore is a prefix
+of the longer, and nothing else can collide. Names are lowercase, so upper-casing
+for the environment adds nothing. That is why one check closes both cases, and the
+review's instruction to stop and report rather than close one did not have to fire.
+
+**Both members of the pair are refused.** There is no principled winner. Awarding
+the namespace to whichever name sorts first is D234's first-come rule with spelling
+in place of install order — and it always picks the *shorter* name, because a prefix
+sorts first, so the add-on that reached into its neighbour's namespace would be the
+one that kept it. Either add-on can deny the other by being installed; that cost
+exists under any refusal rule, and handing one of them the other's cookies does not.
+
+**The claim is read from manifests, not from directory entries.** `claimants` reads
+each directory's manifest and counts a name only where the manifest names the
+directory it sits in. Reading entries would be one line shorter and would let a
+mis-installed `oidc_x` refuse a working `oidc`, reporting a name collision to an
+operator whose actual problem is one typo. The cost is that the manifest is parsed
+twice per add-on at boot, a few hundred bytes each, and that an add-on which claims a
+name and then fails its checksum still collides — its operator's fix is the same
+rename either way.
+
+**`name_collision` is the eighth load outcome**, for the reason `abi_unsupported` was
+the sixth: neither manifest is invalid, each is a good manifest on its own, and the
+operator's fix is a directory name rather than anything inside a file. The refusal
+honours each add-on's own `failure_class`, which is only knowable because the class
+was read from the manifest — so a `required` add-on whose namespace is ambiguous
+stops the instance, which is what that class means when the add-on is sign-in.
+
+**The route prefix and the Postgres schema were never exposed to this.** Each uses
+the whole name as one segment with nothing joined onto it, and add-on routes mount as
+a single `/addons/{addon}/{rest...}` pattern whose segment is looked up by exact name.
+The three name-derived namespaces are not equally safe, and what separates them is
+whether anything is concatenated after the name; that is now stated where each is
+derived.
+
+**Six sentences were corrected, not the three the review listed.** `manifest.go`,
+`config.go` and `surface_test.go` were named; counting rather than trusting the
+enumeration found the same claim in `docs/addon-abi.md`, `docs/configuration.md` and
+`CHANGELOG.md`. Each now says which half of the rule it is describing.
+`surface_test.go`'s test asserts the collision it used to excuse and names where it is
+closed — the refusal itself cannot be asserted there, since `internal/addon` imports
+`internal/config` and not the other way round.
+
+
+## 2026-08-20 — A code path only CI runs was tested nowhere, and the gate that caught it was ten days old
+
+**No milestone: a task-class fix, made because `make check-ci` reported red on
+`c59404e` and step 8 makes that a prompt the owner answered.**
+
+CI's integration job failed on every add-on storage test with one cause: the test
+module was *"still not readable after building it"*. Two defects compounded, and
+the second is the one worth the entry.
+
+**The prerequisite.** `ci-integration` — the only target CI actually runs for
+integration — never took `addon-fixtures`, while `test`, `ci-test` and
+`single-instance` all did. That is the third instance of one shape in this phase:
+[F259](deferred-findings.md#open) is the Taskfile mirror missing `check-links`,
+[F271](deferred-findings.md#open) is the SDK registered in one gate of three, and
+this is a Makefile family that grew a prerequisite while one caller kept the old
+signature. Each was found by something other than the change that caused it.
+
+**The path, and why nothing local could see it.** `test/integration`'s on-demand
+fixture builder sets `cmd.Dir` to the repository root **and** joined `..`, `..`
+onto a path whose own `../../` had already been stripped, so `go build -o` wrote
+two levels **above** the repository. The read then looked in the right place and
+found nothing. Reproduced by sabotage after the fix, and the sabotage run left a
+directory at `/home/whippy/repos/internal` — the bug's own footprint, outside the
+tree, which is how far off the target was.
+
+**Every local gate was green because every local gate made the builder
+unreachable.** `make test-integration` takes `addon-fixtures`, so the artifact
+always existed and `addonFixture` returned on its first `os.ReadFile`. The builder
+was written at [D220](#2026-08-18--m60-a-fixture-only-make-can-build-is-a-gate-only-make-can-run)
+precisely so that no caller could fail for want of an artifact — and the callers
+that could not fail were the ones that never exercised it. **CI was the only place
+that ran that code, and CI was the only place it was broken.**
+
+That is [F255](deferred-findings.md#closed)'s shape exactly, one layer in: not a
+gate reporting green without checking, but a **code path with no local reader at
+all**. The generalisation is worth more than the fix: *a fallback that only fires
+when the fast path is absent is only tested where the fast path is absent*, and if
+every local target guarantees the fast path, the fallback ships unexecuted. The
+cheap discipline is what this fix now does — wipe the artifact and run the test, so
+the slow path is exercised on purpose rather than by accident of environment.
+
+**`make check-ci` earned its milestone here.** It was built at
+[M59](phase-details/m59.md) because a build had been red for nine days while every
+local gate reported clean, and this is its first real failure: red on the commit
+after it landed, caught at the next boundary, with the run stopping rather than
+building a seventh milestone on top of it. The gate that F255 asked for did the one
+thing F255 said nothing was doing.
+
+## 2026-08-20 — M64.9, the mid-phase adversarial review: what it checked, what it found, and what it refuted
+
+Six milestones, `b9886f5..00d4ed5`, 117 files and +23354/-976 against `v0.3.0`.
+Run to [M32.9](phase-details/m32.9.md)'s specification, as every `X.9` since.
+
+**How independence was bought.** [planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+prefers a different model from the writer's *and a more capable one where the
+choice exists*. No more capable one exists — the workers ran on the most capable
+model available — so the rule degrades exactly as that section says it does, to
+fresh contexts that had never seen the workers' reasoning. Six readers, each
+pointed at a dimension and given the standards as files, no conclusions, and no
+hint of which parts anybody thought were weak. That withholding is the
+load-bearing half of the instruction and it paid: the two findings that cost the
+most were in places nobody had flagged.
+
+**37 raw findings. Every one was put to something that tried to kill it** — six
+adversarial refuters for the behavioural claims, and counting for the nineteen
+that were arithmetic, because counting *is* the refutation for a count claim.
+
+**Four survived nothing, and saying so is the point.** A review that confirms
+everything it finds was not adversarial, it was credulous:
+
+- *The concurrency bound is an outage, not a queue.* Refuted. The behaviour is
+  verbatim what `internal/addon/http.go:100-113` predicts — `ErrBusy` after the
+  request's **own** budget, not a fixed 15 s. Against an honest module, 32
+  workers for 3 s produced 1177 completions and **zero** `ErrBusy`: the sixteen
+  slots never bind, the eight-core host does. The finder measured CPU starvation
+  and named it the bound.
+- *An add-on emits a 60 KB cookie value that helps evict the session.* Refuted.
+  The host does emit it; no browser stores it. Chromium's 4096-byte name+value
+  cap, measured — kept at 4000, dropped at 4090. Header bloat that cannot
+  contribute to the eviction it was filed under.
+- *The guest's clock is frozen, and it contradicts `http.go:62-65`.* Refuted
+  twice over. The clock advances 1 ms per reading, and that sentence is about
+  **state isolation** — one visitor's guest memory not being readable by
+  another's request — which the per-request instance genuinely delivers.
+- *The ABI page's four literal denials are false.* Refuted. Under the shipped
+  config a guest gets no preopens, an empty environ, empty args, discarded
+  stdout and no socket fd. "No socket, no file, no shared table, no environment"
+  is **true**. What is false is the sentence after it.
+
+**Two findings were made worse by the attempt to kill them**, which is the
+outcome the refutation pass exists to produce and the reason a review is evidence
+rather than a verdict:
+
+- The memory bound. *"515.5 MiB at load"* did not reproduce — a real fixture
+  measures 2.31 MiB, so `docs/SECURITY.md:83`'s "about 2.4 MB" is accurate as a
+  typical figure and wrong only as a **bound**, and the host reclaims properly
+  with no leak. The refuter then found what the reader had missed:
+  `docs/deployment.md:15` documents the floor as *"1 vCPU and 1 GB RAM is enough
+  to start"*, and **one request is enough to OOM that**.
+- The log sanitizer. *"The test protects the hole"* was too strong —
+  `internal/addon/hostabi_test.go:638` asserts `ok 😀 ❤️` survives byte-identical,
+  and U+2764 U+FE0F is a **legitimate** emoji presentation selector, a defensible
+  requirement rather than cover for a bug. Which makes the remedy a decision
+  instead of a patch, and is why it went to the owner.
+
+**Two readers reached the same defect by different routes, neither told about the
+other.** The reader pointed at the ABI's documentation measured the fake clock
+and random source resetting per request and closed its report, unprompted, saying
+the thing to fix first was the identical `crypto/rand` stream. The reader pointed
+at the host had already filed it. Root cause is `rand.New(rand.NewSource(42))`, a
+compile-time constant in wazero — so every add-on on every machine on every
+deployment draws the same bytes, and D260's fresh instance per request guarantees
+every visitor gets the **same** nonce rather than a fresh one. Independent
+convergence is the strongest signal this review produced.
+
+**The cross-repo seam is *not yet checkable*, and m64.9.md's bullet named that
+outcome itself rather than leaving it to be discovered.** `DevOfPie/LinkCtrl-OIDC`
+holds one commit, `94168a63`, whose entire tree is a 15-byte `README.md`. Nothing
+compiles against the SDK yet. Checked by `gh api` on 2026-08-20; the repository is
+not cloned on this machine. No amendment was needed and none was made.
+
+**The browser check, which [M46.5](phase-details/m46.5.md) obliges every `X.9` to
+answer.** Against an image rebuilt at 05:00:45 — `make up` does not rebuild, and a
+check against stale code passes for the wrong reason. `make verify-ui`: **18
+passed**. Then M64's own surface, driven signed in through a test module installed
+into the composed instance: the add-on page renders inside the dashboard shell,
+**console clean — 0 messages, 0 errors, 0 warnings — on every page walked**, the
+Content-Security-Policy **byte-identical** across `/login`, `/dashboard` and
+`/addons/pages/`, a hostile `<script>alert(1)</script>` rendered as text with the
+two scripts on the page both the host's and none injected, both themes inverting
+correctly, and the echoed request record reading `"cookies":{}` — the session
+cookie did not cross to the module, which is D232 holding where a person can see
+it.
+
+### D268 — the always-read contract grew 3123 bytes, and it is defended rather than trimmed
+
+`workflow.md` +697, the `check-ci` quick-reference line and the Docs gate's
+release-gate clause (F254). `phase-loop.md` +645, step 3.8's CI gate — F255, the
+nine days CI was red across a phase, two adversarial reviews and a release
+candidate while every gate the contract named ran locally and reported green.
+`phase-details/README.md` +1781, Phase 4's status table, Phase 3's having left for
+`phase-3.md`, so it is not pure growth — **and 90 bytes of that 1781 are this
+review's own**, the five status rows D269 turns to `in progress (reopened)`. The
+figure is stated after the edit rather than before it, because a review that
+regenerates the number before making its own changes is measuring the tree it
+walked in on. Two of the three bought the gate that
+closed a nine-day blindness and the third is the file's whole purpose. Realized
+read ratios: `workflow.md` 0.83→0.92, `README.md` 0.80, `phase-loop.md` 0.49.
+
+**The headline number fell and that is not a saving, which is worth more than the
+defence above.** The `/work phase` resume floor reads 132391 → 67066 because
+`scripts/doc-cost.sh:54` charges `Plan.md` at its longest `^| [M` row, and at the
+previous regeneration — `ca8864a`, after Phase 3's tables were archived and before
+Phase 4 was planned — `Plan.md` held no such row and was charged **whole** at
+68770. The pattern matches again now. So the charge silently swings 68 KB on
+whether Plan.md happens to be carrying an ordering table, and a reader comparing
+two regenerations across a phase boundary would read a 65 KB trimming that nobody
+did. Filed rather than fixed, because what the script should charge for a file in
+that state is a question about the measurement and not a bug in it.
+
+## 2026-08-20 — M64.9's triage: five milestones reopened, and the sanitizer fix that is a decision
+
+Owner-answered, both, on the review's triage.
+
+### D269 — M59, M60, M62, M63 and M64 are reopened
+
+Each carries a confirmed finding that falsifies **its own shipped claim**, which
+is the condition [workflow.md](workflow.md) attaches reopening to:
+
+| Milestone | The claim, and what falsifies it |
+| --- | --- |
+| [M59](phase-details/m59.md) | *"the check verifies the row the linking sentence names is in the table under that anchor"* — `scripts/check-links.sh:230` and `:239` reintroduce the `cmd \| grep -q` + `pipefail` SIGPIPE shape the same file forbids at `:102-105`, so present rows are reported missing and the gate exits 1 on a clean tree |
+| [M60](phase-details/m60.md) | *"logs, increments a metric, and the instance serves without it"* — a `degrade`-class module spinning in `init()` hangs boot with no log, no metric and no error. Also `m60.md:32`'s *"the manifest names identity and intent"*, against duplicate and case-variant JSON keys |
+| [M62](phase-details/m62.md) | *"nothing an add-on could use to smuggle a secret past a reader's eye"* — 260 variation selectors reach the log unescaped |
+| [M63](phase-details/m63.md) | D253's *"the load began clearing them"* — a per-database role GUC survives `ALTER ROLE … RESET ALL`, which clears only `pg_roles.rolconfig` |
+| [M64](phase-details/m64.md) | `m64.md:52`'s *"it cannot read the cookie, mint, or **destroy sessions**"* — an add-on holding only `routes.own_prefix` evicts the visitor's session cookie by volume. Also the documented memory bound, against an unbounded guest |
+
+Three options were declined and each is recorded because *we decided this did not
+matter* is the decision this project keeps losing. **Reopen only the four with
+proven one-line fixes** would have left `m62.md` and `m64.md` asserting something
+false while the run moved on. **Defer all seven to M70** would have built M65's
+session hook directly on top of M62's log boundary and M64's cookie handling with
+both known false, and M69's acceptance test is where that compounds. **Route the
+session-adjacent findings into M65** would have fattened the milestone the size
+target already warns about, and left two `done` rows false until it landed.
+
+The cost is accepted and stated: five reopenings before M65 starts, and the
+recommendation came from the actor that also does the work, which is exactly the
+drift [workflow.md](workflow.md#standing-rules) requires naming rather than
+hiding. It was recommended because the alternative leaves five shipped claims
+false **in writing**, not because it is cheap.
+
+### D270 — the sanitizer asks the real property, and legitimate emoji keep working
+
+`internal/addon/hostabi.go:491` asks `unicode.Other_Default_Ignorable_Code_Point`,
+which is Unicode's **residue** property: the real set is
+`Default_Ignorable_Code_Point = Other_DI ∪ Cf ∪ Variation_Selector − White_Space −
+FFF9..FFFB − PCM`. Go's tables were checked against Unicode's rather than assumed —
+`Other_DI` has 3776 members of which 7 are graphic, `Variation_Selector` has 260,
+all graphic, **none of them in `Other_DI`** — so the `!unicode.IsGraphic` fallback
+at `:494` covers `Cf` and cannot reach the selectors. Reproduced end to end twice,
+in separate contexts, through a module declaring **no permissions**: a line reading
+*"everything is fine"* from which `SECRET=hunter2` was recovered, under both the
+text and JSON handlers.
+
+The fix is to compute the property properly and then exempt the legitimate case by
+what **precedes** the selector, so `❤️` survives and a payload does not. The three
+alternatives were declined:
+
+- **Escape all 260 unconditionally** is correct by construction and one predicate,
+  and it makes `hostabi_test.go:638` and
+  `TestOrdinaryMessagesInEveryScriptSurviveTheBoundary` assert something the owner
+  would be choosing to make false.
+- **Bound the count of non-spacing marks** keeps emoji untouched and is a
+  threshold — which is what D242 replaced. Nothing bounds the call rate, so a
+  payload splits across lines.
+- **Record it and leave the boundary** stops the documents lying and leaves a
+  module that declared nothing holding a covert channel into the operator's log,
+  which is the one boundary D240 exists for.
+
+**The recommendation's own con stands and is not softened by having been taken**:
+it is the most complex predicate of the four, *what precedes* is itself a rule that
+can drift, and it adds a stateful check to a path nobody has benchmarked.
+
+## 2026-08-20 — M59, the row-membership check is not a pipeline, and the failure had to be seen first
+
+The repair [D269](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)
+scheduled, on [F291](deferred-findings.md#closed). No new D number: the owner
+decided the reopening, and what shape the fix takes was decided by the script's
+own comment eight months of gates ago.
+
+**What was wrong.** M59's row-membership pass asked `cached_rows … | grep -qxF`.
+`grep -q` exits at its first match; the `cat` upstream is then killed by SIGPIPE
+and returns 141; `set -uo pipefail` makes the pipeline 141, which the `if` reads
+as *no match*. The row was there. The gate said it was not, and
+`scripts/check-links.sh` exited 1 on a tree nobody had touched. The same file
+forbids exactly this in the comment above its `slugs`-based anchor pass — named rather than numbered, per D221, this phase being the one editing that file — and that pass obeys the prohibition with
+a herestring — so the defect is not a thing nobody knew, it is a thing the file
+says out loud one screen above where it was written.
+
+**The fix is not a workaround.** The cache is a file. `row_present` greps that
+file. There is no writer to kill, no pipeline to take an exit status from, and
+nothing about the shape depends on which `cat` is installed. What was
+machine-specific was only the *trigger*: `/usr/bin/cat` here is uutils coreutils,
+which `splice()`s and touches the pipe again at EOF, so it notices the closed
+reader that a read/write `cat` never probes for. GNU's `cat` mostly does not
+notice, which is why CI was green throughout and why *it passes on the runner*
+would have been the wrong reason to leave it.
+
+**Why the reproduction came before the fix, and is recorded here.** The
+repository's rule is that a test passing first try gets sabotaged; an
+intermittent defect makes the rule bite harder, because a green run proves
+nothing about a fault that only shows up under load. So the order was fixed in
+advance:
+
+| Step | Load | Result |
+| --- | --- | --- |
+| The tree as shipped | 8 busy loops, 8 cores | **6 of 6 runs red**, 65–211 false FAIL lines each |
+| After the fix | 8 busy loops | 8 of 8 green |
+| After the fix | 12 busy loops | 8 of 8 green |
+| Fix in place, two links sabotaged — one moved to the wrong table, one naming a row no table holds | 8 busy loops | 4 of 4 runs red with **exactly** the two intended FAILs, each naming its own reason |
+
+The last row is the one that keeps the fix from being the trivial one. A
+membership check can be made to stop failing by making it check nothing, and the
+sabotage is what separates the two outcomes: both branches of the pass — the
+match at `row_present`'s first call, and the *which table is it in instead*
+search behind it — were driven and both reported correctly.
+
+**What this does not change.** The defect was a false negative in one direction
+only. SIGPIPE needs an early match, so a genuinely absent row was always
+reported; no wrong link ever passed the gate, and no maintained link that this
+milestone corrected needs re-checking.
+
+## 2026-08-20 — M59, the ninth site of F304 is M59's and the other eight are not
+
+[F304](deferred-findings.md#open) was filed during this reopening: nine places
+where a command is piped into `grep -q` under `pipefail`, any of which can read
+141 as *no match* and branch the wrong way. One of them was
+`scripts/release-check.sh`'s integration-test guard, and it is the only one this
+milestone fixed.
+
+**The line is drawn by the claim, not by the subsystem.** M59's F253 bullet says
+the direct form of `release-check` stops lying about whether the integration
+tests ran. The guard asked `docker compose ps --services` through a pipe into
+`grep -qx postgres`; a false 141 makes the `elif` false, the `else` prints
+`skip  Postgres is not running in project …` on a machine where it is running,
+and the release is cut with a third of the gate unrun. That is a third cause for
+the same false skip F253 named — after the missing `COMPOSE_PROJECT_NAME` and
+the missing DSN — arriving at the same line the milestone had already been asked
+to make honest. A finding that makes the current milestone's claim false is in
+spec whatever it looks like, which is the whole of the justification; the
+comment two lines above the guard has named F253 since this milestone shipped.
+
+**The other eight are not**, and the difference is not effort. `ci-image-smoke`,
+`check-version-stamp`, `load-test` and `single-instance-check` carry the shape
+too, and each repair is the same one line — but no claim M59 makes rests on any
+of them, so pulling them in would be scope the owner did not approve. They stay
+in F304, whose row is narrowed to the eight so it does not keep asserting a site
+that is fixed.
+
+**What the fix is not.** It is not a probe result. F304 records the only
+measurement anyone has taken at these sites — that same `docker compose ps`
+pipeline, 100 runs idle and under load, **0 nonzero** — so this site was changed
+because the shape is wrong under `pipefail`, not because it was caught. The
+existence proof is [F291](deferred-findings.md#closed) one file away, where the
+identical shape needed eight background loops before it failed at all. The
+hazard is demonstrable without docker: under `set -uo pipefail`, `yes postgres`
+piped into `grep -qx postgres` is nonzero **50 of 50** runs on this machine,
+where the herestring over 2000 lines of the same text is nonzero **0 of 50**.
+What `docker compose ps` supplies that `yes` does not is a writer small enough
+to usually finish before grep exits — a property of the output, not a guarantee
+about it. A herestring has no writer to kill, so the question stops being about
+which `cat` or which `docker` is installed.
+
+**How the repaired guard was shown to work.** Both branches were driven through
+the shipped script rather than a copy of it. `bash scripts/release-check.sh
+v0.3.0` — the direct form F253 is about — was run whole against the up
+`linkctrl-test` stack: `ok    integration tests (race)`, the suite compiled and
+run for real under `-race`. The four failures in that run are the tree being
+dirty, the tag already existing, `[Unreleased]` being full and the 0.3.0
+section's date; a mid-phase tree, and none of them this step. `make
+release-check` took the same branch. Then the guard's service name was
+sabotaged to one no stack has, and the same script printed `skip  Postgres is
+not running in project linkctrl-test`; a counter-edit put it back and the run
+branch returned. The three branch runs used a `go` that exits 0, on the
+`PATH`, so that what was being read was which branch fired rather than the
+suite again — the suite's own real result is the whole run above.
+
+## 2026-08-20 — M60, a manifest means what it reads as
+
+The repair [D269](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)
+scheduled for [F286](deferred-findings.md#closed). **D271.**
+
+`m60.md` says the manifest *names identity and intent*. It did not, and the
+mechanism is two documented behaviours of `encoding/json` meeting one file nobody
+hashes:
+
+- a repeated key keeps the **last** occurrence;
+- a key with no exact match binds a struct tag **case-insensitively**.
+
+So `{"permissions": ["session.mint"], "permissions": []}` loaded holding nothing,
+the same pair in the other order loaded holding everything, `"schema_version": 99`
+followed by `"schema_version": 1` walked past the equality check that field exists
+for, and every field spelled in capitals was accepted. Reproduced through the real
+`Open` over a real installed directory, twice, before any of this was written.
+
+**What makes it a boundary rather than pedantry is that nothing covers the
+manifest's own bytes.** The `sha256` field is the digest of the *module*;
+`MigrationFile.SHA256` is the digest of each `.sql`. There is no canonicalization
+and no signature over `addon.json`, and the published-provenance half of that
+question is M69's. The manifest is therefore the trust root, and the only property
+that can make a trust root trustworthy without a signature is that everyone reading
+it reads the same thing. The deceived party was never the operator — the boot log
+and the info gauge report the parsed truth — it was whoever reads the **file**,
+which is the artifact `DevOfPie/LinkCtrl-OIDC` is compiled against and the thing a
+reviewer inspects before installing a module on their own instance.
+
+### Exact spelling, not only duplicate refusal
+
+The finding's own suggested fix was *exact repeats and case-collisions*. Taken
+further, deliberately: a key must be spelled exactly as documented, so a lone
+`"Permissions"` with no lowercase twin is refused too.
+
+That is the rule `DisallowUnknownFields` already states, applied to spelling rather
+than only to identity. The comment above that call says a key this host does not
+know means a manifest written for a schema this host does not implement — and
+`"Permissions"` is not a key this schema documents. The alternative leaves the
+cross-repository format with two accepted spellings of every field, one of them
+undocumented, which is a thing somebody has to hold in their head forever and a
+thing a `grep '"permissions"'` over a directory of installed add-ons silently
+misses. With exactness in place, the remaining collision is exact repeats, and
+refusing those is one map.
+
+### At every level, and derived rather than listed
+
+The walk is type-directed and recursive. Only the top level was reproduced, but a
+`migrations` entry carrying `file` twice names one `.sql` to a reader and hashes
+another — the same deception one level down, with DDL behind it — and a `settings`
+entry can hide its `type` the same way. Refusing at the top and not below would
+have fixed the case that was found rather than the defect.
+
+The key set is read from the struct tags with `reflect` rather than listed beside
+the parser. A list would drift the first time a field is added, and its failure
+would be silent and would look exactly like the defect being fixed here.
+
+### What it cost, and the one thing it changed beside the check
+
+The manifest is now read into memory rather than streamed, because the document is
+walked twice — once decoded, once as a token stream. That introduces an allocation
+an add-on's author controls, so the read is bounded at `maxStringIn`, the 64 KiB
+the ABI already puts on a single value crossing into the host. A real manifest is a
+few hundred bytes; the largest this schema can honestly describe is under 40 KiB.
+Reusing that constant rather than inventing a second one is deliberate — two
+arbitrary numbers answering the same question is two numbers to keep true.
+
+`DisallowUnknownFields` stays, and the check runs after the decode rather than
+before it. A key that is genuinely unknown keeps the decoder's own error message,
+which names the field; a key that is known-but-misspelled is the only thing that
+can survive a successful decode, so the new check only ever sees well-formed input
+and never has to produce a syntax error of its own.
+
+### Sabotage
+
+Every case passed on the first run, so each mechanism was broken separately.
+Bypassing the check: **ten** failures, every case in the battery. Removing the
+duplicate rule alone: exactly the four repeat cases fail and the four case-variant
+cases still pass. Removing the recursion into arrays: exactly the two nested cases
+fail. Removing the size bound: the bound's own test fails. Restored by
+counter-edit each time.
+
+---
+
+## 2026-08-20 — M60, one add-on's load is bounded, and the budget is its own
+
+The repair [D269](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)
+scheduled for [F287](deferred-findings.md#closed). **D272.**
+
+`m60.md`'s failure-class bullet — *logs, increments a metric, and the instance
+serves without it* — was true of every way a load could fail except the one where
+it never fails. `-buildmode=c-shared` makes package initialization run *during*
+instantiation, which is what makes a load-time failure expressible at all; a module
+that loops there returns nothing, and `wazero`'s `InstantiateModule` waits.
+
+**The runtime was already configured correctly.** `WithCloseOnContextDone(true)`
+has been set since the host was written, and its comment says why: a deadline
+enforced by cancelling a context does nothing unless the runtime is watching. What
+was missing was the deadline. Boot's context is
+`signal.NotifyContext(context.Background(), …)`, so nothing the runtime watched had
+one, and the correctly configured mechanism sat there watching a context that would
+never be done. `Open` was measured at 20 s and still going, with no log line, no
+metric and no error — and the listener not yet open, because the host is opened
+before it deliberately, so that a `required` add-on's failure is an exit rather than
+a request meeting a half-built schema.
+
+### Per add-on, and this is the part worth arguing
+
+A single deadline over the whole of `Open` is one line shorter and would have passed
+every other test written here. It is wrong for three reasons and the second is
+disqualifying:
+
+- **Attribution.** One expired context says *something* took too long. F287's own
+  severity line is that the failure is silent — *nothing says which add-on boot is
+  stuck on* — and a shared budget answers that with a shrug. A per-add-on deadline
+  puts the name in the log line and in the `addon` label.
+- **It converts a `degrade` failure into a `required` one.** A shared context, once
+  expired, is expired for every add-on discovered after it. One `degrade` module
+  spinning in `init()` would then fail every add-on behind it, and a `required` one
+  among them stops the instance. That is precisely the bullet this reopening exists
+  to repair, re-broken from the other side. It is asserted rather than asserted
+  about: with a shared budget the test fails with `add-on "zfine": load_timeout`,
+  where `zfine` is a healthy `required` module standing behind the spinner.
+- **Scaling.** Ten installed add-ons would each get a tenth of a budget, so
+  installing an eleventh could refuse the other ten.
+
+The cost is stated rather than hidden: N add-ons that all hang cost N times the
+budget before the listener opens. Each is bounded and each logs as its own budget
+expires, so what an operator sees is progress with names on it rather than silence.
+
+### Thirty seconds, because the milestone already said so
+
+`TestInstantiationCostIsMeasured` has asserted since M60 shipped that loading one
+add-on past 30 s *is not a boot-time cost any more*. The number was already this
+project's answer to *what is too long*; it was an opinion held by a test rather than
+behaviour of the host. The constant makes it behaviour, and the test now measures
+against the constant, so a later edit cannot leave the host refusing loads the test
+calls acceptable.
+
+Measured on this machine, 2026-08-20, to check that the budget is not a bound on
+anything real: a 1.87 MB `GOOS=wasip1` fixture compiles in 380 ms and instantiates
+in 1.6 ms, and the whole of one add-on's load through `Open` is 388 ms — a
+seventy-seventh of the budget.
+
+It is a constant and not a config field. An operator has no information with which
+to choose it: the number is about what the host will wait for rather than about a
+deployment, and a knob here is one more thing to set wrongly in the direction of
+*unbounded*. `Options.LoadTimeout` overrides it for tests, which need a budget they
+can afford to spend in real time.
+
+### A ninth outcome
+
+`load_timeout`, for the reason `abi_unsupported` and `name_collision` are their own
+labels: nothing is malformed and the operator's question is a different one. A
+module that traps is broken and the log carries the trap; a module that never
+returns is *running*, and the only fact anyone has is that the budget ran out.
+Folding the two into `instantiate_failed` would make the one alert an operator needs
+— an add-on is spending boot — indistinguishable from an ordinary bad build.
+
+The relabel is applied wherever in the load the budget ran out, compile or migration
+or instantiation, because the step is not the fact an operator needs. It is applied
+only when the *parent* context is still live: a shutdown signal during boot cancels
+every load, and that is an instance being stopped rather than an add-on being slow.
+
+### The hazard the fix introduces
+
+`WithCloseOnContextDone` cuts both ways. A per-load context that outlived its load
+would close a perfectly healthy add-on the moment its budget expired — an instance
+that boots and then loses every module thirty seconds later, which is a worse defect
+than the one being fixed. wazero's watcher is `defer done()` inside the call
+(`internal/engine/wazevo/call_engine.go:326-328`, v1.12.0), so cancelling after the
+load returns is safe. That is now a property this repository asserts rather than one
+its dependency happens to have: a loaded module is called into after its budget has
+passed, and sabotaging it — closing the module when its context expires — fails that
+test with `module closed with exit_code(0)`.
+
+### Sabotage, and why one of them could not merely fail
+
+A test that has never hung has not been shown to catch a hang. The fixture is a
+module that genuinely spins in `init()` — not a bare `for {}`, which a compiler is
+free to reason about, but an accumulator whose result is exported, because what the
+host interrupts has to be a guest really executing.
+
+Removing the deadline does not make the test fail. It makes it **hang**, which is
+F287 reproduced through the shipped test rather than through a scratch harness;
+`go test -timeout 25s` is what ends the run, and `panic: test timed out after 25s`
+is the evidence.
+
+**The test budget is measured rather than chosen, and the first version of it was
+testing the wrong thing.** A fixed 2 s budget passed on its own and failed the
+package under `-race`: loading one add-on costs 380 ms here and **3.9 s** with the
+race detector alongside the rest of the package, so a healthy `required` module
+standing behind the spinner timed out too. The failure is the useful part. A budget
+shorter than a real load expires during **compilation**, so the fixture never
+reaches the loop it exists for — the two hang tests would have passed against a
+module that does not spin at all, which is the same defect as a test that has never
+failed. The budget is now twice a load measured once per package, plus a second, so
+it is past anything healthy under any conditions and short enough to wait out; it
+scales itself to a two-core CI runner instead of being a constant that is wrong
+under one of the two numbers. The package costs 38 s more under `-race`. The other three sabotages fail in the ordinary way: a shared budget
+refuses a healthy `required` add-on, dropping the relabel breaks all three
+outcome assertions, and closing the module on its expired context breaks the
+survival test.
+
+### What is left, deliberately
+
+The same gap gave an unbounded load-time log flood — `log` is ungated, one line is
+bounded at 4 KiB, the count is not, and `Open` would not return to stop it: 3697
+lines and 14.7 MiB in 2 s. The deadline turns *unbounded* into *bounded by the
+budget*, which is a different problem rather than the same one solved: a module can
+still write roughly 200 MiB into an operator's log before its 30 s runs out, and it
+can do the same from a request. Bounding a module's log **rate** is not this
+milestone's claim — nothing in `m60.md` says anything about log volume — so it is a
+row rather than a silent inclusion, and it is filed naming M60 because M60 is what
+was being built when it was found.
+
+
+---
+
+## 2026-08-20 — M60, what the load budget bounds is the add-on's own code
+
+The correction to [D272](#2026-08-20--m60-one-add-ons-load-is-bounded-and-the-budget-is-its-own),
+made at M60's second worker on the same reopening. **D273.**
+
+D272 got the *shape* of F287's fix right and the *scope* of it wrong, and the
+wrongness is the kind this loop's reviewer step exists to catch: it repaired one
+milestone's claim by falsifying another's.
+
+**What went wrong.** The deadline was applied to the whole of `loadOne`, which is
+the obvious place and reads as the general answer — *one add-on's load is bounded*.
+But a load is not one thing. Between reading the manifest and instantiating the
+module, the host creates the add-on's schema and applies the add-on's migrations,
+and [M63](phase-details/m63.md) gives that step `lock.WithLockTimeout(5, 60)` —
+five minutes — with a comment saying exactly why: *the same five minutes the host's
+own migrations wait. A replica arriving mid-migration should wait rather than fail
+into a crash loop.* The host's own `Migrate` is the twin of it and says the same.
+Thirty seconds over the whole load makes those five minutes unreachable. A second
+replica arriving mid-migration expires at 30 s, reports `load_timeout`, and if the
+add-on is `required` the instance stops — the crash loop M63 chose five minutes to
+prevent, produced by the fix for F287. A first `CREATE INDEX` on a real table at
+upgrade meets the same bound with nothing wrong anywhere.
+
+**What the budget bounds instead.** The two steps that run code the add-on
+supplied: `CompileModule`, and `InstantiateModule`, which is where package
+initialization runs and therefore where F287's hang is. Each gets the budget; the
+host's own work between them does not. That leaves M63's five minutes reachable,
+leaves the hang caught, and — the part that matters for the next person reading a
+boot log — stops the outcome being overwritten. D272's version replaced whatever
+outcome the expiring step had produced with `load_timeout`, so a missing-tables
+upgrade that `docs/operations.md` promises reports `storage_failed` reported
+`load_timeout` instead. Bounding the steps rather than the whole load means the
+outcome is whatever actually failed, with no rewriting.
+
+**Why a bound and not a behaviour change, and therefore the worker's.** Nothing
+about *what happens* when the budget runs out moves: the class the manifest
+declared still decides, the ninth outcome is still `load_timeout`, the number is
+still 30 s and is still the one `TestInstantiationCostIsMeasured` has called the
+boundary since M60 shipped. What moves is which clock the 30 s is on. Choosing
+that is reading two files against each other, not a preference anybody could hold
+differently, which is why it was decided here rather than asked.
+
+**Two consequences, stated rather than discovered.**
+
+- An add-on's *migrations* are code it supplied too, and nothing bounds how long
+  one statement in one of them runs. That bound is Postgres's, on the migration
+  connection, and setting it is a number with a real cost on either side — too
+  tight and a legitimate index build fails an upgrade. It is
+  [F306](deferred-findings.md#open) rather than a silent inclusion.
+- The worst case per add-on is two budgets rather than one. In practice it is one:
+  compiling is a finite pass over a file of finite size, while instantiation runs a
+  loop the add-on wrote. Sixty seconds and thirty seconds are the same answer to
+  the question an operator actually has, which is whether boot ends.
+
+**The aggregate cost is now written where an operator reads.** Per add-on is still
+the right choice, for D272's three reasons, and it prices boot at N budgets for N
+hanging add-ons. Three of them exceed the 80 s `docker-compose.yml`'s healthcheck
+allows — a 30 s start period and five attempts 10 s apart — so `docker compose up
+--wait` reports a failed bring-up for an instance that comes up behind it. That
+arithmetic lived in a code comment, which is not a place an operator meets it;
+`docs/operations.md` now says it under `load_timeout`, with the two remedies.
+
+## 2026-08-20 — M60, the compile step was bounded by nothing
+
+**D274.** The third attempt at M60's reopening, and a correction to
+[D273](#2026-08-20--m60-what-the-load-budget-bounds-is-the-add-ons-own-code)
+rather than to what it decided. D273 is right about *which* steps get the budget.
+It was wrong that both of them had it.
+
+**What was false.** `loadOne` wraps `CompileModule` in `runGuest`, which gives the
+step a context with the budget on it and reports expiry separately. wazero does
+not stop for that context. Its wazevo engine checks cancellation only on the
+**multi-worker** compilation path — the worker loop opens with `ctx.Err()` and the
+caller reports `context.Cause` — while the single-worker branch walks the code
+section with no check anywhere in it, and single-worker is the branch every
+compile here took, because `experimental.GetCompilationWorkers` returns
+`max(workers, 1)` and nothing set the key. A compile that ran past its budget
+therefore returned `err == nil`; expiry is read only when the step returns an
+error; and the `load_timeout` limb for compiling was unreachable. The load did not
+fail late — it **succeeded** late.
+
+Measured on the `minimal` fixture rather than argued: handed a context that was
+already done, `CompileModule` returned success after 377 ms with the default and
+`context deadline exceeded` after 23 ms with two workers. With a budget that
+expires *during* compilation it returns within about a millisecond of the budget,
+at 50 ms, 100 ms and 200 ms.
+
+**Why this is a correction and not a new claim.** Four documents already said the
+compile step was bounded — `docs/operations.md` under `load_timeout` twice,
+`docs/SECURITY.md`'s add-on row, `CHANGELOG.md`, and m60.md's own D273 bullet.
+Narrowing all five to say only instantiation is bounded was the other legitimate
+answer and was weighed. It was declined for one reason: the step being described
+runs code a publisher supplied, from a file this host does not bound the size of,
+and leaving it deliberately unbounded is the exact shape F287 was filed against.
+Making the sentence true was cheaper than making it smaller.
+
+**The fix is a constant on a context.** `compileWorkers = 2`, set where the
+compile runs. Two, because two is the whole of the requirement — anything below it
+lands back on the branch with no check, which is what a `NumCPU`-shaped number
+would do on a one-core container, the machine most likely to need the bound.
+Compiling is also faster with more workers (383 ms, 208 ms and 126 ms at one, two
+and four on this machine, so `TestInstantiationCostIsMeasured` now compiles the
+way `loadOne` does, its number having otherwise stopped describing the host). That
+is a side effect and not the reason.
+
+**What is bounded is stated at its real granularity.** The check sits between
+functions of the code section, so a single function whose compilation is
+pathologically slow overshoots by however long that function takes. "Compilation
+is interruptible" is the rounder claim and the false one; the test is written
+against the enforced one.
+
+**The hazard, named because it is silent.** `experimental` is wazero's own word
+for an API that may move. If the check moves, the budget stops being enforced and
+every test that does not measure it stays green.
+`TestTheCompileStepIsBounded` is what fails at that upgrade — it asserts the
+compile step by name, because the outcome alone does not distinguish the two
+limbs: with the bound gone the add-on still fails as `load_timeout`, one step
+later, having spent a whole compile getting there. Sabotage confirmed the sharper
+thing, that with `compileWorkers` at 1 the load **succeeds** — each step gets its
+own budget, so instantiation's clock starts fresh.
+
+## 2026-08-20 — M60, one defect gets one row
+
+**D275.** Bookkeeping, and it is a decision because
+[deferred-findings.md](deferred-findings.md)'s own rule says removing or moving a
+row is one.
+
+**F267 was F287, two days earlier.** M60's sixth review found that a `degrade`
+add-on whose initialization never returns hangs the boot and filed F267;
+M64.9 found the same thing and filed F287; the reopening D269 scheduled closed
+F287 and left F267 in *Open*. That is not a tidy-up: F267's text says *no
+milestone owns a load-time deadline* and its Severity cell describes the fix as
+*a context with a timeout around instantiation and a class to put the expiry in*,
+which is the diff. An open row asserting the defect is unfixed is worse than no
+row, and three operator-facing documents were still citing it by number —
+`docs/configuration.md`, `docs/SECURITY.md` and `.env.example`, the last of which
+also still said *there is no load-time deadline yet*. F267 moves to *Closed*
+against M60, naming F287 as the duplicate filing and M60 as the work.
+
+**F306 was F274, one day earlier.** F306 was filed at this reopening, from
+D273's scoping — an add-on's migrations are the one piece of its own code the load
+budget does not bound. F274 already said that, from M63, with the same site
+(`MigrateAddon` with no `statement_timeout`), the same evidence and the same fix,
+plus a limb F306 did not have: the migration holds a session-level advisory lock,
+so every other replica blocks in goose's retry and one bad release costs a rolling
+deploy rather than a container. F306 merges into F274 under the file's merge
+convention. F274 survives because it is earlier, better evidenced, and filed
+against the milestone the defect lives in.
+
+**F274 is rewritten off the premise it was resting on.** Its finding opened *which
+is F267's shape with a cluster-wide lock added* and its severity read *higher than
+F267's*. Both cite a row that is now closed and a claim that is now false, so the
+row is restated on its own mechanism and absorbs F306's framing. A surviving row's
+cells are editable; a row that has moved to *Closed* is not, which is why F267 and
+F306 are left exactly as written and only their *Closed by* cells are new.
+
+**D273's entry is left alone**, including its pointer to F306, because this file
+is append-only and an entry rewritten to match a later state stops being a record
+of what was decided when. This entry is the forwarding address.
+
+**What the count says.** Open rows go from 74 to 72, and neither of the two that
+left was fixed by code written today. That is the point worth keeping: the
+duplicate-row failure is invisible to every gate this repository runs, and both
+halves of it were found by a reviewer reading rows against a diff.
+
+## 2026-08-20 — M64.9, M62 is parked and M63 and M64 go ahead of it
+
+Owner-answered, and it is a scheduling decision rather than a technical one, so
+it is recorded here before anything acts on it.
+
+**D278 — M62 stays reopened and unfinished while M63 and M64's reopenings land.**
+Its remedy has now produced two carve-outs and a reviewer smuggled a payload
+through both — the second at three times the first's rate, because the ten ASCII
+digits are registered keycap bases and bare `1 FE0F` renders exactly as `1`. The
+options put to the owner were: escape all 260 unconditionally (recommended, and
+previously declined at D270 on less evidence); narrow a third time to require the
+complete `base FE0F 20E3` keycap sequence; accept the residue and state it
+truthfully; or park it and take the two independent reopenings first. The owner
+took the fourth.
+
+**The recommendation against it is recorded because it was made and overruled,
+not because it was right.** Parking leaves `M62` un-`done` while `M63` names it
+in its `Depends on` column, so the loop is taking a row whose dependency is not
+`done` — permitted here only because the owner scheduled it, and because what
+M63 depends on is M62's *function*, which shipped and is in the tree; what is
+under repair is one claim about its log boundary. The ordering table is not
+amended and no dependency edge is removed.
+
+**Where the work went, because uncommitted work does not survive this
+repository.** Attempt 2 is a real commit on the local branch `wip/m62-sanitizer`,
+never pushed and never a milestone commit. `make demo-update` and
+`release-check` both refuse a dirty tree, so M63 and M64 could not have landed
+around it. Restoring it will conflict in `decisions.md`, `deferred-findings.md`,
+`CHANGELOG.md`, `Plan.md` and `docs/SECURITY.md`, which M63 and M64 also touch —
+that cost was stated when the option was offered and is repeated here so whoever
+resumes M62 expects it rather than discovers it.
+
+**D276 and D277 are reserved.** Attempt 2 spent those numbers on the branch. The
+next entry on `phase-4` therefore takes **D279**, and a gap at 276-277 is
+deliberate rather than a lost decision — this is the line that says so.
+
+## 2026-08-20 — M63, the reset the load ran cleared one scope of two
+
+**D279 — the correction to [D253](#2026-08-19--m63-the-load-clears-every-role-level-setting-before-pinning-the-search-path).**
+That entry is headed *the load clears every role-level setting before pinning the
+search path* and it is not true; this file is append-only, so the heading stays
+where it is and this entry is what corrects it. The two other written claims that
+rest on it are corrected in place, because they are prose in files that are not
+append-only: `internal/store/addons.go`'s *Everything the role has been told
+about itself, cleared*, and `docs/SECURITY.md`'s *every load now clears the
+role's settings*. F288, on M64.9's triage, reopening M63 under D269.
+
+**What `RESET ALL` clears is one scope of the two Postgres keeps.**
+`pg_db_role_setting` is a shared catalogue holding a row per role per database,
+plus one row per role with `setdatabase = 0` for the cluster-wide default.
+`pg_roles.rolconfig` *is* that catalogue filtered to `setdatabase = 0`, and
+`ALTER ROLE … RESET ALL` writes only there. So:
+
+```
+as the confined role:
+  ALTER ROLE CURRENT_USER SET work_mem = '4GB'                      -> accepted
+  ALTER ROLE CURRENT_USER IN DATABASE linkctrl SET work_mem = '4GB' -> accepted
+after the load's RESET ALL and search-path pin:
+  pg_db_role_setting                 -> linkctrl: {work_mem=4GB}
+  a fresh login, SHOW work_mem       -> 4GB, src = database user
+```
+
+Live rather than nominal: a confined `READ ONLY` sort of 400,000 rows ran fully
+in memory, `Sort Method: quicksort Memory: 12289kB`, where the 4 MB default
+spills to disk — times `AddonMaxConns`, surviving every reboot. Every obvious
+defence was tried and none of them is one. A non-superuser alters its own
+per-database settings with no grant, because these are `PGC_USERSET`. There is no
+`SET ROLE` escape hatch, because the pool logs in **as** the role, which is the
+whole reason startup applies the rows. `AddonDB.pin` pins `search_path` and
+`statement_timeout` and nothing else, and replaying the read inside that
+transaction still gets 4 GB.
+
+**The repair is not a second reset with a scope on it, and that is the decision
+this entry exists for.** `IN DATABASE` takes a *name*. It is not a connection and
+needs no privilege on what it names: measured as the confined role, the row lands
+for a database with `CONNECT` revoked from `PUBLIC`, and for `template0`, whose
+`datallowconn` is false. A repair scoped to `current_database()` therefore closes
+the shape F288 was first filed as and leaves the same lever one word away, and
+Postgres offers no `IN ALL DATABASES` to widen it with. What holds instead is to
+**stop naming databases**: the catalogue is shared, so one connection sees every
+row wherever it was written, and `ALTER ROLE … IN DATABASE d RESET ALL` is
+accepted for a database the *application* cannot connect to either — measured as
+a NOSUPERUSER CREATEROLE role with no `CONNECT` on `d`. The load enumerates,
+resets each database it finds, resets the cluster-wide row, and then pins. There
+is no name left to evade with, and the privilege is still the `CREATEROLE`
+D253 measured, so this stays the one narrowing in the family conditional on
+neither superuser nor database ownership.
+
+**The test that guarded this could not have caught it, which is a separate
+failure from the reset being short.** It set the plain variant and its verifier
+read `pg_roles` — the filtered view — so the row the defect lived in was outside
+the catalogue the assertion looked at, and it passed on every run for the whole
+life of the defect. A repair verified the same way would have passed over the fix
+exactly as it passed over the defect. The test now sets all three scopes,
+including one in a database the add-on does not run in, and reads
+`pg_db_role_setting` itself; and `AddonConfinementViolations` gains a fifth
+branch reading the same catalogue, permitting exactly the row the load writes —
+the search-path pin — and reporting every other. A setting is not an object, so
+the four `pg_shdepend` and `pg_depend` branches that shipped could not have seen
+one however carefully they enumerate: this is the same shape as D255's grant, one
+catalogue over. The cost is D255's too — an add-on that parks a setting between
+the load's reset and the check refuses itself, and a `required` one stops the
+instance — and it is accepted for the same reason, that the host noticing is
+worth more than an add-on being able to sabotage its own confinement quietly.
+
+**And nothing in this product drops a role, so a per-add-on repair does not
+finish the job.** The only `DROP ROLE` in the tree is the purge an operator types
+out of `docs/operations.md`. Delete a module's directory and nothing will ever
+call `EnsureAddonSchema` for that role again, so a setting parked before it went
+is repaired by no load that will ever run. The boot that already enumerates
+orphaned schemas now also clears the session defaults on every `addon_*` role no
+loaded add-on claims, and logs what it cleared.
+
+Two lines were drawn around that, and both are deliberate. It is **not** M63's
+*nothing is deleted here*, which is about the add-on's data — a schema, its
+tables, its rows, which an operator may want back and which M68's purge asks
+about first; a session default is the host's own confinement state, the host is
+the only party with a reason to write one, and there is nothing an operator could
+have meant by one on a role no module claims. And it **puts the search-path pin
+back**, so it removes only what an add-on wrote about itself: an instance is not
+alone in its cluster, `pg_db_role_setting` and `pg_roles` are shared across every
+database in it, and *unclaimed here* is not *unclaimed anywhere* — a replica
+rolling forward onto an image a release behind sees another replica's live add-on
+as an orphan. Keeping the pin makes that case a no-op on a well-behaved role
+rather than a judgement call. A role whose only row is the pin is skipped
+outright, so the second boot finds nothing and says nothing.
+
+**What this does not do.** It does not stop the role parking a row a second
+later; `PGC_USERSET` has no per-role deny, and what the host does is notice at the
+next load and refuse. It does not touch the role's `LOGIN` or its password — an
+add-on can set its own password and that outlives an uninstall too, which is
+[F280](deferred-findings.md#open) and is not this. And it clears nothing for a
+role whose name is not one this product could have created: the sweep reads names
+from a catalogue rather than from a manifest, so it runs each one through the same
+regexp the load runs before it creates a role and skips anything that fails.
+
+## 2026-08-21 — M63, a prefix is not a proof of ownership
+
+**D280 — the correction to [D279](#2026-08-20--m63-the-reset-the-load-ran-cleared-one-scope-of-two)'s
+last two paragraphs.** Everything that entry says about the reset and the
+post-condition stands and is in the tree. What does not is its account of the
+*sweep*: that a session default on an `addon_*` role no module claims is
+necessarily this product's, that *there is nothing an operator could have meant by
+one*, and that running the name through the load's own regexp is what keeps the
+sweep to roles *this product could have created*. A name a product could have
+created is not a name it did create, and the distance between the two is the whole
+of this entry. D279 was never committed; it is left as written because this file is
+append-only and the two entries land in the same commit, which is also the record
+of what the first attempt argued.
+
+**The falsification was a reviewer typing six words.** `CREATE ROLE addon_reporting`
+— `NOLOGIN`, no schema, no module, never created by LinkCtrl — with settings in two
+scopes, then this milestone's own boot test. Both rows were gone. That is this
+product reaching outside its own database and mutating a catalogue the whole
+cluster shares, on the strength of a string prefix, and it is why the milestone was
+rejected a second time.
+
+**What entitles the sweep now is two facts, asked of the catalogue, that only
+`EnsureAddonSchema` writes.** A schema of exactly the role's name exists **in this
+database and the role owns it** — `CREATE SCHEMA … AUTHORIZATION` and the
+`ALTER SCHEMA … OWNER TO` beside it. And **this application's own database user is
+a member of the role** — the `GRANT … TO CURRENT_USER` the load runs, which is a
+row in `pg_auth_members` rather than an implication of superuser. The identifier
+regexp stays, because the name still becomes DDL, but it is a bound on what may be
+written rather than a claim about who wrote it.
+
+Both facts were measured on Postgres 17.10 rather than reasoned about:
+
+```
+CREATE ROLE addon_probe …              as superuser  -> pg_auth_members: 0 rows
+GRANT addon_probe TO CURRENT_USER      as superuser  -> member linkctrl, admin f
+CREATE ROLE addon_mine …               as CREATEROLE -> member m63app,  admin t
+as addon_selfrevoke: REVOKE addon_selfrevoke FROM linkctrl
+                                       -> permission denied to revoke role
+```
+
+So the row is present exactly when this product's load put it there, on both
+deployment shapes docs/deployment.md documents, and the add-on cannot remove it to
+dodge the sweep, because no role holds `ADMIN OPTION` over itself. The whole sweep
+was then replayed end to end on the shape that is not the compose file's — a
+`NOSUPERUSER CREATEROLE` application that does not own the cluster, its own
+`addon_x` beside a superuser-made `addon_stranger` that owns a schema of its own
+name in the same database. The candidate query returned `addon_x`'s two rows and
+neither of the stranger's, and both `ALTER ROLE addon_x IN DATABASE postgres RESET
+ALL` and the cluster-wide reset were accepted — the `ADMIN OPTION` Postgres 16 and
+newer give a `CREATEROLE` creator automatically is what makes the privilege claim
+hold there as well as under the superuser the compose file ships. It *can* drop its
+own schema and lose the other fact — and that is the safe direction, since the sweep
+then skips it and the add-on has destroyed its own data to arrange it.
+
+**A false positive now costs a role its session defaults and nothing else**: the
+search-path pin goes back inside the same transaction, and the schema, its tables
+and its rows are untouched. That is the blast radius, and docs/deployment.md states
+it in a paragraph it did not have — *One database-wide change* was a shipped
+operator claim and the sweep made it false, which is the second half of the
+rejection and the reason this is a decision rather than a patch.
+
+**The sweep is the smaller half of the answer, and saying which half is which is
+what stops it being written too wide again.** A session default applies only to a
+session that **logs in** as the role: measured, `SET ROLE addon_probe` and
+`SET SESSION AUTHORIZATION addon_probe` both leave `work_mem` at the cluster
+default of 4 MB, while a login reads back the parked value with
+`source = database user`. This product opens such a session only from a load, and a
+load clears every scope before it opens one. So a row on a role nothing connects as
+is **inert**, and the case the sweep is genuinely for is the one where *unclaimed
+here* is not *unclaimed anywhere* — a replica a release behind, whose neighbour
+still has the module loaded and whose pool would otherwise inherit what the add-on
+parked. Detection is the larger half and it is
+`AddonConfinementViolations`'s sixth branch, which refuses the add-on rather than
+repairing it quietly.
+
+**Three other defects the same rejection named, each fixed at its own level.**
+
+- **One role's failure was every role's.** The old loop returned on the first
+  error, `Open` logged it at `Debug` and threw the partial result away. Measured:
+  `ALTER ROLE addon_revother RESET ALL` answers `42501 permission denied to alter
+  role … Only roles with CREATEROLE and the ADMIN option may alter this role`, and
+  rows sweep in name order, so a stranger's role sorting early stopped every
+  genuine orphan behind it, at a log level nobody reads. Each role is now its own
+  transaction, failures are joined rather than returned, and the boot logs them at
+  `Warn` naming the roles still carrying something.
+- **The sweep did not reach the two cases it most needed to.** It sat after the
+  load loop, which a `required` add-on's failure returns from — so an instance held
+  down by one module repaired none of the others — and it subtracted what *loaded*,
+  so an add-on with a broken module was swept as though it had been uninstalled. It
+  now runs before the loop and subtracts what is **installed in the directory**.
+  The bound that remains is `Open` returning early when no add-ons directory is
+  configured, which is [F308](deferred-findings.md#open): closing it means the
+  add-on host touching the database on an instance that configured no add-ons, and
+  *off costs nothing* is a claim `internal/config` states and `internal/addon`'s
+  tests assert. The inertness measurement above is what makes leaving it a bound
+  rather than a hole.
+- **A database dropped between the enumeration and the reset failed the load.**
+  Two round trips against a shared catalogue: measured, the reset answers
+  `3D000 database "x" does not exist`, and inside `EnsureAddonSchema`'s transaction
+  that is an abort rather than a row to skip — so a concurrent `DROP DATABASE`
+  anywhere in the cluster stopped a `required` add-on's instance. Each per-database
+  reset now runs in a savepoint and tolerates that one code, which loses nothing:
+  `DROP DATABASE` deletes the role's `pg_db_role_setting` rows for that database,
+  measured, so a database that has gone has taken the thing the statement was going
+  to clear with it. **This branch has no automated test and that is stated rather
+  than hidden** — the window is between two statements this code issues and there
+  is no seam a test can hold it open at; what is asserted instead is the invariant
+  that makes tolerating it safe.
+
+**And the doc comment miscounted its own query.** It read *the fourth branch is the
+only one that sees it* over a query with six branches. Corrected in the comment and
+in the test that repeated it, which is the same class of error as the one this
+milestone was reopened for, one directory over.
+
+**What did not change.** The load's own reset still enumerates the catalogue and
+resets every database it finds — D279's argument for that stands, and it is not the
+same question as the sweep's, because `EnsureAddonSchema` holds its proof of
+ownership by construction: it creates the role in that transaction, or adopts one
+whose `GRANT … TO CURRENT_USER` succeeded, which fails for a role belonging to
+somebody else. The post-condition still reports every row but the pin, in every
+database, at the cost D255 accepted for grants.
+
+## 2026-08-21 — M63, a prefix is not a proof of ownership: the amendment
+
+An amendment, owner-answered, made at [step 3.4](phase-loop.md#3-land) rather
+than at validation — because it was reading the tree against the bullet that
+surfaced it, which is the case that step exists for. Only the orchestrator
+amends; the worker carried it and stopped, correctly.
+
+### D281 — the sweep's identification clause
+
+**The bullet as it stood**, at `m63.md`'s third F288 entry:
+
+> Done is that the boot which already enumerates orphaned schemas also **clears
+> the session defaults on every `addon_*` role no loaded add-on claims**, and
+> says what it cleared. … A session default is not the add-on's data: it is the
+> host's own confinement state, **the host is the only party with a reason to
+> write one** … So the sweep removes only what an add-on wrote about itself …
+> and leaves nothing an operator could have meant.
+
+**The bullet as amended:**
+
+> Done is that the boot which already enumerates orphaned schemas also **clears
+> the session defaults on every add-on role it can prove it created and no
+> *installed* add-on claims, and says what it cleared — and what it could not**.
+> … **A name beginning `addon_` is not a proof of ownership.** What the sweep
+> asks for instead is the two facts `EnsureAddonSchema` writes and nothing else
+> in this product does — a schema of that name in this database that the role
+> owns, and a `pg_auth_members` row making this application's own database user a
+> member.
+
+**The tree fact that forced it.** A reviewer created `addon_reporting` by hand —
+`NOLOGIN`, no schema, no module, never made by this product — gave it settings in
+two scopes, and ran this milestone's own boot test. Both rows were gone
+afterwards. So *the host is the only party with a reason to write one* is false,
+and the identification clause that rested on it was mutating a cluster-shared
+catalogue on the strength of a string. Measured again from the other side: a
+superuser's `CREATE ROLE addon_x` records **no** `pg_auth_members` row while this
+product's own `GRANT … TO CURRENT_USER` does, and as the add-on's role
+`REVOKE addon_selfrevoke FROM linkctrl` answers *permission denied to revoke
+role* — so the evidence the sweep now requires is evidence an add-on cannot
+manufacture and cannot destroy.
+
+**Why it was a prompt and not a correction.** The stated reason was a fact and
+was false; but *what the sweep clears* is a thing somebody could decide
+differently, and the loop is not allowed to decide it. Two other answers were
+put to the owner and declined. **Not sweeping at all** was real — the
+post-condition already reads `pg_db_role_setting` and refuses an add-on that
+parked anything, so a parked setting earns its author nothing, and a row on a
+role nothing logs in as is inert (measured: `SET ROLE` and
+`SET SESSION AUTHORIZATION` both leave `work_mem` at its default; only a login
+reads the parked value). Its cost is that an uninstalled add-on's settings stay
+forever on a role this product never drops. **Sweeping everything and documenting
+it** was declined because it makes the reviewer's case shipped behaviour and
+hands a naming convention to everyone sharing the cluster.
+
+The cost of the answer taken is stated in the bullet rather than absorbed: a role
+whose schema an operator dropped by hand keeps its parked settings, because the
+proof of ownership is what was dropped with it.
+
+## 2026-08-21 — M63, detect and refuse; the sweep is removed
+
+### D282 — the reversal of [D281](#2026-08-21--m63-a-prefix-is-not-a-proof-of-ownership-the-amendment)
+
+**Owner-answered: detect and refuse, do not sweep.** `ClearOrphanedAddonRoleSettings`
+and its call from `internal/addon/host.go`'s `Open` are removed outright. What
+stays is the confinement post-condition's `pg_db_role_setting` branch, which reads
+that catalogue at every load and refuses an add-on whose role carries any row but
+the search-path pin, in any database. A load resets every scope **before** it
+checks, so a setting parked from an ordinary query is cleared rather than refused
+and one parked inside the add-on's own migrations — which run between the two —
+is refused; either way parking earns its author nothing, and **no proof of role
+ownership is needed
+anywhere**. This file is append-only: D281 stands as the record of what was
+decided and on what evidence, and this entry is the reversal.
+
+**D281's proof had two legs and the load-bearing one is false.** It rested on two
+facts said to be written only by `EnsureAddonSchema`: a schema of the role's name
+in this database that the role owns, and a `pg_auth_members` row making the
+application's own database user a member of the role. The membership leg does not
+hold on the privilege this product asks for. Measured on PostgreSQL 17.10 in
+`linkctrl-test-postgres-1`, as a `NOSUPERUSER CREATEROLE` role — which is what
+docs/deployment.md requires and what D253 measured the rest of this family
+against:
+
+```
+as d282app (LOGIN CREATEROLE NOSUPERUSER):
+  CREATE ROLE addon_d282probe NOLOGIN            -- no GRANT typed
+  -> pg_auth_members: addon_d282probe / d282app, admin_option = t
+
+as linkctrl (superuser, which is what the compose file ships):
+  CREATE ROLE addon_d282super NOLOGIN
+  -> pg_auth_members: no row
+```
+
+D280 measured only that a **superuser**'s bare `CREATE ROLE` records no row, and
+concluded the row was present *exactly when this product's load put it there*. On
+the `CREATEROLE` shape the row arrives automatically, with `ADMIN OPTION`, from
+six words an operator typed. A reviewer then built the whole counterexample by
+hand in five ordinary statements and the sweep's own `SELECT` returned it. So the
+test that guarded the leg — `TestTheSweepLeavesARoleThisProductDidNotMake` —
+passed only because this machine's compose application user happens to be
+superuser: the one deployment shape on which the false leg looks true.
+
+**Sweeping was never the larger half, which is what makes removing it cheap.**
+D280 already said so and the measurement stands, re-taken here: a session default
+is read only by a session that **logs in** as the role. `SET ROLE addon_x` and
+`SET SESSION AUTHORIZATION addon_x` both leave `work_mem` at the cluster default
+of 4 MB; a login reads the parked value back as `source = user` for the
+cluster-wide row and `source = database user` for a per-database one. Nothing logs
+in as an add-on's role except a load, and a load clears every scope first. So the
+detection half was carrying the security property all along and the repair half
+was tidying.
+
+**The residue the owner accepted, stated rather than absorbed.** An uninstalled
+add-on's parked settings stay forever on a role this product never drops. It is
+inert by the measurement above, it is cleared by the add-on's next load if the
+add-on returns, and an operator who wants it gone types one
+`ALTER ROLE … RESET ALL` per scope. That is said in `phase-details/m63.md`, in
+`docs/deployment.md` before an operator installs anything, in
+`docs/operations.md` where they meet it — with the query that lists the scopes —
+and in `Plan.md`'s known-limitations row.
+
+**What survives untouched.** The load's own reset: enumerating
+`pg_db_role_setting`, resetting each database, the savepoint tolerating `3D000`,
+then the cluster-wide reset and the pin. D279's argument for it stands and its
+proof of ownership is by construction rather than by catalogue —
+`EnsureAddonSchema` creates the role in that transaction, or adopts one whose
+`GRANT … TO CURRENT_USER` succeeded, which fails for a role belonging to somebody
+else. The post-condition's sixth branch survives untouched too, and is now the
+whole of the answer rather than half of it.
+
+**Four written claims went with the sweep, because each stated its false half as
+measured.** `internal/store/addons.go`'s membership bullet, `docs/SECURITY.md`'s
+*a bare `CREATE ROLE addon_anything` produces neither, measured on Postgres 17.10
+for both a superuser and a `CREATEROLE` creator*, and the operator paragraphs in
+`docs/deployment.md` and `docs/operations.md` that told an operator their own
+`addon_*` role was safe because of those two checks. `docs/operations.md` also
+carried `ALTER ROLE addon_<name> IN DATABASE <name> RESET ALL`, one placeholder
+standing for both the add-on and the database — wrong as written and copied as
+written, now two placeholders with the difference spelled out.
+
+### The bullet as it stood, and as amended
+
+This is the [amendment](phase-loop.md#amending-a-bullet) D281 made, made again in
+the other direction. It is written by the worker by explicit owner exception: the
+owner has just decided the assertion the bullet carries, so there is nothing left
+for the orchestrator to decide.
+
+**The bullet as it stood**, at `m63.md`'s third F288 entry — D281's text:
+
+> Done is that the boot which already enumerates orphaned schemas also **clears
+> the session defaults on every add-on role it can prove it created and no
+> *installed* add-on claims, and says what it cleared — and what it could not**.
+> … **A name beginning `addon_` is not a proof of ownership.** What the sweep
+> asks for instead is the two facts `EnsureAddonSchema` writes and nothing else
+> in this product does — a schema of that name in this database that the role
+> owns, and a `pg_auth_members` row making this application's own database user a
+> member. A bare `CREATE ROLE` produces neither, and an add-on cannot revoke the
+> membership to hide from it.
+
+**The bullet as amended:**
+
+> **Done is detect and refuse, not sweep.** The confinement post-condition's
+> `pg_db_role_setting` branch — the bullet above — reads that catalogue and
+> refuses an add-on whose role carries any row but the search-path pin, in any
+> database. So parking a setting buys its author a failed load rather than a
+> lever, and no proof of role ownership is needed anywhere, which is what makes
+> this the shape that holds: **a name beginning `addon_` is not a proof of
+> ownership, and neither is the `pg_auth_members` row that looked like one.** …
+> **The residue is stated rather than absorbed.** An uninstalled add-on's parked
+> settings stay forever on a role this product never drops.
+
+**The tree fact that forced it.** `CREATE ROLE addon_d282probe NOLOGIN`, typed as
+a `NOSUPERUSER CREATEROLE` role against PostgreSQL 17.10 with no `GRANT`
+following it, produced `pg_auth_members` row `addon_d282probe / d282app,
+admin_option = t` — the exact row D281 required as proof that this product's load
+had adopted the role. The same statement as superuser produced no row, which is
+the only case D280 measured. Both probe roles were dropped after measuring;
+`SELECT rolname FROM pg_roles WHERE rolname LIKE '%d282%'` returns 0 rows.
+
+## 2026-08-21 — M62, strip the variation selectors; there is no base set
+
+**D283, owner-answered, superseding [D270](#2026-08-20--m649s-triage-five-milestones-reopened-and-the-sanitizer-fix-that-is-a-decision)'s
+remedy.** Every variation selector is **deleted** from an add-on's log message
+rather than escaped, and there is no exemption for the legitimate emoji case.
+D270's *exempt the legitimate emoji case by what precedes the selector* is
+withdrawn. So are the two predicates written under it, D276 and D277 — **neither
+of which ever landed**: they live on the local branch `wip/m62-sanitizer`, which
+is not merged, and [D278](#2026-08-20--m649-m62-is-parked-and-m63-and-m64-go-ahead-of-it)
+is the entry that reserved their numbers. This file is append-only, so D270 stands
+as the record of what was decided; what follows is what replaced it.
+
+**The finding is unchanged.** F285: `escapedRune` asked
+`unicode.Other_Default_Ignorable_Code_Point`, Unicode's *residue* property, where
+the real set is `Other_DI ∪ Cf ∪ Variation_Selector − White_Space − FFF9..FFFB −
+13430..13440 − PCM`, all **seven** terms of the derivation Unicode publishes. The
+260 selectors are category `Mn`, so `unicode.IsGraphic` says yes and the
+default-deny fallback could not reach one. The derivation is kept and is the half
+of D270 that was never in doubt — 4174 members, 267 graphic, against the residue's
+3776 and 7, counted by `TestNoDefaultIgnorableCharacterReachesALogLine`.
+
+*(This paragraph first wrote six of the seven terms and put the size at 4190. It was
+corrected here **before either entry landed**, and [D284](#2026-08-21--m62-the-seventh-term-a-derivation-is-not-the-terms-that-change-an-answer)
+is the entry that says what the mistake was and what rule it produced. Append-only
+protects committed history; two new entries contradicting each other inside one
+commit is a thing to fix rather than a thing to preserve.)*
+
+**What changed is the remedy, and the owner's reasoning is the shape of it.**
+
+- **The threat is legibility, not confidentiality.** `log` is ungated, so a module
+  may write a secret in plain text whenever it likes and nothing at this boundary
+  stops it. What the boundary owes a reader is narrower and checkable: *what you
+  see is what is there*. D270 read the finding as a disclosure channel and looked
+  for a predicate that closed it while keeping every legitimate rendering; read as
+  a legibility rule instead, the selector simply has no business being in the line.
+- **Removing the covert bit does not require making logs ugly**, which is what
+  made D270's carve-out feel necessary. Stripping removes the bit and costs the
+  reader nothing: `❤️` becomes `❤`, still a heart; `😀` is untouched, because
+  `U+1F600` already defaults to emoji presentation and carries no selector.
+  Escaping would instead have put a literal `\ufe0f` through the middle of every emoji
+  anybody logs — which is the cost D270 declined, and stripping does not pay it
+  either.
+- **There is no base set**, and this is where both attempts died. Attempt 1 keyed
+  the exemption on category `So`: 6304 of the 6634 symbols carry no registered
+  emoji variation sequence, so `migrating: [████░░░░] everything is fine`, drawn
+  from `U+2588` and `U+2591`, went through byte-identical at log₂3 bits per
+  symbol. Attempt 2 keyed it on Unicode's own registered sequences, read from the
+  UCD's `emoji-variation-sequences.txt` — and a reviewer defeated that too, by
+  building the channel out of registered bases whose selector a renderer ignores.
+  Whether a selector is visible depends on the font in front of the reader, and
+  Unicode publishes no property that names that set. A carve-out has to name
+  characters where a reader can *see* the selector act, and there is nothing to
+  name.
+
+**Three declined answers, and why each loses to stripping.** Escaping all 260
+unconditionally is correct by construction and is what D270 declined; it is
+declined again for the same reason and stripping costs nothing it cost. A third
+attempt at a narrower base predicate is declined because the two attempts did not
+fail on their choice of set but on the premise that a safe set exists. Leaving the
+boundary and correcting the documents is declined because a module that declared
+nothing would keep a covert channel into the operator's log, which is the one
+boundary D240 exists for.
+
+**The cost, stated because it is real.** About 354 symbols render in whatever
+presentation the reader's font defaults to rather than the one the add-on asked
+for — a monochrome `❤` where an add-on wrote `❤️`. Nobody reads a log for
+typography, and this is the whole of what the exemption was protecting.
+
+**The cost that had to be proved rather than stated: stripping is lossy, and
+escaping was not.** The escaping form is injective (D244) and a reviewer verified
+it; deleting a class breaks that, so `hello` and `hel<FE0F>lo` are now one line.
+Four properties could have rested on injectivity and none does.
+
+| Property | What it actually rests on |
+| --- | --- |
+| No forged record boundary | `\n` and `\r` being escaped. A deletion cannot produce one |
+| Attribution — a line cannot read as the host's or as another add-on's | The `addon` and `source` **attributes** `newHostState` sets, never message text. A module's whole message is one field's value |
+| `…\(truncated)` is the host's alone | Every module backslash being doubled. The forgery needs `\(`; the escapes emitted are `\n \r \t \\ \uXXXX \UXXXXXXXX`, so the character after an emitted backslash is always one of `\nrtuU`, and a deletion cannot split an escape that is written whole |
+| Evidential fidelity — the reader can tell what the module wrote | **This is the one that is lost**, and it is bounded to characters that have no appearance to report |
+
+The general argument is one line: this boundary is the escaping form composed
+after a deletion, so its image is a **subset** of the escaping form's. Whatever
+line a module gets, it is the line it would already have got by writing the same
+message with its selectors removed — a message it could always have written. A
+module can therefore reach strictly *fewer* distinct log lines than before, so
+anything it could not forge under an injective map it still cannot.
+`TestStrippingIsLossyAndForgesNothing` is that argument as assertions, including
+the attribution half read back through the JSON handler and decoded, because a
+substring search for `source=host` also matches a module's own message and that is
+exactly the confusion at issue.
+
+**`prev` is gone, and with it the question it forced.** D270's predicate decided a
+selector by what preceded it, so sanitizeLogMessage carried the previous decoded
+rune through the loop and owed a statement about what that rune is when the input
+is not valid UTF-8 — `for range` yields U+FFFD, and so does the WriteRune that
+follows, so the value was the character the reader would see rather than the byte
+that arrived. Stripping decides a code point on its own, so `escapeLogRune` keeps
+its one-argument signature, the loop carries no state, and that note has nothing
+left to be about.
+
+**What this decision deletes from the tree that was never in it.** Under stripping
+there is nothing to look up, so attempt 2's vendored
+`assets/unicode/emoji-variation-sequences.txt`, its `EMOJIVS_*` pins,
+`scripts/get-emoji-variation-sequences.sh`, `internal/addon/emojibasegen` and
+`emojibase_gen.go` are surplus — superseded by this decision rather than merely
+unused. None of it is carried onto `phase-4`.
+
+**Two absolute claims were corrected rather than restated.** `docs/SECURITY.md`
+and `CHANGELOG.md` shipped *cannot arrange bytes in an operator's log to be
+overlooked*; the rejected second attempt replaced that with *cannot put invisible
+bytes in an operator's log*, which never shipped and is worse. Both are false and
+cheap to falsify: 17 `Zs` code points survive as
+themselves and `U+00A0` is pixel-identical to a space; 13 `Cf` survive by the
+`Prepended_Concatenation_Mark` allowlist, two of which the same cell names by hand
+three sentences later; and `U+00C5` and `U+212B` are canonically equivalent and
+render identically. No escaping rule that keeps text can support an absolute
+claim. What both documents now claim is about **default-ignorable** characters,
+and a test walks the whole range asserting it.
+
+
+## 2026-08-21 — M62, the seventh term: a derivation is not the terms that change an answer
+
+**D284, the correction to [D283](#2026-08-21--m62-strip-the-variation-selectors-there-is-no-base-set).**
+D283's *The finding is unchanged* paragraph wrote the real set as
+`Other_DI ∪ Cf ∪ Variation_Selector − White_Space − FFF9..FFFB − PCM` and put its
+size at 4190 members. Both were wrong. Unicode 15.0's `DerivedCoreProperties.txt`
+generates `Default_Ignorable_Code_Point` from **seven** terms, and the one nobody
+wrote is the subtraction of `13430..13440`, the Egyptian hieroglyph format
+characters. The property has **4174** members, which is also the total printed at the
+foot of its own section in that file.
+
+**D283's own sentence is corrected in place rather than left standing wrong**, and
+that is a deliberate exception with a narrow reason: D283 and this entry are both new
+in the same commit, so nothing that was ever published said 4190. Append-only exists
+so that a reader of committed history is never shown a decision rewritten under them;
+it does not oblige a commit to ship two entries that contradict each other on their
+first line. What D283 records is the *decision* — strip the selectors, no base set —
+and that is untouched. What this entry records is the mistake and the rule it
+produced, which is why it is still a numbered entry and not an edit.
+
+**The code was right and the sentence was wrong, which is the whole of the defect.**
+The sixteen code points `defaultIgnorable` over-counted are `U+13430`–`U+1343F`, all
+category `Cf`, none of them graphic, so `escapeLogRune`'s `!unicode.IsGraphic`
+fallback escaped every one of them regardless — and a case in
+`TestSanitizeLogMessageNeutralizesEveryClassOfByte` already named `U+13430` by hand. No payload
+claim moves, the graphic count of 267 does not move, and neither does the 268 that
+three documents print. What moves is a number stated in eight places.
+
+**It is F285's own shape, a level further in than the function written to end it.**
+F285 was *a property whose name begins with `Other_` is incomplete by construction*.
+This is *a derivation trimmed to the terms that change an answer is not the
+property*, and `defaultIgnorable`'s own comment had already made that argument: it
+says the two behaviourally-inert subtractions are written in **because** the
+function's claim is that it *is* the property rather than that it happens to agree
+with one. A third inert subtraction was then left out of the same expression.
+
+**The remedy is not the term. It is that the counts stop being floors.**
+
+- `TestNoDefaultIgnorableCharacterReachesALogLine` asserted `derived < 4190`. That is
+  an enforcing test containing a wrong constant and passing, because a floor cannot
+  tell a number that is wrong from a number a Unicode revision moved. The floor was
+  chosen deliberately, to absorb toolchain upgrades; what it actually absorbed was
+  the defect.
+- Every count the code or a document states is now an **equality**: 4174 members and
+  267 graphic, the residue property's 3776 and 7, the 268 graphic-yet-invisible, the
+  260 variation selectors, the thirteen prepended concatenation marks, the seventeen
+  `Zs` that survive as themselves, and the derivation's gain over the residue — 398
+  members, of which 138 are `Cf` and 260 are the selectors.
+- The cost is real and is accepted: a Go toolchain built against a newer Unicode
+  fails this test rather than absorbing the change. The test names
+  `unicode.Version`, says it measured 15.0.0, and lists the seven files to move. A
+  toolchain bump is a thing somebody does on purpose; a wrong constant is not.
+
+**A number and a floor is not a claim.** The rule this milestone has now been
+corrected under twice — *if a sentence states a number, a named test asserts that
+exact number* — was already written down after the fourth review, and was satisfied
+in form by an assertion that could not have failed on the value it was guarding.
+The rule is therefore stated the stricter way: the assertion is an equality, or the
+sentence does not state the number.
+
+**Two smaller corrections ride with it, both about the same paragraph's history.**
+
+- `CHANGELOG.md` attributed the block-element progress bar to the **second** rejected
+  attempt. It broke the **first**, which keyed its exemption on category `So`. It
+  could not have broken the second: `U+2588` and `U+2591` carry no registered emoji
+  variation sequence, so the registration-keyed exemption escaped them. Every other
+  record had the attribution right, so this was one sentence out of step rather than
+  a misunderstanding.
+- `CHANGELOG.md` and `Plan.md` called the 260 selectors *the difference* between the
+  residue property and the derived one. The difference is 398. 260 is the difference
+  a reader could ever have seen — the graphic part of it — and the other 138 are
+  format characters that were escaped by either property. Both sentences now say
+  which of the two they mean, and both numbers are asserted.
+
+
+---
+
+## 2026-08-21 — M62, invisible is not a property, so the claim narrows and the residue is stated
+
+**D285, owner-answered, ending F285's fourth round.** Four workers built a denylist
+over invisible characters and four reviewers defeated them, each time with a code
+point the current property missed. The owner's answer is not a fifth predicate. It is
+that the claim narrows to exactly what is enforced, the residual class is stated, and
+the channel is filed as a row.
+
+**The conclusion is categorical, and it is why a fifth attempt was refused.**
+*Invisible* is not a Unicode property. `Other_Default_Ignorable_Code_Point` is the
+*residue* of one. `Default_Ignorable_Code_Point` is a rendering *default*, not the
+statement *renders as nothing*. And the survivors that carry bits are combining marks
+the UCD annotates as **"shape shown is arbitrary and is not visibly rendered"** —
+`U+2D7F`, `U+17D2`, `U+10A3F`, `U+1107F`, `U+11A47`, `U+11A99`, `U+11F42` and
+`U+16FE4`. Three properties in a row were chosen because the name resembled the
+threat. **The eight are not added to a list**, and the owner declined that
+explicitly: it is the hand-written enumeration D242 replaced, one more level in, and
+it would be behind the next Unicode revision the day it was written.
+
+**The residue is acceptable because of a second property, and that is the load-bearing
+half of this entry.** An add-on may *post* to the log and may not *read* it, so a
+value accidentally logged cannot be retrieved by the module that wants it. A covert
+channel needs both ends. The write end is open on purpose — `log` is ungated, and a
+module that wants a secret in an operator's log writes one in plain text — so the
+whole of the defence has always been the read end, and the read end was closed by
+accident rather than by assertion. It is now four facts, checked before this was
+written: `log` takes a level and a message and declares no out-parameter; no function
+in `abi.Functions` returns log content; a guest gets no WASI preopen and its stdout
+and stderr are discarded; and an add-on's storage is a Postgres schema of its own that
+the log does not live in.
+
+`TestAnAddonPostsToTheLogAndCannotReadItBack` is that property as assertions, and its
+shape is deliberate. It posts a secret through `log`, clears the bytes it put in the
+guest's memory to do so, then drives **every** function the ABI declares — from a
+state holding every grant, past the dispatch that would otherwise refuse most of them
+— and sweeps each declared out-buffer and the whole of the guest's linear memory. A
+function added later that hands log content back fails it without anybody
+remembering the rule. Verified red four ways: an out-parameter added to `log`, and
+`abi_version` rewired to return the last line logged, each failing the limb written
+for it.
+
+**So the residue pays out only if an operator hands the log to the add-on's author**,
+which is a decision a person makes and not a capability this host grants. That is the
+sentence the documents now carry beside the concession, because a stated residue with
+nothing bounding it is a disclosure, not a decision. The row is
+[F310](deferred-findings.md#open), open, and what it watches for is any milestone that
+gives a module a way back into log content.
+
+**The 268 claim was false in the ordinary way, and its test could not have said so.**
+`TestNoDefaultIgnorableCharacterReachesALogLine` computed the count from the
+boundary's own behaviour and then asserted the documents' number against that count,
+so a graphic code point the boundary let through was invisible to the test **by
+construction** — D284's rule broken in form one entry after it was written. The fix is
+the shape and not the number: the expectation is now built from Unicode's side (the
+graphic members of the derived property, plus `U+2800`, which `escapedRune` names for
+a reason of its own), the boundary's behaviour is asserted **equal** to it for every
+code point in both directions, and 268 is the size of that set rather than a tally of
+what the code did. The prose moves with it — *the 268 graphic code points the host
+treats as invisible*, never *that render as nothing*.
+
+**A boundary is not a function, and this milestone had been claiming one for the
+other.** `docs/SECURITY.md` says a *module* cannot put a default-ignorable character
+in front of a reader; `sanitizeLogMessage` is the boundary for `log` and for nothing
+else. `Manifest.validate` embeds every value it refuses with `%q`, and `%q` escapes on
+`unicode.IsPrint`, which is true of every mark and every letter — measured, `U+3164
+HANGUL FILLER`, `U+FE0F`, `U+E0100` and `U+2D7F` all pass through it unchanged — while
+`migrationFileRe` admits every code point but a newline. That text reached an operator
+twice: logged as a load failure, and printed as the fatal message a `required` add-on
+produces. This is not residue. It is a path with no boundary on it.
+
+*(Corrected before this entry landed, by [D286](#2026-08-21--m62-the-boundary-is-a-handler-because-a-list-of-log-sites-is-a-claim-about-code-nobody-has-written) — see the entry itself, which is
+where the correction lives. It reached an operator **four** times, not twice: the two
+here, plus `store.MigrateAddon`'s success-path line and a per-request instantiation
+failure. The list below is what D286 replaced with a `slog.Handler`, and it is kept as
+written because the diagnosis above is the part that stands. Both entries are new in
+one commit, so this is the D284 exception and not an append-only breach.)*
+
+The remedy is one escaping applied **once**, where module-supplied text is first put
+into a sentence: a `LoadError`'s `Err` at construction, its `Addon` where `Error()`
+formats it, and an slog attribute at the call for a refused response, a failed
+statement and a trapped guest handler. Once, because the escaping doubles a backslash
+and a second application would double it again — which is also why the composition
+with `%q` is stated rather than hidden: a directory name carrying a backslash reads as
+four, and that is the safe direction to be odd in. `errors.Is` is preserved through
+`Unwrap`, so which status a guest gets does not depend on any of this.
+
+**Three smaller things the fourth reviewer was owed, and they are the same rule each
+time.** 6634 is the size of category `So` and is now pinned as an equality; 6304 is
+marked **attributed rather than pinned**, because it cannot be computed from the
+tables Go ships — it was measured against the UCD's `emoji-variation-sequences.txt` on
+the parked branch — and D284's rule is satisfied by saying which of the two a number
+is, not by pretending every number can be a test. The toolchain guard named seven
+files and omitted `abi/functions.go` and the two generated copies that each print 268;
+it now names the source and the `make abi-sdk` target that carries it. And a sentence
+M61 published — that a flag sequence survives, being made of ordinary graphic code
+points — is true of a national flag and false of a **subdivision** one, which is
+`U+1F3F4` followed by tag characters from `U+E0020`–`U+E007F`; those are `Cf`, so
+`🏴󠁧󠁢󠁳󠁣󠁴󠁿` arrives as the black flag and six escapes. All three sequences are pinned.
+
+**D283 was corrected in place rather than superseded, and that is a deliberate
+exception.** D283 and D284 are both new in this commit, and D283 stated the six-term
+derivation and 4190 which D284 corrects a hundred lines below it. Append-only exists so
+that a reader of *committed* history is never shown a decision rewritten under them; it
+does not oblige one commit to ship two entries that contradict each other on their
+first line. D283's decision — strip the selectors, no base set — is untouched, D284
+still records the mistake and the rule it produced, and D283 now says it was corrected
+before it landed.
+
+**What this does not do.** It does not make the log unreadable to an attacker who
+already has it; it does not redact secrets, which is a separate request the owner sent
+to the queue; and it does not claim the eight are the last of the residue. It claims
+the property the code computes, states what that leaves out, and asserts the thing
+that makes what it leaves out survivable.
+
+
+---
+
+## 2026-08-21 — M62, the boundary is a handler, because a list of log sites is a claim about code nobody has written
+
+**D286.** Five findings against M62's fifth attempt, and three of them are one
+defect. This entry is the answer to that one and to the two that stand alone.
+
+**Two more sites, and the enumeration was the problem rather than the sites.**
+The round before this fixed the manifest-validation path and wrote down three
+places module-supplied text reached an operator. The list was wrong. It missed
+`store.MigrateAddon`'s `slog.String("name", r.Source.Path)`, which fires when a
+migration **applies** — the success path, the one that runs when nothing is wrong —
+carrying a filename `migrationFileRe` admits every code point but a newline into,
+from a package that cannot import the neutralizer because the dependency runs the
+other way. And it missed the per-request instantiation failure, where the trap
+twelve lines below it was neutralized and this one was not, although both carry
+wazero text built out of the module's own name section. That one is deterministically
+reachable: the per-request `hostState` is registered **before** `InstantiateModule`
+and carries the request, so a guest can read that it is answering one and trap only
+there — loading clean, failing per visit.
+
+Two rounds, two wrong lists, both written carefully. So the shape was wrong.
+
+**The property is now structural.** `Open` wraps the logger it is given in a
+`slog.Handler` that neutralizes the message and every attribute — string, error,
+Stringer, string slice, group, `With` attribute, group name, resolved `LogValuer` —
+and every logger this subsystem uses is derived from that one, including the one
+`openStorage` hands to `internal/store`. A log call added tomorrow in a file nobody
+has thought of is neutralized without its author knowing the boundary exists. There
+is no site to miss, so there is no list to get wrong. `Route` gets the mirror of it:
+one wrapper at the exit rather than a `neutralize` at each of its return statements,
+so which of its failures carried the module's text stopped being a question anybody
+has to answer correctly. `Unwrap` is preserved at both, so `errors.Is` decides what
+it decided.
+
+**Escaping exactly once, kept by a marker and not by discipline.** The escaping
+doubles a backslash, so applying it twice is lossy. Every call site now logs the
+**raw** value and lets the handler escape it; the two types whose text must already
+be neutralized because they are *also* printed outside a log — `moduleErr` and
+`LoadError`, which is what `cmd/linkctrl` prints fatally — say so by implementing a
+marker interface, and the handler then only folds their newlines and bounds them. A
+type that carries neutralized text and forgets the marker is escaped twice: a line
+that reads worse, never a line carrying what it should not. That is the direction to
+be wrong in, and it is why the marker means *already safe* rather than *needs work*.
+
+**Neutralization and length-bounding were one function and that cost M60 a
+behaviour.** `neutralize` was `sanitizeLogMessage` under another name, so the 4 KiB
+cap that belongs to a log line was imported onto the path that prints why a
+`required` add-on refused to load. `Manifest.Validate` aggregates with `errors.Join`
+precisely so that somebody publishing an add-on for the first time sees every
+problem at once; past 4 KiB that list was cut with nothing to say it had been. The
+two are separate now — `escapeModuleText` takes the bound as a parameter and
+`moduleText` passes none — and the aggregate's own newlines survive to the operator,
+because `moduleErr.Error()` descends into a join and neutralizes each branch rather
+than escaping the whole. A join is told from `fmt.Errorf`'s two-`%w` form by
+**shape** and not by type: `errors.Join`'s text is exactly its branches separated by
+newlines, and anything else is a sentence the host wrote and is escaped as a leaf.
+The same error still arrives in a log as one bounded record, marked as cut. Two
+destinations, two treatments, one escaping.
+
+**The read-end test's behaviour limb was near-vacuous and its docstring said the
+opposite.** It built its state as `newHostState(Manifest{Name: "reader"}, Grants{},
+nil, nil, …)` and drove every function against it, so `config_get` answered Denied on
+an empty settings map, `storage_query` answered Internal on a nil storage, and both
+request functions answered NotFound on a nil request. Of five live out-parameters
+exactly one was ever written — four buffers of filler swept and one host write — and
+the guard could not see it, because it counted out-parameters **declared** rather
+than bytes written. The docstring's *"a function added later that hands log content
+back fails this"* was false for any function shaped like every gated one in the file.
+The state now carries a declared setting with a default, a request and a session;
+each input parameter is given an argument by the ABI's own name for it, so a function
+added later that reuses a name is driven correctly and one that introduces a name
+gets a placeholder, refuses, and fails the count; and the count is over buffers whose
+filler actually changed. The expectation is derived from `abi.Functions` — every live
+out-parameter except the ones behind the storage permission, which a unit test has no
+database for — and those two are asserted to answer `StatusInternal` so that the
+reason they wrote nothing is named rather than assumed.
+
+**Two of the read-end claim's four facts were true by omission.** *A guest gets no
+preopened file* and *its stdout and stderr are discarded* rested entirely on wazero's
+`NewModuleConfig()` defaults at the two instantiation sites; nothing failed if a
+later milestone added `WithFSConfig` or `WithStdout`. They are asserted from inside a
+guest now, because the config is what would change: the `undeclared` fixture tries to
+list `/`, to open a host file and to open its own manifest, and panics on any that
+succeeds — which fails instantiation, so a host that grew a filesystem cannot load it
+at all. Where a stream goes is not something a guest can see, so that half is the
+host's: the fixture writes a marker to each, and the test swaps this process's own
+`os.Stdout` and `os.Stderr` for pipes across the load, so `WithStdout(os.Stdout)`
+fails as readily as `WithStdout(logWriter)`.
+
+**What this does not do.** It does not neutralize what other packages log through
+their own loggers — `internal/httpx` logs an error it got from `Route`, and what
+makes that safe is `Route`'s exit and not this handler. It does not stop a module
+writing a secret in plain text, which `log` being ungated permits by design and D285
+already concedes. And it does not make the enumeration in `docs/SECURITY.md` and
+`CHANGELOG.md` longer: those now state the property instead, because an enumeration
+that has been wrong in two consecutive rounds is not made right by a third entry.
+
+## 2026-08-21 — M64, an add-on's cookies go in a jar, because a count it can repeat is not a bound
+
+**D287.** F289 reopened M64: an add-on holding nothing but `routes.own_prefix`
+could sign a visitor out of LinkCtrl, by volume rather than by naming. It set 180
+cookies inside its **own** declared namespace, the browser's per-domain cap
+overflowed, and the eviction took `linkctrl_session`. Reproduced twice in real
+Chromium against a real signed-in account: n=179 stays on `/dashboard`, n=180
+lands on `/login?next=/dashboard`, and `linkctrl_theme` goes with it. That
+falsified this milestone's own sentence — *it cannot read the cookie, mint, or
+destroy sessions*.
+
+**What the fix could not be.** The obvious answer is a bound on the array, and
+every shape of it is wrong for one reason: a browser cookie is *persistent*, so
+an add-on's occupancy is the sum over every response it has ever given, and the
+add-on also decides how many responses there are — its page can redirect to
+itself. Eight cookies per response is eight per response times however many times
+somebody visits. A total-bytes bound has the same hole. A bound on *distinct
+names* would have to be remembered somewhere, and the only durable place is the
+browser, which is the thing being filled. Every threshold here is a threshold an
+add-on sits just under and repeats, which is what this repository has been bitten
+by before.
+
+**What it is.** The host stopped writing an add-on's cookies at all. It writes a
+**jar**: one cookie of its own, `linkctrl_addon_<name>`, carrying the add-on's
+cookies inside its value, path-scoped to the add-on's prefix as before. A module
+still names its cookies, still reads them back by name, and still gets the
+lifetimes it asked for. What it no longer has is a say in how many *slots* of the
+browser's store it occupies. That number is a property of the code — at most one
+jar per lifetime class — and it does not move when a module answers a thousand
+cookies or is visited a thousand times. The count an operator's browser can be
+made to hold is installed-add-ons times two, and installing an add-on is the
+operator's act.
+
+**Two jars, not one.** `max_age` zero is a session cookie and positive is a
+persistent one, and a single jar cannot be both: a session entry packed beside a
+year-long one would outlive the browser being closed, which is the opposite of
+what the module asked for. So entries are partitioned by lifetime class, the
+session jar is written with no `Max-Age` and the kept jar with the longest
+lifetime anything in it still has. Inside the kept jar each entry carries its own
+absolute expiry and the host drops it on the way in, so a ten-minute value in a
+jar held open by a year-long one is still gone in ten minutes.
+
+**The structural half, which is the part that answers the review's standing
+lesson.** *An enumeration of sites has been wrong every time it was written*, so
+the fix is not *these places now bound the cookies*. `Host.Route` fills
+`Response.Jar` and **empties `Response.SetCookie` doing so**. A module's own list
+is gone by the time a response leaves `internal/addon`, so the writer in
+`internal/httpx` — and any writer a later milestone adds without having read a
+word of this — has nothing to loop over but the jar, and the jar is at most two
+cookies. The test for it hands the real handler a response carrying 1200 cookies
+a module named and asserts that **nothing** is written: not that a bound was
+applied, but that this code has no path to a module's own list at all.
+
+**What an add-on can still do to itself**, and it is the one threshold in the
+fix, named as one: fill its own jar. A packed jar is bounded at 3 KiB, under the
+4096 bytes browsers give a cookie's name and value together — M64.9 measured
+Chromium keeping a 4000-byte cookie and dropping a 4090-byte one. A set that
+would not pack even into an empty jar is `ErrInvalid` at the call the module
+made, which is the rule the whole response record already follows; an add-on that
+fills its jar over many responses loses its oldest values and the log names it.
+Neither can touch anything outside the add-on's namespace.
+
+**What was measured, and where.** In Go, against the real wasm fixture and a
+model of a browser's store carrying answers forward: 200 visits, each setting a
+name the module had never used, leave the store holding the session cookie and
+two jars, and the module can still read back what it just wrote. In Chromium,
+against the running test instance with the flooding module installed: the tab
+stays signed in where the same module signed it out before. The Go test is what
+CI runs; the browser is what the finding was made in, and a claim measured on one
+configuration and asserted for another has been this phase's defect three times.
+
+**What it costs.** An operator debugging an add-on sees one opaque cookie rather
+than named ones. An add-on's total cookie storage is 3 KiB per lifetime class
+instead of whatever a browser would have allowed. The jar's name sits in this
+product's own `linkctrl_` namespace, which no manifest may declare a prefix
+inside, so a module can neither read its own jar nor forge another's; two add-ons
+cannot collide over the `_kept` suffix either, because two names standing in a
+`name + "_"` prefix relation are already both refused at load (D267). And the ABI
+docs, the SDK's package documentation, `docs/SECURITY.md`, `docs/configuration.md`
+and `CHANGELOG.md` all say the shape out loud, because a publisher who thinks
+cookies are free storage will design a flow around one.
+
+**What it does not close.** An add-on can still occupy its two slots forever, and
+an operator installing ninety add-ons is back at the browser's cap by their own
+hand. Nothing here bounds how many add-ons an instance loads, which is the
+directory and therefore the trust boundary. The session cookie is also still
+evictable by any *other* origin-sharing thing that fills the store; what changed
+is that an add-on is no longer one of them.
+
+## 2026-08-21 — M64, guest memory gets a bound, and the number quoted as one was a measurement
+
+**D288.** F290, the other finding that reopened M64. The runtime was built with
+no `WithMemoryLimitPages`, so wazero's default of 65536 pages — 4 GiB per
+instance — applied, and no container bound existed either. One request that
+allocated 512 MiB took the host from 78 MB resident to 1604 MB; sixteen
+concurrent at 128 MiB reached 4332 MB with zero failures.
+
+**The claim that was false was not the number.** `maxConcurrentRoutes` prices
+sixteen in flight at *about 2.4 MB each*, and 2.4 MB is right: a real fixture
+measures 2.31 MiB of linear memory at load, the host reclaims properly, and there
+is no leak. It was right as a **typical cost** and was being quoted as a
+**bound**, which is a different kind of sentence, and the difference is the whole
+finding. `docs/deployment.md` documented the floor as *1 vCPU and 1 GB RAM is
+enough to start*, and one request could exhaust it.
+
+**The bound.** 128 pages, 8 MiB per instance, set on the runtime rather than on a
+module config so it holds for every instance this host will ever make — the ones
+made at load, the per-request ones, and any a later milestone adds. Sixteen in
+flight times 8 MiB is a **128 MiB** ceiling, and that product is the sentence
+`docs/SECURITY.md`, `docs/deployment.md` and `docs/configuration.md` now make.
+`TestTheGuestMemoryCeilingIsTheOneDocumented` reads those three files and asserts
+the arithmetic against them, so changing either constant without changing what an
+operator was told fails — which is the tie the old sentence never had.
+
+**Why eight and not sixteen.** Measured on the fixture the standard toolchain
+produces: it holds 2.4 MB at load, allocates a 4 MiB block on top and succeeds,
+and traps at 5 MiB. Four megabytes of working room is more than a page handler
+needs — the largest request that can cross this boundary is 64 KiB and the
+largest response 256 KiB — and eight is the number that keeps the whole add-on
+ceiling inside the 1 GB floor this product documents, alongside Postgres. Sixteen
+per instance would have been 256 MiB and would have required rewriting the floor
+rather than keeping it true. Raising the constant later is one edit and one test
+failure, which is the right cost for a decision that changes what an operator has
+to buy.
+
+**What the bound is a bound on, stated exactly.** Live guest memory at any
+instant. It is not a bound on the process's resident size, and the honest
+measurement says so: 200 requests at sixteen concurrent, each allocating 4 MiB,
+peaked at **406 MB resident** against a 103 MB idle and returned to 48 MB after a
+forced collection, with the live heap at 10 MB. That is Go's collector working at
+its ordinary ratio over garbage the bound makes finite, and it is the reason
+`docs/deployment.md` now says a host serving add-on pages under load wants 2 GB
+rather than pretending 128 MiB is the whole arithmetic. Before the bound the same
+shape had no ceiling at all.
+
+**Both directions are visible to somebody who can act.** A module that grows past
+its 8 MiB traps: the request answers 502, the instance is closed, the host goes
+on serving, and the operator's log carries the failure. A module whose memory
+section *declares* more than the bound is refused at **load**, with the add-on
+named — wazero validates the section at decode — so a toolchain that pins a
+maximum is a packaging problem an operator meets at install time rather than
+under load. Neither is silent, which is the difference between a bound and a
+cliff.
+
+**What it does not close.** Nothing here bounds the host's own heap, which is
+what `GOMEMLIMIT` or a container limit would do, and both are deployment
+decisions rather than this milestone's; F290 named their absence and this entry
+does not claim to have answered it. Nothing bounds CPU either — that is M66's
+deadline, and a module spinning inside 8 MiB is still a module spinning.
+
+
+## 2026-08-21 — M64, a sentence is only as true as what checks it, and one bound was not total
+
+**D289.** The second pass over the reopened M64. Six findings came back against
+the first worker's tree; the cookie jar and the memory ceiling were both sound
+and both stayed. Three of the six are one defect wearing three coats, and it is
+the same defect that reopened this milestone: **a sentence claiming more than
+anything checks.**
+
+**This entry was corrected in place, and says so because the file it sits in is
+append-only.** Three findings came back against this same *uncommitted* tree: the
+doc tie's own *every file* claim was still false and `Plan.md` was the
+counter-example this change had itself written; the margin under the cookie bound
+was two and a half orders of magnitude rather than four; and `jarMaxAge` computed
+a jar's lifetime from entries eviction had already dropped. Nothing here had
+landed, so the established exception applies — an entry is corrected before it
+lands, and a D290 correcting a D289 that no commit ever carried would be a record
+of a paragraph rather than of a decision. The three corrections are in the
+paragraphs below, and each says which of them it is.
+
+**The doc tie pinned the product and the file said it pinned the parts.**
+`TestTheGuestMemoryCeilingIsTheOneDocumented` computed `maxConcurrentRoutes *
+maxGuestMemoryPages / 16` and looked for `"128 MiB"` in three files, and m64.md
+concluded from it that *neither constant can move without the operator-facing
+sentence moving with it*. False for a compensating pair — thirty-two instances of
+4 MiB is also 128 MiB — while `docs/SECURITY.md`, `docs/deployment.md`,
+`docs/configuration.md` and `CHANGELOG.md` each state the concurrency and the
+per-instance bound **separately**, so both would have gone quietly wrong and the
+test would have stayed green.
+
+Fixed by making the check match the sentence, which is the cheaper of the two
+honest directions here because the sentences are already right. The test holds
+each number where it is stated, in the sentence that states it. Whitespace,
+emphasis and `//` are flattened, so where a sentence happened to wrap is not part
+of the claim. It carries a spelling table for the concurrency because every one
+of those documents writes that number as a word, and a constant with no spelling
+in the table fails the test loudly rather than asserting nothing.
+
+**That fix then made the same mistake one size smaller, and the correction to it
+is the more useful half of this entry.** It listed eight sentences in six files
+and said of itself that its claim was *every file outside build-notes that states
+any of the three*. It was not, and the counter-example was in the same diff:
+`Plan.md` states all three in the limitation row this change had just edited,
+`docs/operations.md` states the concurrency in the 503 row an operator reads when
+an add-on's page fails, and four of the six files it *did* list state one of the
+numbers a **second** time in a sentence no anchor covered — `docs/SECURITY.md`
+three times over, `docs/configuration.md`, `docs/addon-abi.md` and `sdk/doc.go`
+once each. Seventeen sentences, not eight.
+
+Adding the nine missing anchors makes the claim true today and does nothing
+about why it was false twice: *every file* was being kept true by whoever last
+thought to read every file, which is the same shape as a sentence kept true by
+whoever last thought to check it. So the claim is now checked.
+`TestEveryDocumentedNumberIsTied` walks every Markdown file outside build-notes
+plus `sdk/doc.go`, finds every occurrence of any of the three numbers, and fails
+on one no anchored sentence spans. An occurrence that is not the bound — sixteen
+bytes of domain challenge in `docs/SECURITY.md`, sixteen cached runs in
+`docs/slo.md`, sixteen milestones inside a `Plan.md` link anchor — is listed as
+*untied* with what it is about instead, and that list is checked in the other
+direction too, so a phrase the prose no longer contains fails rather than quietly
+excusing nothing.
+
+Four exclusions, written into the test rather than left to be discovered, since
+an unwritten exception is the thing this is over. **build-notes** is the record:
+its entries quote what a number was when they were written, and an append-only
+file whose past has to be rewritten when a constant moves is not append-only.
+**Go source under `internal/`** states these numbers beside the constants that
+produce them, so the edit that moves one has the sentence about it already on the
+screen; the failure this is for is a sentence in a different file from the
+constant it describes. **`.claude/` and build output** are not the product's
+documentation. And **a number spelled in digits** is outside it: the sweep looks
+for how these documents actually write these numbers — the concurrency as a word,
+the memory in MiB — so *"16 add-on requests"* would pass it. That last one is
+narrow because the spelling table sits in front of it: a concurrency constant
+with no word in that table fails the first test outright, so writing the digit is
+not a quiet option, it is one nobody can reach without going through the table.
+
+Measured on the tree, eight ways. With the constants set to 32 and 64 pages —
+product unchanged at 128 MiB, which is exactly what the first version checked —
+**sixteen of the seventeen** anchors go red, and the one that stays green is
+`Plan.md`'s *the two bounds multiply into the 128 MiB ceiling*: the pure product,
+and the blind spot the other sixteen exist to cover. With only the per-instance
+constant moved, **thirteen** go red and the four naming the concurrency alone
+stay green. Deleting `Plan.md`'s two anchors reproduces the review finding
+exactly, three occurrences named with the sentence around each. Rewording
+`docs/operations.md`'s row, appending an unanchored *capped at 8 MiB* to
+`README.md`, deleting an untied entry, and rewording the `docs/slo.md` sentence
+an untied entry quotes each go red where they should. And a walk that reaches no
+file at all is caught by an occurrence count, rather than passing every assertion
+by reaching none of them.
+
+The cost is stated rather than hidden: rewording one of those sentences now fails
+a test, and fixing it is one line. Writing a *new* sentence that quotes one of
+these numbers costs one line too — an anchor, or an untied entry saying what the
+number is about there. That is the tie, and a tie nobody can feel is not one.
+
+**Four documents said a memory declaration over the bound is refused at load, and
+half of it was untrue.** `CHANGELOG.md`, `docs/SECURITY.md`, `docs/addon-abi.md`
+and `sdk/doc.go` all carried it; nothing asserted it. The review that raised it
+believed it was true-but-unchecked. It is not. Measured against wazero v1.12.0
+with `WithMemoryLimitPages(128)`:
+
+- a declared **minimum** over the bound is refused at `CompileModule` —
+  `internal/wasm.Memory.Validate` answers *"min N pages over limit of 128 pages"*
+  — and the load fails with the add-on named;
+- a declared **maximum** over the bound is **not** refused. The decoder
+  substitutes the runtime's limit for it
+  (`internal/wasm/binary/decoder.go:224`, whose own comment reads *"This is a
+  valid value, but it goes over the run-time limit: return the limit"*), so the
+  module loads and its instance is held to 128 pages anyway. A maximum over
+  WebAssembly's own 65536 is refused, but by the format rather than by anything
+  this host chose.
+
+Here the honest direction is the other one: **the sentence changes, not the
+check.** The behaviour is already right — a module held to the bound is bounded,
+and refusing a declaration that changes nothing would refuse a module that is
+perfectly safe — and building a memory-section parser into the load path to make
+a sentence true would be spending code to preserve a wording. All four documents
+now say which limb does which. `TestWhatAMemorySectionMayDeclare` measures both,
+on wasm written byte by byte in the test, because the Go toolchain emits no
+maximum at all and therefore no fixture in this repository could ever have shown
+either half — which is precisely why nobody noticed. The second limb instantiates
+through the **host's own** runtime and grows the memory to the bound and one page
+past it, so what it measures is this host's limit and not one the test set up.
+
+**A cookie's `max_age` was not bounded, and the arithmetic under it was not
+total.** `applyToJar` turns a lifetime into an absolute expiry with
+`now.Add(time.Duration(c.MaxAge) * time.Second)`, and a `time.Duration` is int64
+nanoseconds. Measured: `max_age=10000000000` produced an expiry **8446744074
+seconds before now**, and `max_age=1<<62` produced one exactly equal to now.
+Neither was an error. The module was answered 200, `keepLive` dropped the entry
+on the very next read, and the cookie the module had been told it set did not
+exist — and where such an entry was alone in the kept jar, `jarMaxAge` wrote
+`Max-Age=1`. It was also a regression: before the jar the same value went to
+`http.SetCookie`, the browser clamped it, and the cookie worked.
+
+The shape of the fix is not a matter of taste, because the ABI already published
+it. `http_response_write` says every bound on that record is *ErrInvalid rather
+than a silently corrected response* — in `internal/addon/abi/functions.go`, in
+both generated SDK files and in `docs/addon-abi.md` — so a clamp is the one
+answer that sentence forbids. `checkCookie` refuses at the module's own call, and
+the ABI sentence now names the bound alongside the prefixes rather than leaving
+it implied.
+
+**400 days**, 34560000 seconds. Not a safe-looking round number: it is the limit
+`draft-ietf-httpbis-rfc6265bis` puts on a cookie's age, which a user agent MUST
+reduce a longer lifetime to, and which Chromium has applied since 2022. A module
+inside the bound loses nothing it had; one outside it was never going to be
+honoured by any browser. It clears the overflow point by a factor of 266 —
+3.456e7 seconds against the 9.223e9 where int64 nanoseconds wrap — which is what
+makes the arithmetic total; being the number browsers already enforce is why it
+costs a publisher nothing. A negative `max_age` is untouched, because it is a
+deletion and no arithmetic is done on it.
+
+**The margin was first written here and in `http.go` as *four orders of
+magnitude*, and it is nearer two and a half** — the second of the three
+corrections above. The bound is still comfortably total; the sentence justifying
+it still claimed more than it had, which is this entry's own subject arriving a
+third time, in the paragraph that named it.
+
+**`jarMaxAge` was also reading a jar it was not writing** — the third correction.
+`jarCookies` packs the kept jar with eviction and then computed the cookie's own
+`Max-Age` from `class.entries`, the list from *before* the eviction. The
+function's own comment says the jar lives *"as long as the longest-lived thing in
+it, and no longer. A jar outliving every entry it holds would be a cookie a
+browser keeps in order to hand back nothing"*, and the line calling it made that
+false. Reachable with nothing hostile and no forged jar: set one value at the
+400-day bound at the start of a flow, write short-lived ones on top until the jar
+fills, and the 400-day entry is the oldest, is evicted first, and its lifetime
+stays on the cookie. Measured — `Max-Age=34560000` written for a jar whose
+longest surviving entry had an hour left. No security consequence and nothing
+crossed a boundary; what was wrong was the sentence beside the code.
+`packWithEviction` returns the survivors now, which is the shape that cannot
+drift back: there is no pre-eviction list in scope at the call site to reach for.
+
+`jarMaxAge` is clamped to 400 days as well, and that one **is** a silent
+correction — deliberately, and it is not the same promise. An expiry reaching it
+from a jar the browser handed back is a value under the visitor's hand, and
+`unpackJar` has been silent about those since it was written, for the reason
+recorded in D287: an edited or stale jar is neither the add-on's fault nor the
+operator's problem. No module wrote that attribute, so no module is being
+corrected.
+
+**A jar planted at a broader path shadowed the real one, permanently.**
+`jarsFrom` assigned per matching cookie name rather than merging, so where a
+browser sent two cookies named `linkctrl_addon_<name>` — the host writes its own
+at `/addons/<name>/`, and a visitor can set one at `/`, which the writer then has
+no path to delete — the last one won. The add-on's state was void on every later
+visit and the host could not clear it. Self-inflicted and reaching no other
+add-on, so it is the smallest of the six; it is fixed here rather than deferred
+because it is [an abuse path in the code this milestone
+wrote](workflow.md#standing-rules), which is in a fix milestone's scope by
+default.
+
+Merged now, first-wins, which is RFC 6265 §5.4's order — a user agent sends the
+more specifically scoped cookie first — so the host's own jar survives. What a
+planted jar can still do is carry names the real one does not hold, and that is
+stated in the code rather than papered over: a value under a declared prefix
+already reaches the module straight off the cookie header, by design, and a
+visitor's own browser was always theirs to write.
+
+**Two smaller ones, and one of them is why the first three were possible.**
+`ownedName`'s comment claimed to be *the one place that question is answered*
+while `checkCookie` still carried its own copy of the prefix loop; it uses
+`ownedName` now, and the comment names its three callers so the claim is
+checkable rather than asserted. And 129 characters of `CHANGELOG.md` and a double
+space in `docs/configuration.md` were caught by no gate, which is worth recording
+as the standing state rather than fixed and forgotten: this repository has no
+prose formatter, and every long line in those files was written by an agent that
+meant to wrap at eighty.
+
+**What none of this changes.** The jar, the two lifetime classes, the structural
+occupancy bound and the 3 KiB threshold are D287's and stand untouched. The
+128 MiB ceiling, the eight-pages-per-instance measurement and everything D288
+says about resident size stand too. D288's one sentence that does not survive is
+its last paragraph's *a module whose memory section declares more than the bound
+is refused at load* — corrected above, and left in place there because this file
+is append-only and a later entry is how it corrects an earlier one.
+
+## 2026-08-21 — M65, the callback arrives as a redirect, and the guest gets a real random source
+
+Both owner-answered at M65's validation, which raised them rather than picking:
+neither had a `D` and `upcoming-decisions.md` carried no entry for either.
+
+### D291 — an add-on's callback is a GET redirect, and `response_mode=form_post` is not supported
+
+[F284](deferred-findings.md#open) established that `http.CrossOriginProtection`
+refuses **every** cross-site unsafe request rather than only a cookie-authenticated
+one, and that M64 mounted add-on routes inside that chain. Measured through
+`NewRouter` with a real module behind the route: `Sec-Fetch-Site: cross-site`
+**403**, `same-site` **403**, `same-origin` **200**, `none` **200**, header absent
+**200**. The module is not entered in either 403.
+
+**The answer is the stance rather than an exemption.** An add-on's callback
+arrives as a GET redirect carrying `code` in the query, which is OIDC's
+authorization-code default. Nothing is exempted from the cross-site refusal, so
+there is no carve-out to get wrong — and this phase has just spent four workers
+watching carve-outs leak in M62, which is the argument that decided it.
+
+Two options were declined and are recorded because *we decided this did not
+matter* is the decision this project keeps losing. **Trusted origins the manifest
+declares** would have been general, and it is a trust decision an add-on makes
+about itself that the host cannot verify and an operator has no way to judge —
+the shape this phase has now found wrong in a manifest three times. **An
+exemption bounded to one declared callback path** is narrower and is still a CSRF
+carve-out on a route anything holding `routes.own_prefix` can serve.
+
+**The cost is real and is stated rather than absorbed**: an identity provider
+that offers only `form_post` cannot be used with this product. That is a
+limitation to publish, not a gap to leave for somebody to discover, and
+[M69](phase-details/m69.md)'s provider has to be checked against it **before**
+M69 rather than at it. The recommendation came from the actor that also does the
+work and it was the cheapest option to build, which is named here because
+[workflow.md](workflow.md#standing-rules) requires naming it rather than because
+it changes the answer.
+
+### D292 — the ABI grows a real random source and a real clock, inside M65
+
+[F292](deferred-findings.md#open): a guest's `crypto/rand` is
+`rand.New(rand.NewSource(42))` in wazero's `internal/platform`, a **compile-time
+constant**, so the stream is identical across requests, add-ons, host processes,
+machines and deployments — measured across three `Host.Route` calls, a second
+independently-opened `Host`, and two separate processes. The clock is wazero's
+fake one, advancing 1 ms per reading from 2022-01-01. D260's fresh instance per
+request therefore hands **every visitor the same nonce** rather than a fresh one.
+
+Found independently by two readers that could not see each other's work, one
+pointed at the host and one at the ABI's documentation — the second closed its
+report naming this as the thing to fix before the four findings it had been
+given. That convergence is why it outranked the milestone's planned scope.
+
+**It lands inside M65 rather than as its own milestone.** An add-on that cannot
+generate a unique nonce is not an authentication add-on, so M65's *sabotage-verified
+end to end* bullet is not honestly satisfiable without it. The ABI is `0.x` and
+the declared-and-refused pattern is established, so adding functions is the
+precedented move rather than a new shape.
+
+**The declined option is the one this repository's own process specifies**, and
+that is worth stating plainly: [planning.md](planning.md) says added scope is a
+numbered insertion with its own definition of done, reviewed before anything is
+built against it. Taking the scope into M65 skips that review on a change to a
+**published contract another repository compiles against**. The owner chose it
+knowing the phase already carries fourteen milestones. The mitigation is that
+M65's own reviewer reads the ABI change against the tree, which is not the same
+thing as an independent review of a plan and is not claimed to be.
+
+The third option — documenting the constant loudly and letting M69 force it —
+was declined because M65, M67 and M68 would each be built on a foundation whose
+acceptance test is known in advance to fail.
+
+## 2026-08-21 — M65, what D292 costs a publisher, and four host rules nobody asked for by name
+
+Seven decisions taken while building M65, none of them owner-answered: D291 and
+D292 above are the two the owner took, and these are the shape those answers
+leave open plus the rules the milestone's own bullets imply without naming. They
+are here rather than in the milestone file because a worker never amends one.
+
+### D293 — the SDK's `crypto/rand` and `time.Now` are repaired underneath, and the two ABI functions are offered *alongside*
+
+The question D292 leaves open: whether the SDK's standard-library calls are made
+to work **through** the new ABI functions, or whether the ABI simply offers them
+beside a `crypto/rand` that stays fake. The answer is neither of those two — both
+are real, from **one** source each.
+
+`guestModuleConfig` (internal/addon/host.go) sets `WithRandSource(rand.Reader)`,
+`WithSysWalltime()` and `WithSysNanotime()`. Those feed WASI's `random_get` and
+`clock_time_get`, which are what a wasip1 guest's `crypto/rand` and `time.Now`
+read. So the repair is *underneath* the standard library rather than in front of
+it, and `random_bytes` and `time_now` are the same two sources with a documented
+shape rather than a second pair of them.
+
+**Routing the SDK through the ABI was considered and is not available.** The
+`crypto/rand.Reader` half could be done — it is a package variable — but
+`time.Now` cannot be intercepted from a library, so that shape would have left a
+publisher with a real random source and a clock in 2022, which is the worse half
+of F292 rather than the better one. Leaving `crypto/rand` fake and offering the
+ABI beside it was the option this milestone was told to weigh, and it fails
+D292's own instruction that *the fake source must stop being reachable in a way a
+publisher can mistake for a real one*: `crypto/rand.Read` is exactly that
+reachability, and no wording in `sdk/doc.go` makes a publisher's muscle memory
+read a warning.
+
+**The two halves are independent and both are needed**, which is measured rather
+than argued. Sabotaged by restoring wazero's default module config at the
+per-request site only: `random_bytes` kept working (it is the host's own
+`crypto/rand`), while the guest's `crypto/rand` returned the identical 32 bytes
+across two separately-opened hosts and its `time.Now` answered
+`2022-01-01T00:00:00Z`. A fix in either place alone leaves the other broken, and
+nothing in the tree would have said so.
+
+The enumeration is closed structurally rather than by a list.
+`TestOnlyOneModuleConfigIsBuilt` sweeps this package's non-test sources for
+`wazero.NewModuleConfig(` and fails on anything but the single site in
+`guestModuleConfig`, so a third instantiation added by M67's lifecycle work
+cannot quietly get wazero's defaults. That is the answer to *an enumeration has
+been wrong every time it was written*: there is no list of instantiation sites to
+keep, only a rule that there is one.
+
+### D294 — the ABI moves to 0.1.1, and the generation does not move
+
+`docs/addon-abi.md`'s table decides it and the row is *adding a function is
+additive*. While the major is zero the **minor** is the breaking axis — the page
+says so, `GenerationOf` executes it — so additive is the **patch**. 0.1.0 becomes
+0.1.1, `Generation` stays 1, and `MinimumGeneration` stays 1.
+
+What that buys, stated as the three cases a publisher can be in:
+
+- **An add-on built against 0.1.0 and not rebuilt** loads unchanged and is
+  unaffected. It cannot call `random_bytes`, `time_now` or `identity_link`,
+  because they did not exist when it was compiled — and it *still gets real
+  entropy and a real clock*, because D293 put the repair under `crypto/rand` and
+  `time.Now`. That is the whole reason the repair is there rather than in the two
+  functions: the population that most needs it is the one that cannot call them.
+- **An add-on rebuilt against 0.1.1** gets the three new functions and the same
+  `abi_version: 1` in its manifest. Nothing in the manifest changes.
+- **An add-on built against 0.1.1 and run on a 0.1.0 host** is the one failure
+  mode, and it is the case `CheckGeneration`'s own comment and the page already
+  document: the manifest cannot express a patch, so the import does not resolve
+  and instantiation fails **naming the function**. Loud, immediate, and named
+  before this milestone existed.
+
+`session_mint` going live is the *implementing a function that was declared and
+refused* row — additive, and deliberately so, which is the row that exists to
+stop the declared-and-refused pattern costing a generation per limb.
+
+### D295 — `identity_link` is a fourth function, because a table nothing may write is not a bridge
+
+m65.md requires the linking table to be *written only through a deliberate
+linking flow (signed-in user connects a provider)*. Nothing in the ABI could
+write it, so without a function the table is unwritable except by a test, M69
+cannot connect anybody, and the milestone ships a refusal with no path past it.
+
+It costs **no new permission**: `session.mint` gates both halves. That is the
+property that stops an add-on bootstrapping itself — an add-on that cannot mint
+also cannot link, so it cannot create the mapping it would later be believed on.
+
+The two functions have **opposite** preconditions, and the symmetry is the design
+rather than a coincidence:
+
+| | `session_mint` | `identity_link` |
+| --- | --- | --- |
+| Somebody signed in | `ErrDenied` | required |
+| Nobody signed in | required | `ErrDenied` |
+| The subject is linked | mints | already connected, and idempotent |
+| The subject is not linked | `ErrNotFound` | connects it |
+
+So neither can be used to do the other's job, and the account a link is written
+for comes from `RequestIn.Identity` — the host's own resolution of the request —
+rather than from any field of the claim. There is no field of the claim that
+names an account.
+
+**What it does not defend, stated rather than left to be found.** The host's
+guarantee is that a link is only ever made for whoever is signed in, in their own
+browser, at that moment. Whether that browser *meant* to be there is OAuth's
+`state` parameter, and it is the add-on's — the callback is a GET by D291, so the
+application tree's cross-site refusal does not reach it. `docs/addon-abi.md` says
+this to the publisher in as many words rather than implying a protection the host
+does not provide.
+
+### D296 — a mint is refused on a request that already carries a session
+
+Not in m65.md's bullets, which enumerate three host rules — the account exists, is
+active, lockout applies. This is a fourth, and it is here because the alternative
+is the login-CSRF shape: a signed-in browser is caused to complete somebody
+else's provider flow and comes back signed in as them, having changed identity
+without anybody choosing to.
+
+Refused rather than resolved. The narrower options — mint only when the assertion
+resolves to the *same* account, or replace the session — each need the lookup
+before the refusal, which makes a signed-in browser a way to ask whether a subject
+is linked. The refusal is therefore **before** the lookup, and the cost is stated:
+somebody already signed in who visits an add-on's callback is refused rather than
+re-authenticated, and signs out first. There is no flow in this product that needs
+the other behaviour, because connecting a provider is `identity_link` and is the
+signed-in half by construction.
+
+### D297 — the provenance record carries the add-on and the issuer, and nothing about the person
+
+m65.md asks for `session.minted_by = addon:<name>` and for the writer to follow
+*the metadata conventions the sweep already covers*, checked against the
+seven-writer count F177's closure established. So the record carries `minted_by`,
+`addon`, `issuer` and `second_factor_required`, and deliberately **not** the
+external subject, the address the assertion carried, or the display name.
+
+The reason is the sweep. `EraseDeletedAccounts` scrubs `audit_logs.metadata` by
+the keys it knows — the scalar `email`, and the `from` array F189 added — and its
+coverage was counted site by site to close F177, twice, after the count went wrong
+twice. A person's provider identifier in a jsonb key nothing sweeps would be an
+eighth site in the milestone after the one that finished getting the seventh
+right. Adding no key the sweep does not read is the only version of *follows the
+conventions the sweep covers* that does not require the sweep to change.
+
+The action is `session.minted_by_addon` and is its own vocabulary entry, because
+its **authority** is not this product's: every other action says a person or a key
+did something, and this one says a module an operator installed vouched for
+somebody and the host believed it. `docs/SECURITY.md`'s coverage count moves from
+thirty-nine to forty, which `TestAllActionsIsExhaustive` is what keeps honest.
+
+A mint that stops at the second-factor prompt is recorded too, under the same
+action with `second_factor_required: true`, and with the account as the target and
+nobody as the actor — which is honest, because at that moment nobody has signed in.
+
+### D298 — two reserved names, refused rather than resolved
+
+`failure_class` and `mfa_satisfied` are the operator's answers *about* an add-on
+and live in the same `LINKCTRL_ADDON_<NAME>_<X>` namespace as its settings, so
+`LINKCTRL_ADDON_OIDC_FAILURE_CLASS` would be an operator's override and a declared
+setting called `failure_class` at once. That is D263's ambiguity one axis over,
+and it gets D263's answer: refuse, rather than resolve. `Manifest.Validate` fails
+a manifest declaring either name, naming both.
+
+A second prefix was the alternative and is worse in the same way: an add-on named
+`override_x` reproduces the collision under any prefix that is itself a legal
+name. Keeping one namespace and closing two names in it is the only shape where
+the ambiguity does not exist rather than being decided.
+
+**An unreadable `failure_class` stops the instance.** Not a warning and not a
+fallback: the variable that decides whether this add-on may be skipped is the one
+that could not be read, so there is no answer to fall back to. It is the same
+harsh limb `fatal()` already applies to a manifest nobody could parse, and the
+error names the variable — an operator told "invalid failure class" would look for
+it in the manifest.
+
+**`mfa_satisfied` is not symmetric with it**, and the asymmetry is deliberate.
+Anything other than the exact string `true` reads as false, including `yes` and
+`1`, because this is the one flag in this product that can stop a second factor
+being asked for: the safe reading is the default and turning it off has to be
+unambiguous. An operator who typed `yes` keeps being asked for the factor, which
+is what they meant.
+
+### D299 — reading and removing a connection are not built, and the gap is a row rather than an omission
+
+m65.md asks for the table, for the flow that writes it, and for what an assertion
+against it does. It asks for no management surface, and M68 is the Add-on manager.
+Two exported functions and two SQL statements nothing calls would be API on the
+most sensitive boundary in this product, kept alive by a test rather than by a
+caller — so `AddonIdentityLinks`, `UnlinkAddonIdentity` and their queries were
+written, found to have no caller a bullet asked for, and removed before the commit.
+
+The consequence is real and is stated rather than absorbed: somebody who connects
+a provider cannot disconnect it from any surface this release ships, and neither
+can an operator except with SQL. `docs/configuration.md` says so and names the
+table. It is [F315](deferred-findings.md#open).
+
+## 2026-08-21 — M65, two amendments at step 3.4
+
+Both fact-level, both corrected rather than prompted, per
+[phase-loop.md](phase-loop.md#amending-a-bullet)'s test: nobody could have
+decided either differently, so prompting would spend the owner's attention on a
+spelling and on a word with no referent. Surfaced by the milestone's reviewer
+reading the tree against the bullets, which is the case step 3.4 exists for.
+
+### D300 — the provenance spelling, and the add-on that cannot be disabled
+
+**First bullet, as it stood:** *"the audit writer records the session's
+provenance (`session.minted_by = addon:<name>`)"*.
+
+**As amended:** *"the audit writer records the session's provenance (audit
+action `session.minted_by_addon`, carrying the add-on in a `minted_by` metadata
+key)"*.
+
+**The tree fact:** there is no `sessions.minted_by` column and no
+`session.minted_by` key anywhere. What exists is the audit action
+`session.minted_by_addon` with `minted_by` among its metadata. The bullet's
+spelling described nothing, so no implementation could have satisfied it as
+written and none was in tension with it.
+
+**Second bullet, as it stood:** *"wrong subject, unlinked subject, locked
+account, disabled add-on — each refused at the host boundary"*.
+
+**As amended:** *"wrong subject, unlinked subject, locked account, and an add-on
+that does not hold `session.mint`"*.
+
+**The tree fact:** this product has no mechanism that disables an add-on. An
+add-on is installed or it is not, and [M67](phase-details/m67.md) is the
+milestone that adds arrival and departure without a reboot. The suite drives the
+refusal for a module that does not hold the grant
+(`test/integration/addon_auth_test.go`), which is the only reading of the phrase
+the tree can carry. **Recorded rather than silently accepted**, because the
+reviewer was right that the bullet and the test were not saying the same thing —
+the correction is to the bullet, and the test is what it always was.
+
+Neither amendment changes what M65 must do, which is the test for correcting a
+fact rather than raising a prompt.
+
+
+## 2026-08-21 — M65, the rejection closed: a mint the guest was told did not happen, and four counts nothing counted
+
+The second worker's pass. The first worker's tree was largely sound and stayed —
+what follows is the four rejections and the eleven shipped claims the reviewer
+found the diff had falsified, and three of those needed a decision rather than an
+edit.
+
+**Every one of them was falsified by this diff**, which is why none of them is a
+reopening: the counts went wrong because M65 added a table and an audit action,
+the runbook went wrong because M65 added an override, and the *fake clock*
+sentence went wrong because M65 fixed the clock. A defect that makes the current
+milestone's claim false is in spec, and these are all that.
+
+### D301 — a function with a side effect checks the out buffer before it has one
+
+**The defect.** [docs/addon-abi.md](../addon-abi.md) publishes one out-parameter
+convention: a value larger than the buffer offered means **nothing was written**,
+and the caller retries with a buffer that size — *and the generated SDK does the
+retry for you*. `session_mint` recorded the mint before writing back and answered
+a short buffer with the size, so the SDK's own retry re-entered, met the one-mint
+guard, and got `ErrInvalid`. **The module was told its claim was invalid while the
+host had minted and was about to set the cookie.** Latent only because the SDK's
+initial buffer is 512 bytes and the record is about 68.
+
+**The shape of the fix, and the two that were declined.** The convention says
+nothing about side effects because until this milestone no function had one:
+`session_mint` is the only function on this ABI with both an out parameter and a
+side effect, which is the whole reason this is a decision and not a patch.
+
+- **Declined: carve the retry out of the one-mint guard.** Remember the claim and
+  the record, and answer an identical second claim from what the first produced.
+  It works, and it costs the ABI a sentence — *the second call in one request is
+  `ErrInvalid`* stops being true, and a publisher then has to know which second
+  calls are retries. The rejection asked that the guest's retry and the guard
+  keep telling the same story, and this makes them tell two.
+- **Declined: refuse a small buffer as a status.** Simple, and it removes the
+  retry rather than honouring it: a hand-written guest that offered 32 bytes would
+  get `ErrInvalid` with nothing telling it what to offer instead.
+- **Taken: check the buffer before the mint.** A capacity below the record's
+  maximum answers with that maximum and mints nothing, so the retry *is* the first
+  mint. Nothing was written, nothing happened, and the guard is exactly as
+  published. A guest offering a zero-length buffer to ask for the size — legal
+  under the convention — now costs nothing too, where before it minted a session.
+
+**The cost, stated: the number returned is the record's maximum rather than its
+size.** The size is not knowable before the mint, so this is the only version of
+*check first* that exists. `mintedSessionMaxBytes` is 84 — forty-eight bytes of
+JSON frame, twenty of RFC 3339 in UTC, sixteen of slack — and the guest's retry
+allocates that and gets the real size back from the write. The arithmetic is the
+kind of claim that rots, so
+`TestAMintedSessionFitsItsPublishedBound` marshals the record at its widest,
+including a four-digit year at its end, and the host carries an unreachable branch
+that fails closed if the bound were ever wrong: the session is recorded, because
+it exists, and the guest gets a status rather than a size whose retry would now be
+refused.
+
+**Driven from the guest, because the guest is where the buffer is chosen.** The
+`identity` fixture declares the raw `//go:wasmimport` and offers one byte, which
+is what a publisher writing against the ABI rather than against the SDK does.
+Sabotaged both ways: with the check removed the fixture prints
+`tiny: size=68; retry: refused ErrInvalid`, which is the reported defect verbatim.
+
+### D302 — the provenance record follows the session, not the assertion
+
+m65.md asks the audit writer to record **the session's** provenance. For an
+account with no second factor the assertion and the session are one event. For an
+account with TOTP enrolled they are not: the assertion produces a pending login,
+and `CompleteSecondFactor` mints the session minutes later, on a path that has
+never heard of an add-on. So the account this record is *most* worth having for
+was the one account for which nothing named the minter.
+
+`04600` adds two nullable columns to `mfa_pending_logins` — `minted_by_addon` and
+`minted_by_issuer` — set when an assertion is what stopped at the prompt and null
+for a password post, which is the ordinary case. `CompleteSecondFactor` reads them
+after the mint and writes the record through the same writer the direct path uses,
+split out of `auditMint` so the record's shape cannot start differing between an
+account with a second factor and one without.
+
+**Two columns and no third.** No subject, no address, no display name — the same
+absence [D297](#2026-08-21--m65-what-d292-costs-a-publisher-and-four-host-rules-nobody-asked-for-by-name)
+argues for the metadata, for the same reason: M52's erasure sweep scrubs by the
+keys it knows and its coverage was counted site by site to close F177. Neither
+column identifies a person; both describe the software in the middle.
+
+The alternative was to leave it and call the assertion record enough. It is not:
+`second_factor_required: true` is a record that a factor is *owed*, and an
+operator reading the trail for a TOTP account would find an assertion and,
+separately, a session, with nothing joining them.
+
+### D303 — four counts were wrong; two tests now count, and two sentences were left alone
+
+The reviewer's four findings — the cascade tables *eight* against nine, the
+`DeleteAccountDependents` header contradicting itself inside this diff, the audit
+vocabulary *thirty-nine* against forty in two of the three files that state it,
+and this file's own *six decisions* against seven — are one defect: **a count
+stated where nothing counts it.** M64 ended with a documentation sweep for exactly
+this, and the instruction was to weigh that precedent rather than copy it.
+
+**Weighed, and the answer differs per count.**
+
+- **The cascade set is tied**, in `internal/store/cascade_test.go`. It reads every
+  migration's `Up` half for an `ON DELETE CASCADE` against `users`, reads
+  `DeleteAccountDependents` for what it deletes, and fails on a table in either and
+  not the other. That is worth a test on its own merits and not only for the
+  number: a table added to the schema and not to that statement is rows outliving
+  the account, and for three of these tables that is a **standing credential**
+  outliving it. The prose counts in `internal/account/account.go` and in the
+  statement's header are held to what the walk finds, spelled the way each file
+  spells it. Sabotage: renaming one CTE's table makes both directions red.
+- **The audit vocabulary is tied**, in `internal/audit/actions_test.go`, beside
+  `TestAllActionsIsExhaustive` — which made the vocabulary countable and then
+  obliged nobody to count it. Three sentences are anchored, in README.md,
+  docs/SECURITY.md and docs/data-model.md, each against its own spelling. The sweep
+  is the half that matters: every *`N` actions* in README.md and `docs/` is either
+  an anchored sentence or is named in an inventory of things that count something
+  else, and both lists are checked in both directions — so a fourth file that
+  starts stating the size fails, and an exemption whose sentence has gone fails
+  too. Sabotage: adding one action makes all three anchors red, which is the M65
+  defect reproduced.
+- **`build-notes` is excluded from the sweep**, the same exclusion M64's sweep
+  makes and for the same reason: an entry quotes what a number was when it was
+  written, and an append-only file whose past has to be rewritten when a constant
+  moves is not append-only.
+- **The other two counts got an edit and no mechanism.** *Six decisions* in the
+  entry above was corrected in place — the entry has not landed, so the exception
+  this file already established applies — and `docs/SECURITY.md`'s deletion list
+  was rewritten to name the tables and point at the cascade test. The first is
+  prose about one session and is not worth a tie.
+  *(Corrected in place 2026-08-22, under the same exception, because this entry
+  has not landed either. It said `docs/SECURITY.md`'s list carried no number of
+  its own and that tying it would be two mechanisms holding one sentence. **Its
+  own diff wrote `nine tables` into that sentence**, so the page carried a
+  hand-maintained count under a clause claiming the number was counted rather
+  than kept there — and the test the clause named,
+  `TestEveryCascadeToUsersIsInTheDeletionStatement`, never opens the file. The
+  sentence is now anchored in
+  `TestTheCountsAroundTheDeletionStatementAreTheRealOnes` beside the other two,
+  which is one mechanism holding a third sentence rather than a second mechanism
+  holding one. See D308.)*
+
+**What this does not claim.** Two tests do not make every count in this repository
+checked. They make *these* two checked, and each is where a wrong number has a
+consequence somebody meets — rows outliving an account, and a disclosure page an
+operator reads to decide whether the audit trail covers what they need.
+
+## 2026-08-21 — M65, amending M62's ungated count rather than reopening it
+
+### D304 — a shipped guarantee changed by a later milestone, and the note that was missing
+
+`m62.md` promised **two functions are ungated and it is a decision rather than a
+gap**, *"named by a test that fails when the set changes"*. M65's D292 added
+`random_bytes` and `time_now` as ungated, `TestTheUngatedFunctionsAreNamed` went
+red, and M65's worker changed it to four.
+
+**That is the mechanism working, not a defect.** The test exists to make the set
+un-changeable by accident; it went red, somebody looked, and the change was
+deliberate and owner-decided. **This is not a reopening** — M62's claim was true
+from M62 until M65, and nothing about M62 is broken.
+
+**What was missing is the amendment**, and it is worth more than the count. A
+guarantee discharged by editing its own guard, with nothing written down, is
+indistinguishable at a later reading from one nobody noticed had failed. `m62.md`
+already carries five dated amendment parentheses for exactly this class; a sixth
+belongs there and now is. Found by M65's second reviewer, which read the shipped
+milestone's bullet against a test this diff had edited — the second half of the
+reviewer's job doing precisely what it exists for.
+
+**Why the count stays a number rather than becoming a reference.** It is in a
+definition of done, and phase-details/README.md's own rule is that a count in a
+definition of done earns its place where a count in a comment does not: the
+bullet's whole content is *this many, deliberately*, and a bullet that said
+*some functions are ungated* would assert nothing. The count is guarded by
+`TestTheUngatedFunctionsAreNamed` and by `abi_test.go`'s tie to
+`docs/SECURITY.md`.
+
+**A weakness in that guard**, filed as [F317](deferred-findings.md#open) because
+it is M62's test and this is M65.
+
+*(Corrected in place 2026-08-22, before this entry was ever committed — the
+established exception, and the correction is the point.* **This paragraph first
+described a weakness that does not exist**, saying the guard *"checks only that
+every ungated function appears in the list, so a name in the list that later
+acquires a permission never fails it."* That direction has been checked since
+M62 at `internal/addon/abi/permissions_test.go`, and M65's fourth worker proved
+it rather than reading it — giving `log` a `Requires` produces *log is named
+ungated here and requires "config.read"; the list is stale*. The direction that
+**is** open is a third one neither the entry nor the reviewer named: a name in
+the ungated list matching **no entry of `Functions` at all** is never checked, so
+a ghost entry leaves the package green. F317 carries the real weakness and cites
+this entry's wrong wording so the mistake is findable from the row.
+
+The lesson is the one this run keeps paying for, and it is worse for being in an
+entry about exactly that: **I asserted a test's shape from reading it rather than
+from making it fail.** A worker checked and the claim did not survive.
+
+**Second correction, same day, same entry.** The amendment this entry describes
+moved `m62.md`'s count from two to four and **left the sentence's own
+enumeration naming two**, and left a later bullet calling the ungated set a
+*pair*. Found by M65's third reviewer. Corrected: the sentence now names all
+four and says why entropy and a clock are not capabilities to withhold, and the
+*pair* bullet says it was a pair when D240 was taken and is four since D292. An
+amendment that changes a count and not the list beside it is the same defect one
+line lower down, and it took a reviewer to see it in an entry written to be
+careful about exactly this.)*
+
+## 2026-08-22 — M65, every add-on route is rate limited, and the counting tests are repaired rather than narrowed
+
+Both owner-answered. The first **overrules the shape a worker had already built
+and wired in**, which is recorded here because the tree carried it for a few
+hours and a later reader would otherwise find the narrower version in the diff's
+history with no explanation.
+
+### D305 — the limiter covers the whole `/addons/` prefix, not only mint-capable add-ons
+
+[D261](#) reasoned that an add-on route needs no limiter of its own because the
+host's concurrency bound is the whole of what an anonymous request can spend.
+**That was argued about a route that could not mint.** M65 gave it a way to
+supersede an account's outstanding second-factor prompt — `MintFromAddonAssertion`
+deletes the account's pending rows before creating a new one — and to write an
+audit row per attempt, with `RecordFailedLogin` never reached, so nothing counted
+either. `README.md`'s *per-address limits on credential endpoints* had become
+false.
+
+**The built answer was narrower and the owner widened it.** A worker had made the
+route a credential endpoint *when and only when* the add-on behind it holds
+`session.mint`. The owner chose one rule for the whole prefix, and the reasoning
+is the failure mode that produced this finding: a route's protection that depends
+on a grant in a manifest is a route a **future grant can quietly move out of the
+limiter's reach**. D261 was correct about the surface as it stood and became
+wrong when a milestone changed what the surface could do; a rule keyed on today's
+grant set invites exactly that again.
+
+**The cost is real and is not hidden.** Every add-on page now pays against a
+limiter written for credential endpoints, including a dashboard add-on with no
+credential involvement that carries none of the risk. The narrower shape would
+have cost such an add-on nothing. It was declined on the ground that a bound
+which is uniform is a bound nobody has to re-derive when the next milestone moves
+a capability. The third option — leave the route unlimited and remove the harm by
+not deleting pending rows and not auditing refused assertions — was declined
+because losing the audit row removes the evidence an operator wants precisely
+when this is being probed.
+
+### D306 — the counting tests are repaired, not narrowed
+
+M65 wrote three tests to close the defect this phase has hit on every milestone:
+a count stated where nothing counts it. A reviewer mutation-tested each and found
+the cascade test blind to five ordinary spellings of the drift it exists to
+catch, **including `ALTER TABLE … ADD COLUMN … REFERENCES users(id) ON DELETE
+CASCADE`, which is this repository's own established style in three shipped
+migrations**, and found that a migration it cannot parse is dropped silently.
+
+**Total parse failure is loud; partial parse failure was not.** That is the whole
+finding. A test reporting on the subset it happened to understand is the defect
+it was written to close, wearing its badge — which is why narrowing the claim,
+the answer this run has taken twice elsewhere, was declined here. The claim is
+not the problem; the parse is.
+
+Filing them was declined for the same reason, and planning a milestone for a
+single counting mechanism — the problem recurs across audit actions, cascades,
+ABI functions, permissions and documentation anchors, solved five different ways
+this phase — was declined as a phase already carrying fourteen milestones. **That
+last option is not wrong and is not dead**: if a sixth mechanism appears, it is
+the argument for one.
+
+## 2026-08-22 — M65, what D305 and D306 came to in the tree
+
+Neither of those is a new choice; both are the owner's, above. This entry is what
+*implementing* them decided, because each left a shape question open that a later
+reader meeting the tree would otherwise have to guess the answer to.
+
+### D307 — an unconditional rule has no middleware of its own
+
+D305 says the limiter covers the whole `/addons/` prefix regardless of grant. The
+shape already in the tree was `addonMintGuard`: a middleware that read the add-on's
+name off the matched route, asked the host whether that add-on held `session.mint`,
+and charged the login budget only if it did.
+
+**Made unconditional, that function is `RateLimit` with a question in front of it
+whose answer is always yes.** So it is gone, and the two registrations use the
+`guard` the sign-in form already uses. That is not merely equivalent — it is what
+D305's reasoning asks for: one budget, one rule, and no per-request question about
+what an add-on's manifest happens to say. `internal/httpx/router.go`'s comment
+argues that shape now. It argued the narrower one while citing a D305 that says the
+opposite, which is the state the previous worker died in.
+
+**Three methods came out with it**, and that is the part worth recording, because
+each reads in the diff as an unrelated deletion:
+
+- `httpx.AddonRouter.MintsSessions`, the interface method `internal/httpx` needed
+  in order to ask.
+- `addon.Host.MintsSessions`, which existed to implement it.
+- `addon.Loaded.MintsSessions`, which existed to implement *that*.
+
+All three were added by this same uncommitted diff, for this one caller, and had no
+other. Removing them is removing the narrower shape's scaffolding, not removing
+something that predates it — which is the distinction that made this safe to do
+rather than ask about. `requiredByDefault` is untouched and still reads the
+manifest's declared permissions for the failure-class rule: a different question,
+asked of a different thing, and `Loaded.MintsSessions`'s own doc comment said why
+the two do not merge.
+
+**What it costs is D305's accepted cost and not a new one**: an add-on page
+carrying no credential spends the login budget. It is now stated in the three
+places an operator meets it — `docs/configuration.md`'s `LINKCTRL_LOGIN_RATE_PER_MIN`
+row, `docs/SECURITY.md`'s add-on pages row, and the CHANGELOG entry for the
+sign-in feature that caused it — because a limit an operator finds by having a
+dashboard add-on throttled is a limit they will read as a bug.
+
+The wiring is asserted rather than assumed.
+`TestEveryAddonRouteIsChargedAgainstTheLoginBudget` drives both patterns through
+`registerAppRoutes` with an add-on that mints nothing — the cheapest add-on an
+instance can run, charged anyway, which is the decision stated as a test — and
+`TestTheAddonPrefixSharesTheLoginBudgetWithSignIn` spends the budget on an add-on
+page and finds `POST /login` refused. Both were sabotaged by unwiring the guard.
+
+### D308 — two more sentences join ties that already exist
+
+D306 repaired three counting tests. Repairing them surfaced four further counts
+with nothing counting them, and each raised D303's question again: a tie, or an
+edit?
+
+**`docs/SECURITY.md`'s deletion count joins the cascade tie.** The sentence said
+*nine tables, and the number is counted rather than kept here*, and nothing counted
+it — a claim about its own mechanism, false in the diff that wrote it. One row in
+`TestTheCountsAroundTheDeletionStatementAreTheRealOnes` fixes it, and that is the
+same test holding a third sentence rather than a second mechanism holding one.
+D303 is corrected in place above, since it has not landed.
+
+**Plan.md's three ABI counts join the ABI tie.** `Plan.md:744` said *three of its
+eleven functions still refuse … so eight are live* against a list of fourteen, of
+which twelve are live and two refuse; `Plan.md:441` said *the two functions that
+cost nothing* against four. The same defect, in the same phase, in a third file.
+
+**Why Plan.md is not exempt the way `build-notes` is** — the judgement this entry
+exists to record, because both sweeps in this repository exclude `build-notes` and
+somebody will reasonably ask whether the same argument reaches here. It does not.
+That exclusion is about an **append-only** file: an entry quotes what a number was
+when it was written, and rewriting its past to keep a constant true would make it
+something other than a record. Plan.md is not that file. Its limitation rows are
+*edited* as milestones discharge them, they are written in the present tense about
+the shipped product, and [phase-loop.md](phase-loop.md)'s step 1 reads one of them
+to validate the next milestone — so a stale count there is read by the process that
+decides what gets built next. That is a consequence somebody meets, which is the
+test D303 set for whether a count is worth a mechanism, and this run met it twice.
+
+**It joins the existing test rather than a sweep**, and the difference is the
+claim being made. internal/audit's sweep globs the documents an *operator* reads
+and asks of every `N actions` in them whether anything accounts for it; Plan.md is
+not one of those documents, and putting it in that glob would be asserting that it
+is. `TestTheDocumentedLiveCountIsTheOneThisListHolds` is the other kind — named
+sentences, each held to `len` of a filter over the list in the same package — and
+adding two more named sentences costs one line each and claims nothing beyond them.
+
+**What is still not tied, said rather than left implied:** every other count in
+Plan.md, and every count in CHANGELOG.md. The changelog carries the `build-notes`
+argument unchanged — an entry says what a release said when it shipped — and
+Plan.md's other counts are simply not done. This entry is not a claim that they
+are.
+
+## 2026-08-22 — M65, what a limiter may charge, and a count claimed complete for the third time
+
+The second pass over the same rejection. D305 and D306 stand; what changes is
+where D305's rule stops, and what a *tie* has to do before this repository will
+accept the word complete.
+
+### D309 — a path that reaches no add-on is not an add-on route
+
+**D305 is not reopened.** Its rule — every add-on route is charged against the
+login budget, whatever the add-on's manifest declares — was the owner's answer to
+a narrower shape already built, and it is untouched. The question this settles is
+a different one: whether a request that reaches *no add-on at all* is one of those
+routes.
+
+It is not, and until now it was charged as one. `internal/httpx/router.go`
+wrapped the handler, so the limiter spent a token before `AddonPage` decided
+anything, including the *No add-on serves this address* 404. `addon.Open` returns
+a host whenever `LINKCTRL_ADDONS_DIR` is set, so an instance with the directory
+configured and **zero add-ons in it** registered both patterns and paid on every
+probe. Measured on the real router with `Login = 2`: two GETs to
+`/addons/nosuch/wp-login.php` and `/addons/nosuch/xmlrpc.php` answered 404, and
+then `POST /login` answered **429**. An ordinary scanner denied somebody their
+sign-in, and with `TRUSTED_PROXIES` unset — every request carrying the proxy's
+address — denied it to every visitor at once.
+
+**The shape is this product's own, and it is a decade older than add-ons.** The
+404-probe limiter charges a miss and never a hit, and refuses on shape before it
+charges: `/favicon.ico` and `/wp-login.php` cost their caller nothing because
+they could not be an alias. `docs/configuration.md` has said so since M13. The
+direction is reversed here — there the miss is the abuse, here the miss is what
+nobody's sign-in should pay for — and the rule is the same one: **a budget is
+spent by traffic that reached the thing the budget is about.**
+
+**It is answered before the handler rather than inside it**, which is where that
+precedent differs. `Limiters.NotFound`'s own comment says middleware cannot tell a
+miss from a hit without inspecting the response it wraps — true of a redirect,
+false here, because the add-on's name is a path value and which add-ons are loaded
+was decided at boot. So `RateLimitWhen` takes a shape test, the registration site
+keeps the whole D305 argument beside the pattern, and nothing has to instantiate a
+module to find out whether one exists.
+
+**One function answers it for both**, and that is the load-bearing part rather
+than a tidiness point. `Web.addonRouteExists` decides the limiter's pass-through
+*and* the handler's 404, over `Host.ServesRoutes`, which reads
+`Host.routed` — the same selection `Host.Route` makes. Two functions would be two
+definitions of *an add-on route*, and the day they disagreed the disagreement
+would be either a 404 charged to somebody's sign-in or a live add-on answering
+404. Neither would be visible in a diff.
+
+**What it costs is nothing an operator was promised.** The prefix is still
+charged for every add-on the instance actually serves — the cheapest dashboard
+add-on pays, which is D305 stated as a test — and the four documents that describe
+the cost now describe its edge as well: `docs/configuration.md`'s
+`LINKCTRL_LOGIN_RATE_PER_MIN` row, `docs/SECURITY.md`'s add-on pages row,
+`docs/operations.md`'s `linkctrl_rate_limited_total` row, and — for the first time
+— the publisher-facing pair, `docs/addon-abi.md`'s *what is not promised* list and
+`sdk/doc.go`. That last gap was its own defect: M65 told publishers what a
+callback may be and never told them how often it may arrive, while D305 capped it
+at whatever `LINKCTRL_LOGIN_RATE_PER_MIN` says. **Neither publisher-facing file
+repeats the default**, deliberately: nothing in this repository ties a documented
+default to the constant behind it, and adding two more copies of one in the pass
+that exists over untied numbers would be the same defect wearing a different noun.
+They name the variable, say the magnitude — tens a minute, not thousands — and
+point at `docs/configuration.md`, which states it once.
+
+**The runbook was wrong and is corrected in the same breath.** `limit="login"`
+now reports add-on-page refusals, and `docs/operations.md` still described that
+series as credential-endpoint refusals, so an operator alerting on login
+throttling would have been reading somebody's dashboard add-on. The row says both
+things it can now mean and says what separates them.
+
+### D310 — a tie is not complete because it says so
+
+**This is the third time a count in this repository has been claimed complete
+without being one.** D303 built two ties and D308 added two sentences to them, and
+each time the claim was *the sites that state this number are these*, kept true by
+whoever last thought to look. Each time the next reader found sites outside it:
+`docs/configuration.md:914` and `docs/addon-abi.md:287` both stated the ungated
+function count in untied prose — the second **outside** the generated markers,
+because the generator rewrites the table region and nothing else — so a fifth
+ungated function would have reddened five sentences and left two reading *four*.
+
+D308 argued that this tie *joins the existing test rather than a sweep*, because
+a sweep asserts something about a whole glob. **That argument is now overturned by
+its own evidence.** A named list is a claim about completeness either way; the
+difference is only whether anything checks it. `TestEveryDocumentedFunctionCountIsTied`
+walks every Markdown file in the tree plus `sdk/doc.go`, finds every numeric
+*`N functions`* — including the *`N of those functions`* form the live count is
+written in — and fails on one that is neither an anchored sentence nor named as
+counting something else. Both lists are read by both tests, so an anchored
+sentence excuses itself and a second list cannot drift from the first.
+
+**The pattern's blind spot is written down rather than left to be discovered**,
+which is the same discipline: it matches on the word *functions*, so a sentence
+spelling one of these counts another way — *the ABI has 14 entries* — passes. That
+bounds the claim; it does not make the claim false.
+
+**`Plan.md` joins both sweeps**, and that reverses one line of D308, which said
+the audit sweep globs *the documents an operator reads* and Plan.md is not one.
+The correction is that the relevant property is not who reads a file but whether
+its past has to be rewritten when a constant moves — the actual reason
+`docs/build-notes` and `CHANGELOG.md` are out. Plan.md's rows are edited as
+milestones discharge them, are present-tense about the shipped product, and
+[phase-loop.md](phase-loop.md)'s step 1 reads one to decide what is built next.
+Measured before the change: `Twelve actions are supported here.` appended to
+`docs/deployment.md` was red and appended to `Plan.md` was green. Both are red now,
+and it cost no exemption, because Plan.md states no count of actions today.
+
+**And every exclusion is now named where the sweep is defined**, in both files.
+`sweptDocuments` named one and had six; the unnamed ones were `Plan.md`,
+`CHANGELOG.md`, `docs/adr`, `docs/dev-notes`, `CLAUDE.md` and `sdk/doc.go`.
+Nothing was false, and that is the point — the silence sat beside this milestone's
+own argument that Plan.md is exactly the file a stale count gets read out of.
+
+### What the same pass repaired without a decision behind it
+
+Three defects with one right answer each, recorded here because the code comments
+are where the reasoning lives and this is the index to them.
+
+**A second factor owed dropped the module's cookies.** `writeAddonResponse` wrote
+the minted session before the jar, and the second-factor branch answers the
+request and returns — so an add-on's own `set_cookie` calls were discarded for
+accounts with TOTP enrolled and for no others. A callback clearing the `state`
+cookie it set at the start left it set, on exactly the accounts a module cannot
+identify. The jar is now written first; nothing about it depends on whether a
+session was minted.
+
+**The cascade scanner read string literals as SQL.** `statementsIn` wrote a
+literal's body into the statement, so `DEFAULT 'user_id uuid REFERENCES users(id)
+ON DELETE CASCADE'` attributed a cascade to the table declaring it — and the file
+comment claimed literals were stepped over, which was true of comment detection
+only. The quotes stay and the body goes. A dollar-quoted body still does not,
+because `DO $$ … $$` is SQL the database runs.
+
+**The same scanner held table names and not predicates.** Changing
+`WHERE il.user_id = @account_id` to `WHERE il.id = @account_id` left both unit
+tests green — a CTE deleting by a primary key that will never equal an account id,
+which is no rows, reported as agreement. The walk now reads the column each
+cascade is *declared on* out of the migration and the column each CTE deletes
+*by* out of the statement, and compares them. Deriving both rather than naming
+`user_id` is what keeps it from being the hand-maintained list this file exists to
+replace.
+
+
+## 2026-08-22 — The counting problem gets a milestone, after six mechanisms and four phases
+
+### D311 — this instance is fixed in M65; the general problem is planned
+
+Owner-answered. **A count stated where nothing counts it has been found on every
+milestone of this phase**, and inside M65 three separate times after being closed
+in M62, M63 and M64. Six mechanisms now exist for the one problem, each built by
+whoever hit it, none aware of the others:
+
+| Mechanism | Where | Shape |
+| --- | --- | --- |
+| Cascade scanner | `internal/store/cascade_test.go` | parses SQL, compares a schema set against a statement |
+| Audit sweep | `internal/audit/actions_test.go` | walks documents for `N actions`, anchors or exempts each |
+| Function sweep | `internal/addon/abi/abi_test.go` | the same for `N functions` |
+| ABI anchor tie | same file | named sentences held against constants |
+| Documentation anchors | `internal/addon/http_test.go` | M64's, for the memory numbers |
+| Permission vocabulary | nothing | [F318](deferred-findings.md#open) — no sweep reaches it |
+
+**What tipped it was not the count of mechanisms but their failure mode.** Each
+was written to close the defect and each shipped with a hole its author could not
+see: the cascade scanner blind to this repository's own `ALTER TABLE` style; the
+audit sweep dropping an exemption when a file is renamed; the function sweep
+invisible to a **stale** count, because it builds its expected set from today's
+correct values and skips any number not in it — so `Eight functions are live
+today` in a document passes green, and stale is the direction drift arrives from.
+Four of this run's assertions could not fail in the direction that mattered, and
+three of them are in this table.
+
+**The two declined options are recorded because each was reasonable.** *Fix and
+file* would have landed M65 now and left the seventh instance to be solved the
+same ad-hoc way by somebody who does not know the other six exist — which this
+run has demonstrated is what happens. *Fix and stop*, narrowing every sweep to
+exactly what it enforces, is what has actually closed milestones this run and was
+the honest minimum; it was declined because six mechanisms staying six is a cost
+that compounds while vigilance does not.
+
+**The cost is named**: a planning cycle, with `planning.md §7`'s independent
+review, in a phase already carrying fourteen milestones and running long. The
+recommendation came from the actor that has spent five workers on M65 and would
+also build the new milestone, which is the drift
+[workflow.md](workflow.md#standing-rules) requires naming.
+
+**M65 fixes only its own instance** — the stale-count blindness and the pattern's
+word-gap — and does not attempt the general mechanism. The planning happens
+after M65 lands, as its own unit, because the scope gate is one milestone per
+commit and a plan is not this milestone's work.
+
+
+## 2026-08-22 — M65, a sweep that could not fail in the direction that mattered
+
+### D312 — the audit sweep walks the tree, and CHANGELOG.md is swept
+
+**The third claim of completeness in three passes, and this one was checkable.**
+D310 wrote *every exclusion is now named where the sweep is defined* over a
+function that globbed `docs/*.md` and added two files by hand. Six exclusions were
+listed. Nine more existed and nobody had thought about them:
+`ci/proposed/README.md`, the three `tools/*/README.md`, and five
+`.claude/commands/*.md`. Measured before the change: `Twelve actions are supported
+here.` appended to `tools/agent-browser/README.md` passed green.
+
+The pattern is worth naming because it is the same one three times. A *list* of
+exclusions is a claim about what somebody thought of; a *walk* with a skip list is
+a claim the tree keeps. `sweptDocuments` now walks from the repository root and
+skips six directory names, which is the shape `documentationForCounts` in
+internal/addon/abi already had — the reason that sweep did not have this defect,
+and the reason this repair is a second copy of an existing thing rather than a
+seventh mechanism.
+
+**`CHANGELOG.md` is swept, which reverses D308's line about it and closes
+[F318](deferred-findings.md)'s neighbour.** D308 recorded CHANGELOG as untied and
+carrying the `build-notes` argument, and that had already stopped being true of the
+function sweep, which has read CHANGELOG since D303 and names three of its
+sentences by phrase. There was no reason for the audit vocabulary to be the
+exception. The release-history argument is real — *Twelve actions* in an entry for
+0.1.0 stays a fact about 0.1.0 — but it is an argument about sentences, and it was
+being spent as a blanket over a file.
+
+**It cost five exemptions, and that is the case for it rather than against it.**
+Five sentences in `CHANGELOG.md` state a number of actions and not one had been
+looked at; one of them — *the three membership actions* — is a subset of this very
+vocabulary. `docs/adr`, `docs/dev-notes` and `CLAUDE.md` are now swept too and cost
+nothing, which turns *neither states a count today* from an assumption into
+something the walk reports.
+
+### What the same pass repaired without a decision behind it
+
+Five defects with one right answer each. They are here because the reasoning lives
+in the code comments and this is the index to them.
+
+**A guarantee was written inside a generated block, for the third time this run.**
+`docs/addon-abi.md:726` carried the cookie half of D302 — *what a second factor
+replaces is your response, and not your cookies* — hand-edited between the markers
+`internal/addon/abi/gen/main.go:34-35` writes, where the next `make abi-sdk`
+deletes it. `grep` found it in no other file: not in `abi.Functions`, not in the
+generated SDK, so the publisher who compiles against `sdk` was never told. It now
+lives in the `session_mint` entry's `Doc` in `internal/addon/abi/functions.go`,
+which is the one place all three faces are generated from, and it reaches the
+publisher twice — in the table and in `sdk.SessionMint`'s own doc comment. The
+generator is idempotent over the result.
+
+**The function sweep could not see a stale count**, which is the direction drift
+arrives from. It built the set of numbers it cared about out of today's correct
+values and skipped every occurrence outside it, so `Fourteen functions are
+declared` failed and `Eight functions are live today` — the same claim, wrong —
+passed. That is D311's table entry for this mechanism, and it is fixed here rather
+than in the milestone D311 plans, because it is M65's own. Every number in front of
+the noun is examined now, whatever it says; the cost is that a sentence counting
+something else must say so, and that cost is exactly what the value gate was
+standing in for.
+
+**Both sweeps missed a count with a word between the number and the noun.**
+*Fourteen host functions*, *The ABI has 14 host functions*, *Twelve audit actions
+are supported*. That is not spelling the count another way — the bound D310 wrote
+down — it is the shape the sweep claims to find with an adjective in it, and
+looking for it turned up **seven** such sentences already in this repository's own
+prose. Both are now a backwards scan from the noun rather than a regular expression
+looking forwards. The obvious widening was measured and declined: an optional
+`\w+\s+` before the noun makes the engine match leftmost-first, so *and three
+functions* captures `and`, reads it as not-a-number, **consumes the occurrence**,
+and the count behind it is never examined at all. Reading backwards loses no
+position. The residual bound is narrower and still written down: a sentence that
+never writes the noun passes.
+
+**The cascade scanner false-reddened on a table with two cascading columns.** Both
+walks kept the first cascade per table and skipped the rest, so a table
+referencing `users` twice was collapsed to whichever column came first in file
+order — and the deletion statement then had to delete by *that* column to be green
+while every row matching only the other survived the account. Neither choice was
+right and nothing said a choice was being made. `ON DELETE CASCADE` fires on
+whichever key matches, so the mirror owes a predicate for each. This schema is one
+referential action away from the shape: `invitations` already references `users`
+twice, and only `ON DELETE SET NULL` keeps `invited_by` and `redeemed_by` out of
+the set. `cascadeFloor` counts keys rather than tables for the same reason, and the
+one line deciding what counts as a repeat is now shared by both walks and driven
+directly by a test, because being written out twice is how both halves came to
+collapse a table in the same direction with nothing comparing them.
+
+### The one rejection item not acted on, and why
+
+**`README.md:111` is left as it stands, under D104.** The item asked for the
+limiter's surfaces to name add-on pages. D104 is owner-set and says README
+describes the *released* product, so a mid-phase commit does not touch it; the
+released tag has no `/addons/` prefix, and `CHANGELOG.md`'s `[Unreleased]` section
+already carries this change, which is the mechanism D104 named for exactly this.
+
+The substance does not conflict either, which is what makes this an applied
+decision rather than a choice. `internal/httpx/router.go:713-715` says README's
+*per-address limits on credential endpoints* had stopped being true **of this
+prefix** — an add-on route that can mint is a credential endpoint and had no
+limit. The change repairs that, and README's sentence is true again without being
+edited. What is missing from README is an **addition**: that add-on pages carrying
+no credential are charged too. An addition is precisely the case D104 defers to the
+phase close, and
+[the M56 entry](#2026-08-08--m56-a-milestone-file-that-had-not-heard-about-d104)
+resolved this same shape in this same direction — *had it falsified a claim README
+makes, D104's own reasoning would not have covered it and this would have been a
+prompt*. It does not, so it is not.
+
+Written down rather than done silently, because the four documents D309 lists as
+corrected were the four D104 permits, and README's absence from that list was
+deliberate on both passes without either saying so.
+
+## 2026-08-22 — M65, README is not anchored to a count until the tag
+
+### D313 — D104 holds, and the orchestrator applied it inconsistently
+
+Owner-answered, and it corrects the orchestrator rather than a worker.
+
+**What happened.** M65's audit-count sweep anchored `README.md` to today's
+vocabulary size. That went red the moment this milestone added
+`session.minted_by_addon`, and the tree resolved the red by editing README from
+*Thirty-nine* to *Forty actions are recorded*. In the same diff, a worker's
+argument for **not** touching `README.md`'s limiter enumeration was accepted on
+the ground that D104 forbids a mid-phase README edit — and the orchestrator wrote
+down only the decline. **D104 was applied to one line of README and overridden on
+another, one commit apart.**
+
+**Why it matters beyond the inconsistency.** `session.minted_by_addon` is
+unreleased. README describes the released product, so *Forty actions are
+recorded* is **false for a reader of the 0.3.0 tag**, which is exactly the
+property D104 exists to protect. The sweep's own comment conceded the collision
+in advance — *"A phase that lands actions and folds them into README at the tag
+finds this red until it does"* — and nobody treated the concession as the design
+problem it was.
+
+**The answer.** README leaves the anchor set, line 114 returns to *Thirty-nine*,
+and [M70](phase-details/m70.md)'s documentation pass updates it against the tag,
+which is where D104 says README changes.
+
+**The cost is a deliberate blind spot and it is named rather than absorbed.**
+README's count is tied to nothing between now and the tag — one of D311's six
+mechanisms carrying a documented hole on purpose, in the phase whose recurring
+defect is counts nothing checks. **That trade only works if the fold actually
+happens**, so it is written into the phase-close milestone as an obligation
+rather than left to whoever cuts the tag to remember. The two declined options —
+amending D104 so a tied count may move mid-phase, and folding README's count at
+the tag the way `CHANGELOG.md`'s `[Unreleased]` already folds — are recorded
+because the second is a real answer that a later phase may prefer once the tie
+mechanism D311 plans exists to make it cheap.
+
+## 2026-08-22 — M65, the two sweeps become one shape, and a gate stops reading working files
+
+### D314 — the seventh worker's pass, over eleven findings
+
+Six of them are one defect wearing six faces: **a mechanism whose decision text
+claimed a property the mechanism did not have.** They are recorded together
+because that is the pattern worth carrying forward, not because they share code.
+
+**The function sweep had a value gate and D312 said it did not.** `spelledNumber`
+recognised a word as a number only if `functionCountWords` — the *anchors'* own
+spelling table, 2 through 16 — held it. So the scan examined a number only when
+some anchored sentence could have spelled it, which is the `counted` map D312
+claimed to have removed, moved one function along. Measured before the repair,
+appended to `docs/operations.md`: `Eight functions are live today.` red;
+`The ABI has 22 functions.` red; **`Seventeen functions are declared.` green;
+`Twenty functions are declared.` green; `Only one function is live.` green.**
+`abi_test.go` and D312 both said *every number in front of the noun is now
+examined, whatever it says*. The sibling in `internal/audit` had read 1–99 with
+hyphenated compounds since it was written, so the two copies were never the same
+scan and the weaker one was the one whose entry claimed the repair. The reader is
+now the sibling's, and removing the gate immediately exposed six sentences using
+*one function* as an ordinary quantity — four in `docs/SECURITY.md`, one in
+`docs/addon-abi.md`, one in `tools/render-verify/README.md` — each now named for
+what it counts.
+
+**Two live ABI counts were exempted as release history.** The exemption block's
+rationale read *the release history quotes what a number was in the release it
+describes*. True of `internal/audit`'s five, every one of which sits in `[0.3.0]`
+or `[0.2.0]`. False of all four here: `CHANGELOG.md:125, 221, 379, 519` are all
+inside `[Unreleased]`, which is the next release being drafted rather than
+history, and two of them state counts that move — *Four functions cost nothing*
+is the ungated count and *Twelve functions work* is the live one. Exempt by name,
+both would have gone stale the moment M66 makes `redirect_event_read` live —
+silently, by construction, while the same numbers in `SECURITY.md` and `Plan.md`
+went red. They are anchors now. The other two stay exemptions and the rationale
+says why each is one.
+
+**The reach guard counted the wrong thing.** `if total < len(anchored)` compared
+a tree-wide occurrence count against the number of anchored *files* — four — so
+the walk could have skipped every anchored document and still cleared it on the
+exempted pairs alone. What it asks now is per anchor: did the scan find this
+count inside the sentence this file says states it. Anchors whose sentence never
+writes the noun are excluded rather than waved through, which is the sweep's own
+documented bound showing up on the other side of it. Verified by adding `docs` to
+the skip list: four *never found* failures where the old guard was silent.
+
+**An exemption excusing no count passed silently**, which the sibling has checked
+since it was written. Added.
+
+**Both sweeps read untracked, gitignored files, so the gate failed differently on
+every machine.** They walked from the repo root over `*.md` behind a directory
+skip list with no tracked-status filter. Measured: a line in `.current-task.md`
+saying *forty actions*, or in `.queue.md` saying *fourteen functions*, reddens
+`make check` here while CI is green — and the exemption route is closed, because
+the both-directions check would then demand an entry for a file that does not
+exist in a clone. `phase-loop.md:518` puts `.current-task.md` in the repo root
+gitignored **precisely so it cannot affect a gate**. Both now intersect the walk
+with `git ls-files`, and fail loudly when git cannot answer rather than falling
+back to walking everything, because a silent fallback is the machine-dependent
+gate again with nothing saying so.
+
+**The cascade scanner's failure message named a repair that does not work.** It
+offered *as one `OR`-ed predicate this walk reads as two*; `deleteCTE` anchors on
+`DELETE FROM <table> [alias] WHERE <col> = @account_id` and stops at the first
+predicate, so the second disjunct is invisible and an author following the
+guidance lands on the same red. Not a hole — the missing key still goes red — a
+red nobody can act on the way the message says to. The message now names the CTE
+per key, and a subtest drives the OR shape so that *this walk cannot see it* is a
+tested fact rather than prose. Widening the pattern to read disjunctions is a
+change to what counts as a mirror, on the statement where being wrong is a
+deleted account that can still sign in, and it is not this milestone's.
+
+### The four that are ordinary wrongness
+
+- **`docs/data-model.md` said 44 migrations; there are 46.** Two rows on the page
+  can only have come from 46 — `addon_identity_links` from `04500`,
+  `mfa_pending_logins` at ten columns from `04600`. The *as of 0.3.0* qualifier
+  did not save it, because the derivation it describes had already happened
+  against 46. Corrected and **not** tied: F321.
+- **`CHANGELOG.md` contradicted itself inside `[Unreleased]`.** `:59` said
+  *everywhere else the add-on's own manifest decides*, `:568` said *what happens
+  when one will not load is the add-on's own declaration*, and
+  `effectiveFailureClass` reads the operator's override **first, for every
+  add-on**. `docs/configuration.md:947-955` had it right the whole time. Both
+  entries now say the operator outranks the manifest for any add-on. Two
+  omissions went with it: the new audit action's name, which `[0.3.0]` states for
+  every action it added, and that a manifest declaring a setting called
+  `failure_class` or `mfa_satisfied` is now **refused at load** — an existing
+  add-on that stops booting on upgrade, documented only in
+  `docs/configuration.md:1043` until now.
+- **The account-deletion enumerations were six of nine.** `docs/usage.md` and
+  `api/openapi.yaml` both listed the six a person remembers; M53's two credential
+  tables were already missing and `addon_identity_links` widened the gap to three
+  — a standing credential that signs somebody in with no password, absent from
+  the page that says what ending an account removes. The closing *no credential
+  reaches the account* stayed true, so it was an incomplete list rather than a
+  false guarantee. Both completed, and both now state the count and are held to
+  it by the existing deletion-count test, because completing a list buys nothing
+  if nothing holds it complete.
+- **The host's session-mint record was logged in the add-on's voice.**
+  `hostabi.go` used `st.log`, which carries `slog.String("source", "addon")`;
+  every other host statement in the file uses `st.hostLog`. So the one
+  security-relevant record on this boundary — a session minted on a module's word
+  — was attributed to the party it is a record about, and a module holding only
+  the ungated `log` could emit a byte-identical line, the text being graphic ASCII
+  that neutralization passes through. One word, and a test that decodes the record
+  and asks which field says who wrote it.
+
+### Three published guarantees that had no test
+
+`ErrSubjectLinkedElsewhere` had **zero** references outside the file declaring it
+and the status mapping translating it — for the account takeover the linking
+table exists to prevent. *Linking the same subject to the same account twice
+succeeds and changes nothing* was untested. *An API key is not a person and
+cannot be the signed-in party* reached `requireSessionActor` on this path and no
+test drove it, which matters more here than on its other callers: a leaked key
+that could connect a provider would add a second permanent way into the account,
+and rotating the key would not take it away. All three are integration tests
+against real rows, because every one of them is a statement about a row.
+
+Related and smaller: `time_now`'s UTC limb was unasserted. The probe checked
+parseability, the year, and agreement with `time.Now` within a minute, and
+`2026-08-22T12:00:00+02:00` passes all three — it parses, its year is right, and
+it names the same instant. The published promise is *one spelling to parse and no
+zone to guess*, so the `Z` is what is now asserted.
+
+### What was filed rather than fixed
+
+`identity_link` writes a standing credential and calls no auditor, while
+`mfa.enabled`, `apikey.rotated` and every other credential act on this account
+records. No document claims otherwise, so it is an asymmetry with the rest of the
+product rather than a false statement: F320. The migration count is F321.
+
+### D313 implemented
+
+README's line 114 is *Thirty-nine* again and README has left
+`theCountIsStatedHere`. The occurrence is held by `frozenUntilTheTag`, one entry,
+checked in both directions like every exemption — so the sentence cannot quietly
+disappear, and the moment M70 folds the count the entry goes red and has to be
+re-read. That is what makes the obligation self-announcing rather than something
+the person cutting the tag has to remember, and the obligation itself is written
+into `m70.md` as a bullet with its own definition of done.
+
+## 2026-08-22 — M65, amending M60's failure-class bullet, and the fold that owes more than a number
+
+Both made at step 3.4 by the orchestrator, on a reviewer's findings.
+
+### D315 — M60's `degrade` limb no longer reaches an authentication add-on
+
+**The bullet as it stood** (`m60.md`): *"a `required` add-on that fails to load
+stops the instance with the reason; a `degrade` add-on logs, increments a metric,
+and the instance serves without it. Both asserted by test."*
+
+**As amended:** the same, plus a dated note that an add-on declaring
+`session.mint` is `required` whatever its manifest says, so the `degrade` limb
+does not reach one — and that an operator's `LINKCTRL_ADDON_<NAME>_FAILURE_CLASS`
+is read before the manifest for **every** add-on.
+
+**The tree fact:** `effectiveFailureClass` (`internal/addon/host.go`) reads the
+operator override first for every add-on and then forces `required` for a
+`session.mint` declarer, and the boot log and the info gauge report the
+**applied** class rather than the manifest's. `docs/configuration.md` and
+`docs/operations.md` were updated when the behaviour landed; `m60.md` was
+byte-identical to HEAD and said nothing.
+
+**Why this is an amendment and not a prompt**, which is the part worth arguing.
+[phase-loop.md](phase-loop.md#amending-a-bullet) makes a change to what a bullet
+*asserts* a prompt. This changes what M60's bullet asserts — and **the assertion
+was already decided by the owner**, at M65's planning, in M65's own definition of
+done: *anything on the authentication path defaults to required*, which
+`planning.md §7`'s review saw before anything was built against it. There is
+nothing here for an owner to decide that an owner has not decided; what was
+missing is that M60's file did not say so. A prompt would have asked a question
+whose answer is already recorded two milestones away, which is the failure mode
+the note exists to prevent rather than an instance of it.
+
+**It is the third time this run** a milestone has narrowed a shipped milestone's
+bullet and the shipped file said nothing until a reviewer read the two against
+each other — after M62's ungated count (D304) and M63's sweep entitlement. The
+pattern is worth more than any of the three: **a milestone that narrows another's
+claim does not notice, because nobody in the loop is reading the file it
+narrows.** The per-milestone reviewer's second half is the only thing that has
+caught any of them.
+
+### D316 — the README fold owes the mechanism clause, not only the count
+
+[D313](#2026-08-22--m65-readme-is-not-anchored-to-a-count-until-the-tag) untied
+`README.md`'s action count and put the fold in M70. A reviewer then found that
+the same sentence claims the count *"cannot drift without a failing build"* — and
+between M65 and the tag that clause is **false**, because the tie is precisely
+what was removed and the count drifted on a green build.
+
+D313's cost was stated as *the count is tied to nothing until the tag*. It was
+one word short: what is untied is the count, and what is **wrong** is a sentence
+about the mechanism. `m70.md`'s obligation now covers both, and is done when the
+number, the spelling in `frozenUntilTheTag` and the mechanism clause all agree.
+
+**Not fixed by editing README**, deliberately: D104 says a mid-phase commit does
+not touch it, D313 was answered on that ground hours ago, and correcting the
+clause now would repeat in the same milestone the inconsistency D313 exists to
+correct. The clause is false for a reader of `phase-4` and true for a reader of
+the 0.3.0 tag, which is the trade D104 already makes.
+
+## 2026-08-22 — M66, an inline add-on may rewrite the query and nothing else
+
+Owner-answered at [step 1](phase-loop.md#1-validate), before anything was built
+against it. [m66.md](phase-details/m66.md) left the question to "this
+milestone's design"; this is the design, recorded first because it sets the
+extension point's power and the ABI's return channel.
+
+### D317 — the redirect-inline class gets veto plus a query-only rewrite, and the rewrite is declared separately
+
+**The question.** May a `redirect.inline` add-on rewrite the destination? Three
+shapes were put: veto only; choose among the destinations the tier system has
+already cleared for that link; free rewrite revalidated on the path.
+
+**The answer.** Veto, **plus a rewrite bounded to the query string** — the
+module may alter query pairs and may not touch the scheme, host, port or path.
+And the capability is **declared before it is allowed**: holding
+`redirect.inline` buys observation and refusal, and rewriting the query costs a
+second token the manifest has to name. Owner's words: *"The add-on needs to
+specify this functionality before it is allowed to do it."* That is M62's rule
+applied one level down — a module cannot acquire the sharper power by accident,
+which is the same reason `redirect.observe` and `redirect.inline` are two grants
+rather than one.
+
+**Why the query is a safe bound and the rest is not.** `ValidateDestination` has
+exactly one call site in the program — `link.Service.Judge`,
+`internal/link/blocking.go:625` — and
+`TestEveryDestinationSurfaceGoesThroughTheCheck`
+(`internal/link/surfaces_test.go:98`) enforces that, plus the caller sets of
+`Judge` and `checkDestination`. Every tier above the SSRF refusals judges by
+**host**: the embedded high-confidence list, the operator blocklist and the
+heuristics all ask what host this is. Hold the host and the path fixed and no
+tier's verdict can change, so a query rewrite adds no destination-writing
+surface, no `destinationSurfaces` row and no second validation door. That claim
+is M66's to assert in a test rather than to inherit from this entry.
+
+**Free rewrite was declined on the hot path, not on principle.** Revalidating an
+arbitrary URL means calling `Judge`, which does database tier lookups and writes
+a `destination.blocked` audit record. That is storage I/O on the redirect path,
+which [m66.md](phase-details/m66.md) forbids an inline module by name and which
+the 20 ms cached p99 would have to absorb. The alternative — a weaker second
+door — is the fourth way around the validator the same file forbids. Neither is
+a thing to build quietly, so neither was built.
+
+**Bare veto-only was declined for one concrete case.** The owner asked whether
+veto-only would stop a future add-on declining tracking cookies on destination
+sites. It does not, and nothing could: cookie consent happens in the
+destination's own origin, and a 302 hands the host exactly one lever, the
+`Location` URL. `Sec-GPC` is a request header the browser emits on its own
+navigation and cannot be injected into it. What veto-only *did* foreclose is the
+nearest reachable version — stripping `fbclid`, `gclid` or `utm_*` from the
+outbound URL, or appending a privacy signal to it — and that is precisely a
+query rewrite. The case is what moved the bound from *nothing* to *the query*.
+
+**The counter-argument, on record because it may still be right.** Core already
+owns the query: `ForwardQuery` merges the incoming one into the destination at
+`internal/httpx/redirect.go:885`, under a round-trip guard. Parameter policy
+applied to every link from one operator setting is arguably a better product
+than the same policy applied only where an add-on happens to be installed. The
+owner chose the add-on route knowing that; a core setting remains available
+later and the two do not conflict.
+
+**What this obliges M66 to build**, beyond the bullets already in its file:
+
+- a second grant token in `abi.Permissions` — `redirect.rewrite_query` unless
+  the build finds a better name — `Grantable: true`, `BackedBy: "M66"`, and
+  refused to a module that did not declare it;
+- a **return channel** on the inline invocation carrying a verdict *and*
+  optionally a query, which is the standing half of
+  [F270](deferred-findings.md#open): `redirect_event_read` is a read whose only
+  parameter is the out buffer, so an inline module cannot answer at all today.
+  That row closes here, pointing at M66, under
+  [step 1](phase-loop.md#1-validate)'s deferred-overlap exception rather than
+  under owner approval — named in the commit message as that rule requires;
+- an assertion that the rewritten URL differs from the decided one in its query
+  and in nothing else, so the bound is enforced by the host rather than trusted
+  to the module.
+
+**Deliberately not decided here**: whether a rewrite is visible in the click
+record or the audit log, and what a module returning a malformed query gets.
+Both are M66's to answer in its diff — they are consequences of the shape, not
+choices about it.
+
+
+## 2026-08-22 — M66, what the extension point costs and where it sits
+
+Six decisions taken while building M66. [D317](#2026-08-22--m66-an-inline-add-on-may-rewrite-the-query-and-nothing-else)
+is the one the owner took and it fixed the *power* the extension point grants;
+these are what building against that answer forced, and none of them is a choice
+the owner would recognise as one they were asked. They are here rather than in
+[m66.md](phase-details/m66.md) because a worker never amends a milestone file.
+
+### D318 — the inline deadline ships at 25ms, measured, and it is deliberately larger than the 20ms target
+
+The question was filed a phase early —
+[upcoming-decisions.md](upcoming-decisions.md) has carried *what is the inline
+add-on deadline's default* since 2026-08-18 — with the shape of the answer fixed
+in advance and the value left to be measured: one instance-wide knob, no
+per-add-on override until a real case argues for one, and the number taken from
+M66's own runs.
+
+**The measurement.** An inline invocation is an instantiation plus a call.
+`TestAnInlineInvocationCostsAnInstantiation` times a fixture that reads its
+decision, probes six host functions and writes a query rewrite: on this machine,
+2026-08-22, that is single-digit milliseconds end to end, against M60's separately
+measured ~1.6 ms to instantiate the same class of module. 25 ms is roughly six
+times a module doing real work, which is the headroom a default needs when the
+thing it bounds is code this repository did not write and cannot profile.
+
+**It is larger than the 20 ms cached-redirect target and that is not a
+contradiction.** The target is *core's*, measured with nothing on the path;
+[slo.md](../slo.md) now says so in its own opening. The deadline is the point at
+which the host stops waiting for somebody else's code. A deadline **under** the
+target would kill add-ons that were working perfectly well, in order to protect a
+number that had already stopped describing the instance — trading the operator's
+feature for a figure that was no longer true either way.
+
+The planning-time expectation was *single-digit milliseconds*, and the entry said
+that if the honest number did not fit the 20 ms budget it was an owner prompt
+rather than a bigger default. **It is not a prompt**, because the honest number
+*is* single-digit milliseconds; what does not fit the budget is the safety margin
+on top of it, and a margin is not the measurement. The entry's condition was about
+the measurement.
+
+**What the number is not.** It is not a promise about how long a redirect takes
+with an add-on installed. At 2,000 rps a module that hangs makes *slots* the
+scarce resource, and the k6 run in [slo.md](../slo.md#re-measured-for-m66-2026-08-22)
+measures a generator p99 of 135 ms against a 25 ms deadline for exactly that
+reason. The deadline bounds one invocation; it does not bound a queue.
+
+### D319 — an inline invocation gets a fresh instance, and there is no pool
+
+[m66.md](phase-details/m66.md)'s second risk priced this in advance: *wazero
+invocation overhead at 2,000 rps is unmeasured until now… if per-call cost is
+hostile, pooling strategy changes inside this milestone.* It was measured and it
+is not hostile, and pooling was declined on three grounds rather than on cost.
+
+**Guest memory would cross two visitors' redirects.** D260 gives a route its own
+instance so that a module cannot hold one visitor's state where another's request
+can read it. The redirect path is the *worse* place to give that up, not a
+lighter one: it is where the host hands a module something while somebody is
+waiting, at two thousand requests a second, and an authentication add-on's nonce
+was the example that made D260's argument — the argument does not weaken because
+the payload is a destination.
+
+**It would move a ceiling four documents state.** A pooled instance holds its
+linear memory whether or not anything is using it, so a pool is added to
+`maxConcurrentRoutes × maxGuestMemoryPages` rather than drawn from it, and the
+sentence an operator sizes a host by would have to be rewritten in
+`docs/SECURITY.md`, `docs/deployment.md`, `docs/configuration.md`, `Plan.md` and
+`CHANGELOG.md`. That is not an argument against pooling; it is the price of it,
+and it should be paid by a milestone that has a measurement demanding it.
+
+**A killed instance has to be evicted from a pool.** wazero closes the *module*
+on a deadline, not the call — m66.md's third risk — so a pool needs eviction, a
+health notion and a re-instantiation path, all of which exist to make a
+thrashing module cheaper. A thrashing module being expensive is the correct
+outcome.
+
+**What not pooling costs**, stated rather than absorbed: about 2 ms of
+instantiation per redirect that reaches an inline add-on, paid by the operator
+who installed one, visible per module on
+`linkctrl_addon_redirect_duration_seconds`. A later milestone with a real inline
+add-on and a real profile may reopen this; the entry it would correct is this one.
+
+### D320 — the extension point sits after the destination and before the gates
+
+m66.md calls the placement the riskiest design line in the phase and names the
+constraint: *a killed add-on must not have half-spent a click budget.* Both halves
+of the placement follow from it.
+
+**After the destination is decided**, because a module that cannot see where the
+visitor is going has nothing to have an opinion about — routing rules, the split
+arm, the deep-link path and the forwarded query are all already applied, so what
+crosses is the `Location` header rather than the link's stored URL.
+
+**Before the gates**, because the gates *spend* things. A veto after a one-time
+link's single click had been consumed would refuse the visitor **and** retire the
+link, which makes "an add-on can take somebody's links down by refusing traffic to
+them" true. It is asserted rather than reasoned about:
+`TestAVetoDoesNotSpendAOneTimeLinksClick` reads `link_click_budget` after a vetoed
+visit, and it fails when the two blocks are swapped.
+
+**One write is not undone by a veto, and it is documented rather than
+compensated.** A split test's rotation is advanced when the arm is chosen, which
+is before the destination exists, so a vetoed redirect costs one step of it. The
+two fixes are worse than the skew: asking the module before an arm is chosen is
+asking about a destination that does not exist, and a compensating decrement is a
+race on a counter two replicas share. The rotation is already approximate across
+replicas and the skew is one step per veto.
+
+**The forwarded query moved up with it**, from beside the `Location` line to
+before the point. That is not tidying: `ForwardQuery` merges the *visitor's* query
+into the destination, so a module shown the URL before the merge would strip
+`fbclid` from a query that did not have it yet and the merge would then put it
+back — which is precisely the case D317 gave the rewrite grant for.
+
+### D321 — a veto is a gate refusal, and a gate refusal records no click
+
+m66.md sends a veto "to the gate-refusal path", and following that literally
+decides two things a bullet does not state.
+
+**The page is the blocked-bot 403.** Fixed bytes, embedded at build, naming no
+alias and no destination — and now also naming no add-on. A refusal that echoed
+any of the three would make a veto a confirmation oracle for which short codes are
+real and where they point, which is the reasoning M32.5's page already carries.
+
+**No click is recorded**, and this is the limb worth writing down because it
+contradicts a rule that reads like it should govern. D101 says a request that
+reached a real link is recorded whatever the link's state made the answer, and the
+gate refusals are its standing exception: they never reach `record` at all. A veto
+is on that path, so it inherits the exception. The consequence is deliberate — a
+vetoed visitor brands nobody in the returning-visitor set, and the refusal is
+counted where refusals are counted, on
+`linkctrl_redirects_total{outcome="vetoed"}`. That label is m66.md's last risk
+answered: a new refusal source a visitor meets has to be tellable apart from the
+ones that already existed, or an operator debugs a ghost.
+
+### D322 — a saturated host skips the add-on rather than making the visitor queue for it
+
+An inline invocation holds an instance, and instances are bounded — the same
+sixteen-slot budget add-on pages draw from, unchanged, so no documented
+guest-memory number moves. What is new is **how the slot is taken**: without
+waiting.
+
+A route waits for a slot, because a page arriving late is still a page. A redirect
+must not, because waiting for a *slot* is waiting for a resource this product
+owns — and the owner's boundary gave away the add-on's latency, not ours. So a
+redirect that cannot get a slot is served with the add-on skipped, and the skip is
+counted on `linkctrl_rate_limited_total{limit="addon_inline"}`.
+
+**It is the mechanism that makes "core availability survives a slow add-on"
+true rather than hoped for**, and the k6 run shows it as a split: with a module
+that never returns, 199,757 redirects were served at core's own latency because
+every slot was busy being killed, and 45,195 paid the deadline. Zero of 239,952
+failed.
+
+The counter is the existing throttled series rather than a new one. Its help text
+grew *or work a concurrency bound would not admit*, because a skipped invocation
+is not a refused request and the sentence had to stop implying it was. An operator
+asking "is anything being throttled" gets one answer, which is why that series
+exists.
+
+Dropped observations are counted on the same series under `addon_observe`, for
+the same reason and with the same argument: the out-of-band queue is bounded and
+best-effort by construction, exactly as the click pipeline it is fed from is.
+
+### D323 — `inline` is a reserved add-on name
+
+`LINKCTRL_ADDON_INLINE_DEADLINE` is instance-wide, and it is also exactly what a
+setting called `deadline` on an add-on called `inline` would be read from. A
+concatenation offers nothing to resolve that with — the same ambiguity
+`AddonOverrideNames` closes for `failure_class` and `mfa_satisfied`, arriving from
+the other direction.
+
+So the collision is removed rather than resolved: an add-on named `inline` is
+refused at load, naming the reservation and the namespace. It is a reserved
+**name** and not a reserved *setting*, because the variable belongs to no add-on
+— refusing the setting `deadline` on every add-on would be a far wider
+reservation bought for the same one collision.
+
+The variable's name was not free to change: [m66.md](phase-details/m66.md) states
+it, and a worker meets a bullet as written or reports and stops.
+
+
+## 2026-08-23 — M66, core's histogram excludes what the add-on held
+
+### D324 — the redirect handler subtracts the extension point before it observes
+
+M66's first attempt was rejected on its own attribution bullet, and the finding is
+worth stating before the decision is: `start := time.Now()` is the first statement
+of `RedirectHandler.ServeHTTP`, the extension point runs two hundred lines later,
+and every `time.Since(start)` after it therefore **contained** whatever an add-on
+spent. `linkctrl_redirect_duration_seconds` enclosed
+`linkctrl_addon_redirect_duration_seconds` rather than sitting beside it. Three
+documents and one source comment said the opposite in as many words, and the k6
+slow-module run's headline — 83.17% of server-side redirects under 20 ms — *was*
+the defect being measured: core's histogram absorbing a 25 ms deadline spent by
+somebody else's code.
+
+**The bullet is not satisfied by relabelling.** *Core p99 and each add-on's p99 are
+different curves an operator can read apart* is a claim about two readings that
+can disagree, and under nesting they cannot: they rise together, and an operator
+who installed an inline add-on has no baseline left to compare their instance
+against. Editing the prose to say *nests* would have made the documents true and
+the bullet false, which is the trade this project does not make.
+
+So the handler times its call into the add-on host and subtracts it from the
+duration it hands `ObserveRedirect`, at the three observation sites after the
+point. The six before it are unchanged, because nothing can have run yet.
+
+**What is subtracted is the whole extension point, not the sum of the invocations
+the histogram recorded**, and the difference is the case that decides it. A killed
+invocation is on `linkctrl_addon_redirect_kills_total` and deliberately **absent**
+from the per-module histogram — a bucket of zeroes would drag a p99 towards a
+latency nobody experienced, which is D-numbered reasoning that predates this
+entry. Subtracting only what was observed would therefore have left the deadline
+itself — the largest cost an add-on can impose, and the exact thing the 83.17%
+was made of — inside core's curve. Whatever the host spends around the call is
+excluded with it: a slot check, a query substitution, a log line. Those exist only
+because an add-on is installed, so charging them to core would reintroduce a
+smaller version of the same problem.
+
+**The two do not sum to the wall clock, and neither is meant to.** The question
+they answer together is *whose latency is this*, not *where did every microsecond
+go*. A run with kills has a visible gap between the visitor's wait and the two
+curves, and that gap is the deadline — which is already published, per module, as
+a counter.
+
+**Four measurements are deliberately left enclosing**, because each of them is
+about the visitor rather than about this product's own work:
+
+- the click event's `LatencyUS`, which is what somebody waited
+- the sampled redirect log line's `duration_us`, same
+- `linkctrl_http_request_duration_seconds`, which is the outside view and says so
+- the k6 generator's own p99, which is a client and cannot see any of this
+
+An operator who wants to know what a visitor experienced on an instance with an
+inline add-on reads the third. An operator who wants to know whether *LinkCtrl*
+is slow reads `linkctrl_redirect_duration_seconds`, and now gets an answer that
+does not change when they install a module.
+
+**The cost is one `time.Now()` and one subtraction on redirects that reached the
+point**, which are only ever redirects on an instance that installed an inline
+add-on. The hot path of an instance with no add-on gains a zeroed local and
+nothing else, and the core k6 column re-run after this change is what says so.
+
+**Both k6 runs were re-taken on an image built from the fixed code, and the
+figures in D318 and D322 above are the ones they replace.** This file is
+append-only, so those entries still read 45,195 kills, 199,757 skips, 239,952
+redirects and 83.17% under 20 ms; every one of those is superseded by
+[slo.md](../slo.md#re-measured-for-m66-2026-08-22)'s table, which now reads 40,439
+kills, 199,505 skips, 239,944 redirects and **99.84%** under 20 ms. The arguments
+those entries make are unaffected — the skip/kill split is the same mechanism at
+the same proportion, and the deadline's arithmetic did not depend on the histogram
+— but the numbers in them are a measurement of a build that was rejected, and this
+paragraph is what stops them being quoted as current.
+
+## 2026-08-23 — M66, the deadline default put to the owner anyway
+
+### D325 — 25ms stands, confirmed rather than inferred
+
+[upcoming-decisions.md](upcoming-decisions.md)'s M66 entry carried an escape
+clause naming the owner: *"if measurement says the honest number is larger than
+the 20ms budget can absorb, that is an owner prompt at M66, not a bigger
+default."* [D318](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)
+judged that it did not fire — the honest number is 3.27ms mean and 4.34ms worst,
+and 25ms is a ceiling rather than an expectation. M66's second reviewer read the
+same two sentences and reached *defensible, and the loop decided it itself*.
+
+Both are right, which is what makes it a prompt rather than an argument. The
+clause's trigger is about the measured cost and the measured cost is well inside
+the budget; the clause's *purpose* is that a number bounding what an add-on may
+cost a visitor is the owner's. Put to the owner at
+[step 3.4](phase-loop.md#3-land) with the data and two tighter alternatives —
+10ms, still 2.3x the worst observation and inside the 20ms budget even for a
+hostile module; 5ms, just above it and argued against.
+
+**Owner: keep 25ms.** So the shipped default is unchanged and this entry buys one
+thing — the number is now confirmed rather than inferred from a clause two
+readers had to interpret. The cost is stated: a module that hits the ceiling
+holds a visitor past the 20ms figure this product publishes, which is 0.16% of
+the hostile k6 run and is the owner's own boundary working as intended. Core's
+curve excludes it ([D324](#2026-08-23--m66-cores-histogram-excludes-what-the-add-on-held)),
+so an operator can see whose latency it is.
+
+Recorded because the next reader of `LINKCTRL_ADDON_INLINE_DEADLINE` should find
+an answer rather than a clause, and because an escape clause that two actors read
+opposite ways is worth one prompt to close.
+
+## 2026-08-23 — the test timeout, which had been the default all along
+
+Prompted by CI going red on `b923ed5`, a commit that changed one markdown file.
+
+### D326 — `-timeout 30m` on every suite target, local and CI alike
+
+`go test` defaults to **10 minutes per package** and nothing in this repository
+had ever said otherwise. `internal/addon` takes **429s** on this VM under
+`-race` — every test in it builds and instantiates wasm fixtures — and a hosted
+runner is slower than this VM, so the package started being killed mid-suite
+with `panic: test timed out after 10m0s` and one test four seconds into its own
+run.
+
+The announcement is the part worth recording: it first fired on a **docs-only**
+commit. Nothing had changed about the code, the tests or the runner. The margin
+had simply gone, invisibly, over the several milestones that grew that package,
+and the first commit unlucky enough to land on a slow runner is what reported
+it. A limit nobody chose is a limit nobody watches.
+
+**30m, and the number is a claim about hangs rather than about hardware.** It is
+what a genuinely stuck test costs before the job gives up, and no passing package
+is within a factor of four of it. A timeout tuned close to the slowest real
+package would have to be re-tuned by whoever next adds a fixture, and would fail
+for them the same way it failed here.
+
+Applied to `test`, `test-integration`, `ci-test` and `ci-integration` together,
+because `ci-test` exists to be what CI runs of `test` and a flag on one of them
+is a difference between the two that nobody would think to look for.
+
+**Not the cause, and deliberately not fixed here**: `internal/addon` legitimately
+taking seven minutes. The fixtures are built per test where they could be built
+once for the package, and every add-on milestone makes it worse. That is its own
+unit of work with its own commit, offered to the owner alongside this and
+declined for now in favour of the smaller change — recorded so the smell is on
+the record rather than absorbed by a larger number.
+
+## 2026-08-23 — M66 reopened, the deadline stops charging the host's setup to the add-on
+
+### D327 — instantiation gets its own bound, and M66 comes back rather than a successor
+
+[F326](deferred-findings.md#open): `Host.Inline` and `startObserving` wrap
+instantiating the module and calling the guest in one
+`context.WithTimeout(ctx, h.inlineDeadline)`
+(`internal/addon/redirect.go:320`, `:510`), and 25ms was chosen on a machine
+where instantiation is ~1.6ms. On a hosted runner under `-race` instantiation
+alone exceeds the whole deadline, every invocation dies at `step=instantiate`,
+and the two classes M66 exists to build do not run.
+
+**Owner: exclude instantiation, give it its own wider bound.** Pooling was the
+other option put — it removes instantiation from the request path entirely and
+is what [D319](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)
+declined on the same optimistic data — and was declined here as several days
+against the smallest correct fix. D319 therefore stands, and the reopening is
+forbidden to reargue it: if instantiation cost under load turns out to argue for
+pooling, that is a prompt.
+
+A third option, raising the default until a slow runner fits inside it, was put
+and argued against in the same prompt: it answers a question about the host's
+startup cost with a number that bounds the module's work, so a real add-on would
+gain permission to hold a visitor five times the published core figure.
+
+**Reopened rather than succeeded**, per [workflow.md](workflow.md): a successor
+would leave M66's row reading `done` while its central claim — that an add-on
+runs on the redirect path — is false on any sufficiently slow machine.
+
+**What this costs the three entries decided on the same data**, named here so
+nobody quotes them as current without reading this one. [D318](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)'s
+instantiation and invocation figures are best-case, taken on an idle VM.
+D319's decision not to pool rests on those figures. [D325](#2026-08-23--m66-the-deadline-default-put-to-the-owner-anyway)'s
+confirmation of 25ms was given on them, and the prompt that asked for it did not
+say the measurements came from the best case — that omission is the
+orchestrator's, and it is why the reopening re-takes or re-scopes them rather
+than inheriting them.
+
+**The gap is not in the code.** Every gate this repository names was green on
+code that cannot work on a hosted runner: `make check`, `make test-integration`
+forced with `-count=1`, `make check-links`, `make generate`, two independent
+reviews and a k6 pair on a built image. CI found it, on the one machine nobody
+tuned the tests to. The reopening's third bullet is aimed at that rather than at
+the deadline — a bound that comes from configuration is a bound a test can make
+hostile, and a suite that only proves this VM is fast will ship the next
+timing-shaped defect exactly the same way.
+
+
+## 2026-08-23 — M66 reopened, the second bound and what measuring it under contention said
+
+Four decisions taken while building the reopening
+[D327](#2026-08-23--m66-reopened-the-deadline-stops-charging-the-hosts-setup-to-the-add-on)
+ordered. The owner decided *instantiation gets its own wider bound*; these are the
+things that answer left open.
+
+### D328 — the bound is `LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, and it ships at 500ms
+
+**Measured first, and the measurement is the interesting part.**
+`TestInstantiationCostsWhatItCostsUnderContention` instantiates the `redirect`
+fixture with all sixteen instance slots busy — the state a redirect meets when an
+add-on is installed and the instance is under load, rather than the idle one
+[D318](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)'s
+figures came from. On this machine, 2026-08-23:
+
+| | mean | worst of 128 |
+| --- | --- | --- |
+| plain | **9.6 ms** | **62.7 ms** |
+| `-race` | **91 ms** | **304 ms** |
+
+Against M60's ~1.6 ms for one instantiation on an idle VM. **Contention alone is
+enough to put instantiation past the whole 25 ms inline deadline, on the fast
+machine, with no slow hardware anywhere near it.** F326 was reported as a
+CI-runner problem and it is not: an instance of this product, on this hardware,
+under load, with an inline add-on installed, would have killed invocations before
+the add-on's code ran. That is the strongest argument the reopening produced and
+it is why the entry leads with it.
+
+**500 ms, and the choice leans wide on purpose**, because the two ways of being
+wrong do not cost the same. Too narrow is F326 itself: add-ons silently stop
+running, on hardware nobody measured, and the counter blames the add-on. Too wide
+costs one visitor a longer wait in a case where a module is already broken, and it
+announces itself — the kill counter moves at `step="instantiate"`, the log names
+the variable, and an operator lowers it. So the number is eight times the
+contended worst case here, above the `-race` figure that stands in for far slower
+hardware, and sixty times under the 30 s a hanging module meets at load.
+
+**It is neither of the two numbers that already existed**, which the reopening's
+own risk section required be argued rather than borrowed. `load_timeout`'s 30 s
+bounds a module hanging at boot and no redirect may wait that; the inline deadline
+is the number F326 proved too small for this.
+
+**The name costs a second reserved add-on name.** `AddonReservedNames` becomes
+`inline, instantiate`, for the reason
+[D323](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits) reserved
+the first: an add-on called `instantiate` declaring a setting called `deadline`
+would be read from this instance's own variable, and a concatenation offers
+nothing to resolve that with. The alternative was a name that stays inside the
+existing reservation — `LINKCTRL_ADDON_INLINE_START_DEADLINE` — and it was
+declined because the bound is not the inline class's: the observe path
+instantiates too, and a name that says otherwise would be wrong in the file where
+an operator meets it.
+
+### D329 — the kill counter gains `step`, rather than a second counter
+
+`linkctrl_addon_redirect_kills_total` becomes `{addon,step}`, `step` being the
+closed pair `instantiate` / `call`. One series with a label rather than two
+series, because the two are the same event — *the host stopped waiting and served
+the redirect without the module* — asked about a different party, and an operator
+who wants the total should not have to know to add two names together.
+
+**The label is the half of F326 that was not the deadline.** The finding's own
+words: *it is silent in the shape that matters — the redirect completes, the kill
+counter moves, and nothing distinguishes the add-on declined to act from the
+add-on never ran.* Splitting the bound without splitting the number would have
+fixed the failure and left the blindness, and the blindness is what let a broken
+build look healthy on a runner.
+
+The two also get different log lines, and the difference is who is being told to
+do something. A `call` kill keeps the existing warning — an add-on to go and fix.
+An `instantiate` kill says *this instance could not start an add-on* and names
+`LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, because telling an operator to take a slow
+host to the add-on's publisher is worse than telling them nothing.
+
+### D330 — the host re-reads the bound after instantiating, rather than trusting the runtime to notice
+
+wazero interrupts a guest **cooperatively** — `WithCloseOnContextDone` closes a
+module at a check the compiler inserted, which is to say at a loop back-edge — so
+an instantiation that runs long without one finishes late rather than being
+killed. Left there, that invocation would then be handed its *full* call budget on
+top of a bound it had already overrun, and one redirect could cost both numbers.
+That is the arithmetic the reopening exists to stop, arriving by a different door.
+
+So `invokeInline` and `invokeObserve` re-read the instantiation context after the
+instance exists and treat a late one as a kill like any other. It is a few lines,
+and it buys two things: the bound is enforced by this host rather than by a
+property of somebody else's compiler, and a hostile bound in a test is
+**deterministic** — which is what makes the F326 case reachable on a machine that
+is not slow. See D331.
+
+A related determinism bug was found and fixed in the same pass: the observe path
+selected over *take a slot* and *the budget expired* in one `select`, so with an
+already-expired budget Go picked between them at random and dropped one
+observation in two on an idle host. A free slot is now never declined, whatever
+the clock says.
+
+### D331 — the tests buy room by default and take a hostile bound explicitly
+
+**The gap F326 came through was the test environment**, which D327 says in as many
+words, so the reopening's tests are shaped against it rather than against the
+deadline.
+
+Both redirect harnesses — `internal/addon/redirect_test.go` and
+`test/integration/addon_redirect_test.go` — now open a host with **generous bounds
+by default** and take a bound only when the test's subject *is* a bound. The five
+integration tests CI caught left both bounds at their shipped defaults, which is
+how a suite ends up asserting that this machine is fast; the shipped default is
+not what any of them was about.
+
+**And the hostile direction is what makes a slow machine reachable from a fast
+one.** Two new tests set an instantiation bound of one nanosecond — a bound no
+hardware fits inside, so what they exercise is the branch rather than the
+hardware — and assert the pair of facts that were indistinguishable before: the
+redirect is unharmed, and an operator can tell *the add-on never ran* from *the
+add-on declined to act*, on the counter and in the log. One of them drives it
+through a visitor end to end. Neither can pass on a build with F326 in it, on any
+machine, which is the property the old suite did not have.
+
+**A third robustness fix came out of running the suite rather than out of
+reasoning about it.** `TestAnObservingAddonIsFedFromTheClickPipeline` — one of the
+five CI caught — waited for the fixture's *first* log line and then asserted on a
+later one, which is a race it loses whenever the worker is descheduled between two
+host calls; it failed once here on 2026-08-23 and passed on the reruns. It now
+waits on the fixture's **last** line, which is the discipline the unit suite's own
+`waitFor` already documents and states the reason for. Worth recording because it
+is the same defect class as F326 wearing different clothes: a test that passes
+because this machine is quick.
+
+## 2026-08-23 — M66, the histogram keeps what the deadline gave up
+
+### D332 — instantiation leaves the add-on's *deadline* and stays in the add-on's *histogram*
+
+Raised by the reopening's reviewer, which found the comment at
+`internal/addon/redirect.go:481` citing
+[D328](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said) for a claim
+D328 does not make. The citation is corrected to this entry; the tension under it
+is worth more than the citation was.
+
+`linkctrl_addon_redirect_duration_seconds{addon,class}` times the whole
+invocation — the slot, the instantiation and the guest call — in a milestone
+whose reopening exists because instantiation is the **host's** cost and not the
+module's. Read as an inconsistency, it is one. It is deliberate, and the two
+windows answer different questions:
+
+- **The deadline** bounds *how long the module may take*, and charging it for
+  the host's startup made what an add-on could do depend on how fast the machine
+  starting it happened to be. That is [F326](deferred-findings.md#closed).
+- **The histogram** answers *what did this add-on cost this redirect*, and the
+  visitor waited for the instance too. An operator asking why a redirect took
+  60ms is not helped by a number that omits the 50ms spent starting the module
+  the add-on brought.
+
+Whose *fault* the instantiation is and what it *cost the visitor* are separate
+facts, and the milestone's own boundary is that the first belongs in the bound
+and the second in the measurement. Nothing is falsified by the pair:
+[docs/operations.md](../operations.md)'s row for the series has said *"it times
+the invocation — instantiating the module and calling it"* since M66 shipped, and
+still does.
+
+**What it means for a reader of the two curves.** Subtracting the add-on
+histogram from the request histogram does not leave core's work, because a
+killed guest call is absent from the add-on series while its instantiation was
+real. That is stated in the operations row already and is not new here; what is
+new is that the same series now also carries the setup a *different* bound
+governs, so the p99 of it moves with machine load rather than only with the
+module. An add-on whose histogram rises while its kill counter does not is an
+instance under contention, not an add-on that got slower.
+
+## 2026-08-23 — M66.5 added: pooling, because a well-behaved add-on cost 44.89ms
+
+### D333 — D319 is reversed, on the measurement it was taken without
+
+[D319](#2026-08-22--m66-what-the-extension-point-costs-and-where-it-sits)
+declined pooling and built a fresh wasm instance per invocation. It was decided
+on M60's idle-VM instantiation figure, ~1.6ms, and nobody had yet run an add-on
+under load. [D327](#2026-08-23--m66-reopened-the-deadline-stops-charging-the-hosts-setup-to-the-add-on)'s
+reopening then measured contention — 9.6ms mean and 62.7ms worst with all
+sixteen slots busy, reproduced independently at 10.0ms and 53.4ms — and
+forbade itself from acting on it, because scheduling is the owner's.
+
+**The measurement that settled it**, taken 2026-08-23 at the owner's instruction
+before the question was put a second time. `docs/slo.md`'s two M66 columns are
+*no add-on* and *a module that never returns*; neither is the case anybody would
+run. The third is the `redirect` fixture holding `redirect.inline`, parsing the
+decision and allowing it — the cheapest honest add-on there is — at 2,000 rps
+for two minutes:
+
+| | Core, no add-on | Well-behaved inline add-on |
+| --- | --- | --- |
+| Generator p99 | 138.46µs | **44.89ms** |
+| Generator median / mean | — | 9.18ms / 11.46ms |
+| Mean, **counting only requests that invoked** | — | **18.6ms** |
+| Mean add-on invocation, from its own histogram | — | **11.05ms** |
+| Requests failed | 0 | **0** of 240,002 |
+| Core's own histogram under 20ms | 100% | **99.996%** |
+| Invocations recorded | — | 147,248 |
+| Redirects that skipped the add-on | — | **92,546 — 38.6%** |
+| Guest-deadline kills | — | 208 |
+| Instantiate-deadline kills | — | 0 |
+
+The core column is not a fresh run: it is the reopening's, quoted from
+[docs/slo.md](../slo.md), which calls that figure stable across runs. Only the
+add-on column was measured on 2026-08-23.
+
+**Why an add-on that does nothing costs 11ms**, since that is the part worth
+recording: the guest's code is not what costs. Every invocation allocates the
+module's guest memory — 3,407,872 bytes for this fixture, from its own boot
+line — runs the module's package initialization, which for a Go module is a Go
+runtime starting, calls the export, and destroys all of it. The fixture's own
+work is a JSON parse. The number would be the same if the export body were
+`return`.
+
+**Three means, and they are not interchangeable** — the first draft of this entry
+used them as if they were, which the plan review caught. **11.05ms** is the
+add-on's own histogram, sum over count, and is what one invocation costs.
+**18.6ms** is what a request that actually reached the add-on waited, backed out
+of the run: 240,002 × 11.46ms of total time, less 92,546 skipped requests at
+core's ~140µs, over the 147,456 that invoked. **11.46ms** is the whole-population
+generator mean and is *lower* than 18.6ms only because 38.6% of the population
+skipped the add-on entirely. Quoting the population mean as the per-invocation
+cost understates what an add-on costs the visitors it actually runs for by
+roughly 60%.
+
+**Why 38.6% of traffic missed it** is the same fact through the slot budget.
+Sixteen concurrent add-on slots at 11.05ms of occupancy carry about **1,448**
+invocations a second against 2,000 offered, and an inline invocation that finds
+no slot is **skipped rather than queued** — deliberately, because queueing would
+let an add-on delay a redirect, which the class exists not to do.
+
+That arithmetic predicts a **27.6%** skip rate and the run measured **38.6%**,
+which is a gap worth stating rather than rounding away: the observed throughput
+is 147,456 invocations in 120s, or 1,229 a second, implying **13.0ms** of slot
+occupancy against the 11.05ms the histogram recorded. The histogram's window
+starts once a slot is held, so the ~2ms difference is slots standing idle between
+a release and the next acquisition — the acquisition is a non-blocking try, so a
+request arriving a moment early is skipped rather than waiting for the slot about
+to free. Whichever number is used, the conclusion is the same and the direction is
+against the add-on: capacity is short of offered load by a quarter to two fifths.
+
+**Why 208 kills on a module that does nothing**: the guest deadline is wall
+clock. On a saturated box the goroutine running the guest is descheduled, so
+25ms of wall time passes while the guest has had a fraction of it in CPU.
+
+**D324's subtraction is vindicated by the same run** and is worth naming, because
+it is the one thing that worked as designed: core's histogram stayed at 99.996%
+under 20ms while the visitor waited 44.89ms at p99. The attribution is correct —
+an operator reading the two curves sees exactly whose latency it is. What the
+run says is that being right about the blame does not help the visitor.
+
+**Owner: pool instances, as a milestone before M67.** Two alternatives were put
+and declined — the same work after M67, and shipping M66 as-is with a documented
+traffic ceiling of a few hundred rps. Raising the sixteen-slot budget was not
+offered: more slots multiply the guest memory rather than remove the startup, so
+it answers the symptom with the cost.
+
+**Placed at [M66.5](phase-details/m66.5.md)**, mid-band per
+[planning.md §4](planning.md#4-numbering) so a later insertion can still fall
+either side, and below M69.9 so it stays inside the pre-release review's range.
+The phase planned fourteen and is now fifteen — the planning target, not past
+it, and a milestone the build turned out to need rather than optimistic planning,
+which is the case [planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
+2026-08-11 clarification explicitly allows.
+
+**What the new milestone is warned about rather than trusted with.** Reuse is a
+security boundary M66 did not have: a destroyed instance cannot leak one
+visitor's residue to the next and a pooled one can, and the ABI's privacy
+argument is about what a module is *handed*, not what it *keeps*. That is
+`m66.5.md`'s first design bullet and its first risk. The second is the seam with
+[M67](phase-details/m67.md): removing an add-on must drain its pool, and M67
+builds removal afterwards, so the obligation is written in the earlier file and
+consumed by the later one.
+
+### D334 — the two the plan review sent back to the owner
+
+The addition was reviewed under
+[planning.md §7](planning.md#7-review-it-before-anything-is-built-against-it)
+before anything was built against it. Seven findings; five were corrections and
+were made — the arithmetic above, the core column's provenance, the tied-document
+count, [F326](deferred-findings.md#closed)'s resolution column, and a hard
+dependency edge M67 had gained in a bullet and in neither dependency list. Two
+changed a scope row or a definition of done, so they went to the owner.
+
+**The reserved slot is spent, and Plan.md now says so.** D211 held one of Phase
+4's fifteen planned slots unspent, in these terms: *an ABI is the kind of
+artifact insertions come from, and M69 is designed to surface what the
+foundation got wrong.* M66.5 spends it before M69 has run. The first draft of
+this entry said *the planning target, not past it* — true about the number and
+silent about what the number was for, which is the shape of contradicting a
+recorded decision without saying it reverses it. **Owner: spend it, and say so
+in writing.** `Plan.md`'s sentence is rewritten rather than left describing a
+reserve that no longer exists, and the consequence is stated where it will be
+met: an insertion M69 produces is a conversation about the cap of eighteen, not
+a slot. Two alternatives were declined — raising the plan to sixteen, which
+moves a number set deliberately across three phases and would have to say
+whether it moves for one phase or all; and folding pooling into M67, which is
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
+named trap and was argued against.
+
+**The milestone now has a number to hit.** Its justification is a measurement and
+its definition of done recorded the baseline without ever saying what counts as
+passing — *a p99 this milestone does not move is a milestone that did not happen*
+is satisfied by 44.89ms becoming 42ms, and a risk in the same file explicitly
+declined the obvious target. **Owner: the inherited bar, generator p99 under
+20ms**, over a fraction-of-baseline target and over a bar with an escape clause.
+The escape was declined on a specific ground worth keeping: M66's deadline
+carried one, two readers took it opposite ways, and settling it cost a prompt. So
+if pooling removes startup and the p99 still lands above 20ms, that is an
+unfinished milestone reported with its number, and what to do next is the owner's
+at that point rather than a clause written now.
+
+**The risk the owner took with that**, stated because it is real: the 208
+guest-deadline kills in the baseline run were on a module doing nothing, so part
+of the 44.89ms is scheduling under contention rather than startup, and pooling
+cannot remove it. The bar may therefore be unreachable by this milestone's own
+means. It was set knowing that.
+
+## 2026-08-24 — M66.5, the reset is the host's, because a pooled instance keeps what the last visitor left
+
+### D335 — an instance is reused, and the guest's memory is restored rather than trusted
+
+[D333](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)
+decided *pool*, and left the milestone the question it named as its own first
+design bullet and its own first risk: a destroyed instance cannot leak one
+visitor's residue to the next and a pooled one can. M61's privacy argument does
+not reach it — that argument is about what a module is **given**, and this is
+about what it **keeps**.
+
+**The answer is a memory image, and it is the host's.** A WebAssembly instance's
+whole mutable state is its linear memory. So [pool.go](../../internal/addon/pool.go)
+reads that memory out the moment `_initialize` returns, keeps the copy beside the
+instance, and writes it back over the instance before anything else may have it.
+A module that stored the last visitor's destination in a package-level variable
+reads an empty one, because the bytes that held it are the bytes package
+initialization left there.
+
+**Three alternatives were considered and each fails on something specific.**
+
+- **Ask the guest to reset itself** — a `linkctrl_reset` export the SDK
+  implements. It is not enforcement: a module that ignores it keeps its state and
+  the host cannot tell. The add-ons directory is a trust boundary an operator
+  owns, but *the operator installed it* is not a reason to make a boundary
+  advisory when a non-advisory one is available for ~59µs — the figure
+  `TestResettingAPooledInstanceIsCheaperThanBuildingOne` prints, and the one
+  [docs/slo.md](../slo.md) carries; this entry first said 56µs.
+- **Pool per something that makes sharing safe.** There is nothing to partition
+  by. An inline invocation carries a link's own facts and no visitor identity, so
+  there is no tenant to key on, and the milestone's own bullet requires a test in
+  which *the second cannot observe the first* through one instance — which no
+  partition satisfies.
+- **Restore the WebAssembly globals too.** This toolchain emits eight mutable
+  globals — a stack pointer, a goroutine register and six scratch slots — and
+  wazero exposes globals only through a module's export section, where a Go
+  `wasip1` module exports none. They are left, and that is safe for a reason
+  rather than by omission: an entry is only ever pooled **after a clean return**,
+  and the resting stack pointer after a clean return from any exported function is
+  the resting stack pointer after `_initialize`. What makes that hold is the
+  eviction rule below, not an assumption about the compiler.
+
+**What is evicted rather than reused**, each because the image would otherwise be
+a claim about an instance it does not describe:
+
+- **An invocation that did not return cleanly.** A kill closes the module
+  underneath the call — `WithCloseOnContextDone`, which M66 relied on and this
+  milestone makes load-bearing — and a trap leaves it in a state nothing
+  characterises. This is also what stops a module being killed on every
+  invocation from filling the pool with dead entries: a thrashing add-on degrades
+  to M66's instance-per-invocation, which is the floor.
+- **An instance whose memory grew.** WebAssembly memory cannot shrink, so an
+  image taken at 52 pages cannot restore an instance now holding 61 — the extra
+  pages would keep the guest's own bytes and its allocator would grow again on
+  every use, without bound.
+- **A module with no readable memory.** Nothing this toolchain produces reaches
+  it; the branch is there because *it always has memory* is an assumption about
+  somebody else's compiler.
+
+**The image costs what it copies, and the documents state it rather than leaving
+it to be inferred.** Every live instance carries a host-side copy of its own
+memory for as long as it exists, bounded by the same `maxGuestMemoryPages` the
+guest is — an instance whose memory grew past its image is evicted rather than
+re-imaged, so the copy cannot outgrow the cap. It is ordinary Go memory and is
+therefore **not inside** the guest-memory ceiling D336 restates, which is what
+makes it worth a sentence in `docs/deployment.md`, `docs/configuration.md`,
+`docs/SECURITY.md`, `.env.example` and `CHANGELOG.md`: the resident worst case is
+that ceiling twice, 384 MiB, against a typical module measuring 2.4 MB and the
+redirect fixture 3.4 MB. Sharing one image across the entries of an add-on was
+considered and declined — a Go module's package initialization writes a hash seed
+drawn from the host's random source, so two instances' post-initialization images
+are not the same bytes, and restoring one instance's image onto another would be
+a cleverness with no measurement behind it.
+
+**The image is a copy, and that sentence is load-bearing.** `api.Memory.Read`
+returns a window onto the live buffer rather than a copy of it, so an image taken
+that way would be the memory it is meant to restore and the restore would be a
+write of memory onto itself — resetting nothing while looking exactly like a reset
+that works.
+
+**Both redirect classes are pooled, and the two are pooled apart.** The observe
+class pays the same startup on the same slots — F326 was found in both call
+sites — so serving only the inline class would have been a choice with nothing to
+argue for it. They get an idle set each rather than sharing one, because package
+initialization runs once per entry and the redirect-safe subset applies to it: an
+entry whose init ran as an observer, where storage is allowed, must not later
+serve an inline invocation, where it is not.
+
+**Add-on pages are not pooled**, and that is scope rather than a claim they should
+not be. A page request has a 250 ms budget where a redirect has 20 ms, waits for
+its slot rather than skipping, and carries a request record where a redirect
+carries a link's own facts. `internal/addon/http.go`'s account of one instance per
+request is still what happens there, and the sentence this milestone had to make
+true by another means is narrowed to that path rather than deleted.
+
+**The two bounds are configuration and they are not the slot budget.**
+`LINKCTRL_ADDON_POOL_SIZE` (8) is how many instances are held at rest across every
+add-on; `LINKCTRL_ADDON_POOL_TTL` (1m) is how long one is kept before it is closed
+for lack of traffic. `maxConcurrentRoutes` is untouched and the pool takes nothing
+from it, waits on nothing of it, and did not become the fourth thing it bounds —
+which [F324](deferred-findings.md#open) is the row about and which m66.5.md named
+in advance. Eight is measured into: a pooled invocation is 451µs, so 2,000
+redirects a second want about **one** instance at any moment — 2,000/s x 451µs
+is 0.90, and an earlier draft of this sentence said one and a half — and the
+eviction path never ran in the k6 run at all.
+
+**What it bought**, from the run in [slo.md](../slo.md), against D333's baseline:
+generator p99 **44.89ms → 1.08ms**, mean invocation **11.05ms → 451µs**, redirects
+that skipped the add-on for want of a slot **38.6% → 0.004%**, guest-deadline kills
+**208 → 0**, core's own histogram **99.996% → 100%** under 20ms. The bar the owner
+set on 2026-08-23 was generator p99 under 20ms, over a fraction-of-baseline target
+and over an escape clause; it is met by a factor of eighteen. The risk the owner
+took knowingly — that part of the 44.89ms was contention rather than startup and
+could not be removed by pooling — did not materialise, and the 208 kills on a
+module doing nothing are the clearest reading of why: the box was saturated by
+add-on startup and no longer is.
+
+### D336 — the ceiling gains a term, and the sweep that ties it does not gain a word
+
+An instance is now held while nothing is using it, so **in flight** stops being
+the whole of the guest-memory ceiling. It was **sixteen in flight × 8 MiB =
+128 MiB**; it is **(sixteen in flight + eight kept warm) × 8 MiB = 192 MiB**.
+
+That number is machine-tied. `documentedNumberSites` and
+`TestTheGuestMemoryCeilingIsTheOneDocumented` (`internal/addon/http_test.go`) hold
+the sentence in every document that states it against the constants, so the change
+is a test that goes red rather than a sweep somebody has to remember — which is
+what m66.5.md required and what made this a bounded edit across
+`docs/SECURITY.md`, `docs/deployment.md`, `docs/configuration.md`,
+`docs/operations.md`, `CHANGELOG.md`, `Plan.md`, `docs/addon-abi.md`,
+`sdk/doc.go` and `docs/slo.md`.
+
+**`CHANGELOG.md` was the sharp one and it answered easily.** The paragraph stating
+the old ceiling is inside `[Unreleased]`, so what changed is unreleased history and
+no released entry was touched. D104's rule is unmoved and this milestone did not
+have to argue with it.
+
+**The pool default is tied by sentence and deliberately not by sweep.**
+`TestEveryDocumentedNumberIsTied` finds every occurrence of the two bounds in every
+document and fails on one no line accounts for; it works because those numbers are
+spelled in ways prose does not otherwise use — "sixteen" about anything else is
+rare enough to list, and "8 MiB" is a quantity. "eight" is an ordinary English
+word: adding it to that pattern would flag some thirty occurrences across the swept
+files plus README.md, docs/cli.md and docs/usage.md, every one of them about
+something else, and a sweep whose output is mostly exclusions is a sweep nobody
+reads. So the default is filled into the anchored sentences — a moved constant
+still reddens the build — and a *new* sentence stating it is not caught. The gap is
+stated here rather than discovered later, and it is the same trade
+[F322](deferred-findings.md#open) is a row about from the other side.
+
+### D337 — three corrections the reviewer's read forced, recorded rather than made silently
+
+The reviewer re-ran the gates, sabotaged the isolation test through an overlay
+against a scratch copy rather than trusting it, and read the diff against what is
+already shipped. Three of its findings are corrections to text this milestone
+itself wrote and were made in place; they are named here because two of them are
+numbers somebody will otherwise re-derive.
+
+- **`LINKCTRL_ADDON_POOL_SIZE`'s derivation said one and a half instances in two
+  places and one instance in two others.** 2,000 redirects a second at 451µs an
+  invocation is **0.90** instances at any moment, so *about one* is the true half
+  and the pair saying one and a half is corrected.
+- **The reset's cost was cited at 56µs in this log and 59µs in
+  [slo.md](../slo.md).** `TestResettingAPooledInstanceIsCheaperThanBuildingOne`
+  prints ~59-60µs over 3,407,872 bytes on this machine; slo.md was right and this
+  log was not.
+- **[D328](#2026-08-23--m66-reopened-the-second-bound-and-what-measuring-it-under-contention-said)
+  cites a test this milestone renamed.** `TestAnInlineInvocationCostsAnInstantiation`
+  is now `TestAnInlineInvocationCostsWhatTheGuestDoes`, because the old name
+  asserted the very thing pooling removes. This log is append-only, so D328's text
+  stands and this line is the pointer: a reader following that citation should
+  look for the new name. The name was changed rather than kept because a test
+  named for a cost that no longer exists is worse than a stale citation.
+
+**A shipped milestone's test was also relaxed by this diff, deliberately.**
+`TestAnObservingModuleIsHandedTheRecordedRedirect` asserted a scrape directly; the
+reset now sits between the guest's log line and the histogram observation, so the
+marker it waited on no longer implies the metric. It polls instead. That is a
+loosening of an M66 test inside an M66.5 diff, which is exactly the kind of thing
+that should be visible in the commit rather than only in a code comment — the
+assertion is unchanged and only the wait is, and the marker never implied the
+metric even before this milestone, which is what makes it a fix rather than a
+concession.
+
+## 2026-08-24 — M67, an add-on arrives and leaves, and the directory is still the only store
+
+[M67](phase-details/m67.md). M60's lifecycle was a directory read at boot. This
+milestone makes arrival and departure runtime acts, which turns three things that
+were constants into things that change while requests are being served.
+
+### D338 — the add-ons directory is the only store, and atomicity is one rename
+
+**The decision:** an installed add-on lives in `LINKCTRL_ADDONS_DIR`, the same
+directory an operator writes into by hand, and nowhere else. There is no table of
+installed modules and no blob column.
+
+The alternative — a `bytea` in Postgres, boot reading from there — was considered
+and is the one that would have made an install reach every replica and survive a
+container without a volume. It was refused because it produces **two answers to
+what is installed**, and the first time they disagree the disagreement is either a
+module running that nothing lists or a row for a module that is not there. M60's
+boot route is not going away: m67.md requires it keeps working unchanged, and M63's
+orphan detection is *derived* from the difference between the schemas in the
+database and the modules in the directory, so a second store would need a third
+reconciliation nobody has designed.
+
+**What that costs is stated rather than absorbed**, in `docs/configuration.md` and
+`docs/SECURITY.md`:
+
+- An install reaches the replica that served the request and no other. On more
+  than one replica the boot-directory route is still the way to install, and the
+  API is for the single-container shape this product's own gate is built around.
+- A container filesystem that is not a volume loses an installed add-on on the
+  next deploy — which is the same property the mount already has and which an
+  operator can already see.
+
+Both are properties of *where the operator mounted the directory*. Neither is made
+better by a second store that then disagrees with the mount.
+
+**Atomicity is one `rename(2)`.** The pair is written into `.staging/<name>-*`
+**inside** the add-ons directory — inside, because rename does not cross
+filesystems and that directory is the one place guaranteed to be on the same one
+as itself — and then renamed into place as a unit. Before the rename nothing in
+the discovery set has changed; after it the whole file set is there, because a
+directory is what moved. Discovery skips `.staging` by name, so a crash between
+the two leaves something the next boot sweeps and never a half-written add-on.
+
+Removal is that backwards: the directory is renamed *out* of the discovery set
+first and deleted afterwards. That is the whole of m67.md's *a removed `required`
+add-on cannot brick the boot it was required for* — the file set is gone from
+discovery the instant the rename returns, whatever happens next, and
+`TestARemovedRequiredAddonCannotBrickTheNextBoot` drives it by breaking the module
+first, proving the boot really would have stopped, and then removing it.
+
+**Install refuses a name that already exists**, which is what keeps this to one
+rename: `rename(2)` onto a non-empty directory fails, so replacing would need a
+remove and an install with a window between them. m67.md puts upgrade-in-place out
+of scope for exactly that reason, and the refusal names the path — remove, then
+install. A directory the host did *not* load is refused too, rather than
+overwritten: it is an operator's, placed by hand or left by a module that would
+not start, and installing over it would destroy whatever they were about to debug.
+
+**M60's name-collision rule is applied to the runtime path, and it had to be.**
+Two add-ons whose names stand in a `name + "_"` prefix relation share a cookie
+namespace and a settings namespace — `oidc` reads and overwrites `oidc_x`'s
+session cookies — and `Open` refuses **both** members of the pair. An install that
+skipped the check would be a way to reach exactly the state that refusal exists to
+prevent, on a host nobody restarted, which would make a shipped claim false rather
+than merely leave a gap. So the check runs here too, over the one arriving name
+against the loaded set.
+
+**It refuses the arrival rather than unloading the pair**, and that is the one
+place the runtime path deliberately differs from boot. At boot neither add-on is
+running and there is no principled winner, which is why both go. Here one is
+already serving and the other is a request somebody just made, so taking down a
+running authentication provider because somebody uploaded a badly-named module
+would make this endpoint a denial of service against what is already installed.
+The operator is told which name it collides with.
+
+**A read-only mount refuses an install, and says so.** `docs/configuration.md`
+tells an operator to mount the directory `:ro`, and that advice is still right for
+an instance whose add-ons are placed by hand. The two arrangements are now named as
+two, in that document and in the conformance gate, which grew a fourth limb that
+boots writable rather than an edit to the third that boots read-only.
+
+### D339 — the installed set is an atomic snapshot, not three fields behind a lock
+
+`Host.loaded`, `Host.inline` and `Host.pools` were written once by `Open` and read
+as constants everywhere else. That premise is what let `HasInline` be a field read
+on the hot path of **every** redirect and the pool map be read without a lock.
+
+The obvious repair is an `RWMutex` over the three, and it is the wrong one: it puts
+a lock acquisition on every redirect served by an instance that has no add-ons at
+all, which is the cost m60.md promised nobody would pay. So the three became one
+immutable `addonSet` behind an `atomic.Pointer`. A reader loads the pointer once
+and works from a set that cannot change underneath it; a writer builds a whole new
+set and stores it. Reading costs one atomic load; writing costs a slice copy, on an
+operation an operator performs by hand.
+
+**The three had to move together** rather than becoming three atomics. A redirect
+resolves an add-on out of `inline` and then looks its pool up in `pools`, and an
+add-on present in one and absent from the other is a defect a per-field lock would
+still allow. One value makes it unrepresentable.
+
+Three consequences fell out and are named because they are behaviour changes:
+
+- The observe worker reads the observer set **per event** instead of capturing it
+  at start, or an add-on installed after boot would never be shown a redirect and
+  one removed would be shown every one.
+- `startPoolSweep` and `startObserving` are called again by `Install` and are
+  idempotent, because an instance that booted with no pooled add-on has no sweep
+  and one that booted with no observer has no queue. Idempotent rather than
+  per-add-on: a sweep per install would be a goroutine per add-on ever installed,
+  and a second observe worker would break the ordering promise M66 makes.
+- `Host.Close` now publishes the empty set instead of nil'ing three fields, which
+  closes the *read* half of [F325](deferred-findings.md#open) as a side effect of
+  needing the set swappable at all. **The row is not closed**: what it names is
+  `Host.Close`'s teardown discipline as a whole, including the runtime and the
+  storage pools, and that is still the fix it asks for.
+
+### D340 — in-flight invocations complete, the wait is bounded, and the bound is what interrupts
+
+m67.md assigns the unload semantics to this milestone and asks for the choice to be
+recorded. It is: **they complete.**
+
+Removal detaches the add-on from the set first, so nothing new can resolve it —
+that is the same swap D339 describes, and it is why the wait is finite rather than a
+race against arriving traffic. Then a counter (`addonLive`) is sealed and the
+invocations already inside a guest call are waited for, up to five seconds.
+
+Waiting is right because every one of those invocations is **already bounded by
+something else**: an inline one by `LINKCTRL_ADDON_INLINE_DEADLINE` and
+`LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, an observation by the same pair, a page
+request by the server's write timeout. Quiet is a state that arrives rather than
+one the code hopes for, and five seconds is comfortably past the sum of those
+bounds.
+
+Past the grace the modules are closed anyway, and that is safe rather than reckless:
+wazero documents `CompiledModule.Close` as safe to call with outstanding calls from
+instances made from it. The in-flight guest call then fails, and every caller on
+these paths already handles a failed invocation — a redirect is served without the
+add-on, a page answers the 502 a trapping module produces. The answer says
+`draining: true` when it happened. The alternative, waiting without a bound, makes
+one hung module able to hold a removal open forever, which is the state removal
+exists to escape.
+
+**A `sync.WaitGroup` is not this**, and the comment in `set.go` says why: `Add`
+from a reader racing `Wait` from the remover is the case its documentation rules
+out, and the failure mode is `Wait` returning early — which here means closing a
+module with a guest running in it.
+
+**What unload releases, and in which order**: the pooled instances (M66.5's
+`drainPool`, drained from the set being *replaced*, because the one just stored no
+longer has those pools), then the load-time instance, then the compiled module,
+then the storage pool, then the host state.
+
+**The leak bound is measured against the resident set, and two things about it are
+worth recording because both were found by sabotaging it rather than by reasoning
+about it.**
+
+- `runtime.MemStats.HeapAlloc` measures nothing here and was the first attempt.
+  wazero maps a compiled module outside the Go heap, so a host that never closed
+  one measured *smaller* after ten cycles than before — the assertion passed under
+  a sabotage that removed the exact line it exists to hold. It reads
+  `/proc/self/status`'s `VmRSS` instead, and skips where there is none.
+- Closing the **compiled module** turns out to be promptness rather than a leak
+  fix: forty cycles without `l.compiled.Close` moved the resident set by −208 KiB,
+  because wazero releases the mapping from a finalizer once nothing references it.
+  The line stays — waiting for a collection to release megabytes of mapped code is
+  a thing that happens eventually rather than a thing that happens — but the test
+  is honest in its own comment about not bounding it.
+
+What the test does catch is the leak that matters: removing `l.module.Close`
+reddens it immediately, because wazero refuses the next install of a module whose
+name is still instantiated. Ten cycles of a 1.8 MB module, resident growth under
+16 MiB, and the ratio is what means something — a host retaining one 8 MiB
+instance per cycle is most of a hundred megabytes up, one that merely fragments is
+a few.
+
+**The schema is left.** Removal creates an orphan, which is M63's answer and not an
+oversight, and the removal's own response names it so that M68's manager can offer
+the purge at the point of decision.
+
+### D341 — `addons.manage` is the principal's, and is non-delegable in D18's widest form
+
+The permission is an instance-principal scope in the D98 pattern, seeded by
+`04700_addons_manage.sql` on 03500's shape — inserted, granted to no role, and
+conferred on whoever already holds `instance.admin`.
+
+**Why not a role permission.** An add-on is code this server executes, installed
+once for the whole box, and no organization owns one. A role grant would be F15's
+shape with arbitrary code at the end of it: registration provisions every
+self-registered account the owner role of its own organization, so on
+`SIGNUP_MODE=open` "an owner may install an add-on" means "anybody with an email
+address may install an add-on".
+
+**Delegability — D18's second limb, and the widest instance of it the map holds.**
+Every other entry in `auth.NonDelegableScopes` describes a credential widening its
+reach inside this product's own vocabulary. This one leaves the vocabulary: a key
+that may install an add-on has acquired whatever that module can do — the ABI, the
+permissions the module's own manifest declares, the schema M63 gives it, and, with
+`session.mint`, the ability to decide who is signed in. No reasoning about the
+key's own scopes bounds it. The first limb does not apply: installing discloses
+nothing about an actor and touches no network data.
+
+**It is also not in `auth.InstanceGrantable`**, for a harder reason than
+`domains.write.instance` was not: a delegatee would never need the principal again,
+because the module they install can carry whatever reach they wanted.
+
+**The check sits in the service and the handler asks nothing about credentials**,
+which is the arrangement `InstanceAPI` already has. `Host.Install` and `Host.Remove`
+check and then call unexported halves; the split exists because an `*auth.Identity`
+carries its permissions in an unexported map with no constructor, so a unit test in
+`internal/addon` cannot mint an authority — the gate is asserted in
+`test/integration/addon_lifecycle_test.go`, from both sides and against a real
+principal.
+
+### D342 — what an upload cannot install, and the two shipped claims this narrowed
+
+**An add-on that ships `.sql` migration files cannot be installed by upload**, and
+is refused with `migrations_unsupported` rather than left to fail as a missing
+file. m67.md's install is *a `.wasm` + manifest pair*; a manifest may declare
+migration files the host applies into the add-on's schema (M63), and those files
+are neither of the two parts. An add-on that owns a schema and creates its tables
+from its own code installs here; one that ships DDL is installed by placing its
+directory and restarting. The refusal says which. This is a real bound on the
+surface and it is a deferred row rather than scope creep, because M69's OIDC add-on
+is the first thing likely to need the other shape.
+
+Two claims a shipped milestone made are narrowed here, deliberately and in
+writing, which is what `internal/addon/absence_test.go`'s own header requires:
+
+- **M64's "the API surface knows nothing about add-ons at all."** It was exactly
+  true and the question it left open — whether a *third party's* surface is bound
+  by *every UI feature has API support* — is still open and still M69's. What this
+  milestone adds is not a third party's surface; it is the host's own lifecycle,
+  which the inherited rule requires be in the document because M68's manager drives
+  it. The absence becomes a bound: the document may carry `/addons` and
+  `/addons/{name}`, and any other path under `/addons` fails the test.
+- **M60's "no route is mounted" for an instance with no host**, which was checked
+  over one nil field and is now checked over two. The second is the one that would
+  hurt: an upload endpoint mounted on every instance that installed nothing.
+
+`internal/httpx/api_addons.go` joins `httpSurfaceMentioningAddOns` and
+`04700_addons_manage.sql` joins `migrationsMentioningAddOns`, both as the
+deliberate additions those lists exist to require.
+
+**One thing the API deliberately does not have**, and it is worth a line because
+its absence is the design: there is no field naming a URL for the server to fetch a
+module from. It would be the cleanest request forgery this product could offer —
+an authenticated caller naming an address the server connects to, on a path whose
+whole job is to execute what comes back — and no validation helps, because the
+danger is the request rather than the response. The bytes cross in the body the
+caller already has to send.
+
+### D343 — an audit action is declared in `internal/audit`, whatever package records it
+
+**The decision:** `addon.installed` and `addon.removed` are
+`audit.ActionAddonInstalled` and `audit.ActionAddonRemoved`, declared beside every
+other action this product records and listed in `AllActions`. This milestone's
+first attempt declared them in `internal/addon/lifecycle.go`, next to the code
+that writes them, which is where they read most naturally and is the wrong place.
+
+Wrong for a reason `audit.go` already carries in a comment. [F18](deferred-findings.md)
+is the finding that two of the vocabulary's actions lived in `internal/dispute`,
+so anything counting the list from `internal/audit` was silently short by two —
+and *silently* is the whole of it: `TestAllActionsIsExhaustive` parses `audit.go`
+and only `audit.go`, so a constant declared elsewhere is not missing from
+`AllActions` as far as that test can tell. The count in `docs/SECURITY.md` was
+wrong twice off the back of it, at M32.5 and again at 0.2.0, and M45 moved the
+dispute constants and wrote *there is one list and AllActions can be complete*
+into the file. Declaring these two outside the package re-created that split
+exactly, in the milestone whose own bullet requires every lifecycle act be
+audited, and nothing would have gone red: the list would have read forty while
+the product made forty-two administrative changes.
+
+The single-file parse is not the defect and is not being widened. It is the
+reason the list is trustworthy at all — a check that reads one file cannot be
+fooled by a build tag or an unimported package — and its blind spot is by
+construction. What covers the blind spot is **where constants go**, so that is
+what is written down here rather than a bigger test.
+
+Moving them moved both documented counts, and the mechanism did the moving:
+`TestTheDocumentedActionCountIsTheOneAllActionsHolds` reddens on `docs/SECURITY.md`
+and `docs/data-model.md` together, so forty became forty-two in both or in
+neither. `docs/SECURITY.md`'s enumeration of the instance-wide surface gained the
+two acts beside it — an add-on is installed once for the whole box and belongs to
+no organization, which is why the records are `InstanceWide` and why that
+sentence was short by two until they were listed.
+
+**Sabotage.** Dropping `ActionAddonRemoved` from `AllActions` and re-running the
+pair reddens four separate assertions: the constant declared and unlisted, the
+41-against-42 length mismatch, both documented sentences no longer saying
+forty-one, and the sweep then finding two numbers in those documents tied to
+nothing. Restored by counter-edit.
+
+### The inherited redirect-path measurement, re-run rather than reasoned about
+
+Not a decision, and here because the first attempt at this milestone left it in
+neither state. *Touching the redirect path → re-run the k6 measurement* is one of
+the fourteen rules every Phase 4 milestone inherits, and this milestone touches
+it: `HasInline` became an atomic load, `Inline` takes one snapshot of the set per
+redirect, and each inline invocation enters and leaves a counter under a mutex so
+that a removal has something to wait on. The added cost is one atomic load and
+two uncontended mutex operations, which is a good argument for what the number
+ought to be and is not the number.
+
+It was run in [M66.5](../slo.md#re-measured-for-m665-2026-08-24)'s three-column
+shape rather than only on core, because the mutex is per *invocation* and the
+column where that would show is the well-behaved one. Generator p99 is **1.09ms**
+against M66.5's 1.08ms and the inherited bar of 20ms; the mean invocation is
+460µs against 451µs; core reads 137.78µs and 100% of 240,000 under 20ms; and the
+hostile column is bracketed by M66.5's two takes on every figure it reports. The
+record, with what it did not measure, is
+[docs/slo.md](../slo.md#re-measured-for-m67-2026-08-24).
+
+The 2% on the middle column is reported rather than rounded to nothing. It is
+smaller than this measurement's run-to-run variance and the honest statement is
+the bound, not the delta.
+
+
+## 2026-08-24 — M67, the caller's context stops deciding whether a removal finished
+
+Both entries here are M67's third attempt, and both are things its second
+reviewer refused to let stay undecided. The first is a defect; the second is a
+choice that was defensible and unwritten, which reads the same as one nobody made.
+
+### D344 — a lifecycle act completes on a context the caller cannot cancel
+
+**The decision:** `unload` detaches the context before it closes anything, and
+`record` writes the audit event on a detached context with a bound of its own.
+Both took the caller's request context.
+
+**Why this is M67's and not the house's habit: `removeGrace`.** Removal is the
+only write in this product that deliberately holds a request open for seconds —
+five of them — waiting for the guest calls already inside the module to finish.
+Everywhere else the gap between *the act happened* and *the record is written* is
+microseconds, and a caller who disconnects inside it has hit a window nothing can
+be designed against. Here the window is one this package chose the length of, so
+a client timing out inside it is ordinary rather than exotic.
+
+**What a cancelled context would cost, at the point it would cost it.** By the
+time execution reaches either line the add-on is out of the set and its files are
+renamed out of the directory. There is nothing left to retry and nobody left to
+retry it. A close that declined to run leaves the compiled module and its
+instances resident for the life of the process — exactly the leak
+[m67.md](phase-details/m67.md)'s bullet bounds — and a record that declined to be
+written leaves an act with no trace of it, against *every lifecycle act is
+audited*, for the removal an operator is most likely to go looking for later: the
+one that did not answer.
+
+The rest of the package already did this. `closeInstance` has detached since
+M66.5 and `cmd/linkctrl/main.go` states the rule outright at shutdown — *a
+runtime told to close on a cancelled context would refuse the close itself*. What
+was inconsistent was the two lines this milestone added.
+
+**The audit call site is a departure from the house pattern and is named as
+one.** No other `Record` call in this product detaches, and that is right
+everywhere else for the reason above: the pattern is safe wherever the record
+follows the act by microseconds. `removeGrace` is what makes this the one place
+it is not. Detached **with a bound** rather than merely detached —
+`recordTimeout`, five seconds, `context.WithTimeout(context.WithoutCancel(ctx),
+…)`, which is the shape every other detached call in this repository uses,
+because a detached context with no deadline is a write nothing can end.
+
+**Sabotage, both halves.**
+`TestRemovalAuditsAndReleasesWhenTheCallerHasHungUp` installs, warms the pool
+with one redirect, cancels the context and removes. Reverting the record's
+detach reddens it on *no addon.removed record was written*. Making `unload`
+return early on `ctx.Err()` reddens three separate assertions: the module still
+instantiated, one pooled instance surviving, and the ABI still answering in the
+removed add-on's name. Restored by counter-edit both times.
+`TestRepeatedInstallAndRemovalDoesNotGrowResidentMemory` cannot reach any of
+this — it removes on a live context, which is the path a caller who waits takes —
+and that is why a second test exists rather than an assertion added to that one.
+
+Making it assertable took one change to the fake: `recordingAuditor.Record` now
+honours the context. The real recorder is an insert through pgx, which refuses a
+cancelled context and writes nothing, so a fake that ignored cancellation would
+have recorded an event the product would have dropped and the test would have
+passed whatever `internal/addon` did.
+
+**What this is not, so a later reader does not over-read the test.** wazero
+v1.12 does not itself consult the context in `Module.Close` or
+`CompiledModule.Close`; it hands it to a `CloseNotifier` and a `CodeCloser`,
+neither of which fails on cancellation in this build. So the close half is a
+documented contract being honoured rather than a live leak being fixed, and the
+sabotage that reddens it is an early return rather than a revert. The audit half
+is not hypothetical: pgx refuses a cancelled context, and the record is lost.
+
+### D345 — an add-on install spends the same upload bucket as a QR code's logo
+
+**The decision:** `POST /api/v1/addons` carries `UPLOAD_RATE_PER_MIN` — thirty a
+minute per address, on top of the API limit — which is the bucket the three logo
+addresses were already sharing. It is a fourth address in one bucket, not a
+fourth bucket.
+
+It is written down because it was made silently. The bucket was attached in this
+milestone's first attempt and argued for in a comment at the route, and no
+document said an install spends it; the milestone's second reviewer asked for it
+to be decided in one direction or the other rather than left as the thing nobody
+had looked at.
+
+**Why sharing is right.** The bucket's own reason, in `internal/config`, is a
+request whose cost is set by its **content** rather than by its shape —
+`API_RATE_PER_MIN` is a number chosen about JSON bodies, and 600 megabyte uploads
+a minute is a bandwidth budget nobody picked. That reasoning is as true of a
+module about to be compiled as of an image about to be decoded, so the fourth
+address belongs in the bucket the first three are in.
+
+**The argument against, stated rather than skipped.** The bodies are not the same
+size. A logo is capped at a megabyte and holds under 18 MiB in flight; an install
+is capped at 32 MiB and is read whole into memory before anything is written.
+Thirty of the second a minute is a larger budget than thirty of the first, and
+what one address spends on installs it cannot then spend on logos.
+
+**Why that does not move the answer.** The limit is per address as the server
+sees it; installing needs `addons.manage` and uploading a logo needs
+`links.update`, which are rarely the same person; and an instance installs
+add-ons a handful of times in its life rather than a handful of times a minute.
+The collision needs one address doing both — one administrator — or a deployment
+behind a proxy with `TRUSTED_PROXIES` unset, and that deployment already shares
+every bucket in the product across every visitor, which the rate-limit section
+says at length. A second variable was the alternative and is declined on cost
+rather than on principle: it is a configuration surface, and therefore the
+owner's, for an endpoint whose realistic traffic is single digits a year. If the
+two ever need to differ, that is the change and it is a small one.
+
+**What was actually wrong was not the sharing.** Three documents said the logo
+was the only kind of file this product accepts — `docs/SECURITY.md`'s *Uploaded
+content* row, `docs/configuration.md`'s `UPLOAD_RATE_PER_MIN` row and
+`.env.example`'s comment beside the variable — and this milestone made all three
+false while touching none of them. That is the failing gate
+[workflow.md](workflow.md) names, not documentation-pass cleanup, and the
+`internal/config` comment claiming an upload is *the one place* a request's cost
+is set by its content went the same way. All four now say what is true, and
+`docs/usage.md` gained the clause that keeps the reader of the QR section from
+learning it later.
+
+
+## 2026-08-24 — M67, an install reads what the directory claims, not what is running
+
+M67's third attempt was rejected on one finding, and this is it. The entry exists
+because the fix widens what an operator can be refused, and a widening reached by
+fixing a bug is still a choice somebody has to be able to argue with later.
+
+### D346 — the runtime collision check reads the boot check's set
+
+**The decision:** `Host.collidingNames` runs the `name + "_"` prefix predicate
+over `claimants(h.dir, …)` — every directory whose `addon.json` parses and names
+the directory it sits in — unioned with the add-ons this process has loaded. It
+used to run over the loaded set alone.
+
+**The defect.** M60 refuses *both* members of a colliding pair at boot, and it
+decides the pair from directory entries: a directory that parsed and then failed
+to load still claims its name. Install compared against the running set, which
+that directory is not in. So `<addons>/oidc/` with a valid manifest and a wrong
+digest, `failure_class: degrade`, is refused at boot and absent from the set —
+and an operator installing `oidc_x` over the API was allowed to. At the next
+start `nameCollisions` refuses both, and if either is `required` the instance
+does not start. The comment at the check said it existed "or the API would be a
+way to reach the state that check exists to prevent"; the code did not reach it,
+so the comment was a claim rather than a description. An instance that will not
+start, reached through a shipped API by an operator doing nothing wrong, is as
+bad as this milestone's failures get.
+
+**Why the claimed set and not a wider or narrower one.** Three candidates:
+
+- *Directory entries.* Wrong, and wrong in the direction that hurts an operator:
+  a directory whose manifest will not parse, or which names somewhere else, has
+  claimed nothing. `claimants` says so in as many words, because a mis-installed
+  `oidc_x` refusing `oidc` tells an operator about a collision when what they
+  have is one typo. An install refused by an entry discovery ignores is a refusal
+  with no fix.
+- *The loaded set.* What was there, and what the finding is.
+- *`claimants`.* The set boot decides from. Install and boot then agree entry for
+  entry, including on every exclusion — a non-directory, an unparseable manifest,
+  a manifest naming some other directory, and this host's own staging area, which
+  `claimants` now skips by name rather than by relying on `ReadManifest` failing
+  on it.
+
+**The union with the loaded set is not redundant.** It covers the one claim a
+directory read cannot see: an add-on this process loaded whose directory was
+deleted underneath it. It is still serving and its cookie prefixes are still
+live, so it still owns its namespace, and refusing against it is what the check
+already did. Dropping it to make the two sets identical would have narrowed the
+check in a second place while fixing it in the first.
+
+**What it costs, stated.** An operator can now be refused an install by a
+directory that is not running — a broken add-on they left in place to debug. That
+is the right answer rather than a regrettable one: the pair genuinely cannot
+coexist, and the alternative is an install that succeeds and a start that fails.
+The refusal names what it collides with and says the directory *claims* the name,
+so the fix is the same rename or removal it would have been at boot. The
+`409` prose in `api/openapi.yaml` and the add-on section of
+`docs/configuration.md` both said *running*, and both now say *claimed*.
+
+**Still not unloading the pair.** The arrival is refused and what is already here
+is left untouched, which is where this deliberately differs from boot — argued at
+the call site, and unchanged by the widening except that "already serving"
+becomes "already serving, or an operator's own directory".
+
+Two tests hold it, both sabotaged before they were believed:
+`TestInstallingANameClaimedByADirectoryThatDidNotLoadIsRefused` is the
+parsed-but-unloaded case the rejection required, and
+`TestADirectoryDiscoveryIgnoresDoesNotRefuseAnInstall` is the mirror that stops
+the fix becoming the first candidate above.
+
+## 2026-08-25 — M68, an operator meets the add-on host, and one page is where
+
+**D347–D352.** The Add-on manager: what is installed, what each module costs the
+redirect path, what it is configured with, and the data left behind by modules
+that are gone. The owner chose its layout from drawn wireframes on 2026-08-18 and
+amended it twice in the same review; `phase-4-candidates.md` carries the frames
+and this entry carries the six answers building against them needed.
+
+### D347 — an add-on's settings have two sources, and the environment wins
+
+D263 gave a declared setting one source: `LINKCTRL_ADDON_<NAME>_<SETTING>`, read
+at load. The manager's detail page saves what an operator types, so there is now a
+second — `addon_settings`, host-side — and something has to decide which the
+module reads.
+
+**The environment wins, and the page renders a sentence in place of the control.**
+
+This is not a new rule. It is the one this product already applies to the only
+other value with these two sources: `LINKCTRL_UPDATE_CHECK=false` makes the
+first-run prompt say so instead of drawing a checkbox, because *an air-gapped
+instance must not appear to be asking a question it has already had answered for
+it* (D149). A setting pinned in a deployment's environment is the same shape — the
+answer is given, the page cannot change it, and a field whose write nothing would
+read is worse than no field. So a save to such a setting is **refused** with a
+`422` naming the variable to edit, rather than accepted and ignored.
+
+**The reverse order loses in the direction that matters.** If the stored value
+won, an operator could override their deployment's own configuration from a web
+page — a `required`-class authentication add-on's credentials included — and the
+variable would sit in the compose file describing something no longer true.
+
+**This one was taken on the owner's behalf** rather than put to them, under
+workflow.md's standing rule about deciding when the loop would otherwise stall,
+and it is recorded here on the day it was used because that rule requires it. What
+makes it a smaller decision than it looks is that it is an application of D149
+rather than a new stance; if the owner wants the other order, the change is the
+order of two loops in `mergeSettings` and the field's `Editable` predicate.
+
+**Where the values live is the other half.** A host table, never the add-on's own
+schema: the add-on's role can write that schema, so a `secret` kept there would be
+a credential the module could rewrite and then read back as though an operator had
+chosen it. `04800_addon_settings.sql` is where the argument sits beside the DDL,
+and it also states what is *not* done — the column is not encrypted, exactly as
+the environment variable it mirrors is not, because the key would live beside the
+database in the same environment and the result would be a longer sentence about
+the same exposure.
+
+**A save reaches instances that already exist.** Values are still resolved once at
+load, because `config_get` is on a request's path (D263), so the map lives behind
+one atomic pointer that every copy of a hostState and every pooled instance shares
+— a save swaps the map and the read stays a pointer load and a lookup. What that
+does *not* buy is stated rather than left to be found: a module already inside a
+guest call reads what it read, and there is no quiesce.
+
+**Owner-confirmed 2026-08-25**, put to them at [step 3.4](phase-loop.md#3-land)
+because a worker deciding on the owner's behalf is the case workflow.md's
+standing rule is written for, not a case it excuses. Two alternatives were
+declined: the table winning, which breaks D149's pattern and stops an instance
+being reproducible from its own deployment files; and an explicit *stop using
+the environment value* act, which buys away the dead control at the cost of a
+third state per setting and brings the reproducibility problem back for any key
+somebody clears.
+
+**The owner attached a requirement to the confirmation**: the setting is locked
+*and the reader is told why*, in as many words — *lock or otherwise notify the
+user that the setting is being set by the environment*. The page already does
+it and it is now a requirement rather than a nicety: no control at all, and in
+its place a sentence naming the variable and saying where it can be changed
+(`internal/ui/templates/pages/addon_manager.html`, the `{{if not .Editable}}`
+limb). The value itself is deliberately not shown — it may be a credential, and
+nothing on this page could change it. A future edit that keeps the lock and
+drops the sentence would satisfy the mechanism and not the decision.
+
+
+### D348 — the manager is at `/instance/addons`, not at `/addons`
+
+`/addons/` is an installed add-on's own prefix (M64) and `/addons/{addon}` is a
+route, so a manager at `/addons` could have a list and no detail page:
+`/addons/oidc` is that add-on's page, not the host's page about it. Resolving the
+overlap by precedence was available and was refused for the reason D263 refused it
+twice already in this subsystem — a concatenation offers nothing to resolve it
+with, so the ambiguity is made not to exist.
+
+`/instance/` is where the one other thing belonging to the box already sits
+(`POST /instance/update-check`), it is already in `internal/alias/reserved.txt`,
+and what this page administers is the machine rather than a workspace.
+
+**The API's orphan endpoints take the same treatment, by a different mechanism.**
+`GET /api/v1/addons/{name}` and `GET /api/v1/addons/orphaned-data` are two patterns
+under one prefix, and the second is unclaimable rather than merely unclaimed: an
+add-on's name matches `^[a-z][a-z0-9_]{1,30}$` and a hyphen is not in it. That is a
+property of the grammar, not a reserved list somebody maintains, and
+`TestOrphanPathCannotBeAnAddonName` asserts the segment against the validator.
+
+### D349 — a purge drops the schema, and says what it leaves
+
+`DROP SCHEMA … CASCADE`, and that is the whole mechanism. Three things survive and
+each is named in the confirmation, in the API document and in the audit record,
+because a purge that quietly left them would be worse than one that says so:
+
+- **the `addon_<name>` login role**, with its password. Dropping it is a
+  `DROP ROLE`, which fails while the role owns anything anywhere — a large object,
+  a temp relation — so this operation's success would depend on exactly the state
+  `AddonConfinementViolations` exists to police. Keeping it is also what makes
+  re-installing under the same name work as it did.
+- **large objects the role owns**, which live outside every schema by construction
+  and are why `AddonLargeObjects` is a separate gauge. Zero for every add-on that
+  behaves; one that owns any is refused at its next load.
+- **`addon_identity_links` rows written under this name**, which are the host's
+  rather than the add-on's and are [F330](deferred-findings.md)'s subject.
+
+**And it refuses to purge an installed add-on's data**, with a conflict rather than
+a not-found: the schema exists, it is the state that is wrong. Dropping one out
+from under a running module has no upside over removing the add-on first, and a
+`DELETE` is an address a client can type.
+
+**A name that owns nothing is a 404 rather than a silent success.**
+`DROP SCHEMA IF EXISTS` would answer *done* for a typo, and an operator who
+mistyped would be told their data was deleted.
+
+### D350 — the demo runs a real add-on, which is D265's deferred answer
+
+D265 recorded that showing an add-on on the demo means *building a wasm module,
+shipping it into the demo image and pointing `LINKCTRL_ADDONS_DIR` at it* — a
+decision about what the demo is, deferred to this milestone. Taken as described.
+
+`examples/addons/pageviews` is a first-party `redirect-observe` sample: it counts
+redirects out of band into the schema the host gives it, holds three permissions
+it actually uses, and declares one setting of each of the four types. The image's
+build stage compiles it, computes its digest and substitutes it into the manifest
+— a digest checked into the repository would refuse the add-on the first time the
+toolchain changed a byte, and that refusal is the mechanism working.
+
+**Every image carries it and only the demo turns it on.** `LINKCTRL_ADDONS_DIR` is
+what decides whether an instance has an add-on host at all, so an operator who
+runs no add-ons pays three megabytes of image for a directory they never look at,
+and the demo is not a special build.
+
+**The demo's copy cannot be uninstalled through the page, and that is correct.**
+The container's filesystem is read-only, so install and removal answer `503`
+saying so — the documented behaviour of a `:ro` add-ons mount, and the right
+posture for an instance strangers can sign into.
+
+**What the coverage test asserts is the settings, not the add-on.** An add-on is
+files, so there is no row saying one is loaded and inventing one would be the
+fabrication `demoCoverage`'s own header refuses. Three of the sample's four
+settings are seeded and the secret is deliberately left unset, because *not set*
+is the state a secret field has to render and the demo is where somebody looks at
+it. The row is bounded above as well as below: a fourth would mean somebody seeded
+a credential-shaped value into a demo database.
+
+### D351 — the count in the removal button is script, and nothing else on the page is
+
+The owner's confirmed wireframe reads *Remove selected (n)*, and `n` changes
+without a request. Everything else the manager does works with scripting off:
+select mode is a page state, and both confirmations are pages rather than
+`<dialog>` elements — the one irreversible operation here must not be the only one
+in the product that needs a feature the rest does not.
+
+So `static/js/addon-select.js` is a second hand-written script beside
+`qr-size.js`, served from the same directory under `script-src 'self'`, with no
+Node, no CDN, no build step and no `unsafe-` waiver. It reads the button's own
+words off the DOM rather than repeating them, and with the file blocked the label
+stands as the template wrote it and the confirmation says how many. The browser
+spec asserts the enhanced form, because that is the one the wireframe drew.
+
+### D352 — per-module performance is read off the registry, not kept twice
+
+m68.md requires per-module p99 and kill counts **as values on the page**, which is
+the checkable form of the owner's *attribution without Prometheus*. The
+alternative was a second set of counters beside the Prometheus ones, and it was
+refused for the reason a second store of anything is: the page and the scrape
+would be two answers to one question, and the first time they disagreed the
+disagreement would be the thing to debug.
+
+So the page gathers the registry and interpolates the quantile the way
+`histogram_quantile` does — reproduced rather than approximated differently, so
+the figure on the page and the figure on a dashboard agree. Three consequences are
+stated rather than discovered: it costs one `Gather()` per render, on an
+authenticated page with a 250 ms budget and never on the redirect path; the number
+is **cumulative since this process started** rather than a rate, because there is
+no series here to take a rate of; and a class with no observations is **absent**
+rather than zero, which is what makes m68.md's *modules holding no redirect grant
+show no redirect figures rather than zeros* expressible at all.
+## 2026-08-25 — M68, three answers the rejection needed
+
+**D353–D355.** M68's first attempt was rejected on eleven findings. Eight were
+edits — a comment corrected, a refusal worded, a path renamed under a rule
+[D348](#d348--the-manager-is-at-instanceaddons-not-at-addons) already stated.
+Three were choices, and they are here because each decides something a later
+reader could otherwise reasonably do differently.
+
+### D353 — a menu item is drawn from the wiring, not from the permission
+
+`addons.manage` is the instance principal's and is conferred unconditionally
+([D341](#d341--addonsmanage-is-the-principals-and-is-non-delegable-in-d18s-widest-form)).
+The manager's routes are registered only where `LINKCTRL_ADDONS_DIR` is set, which
+is the demo and nothing else. Gated on the permission alone, the nav entry was
+drawn on every instance that runs no add-ons and led to a 404 on all of them — and
+the router's own comment said it could not, while the browser spec documented the
+404 as the expected state without drawing the consequence.
+
+Three fixes were available. Registering the routes unconditionally and having them
+explain themselves would make `/instance/addons` answer on an instance with no
+host, which contradicts m60.md's *no route is mounted* in the direction that
+matters — an operator who installed nothing would find a page about add-ons.
+Conferring `addons.manage` only where a host exists would make an authorization
+grant depend on a directory, which is the wrong axis: what a person may do must
+not change because a volume was unmounted. What is built is the third: **the shell
+carries `AddonManager`, set from the same field the router registers from, and the
+template reads it beside the permission.**
+
+The rule it settles is general, and it is the one the dispute queue's reviewer
+section already followed without saying so: *a permission says what a person may
+do; a field says what this process can serve. A menu item needs both.* Asserted in
+both directions, because a gate that draws nothing anywhere passes half of it —
+`TestTheAddOnEntryNeedsAHostAndNotOnlyThePermission` in internal/ui, and the
+browser spec now asserts the absence in exactly the state that used to 404.
+
+### D354 — a stored secret's secrecy is a property of the column
+
+m68.md states the promise absolutely: *Secrets get the `Secret` treatment and are
+never echoed back into the form.* It rested on the manifest currently installed —
+the render withheld a value when the loaded manifest declared the setting a
+`secret` — and
+[M67](#2026-08-24--m67-an-add-on-arrives-and-leaves-and-the-directory-is-still-the-only-store)
+is what makes that reachable rather than theoretical: remove-then-install is the
+**documented** way to replace an add-on, so a successor declaring the same setting
+name as `text` had its predecessor's credential rendered into the form and
+returned by the API.
+
+Nothing is escalated by it — reaching either costs `addons.manage`, and the
+principal could always read the table — so a refusal would have been the wrong
+shape. What is built is a `secret` boolean on `addon_settings`, written from the
+manifest in hand at save time and read in the **withholding** direction only: true
+withholds whatever the manifest now says, and a manifest declaring a secret
+withholds whatever the column says.
+
+It changes the rendered *type* and not only the value, and that is load-bearing. A
+withheld value in a text box is a blank text box, blank in a text box means
+*unset*, and the next save would delete a credential nobody asked to remove. As a
+secret the same blank means *keep what is stored*. A value stops being a
+credential when somebody clears it or types over it, which is a deliberate act
+rather than a side effect — the same standard the clear-checkbox already sets.
+
+The alternative — refusing to load a replacement that re-types a stored setting —
+was declined for the reason the paragraph above gives: it would make an add-on's
+load depend on rows an operator typed years earlier, and the failure would arrive
+at boot with a `required`-class module behind it.
+
+### D355 — a save drains the add-on's instance pool
+
+The page says *the add-on reads the new values on its next invocation*, and
+`docs/usage.md`, `docs/configuration.md` and `docs/addon-abi.md` repeat it.
+[D347](#d347--an-add-ons-settings-have-two-sources-and-the-environment-wins)'s
+holder makes it true for a module that calls `config_get` per invocation: the map
+sits behind one atomic pointer and a save swaps it, so an instance built an hour
+ago reads the new value the moment it asks.
+
+It is not true for a module that read the value **once**. Package initialization
+runs during instantiation, and M66.5 made the redirect path keep instances rather
+than destroy them, so a module that cached a setting at start-up went on using the
+old one until its pool entry aged out — `DefaultPoolTTL`, one minute. Caching a
+configured value at start-up is what a well-written add-on does; the sentence was
+wrong for the ordinary case rather than for a pathological one.
+
+So `SaveSettings` drains that add-on's pools, the way `Remove` does and for the
+same reason: a pool is a cache, and a cache with no invalidation is where the
+defect lives. It costs the next redirect one instantiation, bounded by
+`LINKCTRL_ADDON_INSTANTIATE_DEADLINE`, on an act an operator performs by hand. The
+routed and page paths need nothing — they instantiate per request already.
+
+The alternative was to weaken the sentence to *on its next load*, and it was
+declined because the sentence is the product's answer to *why is nothing
+happening*: an operator who saves a value and sees no change has no next step that
+does not involve a restart, which is the thing this whole page exists to avoid.
+
+`TestASavedSettingReachesAnInstanceTheHostAlreadyBuilt` drives it on a live host —
+one inline invocation to fill the pool, a save, a second invocation — and reads
+back both what the guest cached and what it reads now. Without the drain it
+reports `cached=30 live=7`, which is the defect stated in one line.
+
+## 2026-08-25 — M68, the ABI policy decides its own case, and the drain reaches the busy instance
+
+**D356–D358.** M68's second attempt was rejected on ten findings. Seven were
+edits — four documents saying *held* where the page renders *declared*, four
+saying `503` where the page redirects, three claims that one record was the only
+one, an endpoint list the CHANGELOG owed. Three were choices.
+
+### D356 — an answer that gains a source is additive, and M61's promise is what made this a defect
+
+[M61](phase-details/m61.md) shipped a deprecation policy that declared itself
+self-repairing: *if it cannot decide a real case that arises in this phase, that
+is a policy defect to fix in this phase*, and `docs/addon-abi.md` repeats it —
+*it is fixed here in the same change that raised it*. M68 raised one.
+
+`config_get` is live and generation 1. It answered from the manifest's default
+and from `LINKCTRL_ADDON_<NAME>_<SETTING>`; it now answers from a value an
+operator saved in the manager as well, and a running host swaps that value under
+the instance. Walking the table decided nothing: nothing narrows, no parameter
+moves, no status changes for a case that already had one, and *changing a doc
+comment* is the row the diff's edit lands on while the behaviour is what moved.
+The classification went unrecorded and `abi.Version` stayed at `0.1.2`.
+
+**The case is additive**, and the table now has a row saying so: *adding a source
+an answer may come from*, with the parameters, the statuses and the meaning of
+every existing source unchanged. A module cannot tell one source from another — it
+asked for a key and got a string — so widening the set is invisible to it in the
+way an added record field is.
+
+What a module *can* tell is that the answer changed under it, and that is what the
+subsection fixes rather than leaving to be discovered: **a value is read afresh for
+each invocation and is stable within one.** Going the other way — narrowing to
+*fixed for the life of the process* — is breaking under *narrowing what a function
+will do with what it accepts*, which is the row that already existed.
+
+So the patch moves and the generation does not: `0.1.3`, on the same arithmetic
+M65 and M66 used. It is the first patch here that adds nothing importable, so
+unlike those two it cannot fail a load — a module built against `0.1.3` runs on a
+`0.1.2` host. The alternative considered was *no version moves at all*, on the
+observation that this ABI has never appeared in a release. It was declined
+because the two existing carve-outs earn their exemption from a **published**
+promise being absent for one named thing — a signature nothing implements, a cost
+nothing has offered — and generalising that to *anything may change while the
+subsystem is unreleased* would empty the table for the whole phase. The policy is
+worth more than the one patch bump it costs.
+
+### D357 — the drain reaches an instance that is in flight
+
+[D355](#d355--a-save-drains-the-add-ons-instance-pool) is right about why the
+drain exists and wrong about what it reached. `p.drain()` empties the idle set,
+and the entry an invocation is holding is by definition not in it: `releaseInstance`
+put it back a moment later, so a module that cached a setting at package
+initialization went on serving the old value for up to `DefaultPoolTTL` — the exact
+case the drain was added for. Worse, it is the case that fails **under traffic**,
+because an add-on with traffic has its instances out.
+
+So a pool carries a generation, `drain()` increments it, and an entry is stamped
+with the generation it was made in. `put` refuses an entry from an older one and
+the caller closes it, which is what it already does with an entry the pool is full
+for. Nothing new is allocated and no lock is added — the counter lives under the
+mutex `put` and `drain` already take.
+
+The alternative was to weaken the sentence to name the bound: *within a minute*.
+Declined for the reason D355 declined *on its next load* — the page exists so that
+an operator who saved a value has a next step, and *wait a minute and try again*
+is not one.
+
+It repairs `Remove` for free, and that matters more than the settings case it was
+written for: an uninstalled add-on's in-flight instance was returned to a pool
+nothing would ever drain again, and only the `p == nil` branch — the pool being
+gone from the *new* set — was stopping it from being reused.
+`TestDrainingReachesAnInstanceThatIsInFlight` drives acquire, drain, release
+rather than a racing redirect, because the state being asserted is *an entry
+exists and is not resting*.
+
+### D358 — the demo's coverage row asserts that the module ran
+
+[D350](#2026-08-25--m68-an-operator-meets-the-add-on-host-and-one-page-is-where)
+concluded that no honest `demoFeature` row could assert the demo's add-on, because
+an add-on is files rather than rows and seeding an audit record of an install that
+did not happen would be fabricating evidence. The first half stands. The
+conclusion did not: the row it settled for counted `addon_settings`, which `lctl
+demo` writes unconditionally with no add-on host in the process, so it passed on a
+demo whose module had stopped loading and whose manager page was an empty table.
+
+**There is a row nobody can write by hand.** `addon_pageviews` is created by the
+host at load through M63's `EnsureAddonSchema`, and `views` inside it by the
+module's own package initialization through `storage_exec`. Asserting that table
+asserts that the manifest parsed, the digest matched, the declared grants were
+honoured, wazero compiled and instantiated the module, and the guest's first host
+call reached Postgres. It is the first row in that list whose subject is code
+executing rather than data existing.
+
+Making it checkable meant giving the coverage test an add-on host:
+`loadTheDemosAddon` builds `examples/addons/pageviews` with the Dockerfile's own
+command, substitutes the digest the way the image's build stage does, and opens a
+real host over the test database. The build is cached across the two tests that
+need it and costs a few seconds.
+
+What this replaces was a backstop that could not have worked. The coverage file
+named `make verify-ui`, which targets the test instance — where `LINKCTRL_ADDONS_DIR`
+is unset, so both add-on specs skip. Nothing in any automated gate would have
+noticed the demo's add-on stopping. `make test-integration` notices it now.
+
+
+## 2026-08-25 — M68, what a name inherits, and the harness that had never run
+
+**D359–D361.** M68's fourth attempt was rejected on six findings. Two were the
+gates in the milestone's own inheritance table not having fired at all — the
+redirect-path measurement, and the browser harness the bullet names by hand.
+Three were choices, and they are here. The rest were edits.
+
+### D359 — the secret's bound is on the page, not on the module
+
+[D354](#d354--a-stored-secrets-secrecy-is-a-property-of-the-column) built a
+`secret` column on `addon_settings` and said it is *"read in the withholding
+direction only: true withholds whatever the manifest now says"*. Read without a
+scope that is a claim about the credential. It is not one, and two documents
+repeated it as though it were: `CHANGELOG.md` said a replacement add-on
+*"cannot read back its predecessor's credential by re-declaring the setting as
+plain text"*, and `docs/SECURITY.md` stated the same as a bound on the value
+rather than on the form — two lines after saying, correctly, that *"the value
+leaves the database only for `config_get`"*.
+
+`mergeSettings` returns the stored row's value for any **declared** name and
+never consults `row.Secret`; that map is what feeds `config_get`. So the column
+withholds from `settingViews` — the form and the API — and a successor installed
+under the same name, re-declaring `client_secret` as `text`, reads the credential
+from inside the module.
+
+**The documents are what changed, and withholding it at the ABI was declined on
+the merits rather than on cost.** Doing that would make the page say *set* while
+the module reads nothing: a misconfiguration with no surface naming it, arriving
+at whatever the add-on does next rather than at the operator who could act on it.
+That is the failure mode D354 already declined the refuse-to-load alternative
+over, one step quieter. And nothing is escalated either way — reaching the value
+costs `addons.manage`, which is non-delegable, and the principal installing a
+module under a used name can read the table.
+
+So the bound is stated as what it is. A **person** cannot read the value off a
+page they can reach; the **code they chose to install** can. `docs/SECURITY.md`
+now says so in those terms and names it as the second by-name inheritance on that
+page, beside the identity mappings.
+
+### D360 — a purge leaves four things, and the fourth is counted rather than deleted
+
+`addon_settings` is keyed on the add-on's **name** (04800), the way
+`addon_identity_links` is (04500). A removal deletes no row from it,
+`PurgeAddonSchema` is `DROP SCHEMA … CASCADE` and nothing else, and
+`Host.SaveSettings` refuses a name that is not loaded — so a removed add-on's
+saved values are unreachable and undeletable from every surface this product has,
+and are inherited by whatever is installed under the name next. The migration's
+own comment knew this. The **point of decision** did not: the purge confirmation
+said *"Three things are not deleted"* over a tree that left four, and
+`docs/SECURITY.md` asserted that the confirmation says all three *"because a
+delete that quietly leaves things is worse than one that does not"* — which is
+the right principle stating the wrong count.
+
+`Orphan.StoredSettings` counts the rows, beside the identity links and for the
+same reason, and the confirmation, the API row, the server log and the audit
+metadata all carry it. Four documents say a purge deletes none of them and name
+the `DELETE` that does, which is `docs/operations.md`'s by-hand block and now has
+a fourth statement in it.
+
+**Deleting them was not taken, and it is [F332](deferred-findings.md).** It is a
+choice about *when*, with a real cost on every branch: on removal loses what an
+operator typed for an add-on they are about to re-install, which is the case
+04800 keeps the rows for; on purge makes one act mean two things; and a delete of
+its own is a second destructive control on a page that already has one. That is
+scheduling, and scheduling is the owner's — the same disposition
+[F330](deferred-findings.md) got for the identical shape one milestone ago.
+
+### D361 — the test instance runs the sample add-on, so the harness runs at all
+
+m68.md names the browser harness as what asserts *"same column template in both
+states, so the table does not shift"*, and no Go test can make that assertion: it
+is a laid-out column's geometry in two states, and a matched pair of hard-coded
+widths would pass every template scan in this repository. The spec was written
+and had **never executed**. `LINKCTRL_ADDONS_DIR` was unset on the test instance,
+so the manager's routes were not mounted, so both add-on specs skipped on a 404 —
+and a spec that skips is the same string as a pass.
+
+Three ways out were available: a spec that hosts its own instance, a fixture
+add-on the harness installs through the API, or configuring the test instance.
+The third is taken, because the image already carries the sample add-on at
+`/addons` and the demo already runs it from there: one line in
+`scripts/instance.sh` puts the test instance in the same configuration the demo
+has been in since this milestone started, and both specs then pass rather than
+skip. The container is read-only, so installing and removing are refused there as
+they are on the demo — which costs these specs nothing, because what they drive
+is the list, select-mode and the two confirmations, none of which writes.
+
+Two costs, both stated rather than discovered.
+
+**The core SLO column needs the line gone.** `docs/slo.md` measures *core, no
+add-on* on an ordinary instance, and an instance running an observe-class module
+is not one. Taking the line out and recreating the container is the same shape
+the add-on columns already use, in the other direction, and it is written into
+`scripts/instance.sh` beside the line and into `docs/slo.md` beside the recipe.
+
+**And `lctl` runs on the host, where `/addons` does not exist.** `config.Load`
+refuses a directory it cannot stat, so sourcing the instance file unedited made
+`make seed`, `make migrate-up` and every other host-side target exit on a
+configuration error. `DEV_ENV` empties the variable, for the reason it already
+overrides the DSN: the value in that file describes the container, and lctl has
+no add-on host and wants none.
+
+### The inherited redirect-path measurement, re-run for the fifth attempt
+
+Not a decision, and here because the rejection was right that it had not been
+run. *Touching the redirect path → re-run the k6 measurement* is one of the
+fourteen rules Phase 4 inherits, and M68 touches it: `acquireInstance` takes the
+pool mutex through `generation()` on every cold acquire, `releaseInstance` gains
+a branch, and `config_get`'s map read became an atomic pointer load through
+`settingValues.get`. Every one of those is on the inline path.
+
+It was run in [M66.5](../slo.md#re-measured-for-m665-2026-08-24)'s three-column
+shape, on an image built from this attempt's own tree. The record is
+[docs/slo.md](../slo.md#re-measured-for-m68-2026-08-25), with what it did not
+measure.
+
+## 2026-08-25 — M69's subject does not exist, and who builds it
+
+### D362 — the add-on is built now, outside the loop, by the actor that built the foundation
+
+[Step 1](phase-loop.md#1-validate) stopped the run on M69. `DevOfPie/LinkCtrl-OIDC`
+is public, holds a one-line `README.md`, and reports `license: NONE` — so both
+of M69's preconditions fail at once: owed-work #4's MIT licence, and the add-on
+whose release every host-side bullet is written against. [§4](phase-loop.md#4-repeat-or-stop)'s
+first row fired properly: M69.9 covers everything numerically below it and M70
+depends on all, so nothing un-`done` was independent of the question.
+
+**Owner: build it, under the process m69.md already sets for it** — *the same
+gates, no phase loop*. So it is CI green, sabotage-verified tests, a changelog
+and a checksummed release, in that repository, and **no milestones, no
+`.current-task.md`, no phase-details file**. This entry exists because the
+*scheduling* is new even though the process is not: the plan said the add-on was
+not this repository's to milestone and left who builds it unstated, and an
+unstated actor is how a precondition sits still for a week.
+
+Two alternatives were declined. Leaving it to the owner buys an acceptance test
+written by somebody with no stake in the foundation being right — which is worth
+more than convenience, and is the real cost of this answer, stated here rather
+than in a footnote. Cutting M69 from the phase would ship the foundation without
+the thing it was designed for ever having been attempted, turning *if the OIDC
+add-on cannot be built, the foundation is wrong* into a claim nobody checked
+before tagging.
+
+**The conflict of interest is named rather than mitigated.** The same actor now
+writes the foundation and the test of it, and a gap the foundation has is a gap
+that actor is least likely to notice from inside. What guards it is that M69's
+host-side half is still a phase-loop milestone with its own reviewer, and that
+[M69.9](phase-details/m69.9.md) reads the whole range afterwards. Neither is the
+same as an independent implementer, and saying so is the point of this
+paragraph.
+
+**Owed-work #4 is discharged in the same breath**, also owner-answered: the MIT
+`LICENSE` is added by this account, which has push and not admin on that
+repository. The licence choice was already recorded, so adding it executes a
+decision rather than taking one — the plan had called it the owner's one-file
+act, and the act is delegated, not the choice.
+
+**What comes back here.** ABI gaps the add-on's build surfaces are ordinary
+findings under [workflow.md](workflow.md) — in-spec fixes in the milestone that
+owns the seam, or deferred rows — and an ABI change it forces before 1.0 is a
+minor bump under M61's policy. That is m69.md's own bullet and this entry does
+not widen it: work in the other repository does not become work here by having
+been discovered there.
+
+### D363 — M69's *tagged release* bullet, amended to *immutable version*
+
+Found at [step 1](phase-loop.md#1-validate) while writing the add-on's `go.mod`.
+
+**The bullet as it stood** (`m69.md`): *"**The add-on consumes only the published
+SDK** at a tagged release — verified by its go.mod naming the SDK module at a
+version, no replace directive, no fork."*
+
+**As amended:** *"**The add-on consumes only the published SDK** at an
+**immutable, publicly resolvable version** — verified by its go.mod naming the
+module at one, with no replace directive and no fork."* — with the reason, the
+cost and M70's obligation stated in the bullet.
+
+**The tree fact:** `git ls-tree v0.3.0 sdk/` returns nothing. The SDK first
+appears at `0f87297`, M61's commit, inside this phase. The next tag is `v0.4.0`,
+which [M70](phase-details/m70.md) cuts — after this milestone and after
+[M69.9](phase-details/m69.9.md). So the bullet as written could not be satisfied
+in the order the plan itself sets.
+
+**Prompted rather than corrected**, because *tagged* is an assertion and not a
+fact: what an add-on author is shown is part of what the exercise is for.
+
+**Owner: the pseudo-version, and M70 bumps it.** A Go pseudo-version —
+`v0.3.1-0.<date>-<sha>` — is immutable, publicly resolvable, needs no replace
+directive and no fork, so it satisfies everything the bullet is *for*. What it
+does not satisfy is the word itself, and that cost is real and is paid: for one
+phase the worked example shows a third-party author a dependency line nobody
+would tell them to type. `m70.md` now carries the bump as a step of the close.
+
+Two alternatives were declined with their costs. Cutting a `v0.4.0-rc.1` now
+would fire `release.yml`, whose trigger is `tags: ["v*.*.*"]` — a full release
+build, images, archives and provenance, off an unmerged branch — and
+`release-check` refuses while `[Unreleased]` is non-empty, which mid-phase it
+must be; excluding pre-releases needs a workflow edit this loop cannot commit and
+would have to propose. Making `sdk/` its own Go module is the honest long-term
+shape for a contract another repository compiles against — it would stop the ABI
+being versioned by the product's release cadence — and it is a scope change
+touching the generator, the consumer test, CI, `releasing.md` and M61's own
+entries, which wants its own milestone rather than a corner of this one.
+
+## 2026-08-25 — the foundation cannot reach outward, and one constraint nobody chose
+
+Two owner answers, taken together because the second is why the first has a
+second milestone behind it.
+
+### D364 — an add-on declares that it needs egress; the operator decides where
+
+[F334](deferred-findings.md#open): sixteen ABI functions, none network-shaped;
+eight permission tokens, none naming egress; a guest module config granting a
+name, a start function, a random source and two clocks. An OIDC relying party
+needs a discovery fetch, a **token exchange** and a JWKS fetch, and m69.md
+requires authorization-code with PKCE by name — the token exchange being exactly
+what that flow adds over the implicit one OAuth's security guidance deprecates.
+So the acceptance test answered its own question before a line of the add-on was
+written, which is the cheapest moment it could have.
+
+**Owner, verbatim: *"General egress should always be avoided and any egress
+should be done as securely as possible."*** That decides the design rather than
+constraining it. [M68.5](phase-details/m68.5.md) is the milestone: the manifest
+declares a **need** and never a destination, the operator names the origins in
+settings, and an unconfigured add-on that talks outward is inert rather than
+trusting a default.
+
+**Why the operator rather than the manifest**, since the alternative is the more
+familiar shape. A manifest allowlist an operator approves at install is not
+tighter — the operator is the gate either way — and it invites approving a list
+without reading it, which is how permission dialogs stop working. Under this
+answer an add-on's author cannot widen its reach at all, only the person running
+the instance can, and for OIDC it costs nothing: the issuer URL is per-deployment
+and the operator supplies it regardless. The third option put — the manifest
+declaring and the host enforcing with no operator step — was argued against and
+declined, because it lets a later version of an add-on widen where it connects.
+
+**The cost is stated**: an add-on that talks outward does not work until it is
+configured, so *install and it runs* is gone for that class. And this answer is
+also less machinery than the alternative, so cheapness and strictness agree here
+— worth saying, because when they agree the recommendation deserves more scrutiny
+rather than less.
+
+### D365 — *install is an upload, never a fetch* was nobody's decision
+
+`m67.md` shipped that bullet and its commit message argued SSRF for it at length.
+**No decision backs it.** `grep` over this file finds nothing, and
+[phase-4-candidates.md](phase-4-candidates.md) — the file that records the
+owner's planning answers — contains no mention of upload, fetch or URL at all. It
+was the plan author's assumption, written as a stance, reviewed as one, and
+shipped as one.
+
+**Owner, verbatim: *"I don't recall making a decision to not retrieve modules
+from URLs, and my intention was to provide a store for modules later on top of
+local/direct url installs."*** So the intended shape is local **and** direct-URL
+installs, with a store built on top of them.
+
+**Recorded as new function rather than as a defect**, which decides its route:
+M67's claims are all true and its code does what it says, so nothing is reopened
+— the scope was wrong, not the tree. That distinction is the one keeping the
+status table meaningful and stretching it here would blur it. So
+[planning.md](planning.md)'s path, and [M68.6](phase-details/m68.6.md).
+
+**Owner: Phase 4, after the egress milestone.** A URL install needs exactly the
+resolution, address refusal, redirect handling and size cap M68.5 builds, so it
+sits behind that milestone and reuses it rather than growing a second fetch path.
+The declined alternative was Phase 5 alongside the store, which would have closed
+this phase sooner and let URL install be designed with the thing it serves; its
+cost was that 0.4.0's documents would describe upload-only as a stance rather
+than as a stage.
+
+**`m67.md` is corrected in place** with a dated note saying the behaviour stands
+and the reason did not, pointing at M68.6. The file is not rewritten and the
+milestone is not reopened: what was wrong was a sentence claiming somebody chose
+something, and the correction says so.
+
+### What this costs the phase, counted rather than implied
+
+Phase 4 planned fourteen, ran to fifteen at [M66.5](phase-details/m66.5.md), and
+is **seventeen** with these two. The cap the owner moved to on 2026-08-18 is
+eighteen, so this is inside it with one slot left — and the reserve that slot
+used to be was already spent at M66.5 and recorded as spent
+([D333](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms),
+`Plan.md`). Both are milestones the build turned out to need rather than
+optimistic planning, which is the case
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)'s
+2026-08-11 clarification allows without a phase-boundary conversation. **The next
+insertion is that conversation**, and M69 — the one milestone most likely to
+produce insertions, and which has now produced one before starting — is still
+ahead.
+
+Both are numbered below [M69.9](phase-details/m69.9.md), so both sit inside the
+pre-release review's range, and both are above M68, so nothing M64.9 covered is
+reopened.
+
+## 2026-08-26 — the conversation Plan.md promised, and what it decided
+
+### D366 — Phase 4 proceeds at seventeen, with one slot left and M69 still ahead
+
+[D333](#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)
+spent Phase 4's reserved slot at M66.5 and wrote the consequence into `Plan.md`
+in these words: *an insertion M69 produces is a conversation about the cap of
+eighteen, not a slot.* M69's validation then produced **two** —
+[M68.5](phase-details/m68.5.md) and [M68.6](phase-details/m68.6.md) — before the
+milestone started, taking the phase from fifteen to seventeen. The plan review of
+that addition is what noticed the sentence was owed and unpaid.
+
+**Owner: proceed.** Build the two, then M69, at seventeen with one slot left.
+
+**What was weighed was not the count.** Seventeen inside eighteen needs no
+permission; the 2026-08-11 clarification already allows milestones the build
+turns out to need. What made it a real question is what is still ahead: M69 is
+the milestone *designed* to surface what the foundation got wrong, it has now
+produced insertions **before it started**, and the honest reading of that is that
+it is likely to produce more. Proceeding spends the last slot on that
+possibility.
+
+Two alternatives were declined with their costs. **Moving the cap** would stop
+the phase being paced by a number and let M69 find what it finds — and it is
+exactly the pressure the cap was set on 2026-08-18 to resist, a phase growing one
+insertion at a time with nobody ever being the person who decided it was large;
+[planning.md](planning.md#the-size-target-a-phase-stays-under-sixteen-milestones)
+is explicit that moving it for one phase and for every phase after are different
+decisions, and only the first was ever taken. **Closing at M68.6** and opening
+Phase 5 with OIDC would ship a coherent 0.4.0 — a foundation that reaches outward
+and installs from a URL — and would give the acceptance test a phase sized for
+whatever it uncovers; it was declined for the second time, having already been
+declined when the add-on's absence first stopped the run
+([D362](#2026-08-25--m69s-subject-does-not-exist-and-who-builds-it)).
+
+**What happens at the next insertion is now the interesting question**, and this
+entry does not pre-answer it: with the last slot spent, one more is a conversation
+about the cap itself. Naming that here is the whole point of having had this one
+early rather than mid-milestone.
+
+## 2026-08-26 — M68.5, how an add-on reaches outward: the four shapes the answer took
+
+### D367 — the shape of egress, decided four ways below one owner answer
+
+[D364](#2026-08-25--the-foundation-cannot-reach-outward-and-one-constraint-nobody-chose)
+decided the design: *the manifest declares a need, the operator names the origins*.
+It did not decide how, and four choices sat under it. Each is recorded because each
+had a plausible alternative and because
+[M68.6](phase-details/m68.6.md) and [M69](phase-details/m69.md) both build on the
+answers.
+
+**Origins come from a manifest-declared setting, marked by a flag.** m68.5.md says
+*a declared setting the operator fills in — M68's page, M64's types*, and two
+readings survive that sentence: a setting the **manifest** declares, or one the
+**host** synthesizes for every add-on holding the grant. The manifest's own bullet
+decides it — *a log line naming the setting* only means something if the setting has
+a name the add-on chose — so an add-on declares
+`{"name": "provider_origins", "type": "text", "origin": true}` and the operator
+fills it in. The flag is a boolean beside the existing four types rather than a
+fifth type, because what changes is the *meaning* and not the input: the manager
+draws the same text box, and a fifth type would be a shape M68's page had to learn
+to render for nothing. What the flag costs is three refusals that make *the
+manifest cannot name a destination* structural rather than promised — such a
+setting is `text`, carries no `default`, and carries no `options`. A default would
+be a host the publisher chose and the operator inherited; options would be a list
+of them; a `select` would be the manifest naming the choices outright.
+
+**The value is a space-separated list, not one origin.** Measured rather than
+assumed: Google serves discovery from `accounts.google.com`, the token endpoint
+from `oauth2.googleapis.com` and the key set from `www.googleapis.com`. With one
+origin per setting, an add-on whose author had anticipated one field would be an
+add-on nobody could point at such a provider — and the add-on's author is exactly
+the party this design says must not be deciding where it reaches. So the field
+takes as many as the operator writes, and every one of them is still theirs.
+
+**A refusal is a word in the record, not one of the five ABI statuses.** Every
+other refusal in this ABI is a negative [abi.Status], and this one is not, which is
+a departure worth the entry. m68.5.md asks for *a closed vocabulary the guest can
+branch on, and each one is a counter label* — and the five statuses cannot tell a
+timeout from a size cap from a refused address, which are three different things
+for both readers: an add-on retries one of them and an operator investigates
+another. Collapsing them would have made the `outcome` label of
+`linkctrl_addon_fetch_total` a second vocabulary invented for the metric, which is
+the drift the closed-vocabulary discipline exists to prevent. So `FetchResponse`
+carries `outcome`, eleven words, and the negative statuses keep what they mean
+everywhere else here: the guest's own fault, and the host's. The alternative —
+`StatusDenied` for the unconfigured case, statuses for the rest, the record for
+what is left — was written out and rejected as two mechanisms for one question.
+
+**The coherence rule is one-directional.** An origin-marked setting without
+`network.fetch` is refused at load; the grant without an origin setting is legal.
+The second direction was built first and reverted: it broke
+`TestGrantabilityIsNotAValidationQuestion`, which walks the vocabulary asserting
+that a manifest declaring any single token validates — a **shipped** claim, and one
+this milestone has no business narrowing. It is also wrong on its own terms. An
+add-on holding the grant with nowhere to point reaches nothing, and *reaching
+nothing* is not a broken state here: it is the `unconfigured` outcome, which this
+design produces on purpose for every add-on nobody has configured yet. Refusing it
+would make validation ask whether a declared capability is *useful* rather than
+whether it is coherent. It is a publishing mistake, so it gets a boot-log warning
+and the same treatment migrations-without-storage gets in the direction that
+matters.
+
+**The route deadline covers every route invocation, not only a fetching one.**
+m68.5.md's *first job* was to say what bounds a fetching route handler and build
+it. What the tree turned out to have was no bound at all: a route ran under the
+request's context, `LINKCTRL_HTTP_WRITE_TIMEOUT` does not cancel one, and a module
+that looped held one of the sixteen instance slots — shared with the redirect path
+— for as long as the visitor waited. A deadline conditional on the permission would
+have left that hole open for every add-on that did not declare it, while being a
+second rule to reason about. Fifteen seconds, which is three fetches at the default
+timeout and sits under the write timeout where the visitor's patience ends anyway.
+
+### The defaults were measured, and here is what was measured
+
+2026-08-26, four public identity providers. Discovery documents: 839 bytes
+(Apple), 1,217 (GitHub Actions), 1,399 (Google), 1,728 (Microsoft). Key sets:
+2,880 (Apple), 5,547 (GitHub Actions), 12,852 (Microsoft). These are documents
+whose transfer time is a TLS handshake and a round trip rather than bytes on a
+wire, which is what makes a **five-second** timeout generous rather than tight and
+a **256 KiB** cap twenty times the largest of them. The cap is deliberately the
+same number `maxResponseBody` uses for what an add-on may *answer* with: one figure
+for what crosses this boundary in either direction is one figure for an operator to
+hold.
+
+### The egress scan gained its first exemption, and the claim narrowed
+
+`TestTheSecondFactorOpensNoSocket` (M53, extended to `internal/addon` at M65) has
+asserted since 0.3.0 that *nothing on an authentication path in this product
+reaches the network*. This milestone makes that false as written, and the response
+is to say what is true now rather than to widen a pattern quietly: **this product's
+own authentication code does not dial**, and an add-on's outbound request is a
+capability an operator granted to somebody else's module. The exemption is
+`internal/addon/fetch.go` by name — one file — and that confinement is what the
+narrowed claim rests on, so a second file in that package that dials fails the scan
+rather than joining a list. The test also now asserts the exempt path exists, since
+an exemption naming a file that moved is one that has quietly stopped exempting
+anything. `docs/SECURITY.md`'s egress row goes from **five** connections to six,
+and the sixth is the first whose destination somebody outside this project chose.
+
+### What this deliberately does not carry, and why it will be asked for
+
+**No request headers.** The ABI carries no header map, so a token endpoint is
+reached with `client_secret_post` and there is no way to send `Authorization`. A
+header is the shape through which a request grows a credential nobody granted, a
+`Host` override that defeats the origin check, or a cookie no prefix was declared
+for — and the two headers an OIDC exchange actually needs are ones the host sets
+itself. The cost is real and is stated here rather than discovered at M69: a
+provider that advertises only `client_secret_basic` cannot be reached, and the fix
+is a field on `FetchRequest` bounded by a closed allowlist of header names, which
+is additive and argued when something needs it.
+
+**No response headers but the content type**, so a `Set-Cookie` or a `Location`
+from a third party never reaches a module.
+
+**No connection pooling.** Keep-alives are off. A pooled connection would outlive
+the instance the pool hands back, and an add-on removed at runtime would leave one
+open to somebody else's server.
+
+**No proxy.** `http.ProxyFromEnvironment` is deliberately not used: a proxy
+connects on this host's behalf to an address the dial-time check never sees, which
+would make the whole address policy advisory. An operator who needs egress through
+a proxy needs it enforced in the network, which is what `docs/SECURITY.md` already
+says about the destination validator.
+
+### What is *not* claimed
+
+The address policy is a **refusal list plus the stdlib's predicates**, and
+m68.5.md's own risk says what that is worth: *the test suite is written against the
+bypasses somebody thought of*. Nothing here closes that. What the build does
+instead is split the claim so neither half rests on the other — the policy is a
+pure function driven by a table of forty-odd representations, and the wiring is
+asserted by dialling `https://localhost:<port>` for real with the policy untouched,
+which is the DNS-rebinding shape without a DNS server: a name, resolved by the
+operating system, that no amount of reading the URL distinguishes from any other.
+Both halves fail when either is sabotaged, which was confirmed rather than assumed.
+
+## 2026-08-26 — M67 reopened: the leak tripwire measures warm-up
+
+### D368 — there is no leak, and the instrument was measuring the wrong window
+
+`TestRepeatedInstallAndRemovalDoesNotGrowResidentMemory` went red at M68.5's
+gates. It is [M67](phase-details/m67.md)'s, it fails on trees M68.5 never
+touched, and its filer ([F335](deferred-findings.md#open)) reported it as
+*fails under coverage, and on main too* — true, and not the cause.
+
+**Measured rather than reasoned about**, at the owner's direction: growth against
+cycle count, with finalizers settled by five `runtime.GC()`/`debug.FreeOSMemory()`
+rounds 150ms apart, because wazero releases a compiled module's mapping from a
+finalizer and a finalizer runs after the GC that queues it.
+
+| cycles | grown | per cycle |
+| --- | --- | --- |
+| 5 | +27,972 KiB | +5,594 KiB |
+| 10 | +29,416 KiB | +2,941 KiB |
+| 20 | +30,680 KiB | +1,534 KiB |
+| 40 | +40,248 KiB | +1,006 KiB |
+
+**A per-cycle leak holds per-cycle cost constant. This falls by 5.5x**, nearly all
+of it arrives in the first five cycles, and ten to twenty cycles adds 1.2 MiB in
+total. That is one-time warm-up — allocator arenas and whatever the runtime
+caches — and not a leak. **The tree is correct.**
+
+**What is wrong is the test's window.** It takes **one** warm-up cycle and then
+allows 16 MiB across exactly the stretch that grows ~28 MiB in warm-up alone, so
+whether it passes depends on how much of that lands inside the measurement.
+That is the 20-to-103 MiB spread its filer saw on identical work, and it is why
+`make check` was green at M67's acceptance and at M68's: luck, both times.
+
+**Reopened rather than fixed as a loose commit.** M67's bullet has two limbs —
+*repeated install/remove cycles hold resident memory flat*, which the measurement
+above confirms, and *the leak risk is bounded by test*, which is not delivered by
+a test whose verdict is a coin toss. The second limb is a shipped claim that is
+not true, which is what reopening is for; a commit outside the milestone would
+leave `m67.md` asserting it with the correction findable only in a commit
+message. Owner-answered, over that alternative and over widening the tolerance —
+which was declined on the grounds that a tolerance set above noise nobody
+explained will not catch the leak it exists for.
+
+**The repair is the window, not the number.** Warm up until the resident set
+settles rather than once, and assert on the growth of a later window rather than
+on a total that has arena growth in it. The figures above are the record so
+nobody re-derives them, and the one thing the new test must keep is what
+`heldBytes`'s comment already argues: `HeapAlloc` is not this measure, because
+wazero maps compiled code outside the Go heap and a host that never closed a
+module measured *smaller* under it.
+
+**M68.5 is finished and waits behind this**, which is the right order and is
+worth naming: a red gate stops a commit, and the first exception to that is the
+expensive one.
+
+### D369 — the tripwire could not have caught the line it was written for
+
+The repair is two windows of five cycles, the later bounded by a quarter of the
+earlier's growth with an 8 MiB floor — a shape that needs no number taken from
+this machine, because warm-up is what makes a second window cheap and a leak is
+what makes it as expensive as the first.
+
+**What the build found is worse than the window defect.** wazero keys compiled
+code by a hash of the module, so ten cycles of the *same* bytes share one
+compiled copy however many times they are installed. Deleting `l.compiled.Close`
+therefore costs nothing measurable — which is exactly what M67 measured at
+**−208 KiB**, and then recorded in `unload` as *promptness rather than a leak
+fix*. That reading was not a subtle mistake about garbage collection; it was the
+test workload making the defect invisible, and **no tolerance and no window would
+have caught it.**
+
+Each cycle now installs a distinct module — a wasm custom section carrying the
+cycle number — which is both what defeats the dedup and what the shipped upgrade
+path already does: remove-then-install is how a version changes, and successive
+versions are what a retaining host accumulates. Under that workload the sabotage
+grows the later window by **128,524 KiB against a 46,129 KiB bound**, about 25 MiB
+a cycle. `unload`'s comment is corrected to say so.
+
+**The entry this falsifies is named rather than edited**, which is this log's own
+convention and the D179 precedent. **[The 2026-08-24 M67 entry](#2026-08-24--m67-an-add-on-arrives-and-leaves-and-the-directory-is-still-the-only-store)
+is superseded in three of its claims**: that closing the compiled module is
+*promptness rather than a leak fix*; that forty cycles without `l.compiled.Close`
+moved the resident set by −208 KiB; and that ten cycles of a 1.8 MB module grow
+the resident set by under 16 MiB. All three are true of the deduped workload that
+entry measured and false of the one the test now runs. Its text stands, because
+this file is append-only and it was an honest report of what was measured; this
+paragraph is the pointer forward that stops a reader taking it as current.
+
+**The lesson is about the workload, not the instrument**, and it is the second
+time this milestone has taught it: [D368](#2026-08-26--m67-reopened-the-leak-tripwire-measures-warm-up)
+found a test measuring the wrong window, and this one found the same test
+exercising a workload under which the property it guards cannot fail. *A test
+that has never failed has not been shown to test anything* is the rule this
+repository already has; what neither it nor the sabotage caught is a test that
+**did** fail on demand, for a reason unrelated to the line it was protecting.
+
+
+## 2026-08-26 — M68.5, the bound that never fired
+
+### D370 — the route deadline is a bound inside the request deadline, not the first one
+
+M68.5's first attempt was rejected on seven findings. The address policy was not
+among them: the reviewer tried to break it and could not. What it was rejected on
+is the milestone's *first job* — **say what bounds a fetching route handler and
+build it** — and the answer that was built was defended with the wrong number.
+
+**The tree fact.** `internal/httpx/router.go` wraps the whole application tree in
+`RequestTimeout(cfg.HTTP.RequestTimeout)`, which is a **context** deadline
+(`internal/httpx/timing.go`) defaulting to fifteen seconds
+(`internal/config/config.go`). `internal/httpx/addons.go` hands `r.Context()` to
+`Host.Route`, which does `context.WithTimeout(ctx, h.deadlineForRoute())` — also
+fifteen seconds. `WithTimeout` keeps whichever deadline is earlier and the
+request's starts strictly first, so **the new bound never fired at default
+configuration**. Measured by the reviewer: with a 300 ms parent context the `/spin`
+fixture returns in 300.7 ms with *module closed with context deadline exceeded*.
+Six places asserted the opposite, and each of them named `HTTP_WRITE_TIMEOUT`
+(thirty seconds, which genuinely does not cancel a context) while none named
+`HTTP_REQUEST_TIMEOUT` (fifteen, which does).
+
+**[D367's last paragraph is superseded.](#2026-08-26--m685-how-an-add-on-reaches-outward-the-four-shapes-the-answer-took)**
+Its first sentence stands — the deadline covers every route invocation rather than
+only a fetching one, and the argument for that is unchanged. What is false is
+everything after *What the tree turned out to have was no bound at all*: a route
+did have a bound, it was the request deadline, and `HTTP_WRITE_TIMEOUT` was never
+the number at issue. That text stays as written because this file is append-only;
+this paragraph is the pointer forward.
+
+**Why the bound is kept rather than removed.** The other honest outcome was to
+delete the knob and record that the request deadline had been the answer all along.
+It was written out and declined on two grounds, both of which are properties of the
+tree rather than preferences:
+
+- **A bound that fires *first* is not the same bound.** When the request deadline
+  is what elapses, host and guest end on the same context: the module is closed and
+  the handler that would turn that into a page, a log line and a counter has no
+  budget left either. A margin under it means the host closes the guest, observes
+  `ErrGuestFailed`, and still has a live request to answer with. Five seconds under
+  fifteen is that margin.
+- **`RequestTimeout(0)` returns the handler untouched.** An operator who has
+  disabled the request timeout has no bound on an add-on's page at all, and that is
+  the deployment where a module holding one of the sixteen instance slots until the
+  visitor gives up is still reachable.
+
+So the default moves **fifteen seconds → ten**, and the reason written beside it is
+the one above rather than the write timeout.
+
+**The fetch timeout was a third of a budget that did not exist.** Five seconds was
+defended as *a third of what the route deadline allows, so a handler doing the three
+fetches an authorization-code flow needs has room for all of them*. Under the
+finding above the real budget was whatever remained of the fifteen-second request
+deadline after middleware, session lookup, CSRF, rate limiting and instantiation,
+and 3 × 5s does not fit in it. The measurement behind the number was about document
+*size* and still holds — 839 to 1,728 bytes of discovery document, 2,880 to 12,852
+of key set, transfers whose cost is a handshake and a round trip. What did not hold
+was the arithmetic, so the number moves **five seconds → three**, which is still an
+order of magnitude over what was measured and is the largest value at which three
+fetches fit inside ten seconds.
+
+**Both nestings are now enforced instead of described.** `Config.Validate` gains two
+rules on the model of the `FEED_TIMEOUT` one it already had — *a knob whose upper
+half cannot take effect is not a knob*:
+
+- `ADDON_ROUTE_DEADLINE` must be positive and, when `HTTP_REQUEST_TIMEOUT` is set,
+  strictly under it.
+- `ADDON_FETCH_TIMEOUT` must be positive and must not exceed the route deadline.
+
+They sit outside the `Addons.Enabled()` guard deliberately: a misconfigured pair is
+misconfigured whether or not `ADDONS_DIR` points anywhere yet, and refusing it only
+once somebody installs an add-on is refusing it on the worst day. The exception is
+`HTTP_REQUEST_TIMEOUT=0`, where there is nothing above to nest inside and no rule is
+applied — asserted, so a later tightening cannot break that deployment silently.
+
+**What made this survivable to build twice is the test's blind spot, and it is
+named here.** `TestARouteInvocationIsBounded` drives `Host.Route` with
+`context.Background()`. That proves the host bound *exists* and is structurally
+incapable of noticing that it never binds, because there is no caller deadline for
+it to lose to. `TestTheRouteDeadlineNestsInsideTheCallersOwn` asserts both
+directions — host shorter, and caller shorter — and
+`TestTheAddonEgressBoundsNestInsideTheRequestDeadline` asserts the two defaults
+against `HTTP_REQUEST_TIMEOUT`'s. Neither is a substitute for the validation; they
+are what makes the validation's *premise* checkable.
+
+### The five smaller findings, and what each cost
+
+**`docs/SECURITY.md`'s Egress row contradicted itself twice.** The count edit moved
+*five connections* to six in the row's opening and left *the weakest of the five*
+and *so the five can be checked* standing in the same paragraph — the milestone's
+own stated failure mode, an enumeration true when written and wrong within a
+milestone. Both are now six.
+
+**Two log sites escaped what the neutralizing handler escapes.**
+`hostState.originsFor` passed `moduleText(err.Error())` into `s.hostLog`, and
+`originString` — called from four `slog.String` sites — did the same. logsafe.go
+states the rule and names the symptom: *every call site here logs the raw value and
+lets this file escape it*, and pre-escaping makes a reader meet `\\u200b` where an
+operator typed a zero-width space. Both now log raw. The reviewer found one of the
+two; a test now covers the property rather than either site.
+
+**`docs/slo.md` called the slot interaction one-sided.** It said *the change is in
+the direction that helps*, which is true of a spinning module and not of the
+capability this milestone adds. The sixteen instance slots are shared between
+add-on pages and inline redirect invocations, and an inline invocation that finds
+none is skipped **without waiting** (`redirect.go`, the `default:` arm) — the
+redirect served without the module and
+`linkctrl_rate_limited_total{limit="addon_inline"}` incremented. A route handler
+used to be compute-bound and give its slot back in milliseconds; one that fetches
+holds it for a network round trip. So sixteen concurrent sign-in flows skip inline
+redirect add-ons for the duration. That is M66's designed degradation rather than a
+broken promise, and the section that exists to discharge the redirect-path rule now
+says so, because *nothing on this path fetches* is true while *nothing on this path
+is affected* is not.
+
+**Two reserved names shipped without their CHANGELOG line.** `fetch` and `route`
+join `AddonReservedNames`, so an add-on in a directory of either name stops loading
+after an upgrade. The precedent was set twice in the same file — `pool` at M66.5 and
+the two reserved *setting* names before it — and the M68.5 entry listed the three
+new variables and neither name. It does now.
+
+**The refusal list closed against a register rather than against four names.** The
+reviewer found `0.0.0.0/8` dialled — `IsUnspecified` catches `0.0.0.0` and nothing
+catches `0.0.0.1` — plus `192.31.196.0/24`, `192.175.48.0/24` and `2001:20::/28`
+absent. Adding exactly those four would reproduce the milestone's own risk, *the
+test suite is written against the bypasses somebody thought of*, so the list's claim
+changed instead: it is now **every entry in IANA's IPv4 and IPv6 special-purpose
+address registries that the stdlib predicates do not already cover**, which is
+eleven additions and a claim a reader can check against a document this project does
+not write. None was reachable on Linux, so this was an enumeration gap rather than a
+bypass — which is the only reason it is recorded here rather than as a defect.
+
+### D371 — M68.5's *no deadline to spend* clause, amended
+
+**The bullet as it stood** (`m68.5.md`): *"For a **route** handler there is no
+deadline to spend — `m64.md` bounds memory and asks that a `<250ms` dashboard
+target not be broken, and that is not a bound a fetch can be checked against —
+so this milestone's first job is to say what bounds a fetching route handler and
+to build it."*
+
+**As amended:** *"For a **route** handler the bound is the application tree's own
+request deadline, `HTTP_REQUEST_TIMEOUT`, which is a context deadline every
+request already carries — so this milestone's first job is to say what bounds a
+fetching route handler and to build whatever that answer needs."*
+
+**The tree fact:** `internal/httpx/router.go` wraps the whole application tree in
+`RequestTimeout(cfg.HTTP.RequestTimeout)`, a context deadline defaulting to 15s,
+and `internal/httpx/addons.go` hands `r.Context()` straight to `Host.Route`. So a
+route handler has been bounded since long before this milestone, and
+`internal/addon/http.go`'s own pre-existing comment says it: *"the deadline every
+application request carries closes the instance underneath a spinning guest."*
+M68.5's first reviewer measured it — a spinning fixture returned in 300.7ms under
+a 300ms parent context.
+
+**A fact and not an assertion, so amended rather than prompted.** What the bullet
+*requires* is unchanged and is what the build answered: say what bounds a
+fetching route handler, and build what that answer needs. What was wrong is the
+premise clause, and nobody could have decided differently about whether a
+deadline existed — it either did or it did not, and it did.
+
+**It is the same defect the milestone was rejected for**, one level up. The plan
+said there was no bound; the build then added one and defended it against the
+wrong variable; the reviewer measured. Writing *there is no deadline* into a
+milestone file without checking is how the build inherited the belief, which is
+worth recording because this plan was reviewed and the clause survived it.
+
+## 2026-08-26 — M68.5, what a refusal list claims and what a stored value authorizes
+
+Third attempt. The second was rejected on four findings, two of which were claims
+this milestone's own diff makes and does not keep. Both are recorded here because
+each was a choice rather than a slip, and the other two — a metric counting a
+refusal as a request, and the one bound of three with no validation — were
+repairs, written into the code beside what they repair.
+
+### D372 — a value the operator typed does not become a destination, and the claim says so rather than the code
+
+`docs/SECURITY.md` and `CHANGELOG.md` both said **a new version of an add-on
+cannot quietly reach somewhere the old one did not**. The tree does not enforce
+that sentence. `originsFor` pairs the `origin` flag off the manifest *in hand*
+with a value out of `addon_settings` or the process environment, and neither
+source records what the setting was when the value was written. So:
+
+- v1 declares `homepage` as ordinary text; the operator types their own URL in.
+- v2 declares `network.fetch` and marks that same setting `origin: true`.
+- On the next load this host dials it, and no operator act ever named it a
+  destination. The operator sees the new permission and not the promotion.
+
+**The choice was between narrowing the sentence and invalidating the value**, and
+the second is the one that sounds right: `addon_settings` already carries a
+`secret boolean` recording what the setting was *at the moment it was saved*, for
+this exact shape of attack one milestone ago (04800, and M67 made
+remove-then-install the documented replacement path). An `origin boolean` beside
+it, written from `decl.Origin` on save and required by `originsFor`, is the same
+mechanism against the same swap.
+
+**It was not taken, and the reason is that it is partial in a way that makes the
+gap harder to see rather than smaller.** A value can reach an add-on from two
+places, and only one of them has a save moment to stamp:
+
+- **Stored** — the Add-on manager writes a row, and a column could record the flag.
+- **Environment** — `LINKCTRL_ADDON_<NAME>_<SETTING>`, merged **on top** of the
+  stored value by D347, with no row, no timestamp and nothing to stamp. Worse,
+  `SettingView.Editable()` is false for an environment-sourced setting, so a value
+  the column refused could never be re-affirmed through the page. The column would
+  not defer an environment origin; it would refuse one **permanently**.
+
+So the column closes the manager half, leaves the environment half exactly as it
+is, and requires the sentence to be narrowed anyway — while leaving a reader of
+that narrower sentence believing transitions are handled. Half a mechanism costs
+a migration, a state an operator has to resolve, and page copy, and buys a
+smaller gap that is harder to find. Deciding what an environment-sourced origin
+*means* here is a change to D347's precedence rule, which is the owner's and is
+not in this milestone's scope.
+
+**What was done instead**, and it is more than a narrowing:
+
+- The sentence now claims only what the manifest schema actually guarantees —
+  *no version of an add-on, new or old, can name a destination in a file you do
+  not edit* — which is true, is what the tests assert, and is what
+  `TestAManifestCannotNameAHost` holds.
+- `docs/SECURITY.md` gains the transition as its own paragraph, in the operator's
+  terms: when an upgrade adds `network.fetch`, read the settings marked as naming
+  an origin before trusting it, the way you would read the permissions. An
+  operator who cannot act on a risk is not being told about it, so it says what to
+  do. `CHANGELOG.md` says the short version.
+- [F336](deferred-findings.md#open) files the behaviour, pointing at
+  [F332](deferred-findings.md#open) as the same defect reached from removal
+  rather than from upgrade — both are the same surface and the same choice about
+  when a stored value stops being the operator's answer.
+
+**Severity, stated rather than assumed.** Nothing is escalated. Installing a
+version costs `addons.manage`, which is non-delegable and is the highest grant
+this product has, and that principal could name any origin they liked by typing
+one. For the deception to buy an attacker anything they need the operator to have
+already typed an *attacker-controlled* URL into a plain setting — at which point
+v1 could simply have flagged it `origin` and asked. What is real is the
+mismatch between what the operator consented to and what the host now does, and
+D364's whole point is that only the operator decides where an add-on may reach.
+That is why it is a filed row and a paragraph an operator can act on, rather than
+a sentence deleted.
+
+### D373 — the refusal list is no longer what stops the next range being missed
+
+The list claimed to be *every entry in IANA's IPv4 and IPv6 special-purpose
+address registries that the predicates do not already cover*. It was not. The
+first review of the file found four missing; the second found six more, every one
+of them IPv6: `2001:1::1/128` (PCP), `2001:1::2/128` (TURN), `2001:1::3/128`
+(DNS-SD service registration), `2001:30::/28` (DRIP), `5f00::/16` (SRv6 SIDs) and
+`3fff::/20` (documentation). None is private space, so the security consequence
+was small. The defect was the claim, and the shape of it is m68.5.md's first
+risk in as many words — *an enumeration true when written* — with the added
+insult that `TestEveryRefusedPrefixIsActuallyRefused` walks the list, so nothing
+in the suite could ever have caught an omission from it.
+
+**Adding six and re-asserting completeness would have been the third time.** Four
+of the six are carve-outs of one block — `2001::/23`, IANA's IPv6 IETF Protocol
+Assignments — which is delegated whole, holds nothing anybody routes to, and is
+where every new special-purpose IPv6 assignment since Teredo has come from. So it
+is refused **as the block**, the way `192.0.0.0/24` already was on the IPv4 side,
+and the six entries that were enumerated individually inside it are gone from the
+list. The next address IANA carves out of that block is refused before it is
+written.
+
+Two consequences worth having on the record:
+
+- **The list got shorter as it got wider** — twenty-nine prefixes to twenty-six —
+  and the count guard moved from 28 to 26 with the reason beside it, because that
+  guard exists to catch a deletion and this was not one. The six subsumed entries
+  are still named, in the test table, which is where a reader checks *what is
+  inside the block* and where they belong.
+- **The block is not a complete answer and the claim no longer pretends
+  otherwise.** `5f00::/16` and `3fff::/20` are top-level allocations, not
+  carve-outs, and against a *new* top-level allocation there is no mechanism at
+  all. So the claim now carries the date it was read — 2026-08-26 — rather than
+  an unqualified completeness. A dated claim is one a reader can diff; an
+  undated one is one they have to trust.
+
+### Also in this attempt
+
+- **`address_refused` left the duration histogram.** It is this milestone's
+  headline refusal, the `Control` hook that raises it runs before `connect(2)`,
+  and it was landing in `linkctrl_addon_fetch_duration_seconds` — whose help
+  string said *only requests that reached the network are here* — inflating the
+  add-on's p99 with a decision taken in microseconds, the exact effect the
+  surrounding comment claimed to be avoiding. The rule the code now states is
+  **who decided**: an outcome this host reached on its own is counted and not
+  timed; an outcome the world handed back is timed. That keeps `dns_failed`
+  timed, which is right — a name that will not resolve is a resolver answering
+  slowly, and an operator wants the seconds. It costs the DNS lookup that
+  preceded an `address_refused`, deliberately: a lookup's latency filed as a
+  request's is a number about a request this host refused to make. Six documents
+  and one help string moved with it, and
+  `TestAFetchIsCountedAndOnlyAnAttemptedOneIsTimed` is what holds it.
+- **`LINKCTRL_ADDON_FETCH_MAX_BYTES` gained the validation its two neighbours
+  had.** This milestone created all three bounds and validated two;
+  `fetchMaxBytesFrom` substitutes 256 KiB for anything at or under zero, so an
+  operator writing `0` meaning *no cap* got the default and was told nothing.
+  `Config.Validate` now refuses it, and the sentence says there is no way to ask
+  for no cap and why — the body is held in memory to cross the ABI boundary, so
+  an unbounded one is an unbounded heap sourced from a server this product does
+  not run.
+
+## 2026-08-26 — M68.5, one rule and two refusals, because a document said one
+
+The third review of this milestone rejected it on a claim rather than on the
+machinery: it re-read the SSRF bounds and again found no bypass, and then found
+that seven places said `class_refused` is what a redirect-class invocation gets,
+which is true of one of the two classes and false of the other.
+
+### D374 — the inline class keeps M66's refusal, and the documents say which class gets which
+
+**What is actually true.** Dispatch refuses a call before any host function runs
+when `st.inline && !abi.CallableInline(f.Name)` (`internal/addon/hostabi.go`), and
+`network_fetch` is correctly absent from `abi.InlineSafe`. So an inline redirect
+invocation gets `abi.StatusDenied` — `ErrDenied` at the guest — and never reaches
+`doFetch`. The observing class is not `inline`, reaches the function, and is
+refused inside it with the `class_refused` outcome and its counter. One rule, two
+refusals, in two places.
+
+**Both halves of the seven places were wrong in the same direction.** The guest
+half — the SDK doc comment, `internal/addon/abi/functions.go`,
+`internal/addon/abi/surface.go`, `docs/addon-abi.md` twice — told an add-on's
+author to branch on an outcome that an inline module never receives. The operator
+half — `docs/operations.md` and `internal/httpx/web_addons.go`'s meaning table —
+described a `linkctrl_addon_fetch_total` row that the inline class cannot produce,
+because that refusal is deliberately uncounted: it is the redirect hot path, and
+M66 decided that a module looping there does not get to decide how much an
+instance logs or counts.
+
+**The alternative was to make the inline class reach `class_refused`**, by putting
+`network_fetch` on `abi.InlineSafe` and letting `mayFetch` do the refusing. It was
+declined, and not on cost. `InlineSafe` is M66's shipped claim about what an
+inline invocation may call — *no storage, no request, no session, no template*,
+every member an in-memory read of something the host already holds — and adding
+the one function that opens a socket to that list would falsify it in order to
+improve a word in a record. It would also cost the redirect path a counter
+increment per refused call, which is what M66 refused to spend. The bound the
+milestone actually promises — *nothing on the redirect path fetches* — holds
+either way; what was at stake was only which refusal the guest is handed.
+
+So the seven places now say which class gets which, `docs/addon-abi.md` tells a
+module written for both classes to branch on the error first and the outcome
+second, and `docs/slo.md` says the same where somebody looking for the M68.5
+measurement would go.
+
+**And the test that was cited could not have caught it.**
+`TestOnlyARouteInvocationMayFetch` calls `hostState.doFetch` directly, which is
+*below* the dispatch gate, so its inline rows assert the second line of defence
+and cannot see what a guest receives. The new
+`TestNeitherRedirectClassMayFetchAndTheGuestIsToldSo` drives the `redirect`
+fixture — a real module compiled against the generated SDK — through both classes
+and asserts what each is told: `ErrDenied` and no fetch counter for the inline
+class, the `class_refused` record and exactly one counter for the observing one.
+`TestAnObservingModuleWithoutTheGrantIsRefusedBeforeTheClassIsReached` is its
+pair, and is what makes the `class_refused` mean *the class* rather than *the
+manifest*.
+
+### Also in this attempt
+
+- **`TestARedirectIsCheckedForItsAddressToo` asserted nothing about redirects.**
+  It pointed a loopback-refusing policy at a loopback test server, so the *first*
+  dial was refused and no redirect was ever issued; it passed identically with
+  `checkRedirect` and the redirect hop deleted. The milestone requires the address
+  check *again on any address a redirect leads to — the rebinding case*, and that
+  requirement had no assertion behind it.
+
+  The shape is forced by what a redirect may be. A hop that changes origin is
+  refused by `checkRedirect` before anything is dialled, so the only redirect that
+  can reach the address policy is a **same-origin** one — same name, therefore a
+  second address only because the resolver answered differently. That is DNS
+  rebinding, and it is what the test now imitates: the first dial is genuinely
+  permitted, the server genuinely redirects, and the second dial of the same name
+  is refused. Two things keep it honest — the dial count is asserted, and the same
+  fetch is run first under a policy that permits both dials, where it must come
+  back with the second hop's body. Removing `Control` from the dialer turns it
+  red, which is the property being claimed.
+
+## 2026-08-26 — M68.5, the address policy is inverted
+
+### D375 — an address is refused unless it is public, rather than refused if it is listed
+
+**The pattern that forced it.** `refuseAddress` is a denylist, and M68.5's reviews
+found it short **three times in four**: four IPv4 special-purpose entries at the
+first, six IPv6 entries at the second, and `fec0::/10` — deprecated IPv6
+site-local, RFC 3879 — at the fourth. Each was fixed. Each fix was followed by
+another omission. The third attempt already changed the mechanism once, refusing
+`2001::/23` whole so IANA's future carve-outs inside it are covered in advance,
+and that worked for the block it covered and not for the space outside it.
+
+`fec0::/10` is the case that makes the shape clear rather than the case that
+matters most: it is not in the IANA *special-purpose* registry the list's claim is
+scoped to — it sits in the IPv6 Address Space registry as reserved — so the claim
+was **honest and the hole was real at the same time**. A denylist of *everywhere
+that is not the public internet* is not a finite list anybody holds in their head,
+and no amount of care makes it one.
+
+**Owner: invert it.** An address passes only if it falls in globally-routable
+unicast space; everything unlisted is refused. The list stops being the mechanism
+and becomes an optimisation and a set of named exceptions.
+
+**What the inversion buys is a change of failure mode, and that is the whole
+argument.** Under a denylist, a range nobody thought of is **reachable**, and the
+symptom is an SSRF nobody observes. Under an allowlist, a range nobody thought of
+is **refused**, and the symptom is an operator reporting that a legitimate origin
+will not resolve. For a control whose entire job is completeness, the second is
+the direction to be wrong in.
+
+**What it costs, stated because it is real.** It will refuse something legitimate
+eventually — IPv6 space IANA allocates after this ships is the obvious case — and
+that is a support burden this project takes on deliberately. The refusal must
+therefore say *which* rule refused it and be greppable, or an operator meets a
+name that will not resolve and no way to find out why. And it is a redesign of
+this milestone's central mechanism on its fifth pass, which was weighed against
+simply adding `fec0::/10`; the pattern above is why the cheaper answer was
+declined.
+
+**Two alternatives were declined.** Fixing the three findings and taking a fifth
+pass — an hour's work, and the third patch to the same enumeration, with a fourth
+omission waiting. Stopping the run under
+[§4](phase-loop.md#4-repeat-or-stop)'s *same gap survived two workers* — literal
+and defensible, and it would have left a milestone otherwise reviewed clean twice
+over sitting uncommitted with M67's commit unpushed behind it.
+
+**This does not reopen anything.** M68.5 has never landed; the inversion is a
+change to work in flight, not a correction to a shipped claim.
+
+## 2026-08-26 — M68.5, what "globally routable" is, and a rule that refused an instance running no add-ons
+
+### D376 — the shape the inversion took, and the half of it that is honestly weaker
+
+[D375](#2026-08-26--m685-the-address-policy-is-inverted) decided that an address
+passes only if it is in globally-routable unicast space. That phrase has to become
+two lists, and they are not equally strong.
+
+**IPv6 is a real inversion.** IANA allocates global unicast from `2000::/3` and
+from nowhere else, so `routableSpace` names that block and everything outside it is
+refused without anybody having had to think of it: `fc00::/7`, `fe80::/10`, the
+`fec0::/10` that broke the fourth review, `ff00::/8`, both NAT64 prefixes, the
+discard prefix, IPv4-compatible `::/96`, and `5f00::/16` — which the previous
+attempt had to add by name and which now needs no entry at all. A top-level
+allocation IANA makes after this ships is refused the same way, which is the whole
+point and also the cost.
+
+**IPv4 is weaker, and the reason is that IPv4 has no such block.** The space is
+densely delegated, so the allowlist is 1.0.0.0 through 223.255.255.255 — nine
+prefixes covering exactly that range — with the special-purpose ranges inside it
+carved out by name. Forgetting one of those is still a range that gets dialled. Two
+things make that acceptable rather than a denylist wearing a hat: IPv4 is exhausted,
+so the registry it is drawn from is closed in a way IPv6's is not, and the outer
+bound refuses `0.0.0.0/8`, all of multicast, the reserved `240.0.0.0/4` and the
+limited broadcast address without an entry — four of the ranges the first review
+found missing. `TestTheRoutableSpaceIsExactlyWhatItSaysItIs` walks all 256 `/8`s,
+because nine prefixes covering a range exactly is not something a reader checks by
+eye and an off-by-one in either direction is a defect: one bit too wide is a range
+that gets dialled, one bit too narrow is a piece of the public internet that stops
+working.
+
+**`carvedOut` is exceptions, and the test says which.** Every entry has to sit
+*inside* `routableSpace` or it is excepting from a space this host does not dial
+anyway — not wrong, empty, and an empty exception is how a list comes to look
+longer than the policy it states. Under the denylist there was no difference
+between the two kinds of entry.
+
+**The named predicates are naming, not mechanism.** `IsLoopback` and the four
+beside it stay, because a log line saying `loopback` is worth more to whoever reads
+it than one saying `outside routable space`. What makes them decorative is that
+`127.0.0.0/8` and `169.254.0.0/16` — the only two ranges off the public internet
+that sit inside the IPv4 cover — are in `carvedOut` as well, so the two lists are
+the whole policy. The address table asserts it row by row: for every address, the
+lists alone reach the same verdict the policy does.
+
+**`address_rule=` is the greppable half of what D375 accepted.** An allowlist
+refuses something legitimate eventually, and what the operator sees is an add-on
+reporting that a name will not resolve. So a refusal is its own log line — not an
+`error=` field on the generic one — carrying the address and a token naming the
+rule: `loopback`, `link-local`, `multicast`, `unspecified`, `not-global-unicast`,
+`carved-out`, and `outside-routable-space`, which is the one that means *this
+policy may be wrong about your origin*. docs/operations.md tells an operator to
+grep for it and says which token separates a misconfiguration from a refusal worth
+reporting. `TestAnAddressRefusalNamesTheRuleThatRefusedIt` holds the line's shape,
+because the token appearing inside a wrapped error string is not the same as a line
+somebody can find.
+
+**The old completeness claim is deleted rather than restated.** Three restatements
+of *this list is complete against IANA's special-purpose registries, read on a
+date* had been written across four attempts, and each was true when written. What
+stands where it stood is the inversion and the argument for it, and the list below
+it no longer claims to be complete because nothing now rests on its being so.
+
+### D377 — the route-deadline nesting rule is guarded on add-ons being enabled
+
+The rule refuses `ADDON_ROUTE_DEADLINE` at or over `HTTP_REQUEST_TIMEOUT`, and it
+was written deliberately outside the `Addons.Enabled()` guard, with a comment
+saying so: *a misconfigured pair is a misconfigured pair whether or not this
+deployment has pointed ADDONS_DIR at anything yet*.
+
+**That comment was wrong about who it refuses.** `LINKCTRL_HTTP_REQUEST_TIMEOUT=5s`
+is valid today and nothing has ever refused it. `ADDON_ROUTE_DEADLINE` has no
+minimum of its own and defaults to `10s`. So the rule as written refuses to start
+an instance with `ADDONS_DIR` unset, running no add-ons, over the default value of
+a variable that operator has never heard of — and an upgrade that will not start is
+the most expensive failure this file has.
+
+**The line that decides which of these rules is guarded is who wrote the value.**
+`ADDON_ROUTE_DEADLINE` at zero, `ADDON_FETCH_TIMEOUT` over it and
+`ADDON_FETCH_MAX_BYTES` at zero each require somebody to have set that variable, so
+refusing them costs a deployment nothing it did not ask for, and they stay
+universal. The cross-check against `HTTP_REQUEST_TIMEOUT` is the only one that can
+fire on two defaults, and it is the only one guarded. The original comment's fear —
+*refusing it on the day somebody installs one* — is answered by what installing an
+add-on takes: setting `ADDONS_DIR`, which is a restart, and the refusal arrives at
+that boot, before any add-on has served anything.
+
+**It is still an upgrade break, and CHANGELOG.md says so.** An instance that *does*
+run add-ons and has `HTTP_REQUEST_TIMEOUT` at `10s` or less will not start until
+the route deadline comes down. The three documents that described the remedy as
+*raise the one above it* now name both directions, because the operator being
+refused set the request timeout deliberately and the other number is the one they
+have never seen — so the message names lowering `ADDON_ROUTE_DEADLINE` first.
+
+### The two enumerations nothing checked
+
+The eleven-word outcome vocabulary was hand-copied into `api/openapi.yaml`'s
+`outcome` enum and into `linkctrl_addon_fetch_total`'s `Help`, and neither was tied
+to `abi.FetchOutcomes` — the manager page's meaning map and the host's own mapping
+both were. One is what somebody writing against this API reads and the other is
+what an operator reads off `/metrics`, so a word added or renamed would have left
+both wrong silently. `TestTheOutcomeVocabularyIsTheSameWhereverItIsEnumerated`
+parses both and asserts set *equality*, in the shape
+`internal/auth/documented_scopes_test.go` and `internal/store/cascade_test.go`
+already use for claims anchored in `openapi.yaml`. This is m68.5.md's own bullet
+about four enumerations going stale in this phase, applied to the two places that
+had escaped it.
+
+## 2026-08-26 — M68.5, an object the API said could not exist, and what a refusal costs to log
+
+M68.5's sixth pass. Three findings from the fifth review, none of which touches
+[D375](#2026-08-26--m685-the-address-policy-is-inverted)'s inverted address policy —
+that was reviewed sound and complete against both IANA registries and is untouched.
+
+### D378 — `performance` is published when there is a record of **either** kind
+
+`Managed.Performance` is omitted with `json:",omitzero"`, and omitzero compares the
+whole struct. Until this milestone that comparison and
+`observability.AddonPerformance.Observed()` gave the same answer for every reachable
+state, because the only fields were the redirect ones: `Classes` and `Kills`. So
+`api/openapi.yaml` and `manager.go` both said the object is **absent entirely** for a
+module that has never run on the redirect path, and both attributed that to
+`Observed()`.
+
+`Fetch` broke the coincidence. **The failing case is M69's own add-on** —
+`routes.own_prefix` and `network.fetch`, no redirect class at all — which after one
+outbound request has an all-zero redirect record and a non-zero struct, so the
+encoder published `{"performance":{"kills":{"instantiate":0,"call":0},"fetch":{…}}}`
+for a module the document said could not have one. It is schema-valid (`required:
+[kills, fetch]` is met), so no test could catch it; the false thing was the prose.
+
+**The object is right and the sentence was wrong.** The alternative was to keep the
+sentence by suppressing the object for a fetch-only module, and it is worse in the
+obvious way: the fetch figures are the thing this milestone records, the manager
+already draws them, and a client would have had to read the page to learn what the
+API refused to say. What the absence has always been *for* is telling *no
+observations* from *fast*, and that reading survives intact — it just now covers
+both paths, which is what the object covers.
+
+**One predicate, not two that agreed by accident.** `AddonPerformance` gained
+`IsZero() bool`, which `encoding/json` uses in place of its own comparison, and it
+is `!Observed() && !Fetch.Observed()`. A third field added later cannot re-open this
+gap by being non-zero. `Observed()` itself is unchanged and still means the
+**redirect** path alone, because that is what the manager's list draws a dash from
+and what m68.md promised: a module that has only ever fetched has not run there and
+must still read false. `AddonFetchStats.Observed()` gained `len(Outcomes) > 0`, so
+that *unobserved* and *all-zero* are the same state on that half too rather than
+nearly the same.
+
+`TestThePerformanceObjectIsPublishedExactlyWhenThereIsARecord` drives the shapes and
+asserts that the key's presence and `IsZero()` are the same answer — which is the
+assertion that would have failed the day the two stopped agreeing.
+
+### D379 — a guest-drivable refusal warns only when the log is the only channel
+
+Three refusals this milestone added logged at `Warn`, once per call, with no
+throttle: `class_refused` in `hostabi.go`, and `unconfigured` and `origin_refused` in
+`fetch.go`. Every other guest-drivable refusal in `hostabi.go` is `Debug`, and this
+milestone's own comment argued that the inline path must stay at Debug because *a
+module looping there would otherwise decide how much an instance logs*. `unconfigured`
+costs no network at all and a route handler now holds ten seconds, so a module
+holding `network.fetch` and `routes.own_prefix` pointed at nothing could write Warn
+lines at CPU speed for the whole deadline, across all sixteen slots, on a publicly
+reachable page. `class_refused` is reached by the *observing* class, which is
+redirect-driven — the very reason the inline case was held to Debug.
+
+**The rule: Warn is for a refusal an operator has no other way to see.** Where a
+counter and the Add-on manager already carry the fact, the line is Debug — the level
+buys nothing an operator does not already have, and it costs an instance whatever a
+module cares to make it cost. All three are
+`linkctrl_addon_fetch_total{addon,outcome}` and all three are rendered per add-on
+with a sentence saying what to do about each word, which is what `configuration.md`
+and `docs/SECURITY.md` already promise in the phrase *visible without reading logs*.
+
+**It explains the Warns beside them rather than excusing them**, which is what made
+this worth deciding rather than leaving three sites disagreeing with their file. Two
+carry a fact nothing else carries: the address refusal names *which rule* refused
+under `address_rule=`, which the counter's single `address_refused` word cannot, and
+the wire-failure line beside it carries the transport's error. Two cannot be driven
+by a guest alone: `originsFor`'s malformed-origin line needs an operator's typo to
+exist, and `storageFailed`'s denial has neither counter nor page. The wire failures
+also cost a socket, so the network sets their rate — the second half of the test, and
+the half these two configuration refusals fail outright, deciding nothing and
+dialling nothing.
+
+The address refusal is the one that is genuinely both, guest-drivable at CPU speed
+with a literal address and kept at Warn anyway. That is deliberate: a module looping
+there is announcing an attempt on this host's internal space, which is the argument
+`storageFailed` already makes for its own denial.
+
+**The cost is stated rather than hidden.** An operator watching only the log now sees
+nothing when an add-on is inert; `operations.md` and `CHANGELOG.md` say where to
+watch instead, and `operations.md`'s alert for this was already written against the
+label rather than against a log. `TestTheConfigurationShapedRefusalsDoNotWarn` holds
+the decision to the tree, with the malformed-origin line as its control.
+
+### D380 — the response **headers** are bounded, and it is not a knob
+
+`MaxResponseHeaderBytes` was unset on the fetch transport, so Go's 10 MiB default
+bounded the headers while `LINKCTRL_ADDON_FETCH_MAX_BYTES` bounded the body at 256
+KiB — forty times apart. `config.go`'s own argument for refusing an unbounded body
+applies to a header field verbatim: *the response is held in memory to cross the
+add-on boundary and an unbounded body from a server this product does not run is an
+unbounded heap*. A compromised IdP is inside the threat model `docs/SECURITY.md`
+names for this door, and it does not have to send a body to spend this host's memory.
+
+**64 KiB, fixed.** Eight times the largest header block ordinary servers will emit —
+nginx and Apache both refuse a request field over about 8 KiB — and small enough that
+sixteen slots fetching at once is megabytes rather than gigabytes. Not configurable,
+because the two bounds an operator turns are the ones a legitimate provider can
+plausibly need turned and no provider needs this one; a third knob would be a third
+thing to get wrong for no case anybody can name.
+
+**The outcome is `connect_failed`**, not `too_large`. The exchange failed below the
+response and the transport raises an ordinary error, which `fetchFailure` classifies
+as it classifies any other wire failure. Mapping it to `too_large` would need the
+transport's error *text* matched, which rests a documented outcome on a string Go may
+change, and would make one word mean two different faults. `configuration.md` says
+which is which.
+
+## 2026-08-26 — M68.6, a module arrives from a URL, and what an operator's digest is worth
+
+### D381 — the URL names a bundle, and the bundle is an uncompressed tar
+
+**Taken by the worker building M68.6, not put to the owner, and that is the first
+thing this entry has to say.** `m68.6.md` settles what the install must *do* and
+leaves the container shape open, and every alternative below is a real choice the
+owner might have made differently. It was decided rather than asked because the
+question arrives in the middle of step 2 and a worker that meets a prompt returns
+it unanswered and stops — which would have parked the milestone on a wire format
+whose alternatives are one file apart while nothing is released. The standing rule
+that covers this is workflow.md's: *an actor deciding on the owner's behalf
+because the loop would otherwise stall* writes the decision down before acting on
+it, and most of all then. Nothing has been tagged, so this is reversible at the
+cost of one file and the sentences that describe it.
+
+**The milestone's own bullets force a container.** Three of them together leave no
+other shape: the bytes arrive over *one* fetch; from the digest check onward the
+path is M67's, which means *the manifest is parsed and the module checked against
+it*, so the manifest arrives too; and *fetching a manifest independently of its
+module* is named under **deliberately not done**, because it makes the pair
+separable. One request that carries a manifest and a module is a container. The
+test the file asks for settles it beyond doubt — *a manifest whose `sha256`
+matches a module the operator did not expect* is a test with nothing to serve
+unless a manifest is being fetched.
+
+**Uncompressed tar, over three alternatives.**
+
+*A JSON envelope with the module base64 inside* was declined by an argument this
+repository had already made, in `internal/httpx/api_addons.go`, for the upload:
+base64 in a document costs a third more bytes and makes the manifest *a string
+inside a document rather than the file a publisher signed off*. That argument does
+not stop applying because the bytes came over HTTP.
+
+*`.tar.gz`*, which is what this project ships its own releases as, was declined for
+one property: a compressed container has to be bounded twice, on the wire and
+after inflation, and a decompression bomb becomes a thing to defend against rather
+than a thing not to have. With no compression layer, `MaxUploadBytes` bounds the
+fetch **and** the unpacked members, because the members of a tar are smaller than
+the tar.
+
+*`.zip`* was declined for the same reason plus a second: it needs an `io.ReaderAt`
+and a central directory, so the reader has more surface than a sequential walk.
+
+**What it costs is a publisher's convenience, and it is stated in the code and in
+`docs/usage.md`**: a `.tar` on a release page is two to three times the `.tar.gz`
+beside it. That is the price of one bound instead of two, and the size cap is 32
+MiB against fixtures of 1.8–3.6 MB, so it buys nobody a refusal they would not
+otherwise have had.
+
+**The digest covers the whole bundle.** That is what makes *a manifest fetched from
+the URL cannot be the sole source of its own module's digest* structural rather
+than promised: there is no separable manifest to be the source of anything.
+
+**Two members, both plain files, both bare names.** A directory, a symlink, a hard
+link, a device and a name with a separator or a `..` in it are each refused by
+name. The reader never touches a filesystem — the members are held in memory and
+handed to M67's own `stage`, which writes them under names it takes from the
+*manifest* — so a hostile bundle cannot choose a path even if one of those
+refusals were wrong. Both defences, deliberately: a defence that is the only one
+is a defence nobody can check.
+
+### D382 — one fetch mechanism with two callers, rather than a second client
+
+`m68.6.md` requires *one fetch path in this product rather than two* and
+`m68.5.md` had already written the seam for it: `fetcher` takes the origin policy
+as an argument and enforces the address policy itself, so *a caller that has no
+allowlist at all still cannot reach 169.254.169.254*.
+
+What the seam did not survive contact with is the **logging**. `fetch` interleaved
+the mechanism with four log lines written in one voice — *an add-on's outbound
+request* — and an install has no add-on and a different thing to tell an operator.
+So the mechanism moved into `fetcher.get`, which logs nothing and returns the
+outcome, the stage it failed at and the error; `fetch` keeps every line it had,
+word for word, and the install path writes its own. A shared line would have had
+to be true of both, which is how a log stops naming what happened.
+
+**The second caller is a second `fetcher` value, not a second fetch path**, and
+the two numbers are why there is a second value at all: the cap is
+`MaxUploadBytes` rather than the 256 KiB response bound, and the timeout is ten
+seconds rather than three. Both are argued at their constants against the same
+ceiling M68.5 was resized against — an install is a request in the application
+tree, so `HTTP_REQUEST_TIMEOUT` cancels the context it runs under, and a bound at
+or above fifteen seconds would never fire. Neither is configurable: an install is
+bounded by the request it runs inside as well, and a third and fourth knob would
+be more to get wrong for no case anybody can name (D380's reasoning, applied
+again).
+
+**This is what let the authentication egress scan keep its one exemption.**
+`internal/auth/egress_test.go` says in as many words that *a second file in
+internal/addon that dials is a second door with its own bounds and fails here
+rather than joining a list*. `install_url.go` opens nothing: it builds a request
+and hands it to `fetch.go`. Had the install written its own client, the honest
+outcome would have been a second exemption and a weaker claim in
+`docs/SECURITY.md`, and the refactor is what avoided paying that.
+
+**The origin policy is `operatorURL`, an empty struct**, and the emptiness is the
+argument M68.5's file predicted: an install is authorized by `addons.manage` and
+by the typing, so there is no configured set to check against and the policy
+permits the origin of the URL it was handed. The redirect rule then does the rest
+— a hop off that origin is refused by `checkRedirect`, exactly as it is for an
+add-on — which is how *the operator typed one address* stays a bound rather than
+becoming an entry point to a chain.
+
+### D383 — F337 closed here, and why this is the door that decides it
+
+[F337](deferred-findings.md) was filed against M68.5 and explicitly **not** a
+finding against it: Azure's WireServer, `168.63.129.16`, is ordinary public IPv4,
+so it is global unicast, inside `routableSpace`, and matched no carve-out. The
+row's own disposition said the question was M68.6's, and the reason is the one
+this milestone is built on — under M68.5 reaching a routable address costs an
+operator writing it into a *setting* on a deployment, and here it costs a paste
+into a form.
+
+**Carved out, `168.63.129.16/32`**, rather than defended. The alternative was to
+argue that the digest and `addons.manage` are enough, and that argument fails on
+what the harm is: the digest decides whether a *response* becomes a module, and
+the harm at a metadata endpoint is the *request*. A refusal that arrives after the
+socket opened is not a refusal. `addons.manage` bounds who may ask and says
+nothing about where, which is precisely the split D375 exists to keep.
+
+**It is the only entry in `carvedOut` that no registry produces**, and that is
+worth naming: every other line traces to an RFC or to IANA's special-purpose
+registry, and this one traces to a cloud vendor allocating a host-agent endpoint
+out of public space. The finding asked for the question to be answered *once, for
+both doors, rather than twice*, and one prefix in the shared list is what that
+looks like. `TestEveryCarvedOutRangeIsInsideRoutableSpaceAndRefused` covers it
+like any other entry, and the address table gains two rows — the address, and its
+neighbour `168.63.129.15`, which is somebody's ordinary host and stays reachable,
+so the carve-out is asserted to be a `/32` rather than a range.
+
+## 2026-08-26 — M68.6, three containers and one member rule
+
+### D384 — all three formats, and the depth limit is what makes that affordable
+
+[D381](#2026-08-26--m686-a-module-arrives-from-a-url-and-what-an-operators-digest-is-worth) recorded the worker's own
+choice of **uncompressed tar**, made mid-step-2 and flagged for the owner because
+it decides what every add-on publisher ships. Put to them; **superseded here**.
+
+**Owner, verbatim: *"Allow all 3 and limit the directory depth that is extracted
+for compressed options as well if it will help defend against exploits."***
+
+So `tar`, `tar.gz` and `zip` are all accepted, and the answer to *does limiting
+depth help* is yes and it is already how the tar reader works: **exactly two
+plain files, bare names, no directory component, no symlink, no traversal** —
+depth zero, which is the strictest form of the bound the owner asked for. What
+this decision does is make that one rule rather than tar's rule, applied
+identically to all three, so a container format cannot be the thing that widens
+what a bundle may contain.
+
+**Why all three is defensible rather than merely accommodating.** The reason to
+pick one was to avoid defending decompression; the reason to pick tar was that
+there is nothing to decompress. Accepting the other two takes that defence on
+deliberately, and the bound that makes it affordable is the member rule: a bomb
+that inflates to gigabytes still has to present exactly two bare-named plain
+files, and the inflated-size cap refuses it before the member rule is even
+reached. Format variety is then a parser question rather than a policy question.
+
+**What it obliges the build to do**, beyond accepting three magic numbers:
+
+- **Detect by content, never by the URL's extension.** An extension is typed by
+  whoever supplies the URL and proves nothing about the bytes; a `.tar.gz` that
+  is a zip is a fact about the file, not an error about the name.
+- **Bound compressed formats twice** — the fetched bytes as now, *and* the
+  inflated bytes — and refuse an implausible expansion ratio rather than only an
+  absolute size, because the absolute cap alone lets a small archive spend the
+  whole budget on CPU.
+- **One member rule for all three**, asserted per format by test, so the tar path
+  and the zip path cannot drift into two policies.
+- **Zip's own defects are refused explicitly**: duplicate member names, a member
+  name carrying any path separator or `..`, and anything that is not a stored or
+  deflated plain file. Zip is the format with the largest parser surface here and
+  it gets the most specific refusals.
+- **A refusal names which bound bit**, as every other refusal at this door does.
+
+**The cost, stated.** Two more parsers at the door where getting bounds right has
+already taken six passes across this milestone and its predecessor, and a
+decompression bomb becomes something this product refuses rather than something
+it cannot receive. That is a real increase in surface, taken knowingly, in
+exchange for a publisher shipping the container their release pipeline already
+emits.
+
+
+## 2026-08-26 — M68.6, the numbers under D384, and a bound the standard library already held
+
+### D385 — the three figures a ratio bound needs, and the code it refuses with
+
+[D384](#2026-08-26--m686-three-containers-and-one-member-rule) settled the policy
+and left three things to the build: *bound the inflated bytes*, *refuse an
+implausible expansion ratio*, and *a refusal names which bound bit*. Each of those
+is a number or a word, none of them is in that entry, and all three are choices a
+later reader would otherwise have to reverse-engineer out of a constant.
+
+**The inflated cap is `MaxUploadBytes`, written as its own constant.** Same value,
+different bound: the fetch cap is about what this host will *download* and this
+one is about what it will *produce*, and a single constant serving both would make
+a future change to either one a silent change to the other. Thirty-two mebibytes
+against fixtures of 1.8 MB to 3.6 MB, so it refuses nothing a publisher ships.
+
+**The ratio is fifty, with a floor of one mebibyte, and both ends are measured.**
+This repository's own fixtures gzip at 3.3 and 3.5 — 1,866,051 bytes to 570,076,
+3,609,321 to 1,027,181 — text-heavy containers reach ten, and deflate's ceiling is
+1032. Fifty is an order of magnitude above the first figure and an order of
+magnitude below the last, which is the only defensible shape for a bound whose
+two ends are both estimates. **The floor is not a softening**: a tar pads every
+member to 512 bytes and ends with 1024 zero bytes, so a bundle holding a small
+module is mostly padding and compresses at twenty or thirty times while amounting
+to nothing at all. Below a mebibyte the ratio is measuring the padding, and a
+bound that refuses legitimate small bundles for a property of the format is worse
+than no bound, because the absolute cost it is protecting against is a megabyte.
+
+**`bundle_expands` is a fourteenth code rather than a fourteenth reason to say
+`bundle_invalid`.** The vocabulary on the install form is closed and a test holds
+it against the sentence the page words for each entry, so adding one is a change
+to a surface and not only to this reader. It earns that: *these bytes are not an
+add-on bundle* and *this is a valid archive and it unpacks to too much* have
+nothing in common for the operator — the first is the wrong URL and the second is
+the right URL and the wrong file — and collapsing them would be exactly the *the
+upload was refused* failure the codes were introduced to end.
+
+**And one fact found rather than decided, recorded because it changed a test's
+expectation.** `archive/zip` enforces a member's declared `UncompressedSize64`: a
+read that takes the decompressed count past it returns `ErrFormat`. So a zip whose
+central directory declares a kilobyte and whose member carries 33 MiB is refused
+as *not a zip* rather than as an expansion, and the test asserting it says so in
+those terms instead of asserting the code it was drafted to expect. What follows
+is that the declared-size check at the central directory is a real bound rather
+than a hint — it is enforced downstream — and that the per-member budget in
+`bundleMembers.read` is a backstop nothing in the suite reaches. That is written
+at the function rather than left to be inferred, because a bound whose tests never
+fire looks like dead code to whoever reads it next, and this one is load-bearing
+precisely when one of the other three stops being true.
+
+
+## 2026-08-26 — M68.6, a ratio that is a bound rather than a verdict
+
+### D386 — the figure the decompressor stops at, and how far that was from what was written
+
+Found by M68.6's reviewer, in the tree
+[D385](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held)
+describes. The comment on `maxBundleRatio` argued, correctly, that *with
+`maxBundleInflated` alone, a two-kilobyte gzip of zeros still buys 32 MiB of
+allocation and the CPU to produce it, for the cost of one small request* — and
+`inflate` read the stream through `io.LimitReader(zr, maxBundleInflated+1)` and
+consulted the ratio afterwards. So the ratio decided *whether to accept* and
+never *what to spend*: a 100 KB gzip inflating to 30 MiB was refused as
+`bundle_expands` having cost the host the whole 30 MiB and `io.ReadAll`'s
+doubling on top of it, and the two-kilobyte bomb the comment names never reached
+the ratio at all, because the absolute cap stopped it first at 32 MiB. The same
+argument was asserted in `docs/SECURITY.md`, in `docs/usage.md` and in D384's
+delegation, which is what makes this a defect rather than a comment to soften:
+four statements of a property, and a fifth place where it was not true.
+
+It was never exploitable — `addons.manage` is an instance-level scope no API key
+can hold, and anybody holding it can already write into the add-ons directory —
+so this is claim accuracy. That is exactly the reason to fix it rather than
+reword it: the argument is the right one, and it costs a subtraction to be true.
+
+**The ratio and the cap become one number, `bundleInflatedLimit`**, computed from
+the fetched size before a byte is inflated: `min(maxBundleInflated, max(floor,
+compressed × 50))`. The gzip reader bounds its read at one past it, so a bomb
+costs this host one byte more than the largest bundle it could have accepted from
+that many fetched bytes — a few kilobytes fetched now buy a mebibyte, not 32 of
+them. The zip reader compares its central directory's declared sum against the
+same number, which is where it was already looking. **One bound, applied at each
+format's earliest opportunity**, replacing one bound applied at the earliest
+opportunity in one format and the latest in the other.
+
+**Three things follow that are choices rather than mechanics.**
+
+*The ratio's exact form changes, by less than two per cent.* `inflated /
+compressed > 50` is truncating division and admits up to 50.99 times; the limit
+is a multiplication and admits fifty. D385 said fifty and the multiplication is
+what says fifty, so this is the figure being met rather than moved — and against
+a bound whose two ends are estimates an order of magnitude apart, two per cent is
+not a number anybody was relying on.
+
+*A refusal can no longer name what was measured, and should not.* A reader that
+stopped does not know what the container would have amounted to, so both bounds
+now say **more than**: *more than 32 MiB* where the cap produced the limit, *more
+than fifty times the bytes it was fetched as* where the ratio did. Which one bit
+is recoverable from the limit itself — equal to the cap or below it — so
+[D385](#2026-08-26--m686-the-numbers-under-d384-and-a-bound-the-standard-library-already-held)'s
+two sentences survive under one code, and each of the two now has a test that
+fails if it acquires the other's wording. That gap was real: the shipped absolute
+cap test used a bomb the ratio would have refused anyway, so it would have passed
+with the cap deleted.
+
+*The zip's declared sizes are summed by subtraction.* `declared +=
+f.UncompressedSize64` compared afterwards is a comparison an attacker can wrap —
+two entries declaring most of a `uint64` sum to something small — so the check is
+now `f.UncompressedSize64 > limit - declared`, with `declared` never above the
+limit. Not a route to anything on its own, since `archive/zip` enforces each
+declaration on read and the member budget sits under both, but the line was being
+rewritten and a bound that can be wrapped is not a bound.
+
+**And the floor is now asserted rather than merely argued.** Removing
+`maxBundleRatioFloor` broke nothing in the suite before this milestone: no
+fixture in this repository is small enough for it to govern, because the smallest
+module here is 1.8 MB and the floor is one mebibyte. A bundle unpacking to 600 KB
+from 887 fetched bytes — 695 times, which is a tar's padding and not an intent —
+now asserts that it installs, against `unbundle` directly, since a bundle that
+small cannot carry a module this host could compile and an end-to-end version
+would be a test about the compiler.
+
+
+## 2026-08-27 — M68.6, two vocabularies held from the end that was open
+
+### D387 — a bound is pinned where it binds, and a closed list is closed from both ends
+
+Found by M68.6's second review, in the tree
+[D386](#2026-08-26--m686-a-ratio-that-is-a-bound-rather-than-a-verdict) left. Both
+findings are the same shape and neither is a defect in shipped behaviour: a claim
+that something is *asserted by test* where the test asserts the other half of it.
+
+**The ratio was tested twice and neither test could see it.** Both bombs are a
+couple of kilobytes on the wire, and `bundleInflatedLimit` answers
+`maxBundleRatioFloor` for anything fetched below about 21 KB — so what refused
+them was the floor wearing the ratio's sentence, and `maxBundleRatio` could have
+been lowered to almost any figure with the suite green. The constant only binds
+between roughly 21 KB fetched, where fifty times the fetched size clears the
+floor, and 640 KB, where it reaches the cap.
+
+*So the third test is built inside that window, and fifty is written out.* A test
+that computes its expectation from the constant it is checking asserts that the
+constant equals itself, which is exactly the failure being fixed — `ratioUnderTest
+= 50` is the duplication that makes it an assertion, and it is commented as
+deliberate because a reader tidying it into `maxBundleRatio` would silently undo
+this entry. Two cases one byte apart, at the limit and past it, against `inflate`
+directly: five megabytes of padding is not a tar whatever the ratio says, so an
+end-to-end version could only prove the accepted case went on to be refused for
+something else.
+
+*Its construction is a fixed point, and has to be.* The limit is a multiple of the
+compressed size, so padding a payload to reach the limit changes the limit. Each
+pass sets the padding to what the last pass's compressed size asked for; a byte of
+padding costs a thousandth of a byte compressed, so the gap closes twentyfold a
+pass and five passes land on it exactly. The incompressible head is derived from
+a chained SHA-256 rather than drawn from `crypto/rand`, so that convergence is a
+property of the test and not of the run.
+
+**`URLInstallCodes` was closed against the page and open against the wire.**
+internal/httpx proves every code in the list has a sentence of its own; nothing
+proved every outcome an install can arrive at is *in* the list. It was closed only
+by `fetchFailure`'s switch being what it is, so a word added there — a TLS
+refusal, say, told apart from `connect_failed` — would have reached an operator as
+the page's generic *That did not work*, with every gate green.
+
+*The missing half reads the words out of the source that produces them*, the way
+`internal/audit`'s `TestAllActionsIsExhaustive` does, and for the same reason: a
+hand-written enumeration is the thing that goes stale. `fetchFailure`'s returned
+literals, the `Outcome:` values in `fetcher.get`, and `operatorURL.permits`
+between them are every word an install can end on; the `Code…` constants come out
+of install_url.go the same way. The list is then asserted equal to their union in
+both directions, less two words answered otherwise — `invalid_request`, which the
+install door words as `url_invalid` because that names the field to fix, and `ok`,
+which is not a refusal. `fetch_status` is why the declared constants are parsed
+rather than told apart by their prefix: it begins with `fetch_` and is not an
+outcome at all.
+
+This is the pattern the add-on fetch vocabulary already had from both ends —
+`TestEveryOutcomeTheHostProducesIsInTheVocabulary` and
+`TestEveryFetchOutcomeHasAnOperatorsReading` — applied to the door M68.6 opened.
+
+### D388 — M68.6's demo bullet named a mechanism that cannot do the job
+
+**The bullet as it stood** (`m68.6.md`): *"…the manager's install affordance
+showing both shapes is what the demo gains, and a `demoFeature` row asserts it
+the way M68's does."*
+
+**As amended:** *"…a `demoFeature` row asserts the **absence of a fetch** while
+`internal/ui`'s template test asserts the control renders."*
+
+**The tree fact:** a `demoFeature` is a SQL count. The row written for this
+milestone (`cmd/lctl/demo_coverage_test.go`) counts `addon.installed` and
+`addon.removed` actions with `MaxIsZero`, which asserts that no demo install
+reached the network — the bullet's second half, and a real assertion. It cannot
+assert markup, so the *control renders* half is `internal/ui/addons_test.go`'s.
+
+**A fact and not an assertion, so amended rather than prompted.** Both halves of
+what the bullet requires are met by the tree; what was wrong is the mechanism
+named for one of them, and nobody could have decided differently about whether a
+SQL count can see a template.
+
+**Worth one line beyond the amendment.** The demo rule keeps producing this
+shape: [M68](phase-details/m68.md)'s own row was rejected once for asserting
+rows a seeder writes unconditionally rather than anything a module did, and this
+is the same confusion from the other side — a milestone reaching for
+`demoCoverage()` because it is the named mechanism, for a claim `demoCoverage()`
+is not built to make. The rule is about a feature being *visible* in the demo;
+what proves visibility is not always a query.
+
+## 2026-08-27 — M69.5 added: the acceptance test's last inch
+
+### D389 — the sign-in an add-on made possible gets a way to start it
+
+[F345](deferred-findings.md#open), found building the OIDC add-on: the flow works
+end to end — discovery, PKCE, callback, an ID token verified against a fetched
+JWKS, a session minted by the host, all against a live provider — and **nobody
+can start it without being handed a URL**. `template_render` is not live, an
+add-on's route may not answer `text/html`, and the host escapes what a guest
+returns, so *Sign in with your provider* is not a thing an add-on can put
+anywhere a person looks.
+
+M69's own bullet is an integration test proving the flow, and it passes without
+any of this. So the question put to the owner was whether the phase closes with
+the gap.
+
+**Owner: fix it in Phase 4, as a milestone.** [M69.5](phase-details/m69.5.md).
+
+**Why it is worth the phase's last slot.** The acceptance test's framing is *if
+the OIDC add-on cannot be built, the foundation is wrong*, and a foundation whose
+flagship add-on is unreachable by an ordinary user is wrong in the way that shows
+up last and matters most — it is the difference between a capability and a
+feature. A third party evaluating this add-on foundation meets the README's
+*paste this URL* before they meet anything the seventeen milestones built.
+
+**What it costs, and it is the whole remaining slack.** Phase 4 planned fourteen,
+ran to fifteen at [M66.5](phase-details/m66.5.md), seventeen at M68.5 and M68.6,
+and is **eighteen** here — which is the cap the owner moved to on 2026-08-18, so
+there is none left. The next insertion is a conversation about the cap itself,
+and [M69](phase-details/m69.md) has not landed: its host-side half is still ahead
+and it is the milestone that produced four of the last five insertions.
+
+**Two alternatives were declined.** Shipping 0.4.0 with the gap and fixing it in
+Phase 5 alongside the module store — cheaper, and it ships the worked example
+with a paste-a-URL instruction as the first thing an evaluator sees. And a
+narrower thing than a milestone, one setting producing one link — which is a
+mechanism invented for a single add-on, the shape this phase has spent seventeen
+milestones not doing.
+
+**The design is bounded by D364's rule rather than by a new one**, and that is
+the reason to think this is a milestone rather than a sprawl: the manifest
+declares a **label** and never a destination, the host composes the target from
+the add-on's own route prefix, and the operator decides whether it appears. An
+add-on's author cannot change what a visitor sees by shipping a new version — the
+same sentence that decided egress, applied to the one page every visitor with an
+account meets.
+
+### D390 — what the manifest gains, and why its version does not move
+
+Two answers, both owner-given 2026-08-27 at the plan review of
+[M69.5](phase-details/m69.5.md), because each settles what that milestone
+asserts rather than how it is built.
+
+**The manifest declares a label *and* a relative path.** The first draft of the
+bullet said *label* and then described the host composing a target from *the
+route prefix plus a declared relative path*, which is two fields wearing one
+field's description, and [D389](#2026-08-27--m695-added-the-acceptance-tests-last-inch)
+recorded only the label. **Two fields, joined by the host, with the result
+asserted to be under the add-on's own prefix** — so `..`, an absolute URL, a
+scheme and a leading `/` are each refused. The manifest names a place inside the
+one the host already gave it, which is D364's *declares a need, never a
+destination* holding at a second surface.
+
+*Label alone* was declined, and the reason is worth keeping: it would make the
+route prefix's **root** a reserved meaning the ABI never gave it, so an add-on
+already serving something there would have to move — pushing a constraint onto
+every future add-on to avoid one manifest field. The OIDC add-on's start route
+is not its prefix root, so the case is real rather than hypothetical. A third
+option — the host asking the module at load which route starts the flow — was
+declined as a new ABI function for one string, permanent under M61's policy.
+
+**`schema_version` stays `1`.** [the M61 entry that settled it](#2026-08-19--m61-a-cookie-namespace-comes-from-the-name-not-from-whoever-installed-first)
+records the precedent — *`schema_version` stays 1*, for a field added to a schema
+**no release has published** — and
+that condition is true as written: 0.4.0 is untagged and the manifest format has
+never shipped in a release. *(The plan review cited this precedent as D234; D234
+is the first-come cookie-namespace rule in the same entry, and the schema_version
+reasoning is that entry's rather than that number's. Corrected here so the next
+reader follows a pointer that lands.)*
+
+**D232's argument is named rather than waved past**, because it is the one that
+cuts the other way. It says the format was settled in one milestone *rather than
+growing a field per milestone across a boundary another repository is already
+compiling against*, and `internal/addon/manifest.go` records M61's
+`cookie_prefixes` as the exception that proves the cost — a field is cheapest to
+get right **before** anything is built against it. That boundary now has a real
+consumer: `LinkCtrl-OIDC` is written against this format. So this answer turns on
+reading *published* as the word D234 actually used, meaning a release rather than
+a consumer, and the cost of that reading is that the phase's own add-on has to
+change its `addon.json` — which it must anyway, since without the two fields no
+link renders and nothing M69.5 claims is provable against it.
+
+**Bumping to 2 was declined**, with what it would have bought: a version number
+that starts telling the truth about format changes from the first consumer rather
+than the first tag, which is arguably what a cross-repo contract is for. What it
+costs is a version ladder before 1.0 that the deprecation policy carries forever,
+and a `schema_version` table with two rows whose difference is one optional field.
+
+## 2026-08-27 — M69, the acceptance test's four answers
+
+The milestone the whole add-on foundation was built toward: *if the OIDC add-on
+cannot be built, the foundation is wrong.* It could be built, and it works. What
+follows is the four things that had to be decided to prove it in **this**
+repository, and the one defect proving it found.
+
+### D391 — a retry of `network_fetch` is answered from what was already fetched
+
+**The defect, first, because it is why this entry leads with it.** The add-on's
+token exchange was sent to the provider **twice**, and the second one came back
+`invalid_grant`. Sign-in failed. Nothing was wrong with the add-on.
+
+The ABI's out-parameter convention says a value too large for the offered buffer
+means nothing was written and the caller retries at the size it was told, and
+`sdk`'s first buffer is 512 bytes (`sdk/runtime_wasip1.go:17`). A token response
+is about 2 KiB. So every real token exchange took two calls, and the second call
+re-entered `hostState.doFetch` and made the request again.
+
+The convention already knew about this hazard and had answered it once, for
+`session_mint`: *a function that changes something checks the buffer before it
+changes it*. That answer does not transfer. `session_mint` can check against the
+record at its widest because a `MintedSession` is a fixed shape; a fetch's widest
+answer is `LINKCTRL_ADDON_FETCH_MAX_BYTES`, 256 KiB by default, and demanding a
+quarter-megabyte buffer before any add-on may fetch anything would price every
+add-on for the largest document any add-on might read.
+
+**So the answer is to hold the response rather than to check the buffer.** The
+first call fetches, cannot write, and keeps the encoded answer on the
+per-invocation `hostState`; the retry — matched on the request record's own bytes
+— is served from it. The hold is dropped as soon as it is delivered and dropped by
+a fetch of anything else, so a module deliberately fetching the same URL twice
+still gets two requests. Bounded by construction: one response, at most the fetch
+size cap, on a state that is discarded when the request ends.
+
+**Two alternatives were declined.** Growing the SDK's initial buffer moves the
+threshold and does not remove it — a JWKS with four keys is over any figure worth
+defaulting to, and the failure returns silently on somebody else's provider.
+Making `network_fetch` return a handle the guest then reads in pieces is a second
+calling convention for one function, permanent under M61's policy.
+
+**The ABI moves to 0.1.5, and which kind of fix it is had to be decided.**
+`docs/addon-abi.md`'s table does not settle a bug fix that changes an observable
+answer; the paragraph under it does, and it splits on whether an add-on could
+reasonably have relied on the old answer. Nothing could reasonably rely on its
+token exchange being sent twice, and the old behaviour contradicted the calling
+convention's own text — so it is **additive**, the patch moves and the generation
+does not. The patch is invisible in the way M68's was: nothing new is importable,
+so a module built against 0.1.4 loads on a 0.1.5 host and stops being affected
+without being rebuilt. Written into CHANGELOG.md with which of the two it was,
+because the table requires that of either answer.
+
+**It is fixed inside M69 rather than deferred**, under workflow.md's rule that a
+defect making the *current* milestone's claim false is in spec whatever it looks
+like: the milestone's claim is that a stock instance signs somebody in through
+OIDC, and it could not. It is recorded as a row in deferred-findings.md all the
+same, closed against this milestone, because the finding is what the exercise
+produced and a fix with no finding behind it is a fix nobody can trace. **Whether
+it also reopens [M68.5](phase-details/m68.5.md)** — whose file says *one outbound
+request* — is scheduling, and scheduling is the owner's.
+
+### D392 — the acceptance test relaxes two bounds, under a build tag, and nothing else
+
+M69 requires a **containerized identity provider**, and two of this product's own
+bounds make one unreachable from a test. Neither is wrong and neither was
+changed.
+
+The address policy (M68.5) dials globally-routable unicast space and refuses
+everything else, so a provider published on `127.0.0.1` is refused, and so is one
+on a docker bridge, which is RFC 1918 and carved out. And a fetch is https-only,
+so the provider serves TLS with a certificate no public root store knows.
+
+**The declined alternative is the one worth naming**, because it was the first
+idea: give the container an address inside routable space by creating a docker
+network on a subnet in it. That works. What it costs is taking a range of
+somebody else's real public IPv4 and routing it to a bridge — on the developer's
+machine and on every CI runner — which is a larger and far less reviewable thing
+to do than a test seam, and it is wrong in a way that is invisible until the day
+the runner needs to reach an address in the range that was picked.
+
+So `internal/addon/egress_integration.go` carries two functions behind
+`//go:build integration`: `TestReach`, which permits *named addresses* and puts
+every other address through `refuseAddress` unchanged, and `TestTrust`, which
+*adds* a root to the system pool. No shipped binary contains either — `make check`,
+`go build ./cmd/...`, the image and every release compile the package without the
+tag. Everything else about the door is the shipped one: https only, the origin
+allowlist, no add-on-chosen header, the redirect rule, the size caps, the
+timeouts. The address policy's own coverage is unaffected and still leaves
+`allowAddr` alone, which is what exercises the real wiring.
+
+**A consequence worth writing down for operators**, and now in
+`docs/configuration.md`: an identity provider on a private network address cannot
+be used at all. That is the policy working as designed, and it had never been said
+where somebody deploying OIDC would read it.
+
+### D393 — the add-on is rebuilt from the module proxy, not vendored and not checked out
+
+The test installs the **published** add-on. Three ways to get it, and two are
+wrong.
+
+Committing the module is refused by `.gitignore`'s existing rule and m60.md's
+reason: a 5.5 MB binary is a build input nobody reviews. Adding
+`github.com/DevOfPie/LinkCtrl-OIDC` to this repository's `go.mod` puts the host in
+the add-on's dependency graph, which is the architecture backwards, and it would
+sit in `go.sum` for everybody who builds this server.
+
+`scripts/oidc-fixture.sh` fetches the module at a **pinned pseudo-version**,
+copies it out of the module cache and builds it *as its own main module* with the
+add-on's own flags. That last detail is not fussiness: `-trimpath` writes
+`<module>@<version>/…` into a binary built as a dependency and `<module>/…` into
+one built as the main module, so building it the ordinary way produces different
+bytes. Built this way it reproduces the published artifact **exactly**, and the
+script asserts that against the digest the release's own `addon.json` names —
+`695385a1…`. A drift in either fails there, naming what happened, rather than in a
+test whose subject is OIDC.
+
+This is also what makes m69.md's SDK-consumption bullet mechanical rather than a
+claim: the `go.mod` the proxy served is asserted for the module path, for a direct
+requirement on `github.com/DevOfPie/LinkCtrl`, and for the absence of `replace`
+and `exclude`. The version resolving at all is proven by the fixture existing.
+The **`LICENSE` the proxy served** is asserted the same way, which is owed-work
+#4 checked against what was published rather than against a checkout.
+
+### D394 — dex, pinned by digest, in a compose file `make up` never reads
+
+The provider is **dex v2.44.0, pinned by digest**, in
+`docker-compose.integration.yml` — a separate file, because `docker-compose.yml`
+is the operator-facing stack and an identity provider with a password in a tracked
+file is not something an operator runs. Compose applies the override file
+automatically to the default file and never under an explicit `-f`, so `make up`
+cannot reach it. `scripts/idp.sh` names the project explicitly for the same
+reason in reverse: the Makefile exports `COMPOSE_PROJECT_NAME` per instance, and a
+provider that joined `linkctrl-test` would be torn down by `make down`.
+
+**Pinning and health-gating are the milestone's own requirement**, m69.md's second
+risk, and F256's single-flake budget is the lesson it cites. The digest is what
+makes the browser leg safe to write at all: the test reads dex's own login form,
+and a form that changes shape under a tag that did not move is exactly that flake.
+`scripts/idp.sh up` waits for compose's healthcheck **and** for a discovery
+document that parses, because those are two different claims and a suite that
+starts on the first and fails on the second is a flake nobody can reproduce.
+
+**The connector is a static password list and the protocol is not mocked**, which
+is the distinction m69.md's *not a mock of the protocol* draws: dex does real
+discovery, real PKCE, a real `client_secret_post` exchange, real RS256 signing and
+a real key set. What the static list replaces is the upstream identity source —
+the thing dex asks to find out who somebody is — which no OIDC relying party can
+observe.
+
+**The demo does not get OIDC**, and this is where that is recorded rather than
+discovered: m69.md says so, the demo has no identity provider, and a sign-in flow
+against a throwaway one demonstrates nothing a visitor can use. The inherited
+demo rule's exception is therefore stated. `demoCoverage()` is untouched, because
+this milestone seeds nothing and claims nothing about the demo.
+
+
+## 2026-08-27 — M69, the acceptance test's own amendment
+
+### D395 — M69's *minor bump* clause, amended
+
+**The bullet as it stood** (`m69.md`): *"An ABI change it forces before 1.0 is a
+**minor** bump under M61's policy, exercised for real — the deprecation policy's
+first live case, if one arises."*
+
+**As amended:** the same, with **patch** in place of *minor*.
+
+**The tree fact:** [docs/addon-abi.md](../addon-abi.md)'s policy makes the
+**minor** the *generation*, which is the breaking class; an additive change moves
+the **patch** while the major is zero. F346's fix moved `abi.Version` from
+`0.1.4` to `0.1.5`, and the SDK, the generated table and the host all followed —
+so the policy behaved exactly as written and the milestone file described a
+different one.
+
+**A fact and not an assertion, so amended rather than prompted.** Nobody could
+have decided differently about which component a policy already published moves;
+the bullet named the wrong one.
+
+**The clause's condition was met, which is the part worth recording.** *If one
+arises* — one did. The deprecation policy's first live case is F346, raised by
+the acceptance test the milestone exists to run, and it went through the table's
+*a bug fix that contradicts its own documentation* limb rather than needing a new
+one. That is the second time this phase has put the policy under load and had it
+hold; the first was [M68](phase-details/m68.md)'s, which had to repair the policy
+before it could use it (D356).
+
+
+## 2026-08-28 — M69, the release arrives and the fixture becomes it
+
+### D396 — the fixture is the published artifact, and the rebuild is what earns the right to install it
+
+`DevOfPie/LinkCtrl-OIDC` published **v0.1.0** on 2026-08-28 07:56 UTC, by its own
+workflow, from the annotated tag `v0.1.0` at commit `4851439`. Four assets:
+`addon.json`, `linkctrl-oidc-0.1.0.tar.gz`, `oidc.wasm` and `SHA256SUMS`. There
+is a SLSA build provenance attestation over the module's digest naming the
+workflow, the tag and the commit. So m69.md's *release is verifiable end to end*
+bullet became satisfiable, [D393](#d393--the-add-on-is-rebuilt-from-the-module-proxy-not-vendored-and-not-checked-out)'s
+arrangement became the second-best available one, and four places written before
+the release existed — two of which ship to operators — became false in the other
+direction.
+
+**The pin moves from a pseudo-version to the tag.** D393 pinned
+`v0.0.0-20260827052551-90d4bd1e1ecf` because there was nothing else immutable to
+pin. `v0.1.0` is the version the release was *built from*, so pinning it turns
+"the add-on this test installs is the add-on that was published" from an argument
+into a comparison. The module the proxy serves at that tag rebuilds to
+`695385a1…`, which is the digest the release's `oidc.wasm` carries and the digest
+its `addon.json` names — verified before the pin moved, not after.
+
+**What is installed is the release's own bytes; the rebuild is what earns trust
+in them.** `scripts/oidc-fixture.sh` now does both and holds them against each
+other: it builds the module from the tag, downloads the published bundle, refuses
+it unless it hashes to `68f2d0c5…`, unpacks it, and refuses again unless the
+module inside is byte-identical to the rebuild and the manifest inside is
+byte-identical to what this tag's `addon.json.in` produces for that module. Only
+then does the bundle's own manifest and module become the fixture. Installing the
+rebuild instead would have been simpler and would have tested a reproduction of
+the release rather than the release.
+
+**Both digests are written into the script rather than read from `SHA256SUMS`.**
+Fetching the sums file beside the bundle authenticates nothing — it is the same
+page — which is exactly what `docs/configuration.md` tells an operator, and a
+fixture that did the thing the documents warn against would be teaching the
+opposite. Transcribed once, they also catch the case a checksum is for: a release
+re-cut over the same tag fails at the fixture step.
+
+**The bundle is downloaded rather than reconstructed**, and that is deliberate
+rather than lazy. A tarball's bytes depend on how it was packed — file modes,
+ordering, timestamps — and only the release knows that; `LinkCtrl-OIDC` carries a
+later commit, *Pin the bundle's file mode, so its digest is the same number
+everywhere*, precisely because the first cut did not reproduce outside its own
+runner. What has to be true of the bundle is not that this tree can rebuild it,
+but that it holds the module this source builds to, and that is checked directly.
+
+**The provenance attestation is the operator's question, not the suite's.**
+Verifying it means `gh attestation verify` against Sigstore — a credentialled
+network call to a third service, on every integration run, whose failure mode is a
+red suite that says nothing about this product. `docs/SECURITY.md` and
+`docs/configuration.md` now name the command and say plainly that this instance
+does not ask it: the install enforces the digest an operator typed and knows
+nothing about who built the bytes behind it. What the tree proves offline instead
+is the weaker fact the attestation is *about* — that the source at this tag builds
+to the module the attestation is over.
+
+**The cost, stated.** The fixture step now depends on `github.com` as well as on
+the module proxy, which is one more thing that can be down. It is not optional:
+there is no way to check a release you did not fetch, and m69.md's risk about new
+integration surface applies to this the same way it applies to dex.
+
+**What this leaves for [M70](phase-details/m70.md).** Its bullet bumps the
+add-on's `go.mod` to the SDK's `v0.4.0`, which is a new commit in that repository
+and therefore a new add-on release — so the four values pinned here move together
+with it, and the acceptance test is what fails if they move apart.
+
+**One correction that is not a decision**, recorded because it is what the
+milestone's last bullet asks: `docs/configuration.md` and `docs/SECURITY.md` said
+`LinkCtrl-OIDC` had no tag and no release, which was true when written and is now
+the opposite of true. Both now name the release, tell an operator to read the
+digest from its own `SHA256SUMS`, and name the provenance command. `CHANGELOG.md`
+gains the release identity for the same reason: an operator reading the entry had
+no way to learn the add-on has a release at all.
+
+
+## 2026-08-28 — M69 reopened: the digest was a property of this machine
+
+### D397 — the fixture pins the toolchain the release was cut with, read from that release's own go.mod
+
+M69 landed at `d421339`. The *Integration tests* job then failed on it, and on
+`086d325` before it, at the fixture step — before one test ran. The runner built
+`f917a810f6ac58cb35654a0e9c14bc86e7460b3d0775864648182e0f67cc393b`; the release
+published `695385a1a796a689ad2b3b4f910f93c102adfe304728c5081ed215837cb4477e`;
+`scripts/oidc-fixture.sh` refused, exactly as
+[D396](#d396--the-fixture-is-the-published-artifact-and-the-rebuild-is-what-earns-the-right-to-install-it)
+designed it to. That is [F348](deferred-findings.md#closed), and it closes here.
+
+**The cause is a Go patch release, and both halves are measured rather than
+argued.** `.github/workflows/ci.yml:34` pins `GO_VERSION: "1.26"`, which setup-go
+resolves to the newest patch it has — 1.26.7 on the runner, while this machine is
+1.26.5. `go.mod`'s `go 1.26.5` is a language floor and pins nothing. Building
+`LinkCtrl-OIDC@v0.1.0` on this machine under each toolchain in turn gives
+`695385a1…` under go1.26.5 and `f917a810…` under go1.26.7 — the runner's digest,
+reproduced here from its cause. So D396's *reproduces the published artifact
+exactly* was true of one machine's Go, and the acceptance test the whole
+foundation was built toward had never executed in CI at all.
+
+**The fix is in the fixture, not in the workflow — the owner's answer of
+2026-08-28.** Three answers were available: pin the toolchain in the fixture,
+match `GO_VERSION` to whatever cut the release, or accept that the digest check is
+a local-only assertion. The second fixes the runner and nobody else: a
+contributor on any other Go patch gets the same refusal, and the reproducibility
+claim stays a claim about one CI configuration. The third gives up the thing the
+fixture exists for. The first makes the rebuild a function of the source alone,
+which is what `-trimpath` and `-buildvcs=false` were already reaching for and what
+the toolchain was quietly excluded from. It also needs nothing from
+`.github/workflows/`, which this loop may not commit to.
+
+**The pin is read from the module's own go.mod rather than transcribed beside the
+other four.** `LinkCtrl-OIDC`'s release workflow runs setup-go with
+`go-version-file: go.mod`, and its release run logged *Setup go version spec
+1.26.5 / Resolved as '1.26.5'* — so the go.mod at the tag **is** what cut the
+release, and transcribing it here would be copying an answer this tree can derive.
+A tag's go.mod is immutable and proxy-served, so the derived value is as pinned as
+`VERSION` is, and it moves with `VERSION` instead of becoming a fifth line to
+forget when the pin bumps. The derivation mirrors setup-go's own order — a
+`toolchain` line when there is one, the `go` directive otherwise — and refuses
+when the `go` directive names no patch, because `go 1.26` would put the machine
+back in charge of the bytes.
+
+**Deriving is safe because the digest check is the backstop, not because the
+derivation is clever.** If the rule ever reads the wrong value, the build hashes
+to something `MODULE_SHA256` does not name and the fixture refuses — the same
+refusal that surfaced this defect, doing the same job. That is the argument for
+deriving over transcribing: the failure mode of a wrong derivation is identical to
+the failure mode of a wrong transcription, and only one of them can go stale
+silently.
+
+**`GOTOOLCHAIN` is what makes it hold on a machine that has never had that Go.**
+Go fetches the named toolchain from the module proxy when the local one differs,
+and the fixture already talks to the proxy for the module itself, so the runner
+can get it. Verified rather than assumed: with the local `go` forced to 1.26.7 —
+the runner's — the fixture builds `695385a1…` and passes, and with the pin removed
+under that same toolchain it builds `f917a810…` and refuses. The download costs
+about four seconds and happens once per machine.
+
+**What this does not change.** The four pinned values, the two transcribed
+digests, the bundle download and the end-to-end comparison are all as D396 left
+them. The only new thing installed is a toolchain, and the only new refusal is a
+tag whose go.mod names no exact one.
+
+
+## 2026-08-28 — M69.5, the last inch: an add-on asks, an operator agrees
+
+[F345](deferred-findings.md#closed) closes here.
+[D389](#2026-08-27--m695-added-the-acceptance-tests-last-inch) decided that the
+gap was worth the phase's last slot and
+[D390](#d390--what-the-manifest-gains-and-why-its-version-does-not-move) decided
+what the manifest gains — two fields, joined by the host, and `schema_version`
+staying `1`. Both hold as built and neither is re-argued here: the condition D390
+turns on is still true, 0.4.0 is still untagged, and the format has still never
+shipped in a release. What follows is what building it decided.
+
+### D398 — the operator's consent is a setting the *host* declares, riding M68's mechanism
+
+m69.5.md asks which mechanism carries the operator's agreement and says the answer
+is not optional, because it decides whether the inherited *every UI feature has API
+support* rule binds here: an add-on-declared setting riding M68's page discharges
+it through M68, while a new host operation would have to land in
+`api/openapi.yaml` and be replayed by the contract test, the way M67, M68 and
+M68.6 each did.
+
+**The first limb applies, and this entry is the milestone saying so.** M68 shipped
+the whole mechanism — `internal/addon/settings.go`, the migration
+`internal/store/migrations/04800_addon_settings.sql`, the stored answers, the
+manager's form. The consent is a toggle in that table, written by
+`Host.SaveSettings`, rendered by the form that already exists, and reachable over
+`PUT /api/v1/addons/{name}/settings`. **No operation was added.**
+
+`api/openapi.yaml` still changed, and the distinction is worth stating rather than
+glossing: `AddonSetting` is `additionalProperties: false`, so the `sign_in` flag
+the render model carries has to be described there or the contract test refuses
+the response. That is a **field on an existing response**, not an operation — the
+limb turns on whether a new *operation* was needed, and none was. `make openapi`
+passes.
+
+**What it is not is a setting the manifest declares, and that is the load-bearing
+part.** A manifest-declared toggle carries a manifest-declared *default*, so an
+author could ship `"default": "true"` and put themselves on the front door of
+every instance that installed them — the exact thing
+[D364](#d364--an-add-on-declares-that-it-needs-egress-the-operator-decides-where)'s
+shape exists to prevent, one surface over. So `internal/addon/signin.go` declares
+`sign_in_link` on behalf of every add-on that asked, its default is `"false"`, and
+`Manifest.Validate` refuses an add-on that tries to take the name. `managedSettings`
+is the one function that adds it, and it is used by the manager's read and write
+and by nothing else.
+
+It is deliberately kept out of `Host.resolveSettings`, so `config_get` cannot read
+it. Whether this product draws a link on its own sign-in page is not the add-on's
+business, and a module that could read the operator's answer would be a module that
+could behave differently depending on it. The cost is named: `Managed.DeclaredSettings`
+still counts the manifest's own list, so the detail page renders one row more than
+the list page's *N of M* describes — each figure stays true to what it says it is,
+and making them agree would mean calling the host's question the add-on's.
+
+The environment route is not extended to it either. `LINKCTRL_ADDON_<NAME>_<X>`
+answers a *setting the module reads* (D263) or an *operator override* read at load
+(D347's two sources); this is neither, and adding a third meaning to that namespace
+to save an operator one click on a page they are already on is not a trade worth
+making. If it is ever wanted, it is an override name and not a setting name.
+
+### D399 — the link is drawn from what loaded, and ordered by name
+
+**From what loaded, which is the opposite of M67's answer and right for the
+opposite reason.** `Host.SignInLinks` walks the loaded set and asks `Host.routed`
+— the same predicate the router itself uses, so the two cannot drift — and a
+module that did not compile, or that never held `routes.own_prefix`, offers
+nothing. M67's collision check runs over what a directory *claims*
+([D346](#d346--the-runtime-collision-check-reads-the-boot-checks-set)), because the
+harm there is a boot that refuses both add-ons; the harm here is a dead link on the
+sign-in page, and only a running module rules it out.
+
+**The composition is asserted on the result, not only on the declaration.**
+`Loaded.SignInHref` joins `RoutePrefix`, the add-on's name and the declared path,
+then asks whether what came out is still under the prefix it started from.
+`Manifest.Validate` separately refuses a leading `/`, a `..` or `.` segment, a
+`//`, a backslash, a scheme, a query, a fragment and a percent escape. Neither
+layer is trusted alone — validation is what a publisher hears at load, the
+composition is what a visitor gets — and the second is tested against a `Loaded`
+built by hand, because a hand-built one is the only thing that could ever get past
+the first.
+
+**The label is bounded by a constant with a test on both sides.**
+`MaxSignInLabelBytes` is 64, control characters are refused, and it renders through
+`html/template` like every other value on every other page. The CSP is untouched,
+because there is nothing here for it to permit: no add-on gets script, style, an
+icon or a position on this page. An empty or absent label draws nothing.
+
+**Ordered by name, sorted here rather than taken from the loaded set.** m69.5.md
+allows installation order or name, and the two come apart at exactly one point:
+discovery order is `os.ReadDir`'s, which is sorted, and an add-on's directory *is*
+its name — but M67's runtime install **appends**, so an add-on installed without a
+restart sits last and then moves at the next boot. Both are orders the host
+controls and neither is stable, and a sign-in link changing position for a reason
+nobody can connect to it is the thing worth avoiding. Sorting by name is the same
+order at boot and the only one that survives an install. *Which sign-in method is
+listed first* is worth gaming, so it is deliberately nothing a manifest can
+influence. The integration test makes `alpha` arrive last by both routes at once —
+installed at runtime after `zeta` was loaded at boot, and consented to second —
+and asserts it is drawn first.
+
+**A stock instance renders `login.html` byte for byte as before.**
+`internal/ui/testdata/login_stock.html` was captured from the template as it stood
+before this milestone touched it, and `TestAStockSignInPageIsUnchanged` holds three
+shapes of *nothing offered* against it. The local form does not move — the links
+are additive and drawn below it, asserted over the form's fields and their order —
+so an instance whose add-on is broken still lets its operator in.
+
+### D400 — the demo states the exemption rather than seeding a module that mints
+
+**Owner-answered 2026-08-28.** The inherited *a new feature somebody can see* rule
+obliges a milestone to extend the demo seeder or to narrow what the list covers in
+writing. This one narrows it, and `demoCoverage()` in
+`cmd/lctl/demo_coverage_test.go` gains the written row rather than leaving the gate
+to pass because nobody added one.
+
+**What an evaluator sees instead** is the demo's sign-in page exactly as it has
+always been. The demo's sample module is `pageviews`, which holds no
+`session.mint`, so no link is offered. The operator's half is visible in the tree
+— the consent toggle on the Add-on manager's detail page — and a rendered control
+is not a count, so what asserts it is a template test in `internal/ui`, the same
+shape M68.6's install-control row already takes.
+
+**Two alternatives were declined, each for its own reason.** Seeding a sample
+module that mints: a public demo running a session-minting module is a sign-in
+anybody may start, and a link going nowhere in particular reads as broken rather
+than as a demonstration. Installing the OIDC add-on on the demo: m69.md ships an
+exception saying the demo does not run it — there is no identity provider behind
+it — and reversing a shipped milestone's decision is not this one's to make.
+
+The row is therefore the zero row M65's own paragraph in that file predicted, for
+M65's reason and not a new one: `addon_identity_links` must stay empty, because a
+row in it would mean the demo showed an account's connection to a provider it does
+not talk to.
+
+### The `LinkCtrl-OIDC` change this milestone requires, stated here for whoever lands it
+
+m69.5.md's last bullet: the manifest change is the observable end of this milestone
+and this tree cannot commit it. The same shape as
+[M70](phase-details/m70.md)'s obligation to bump that repository's `go.mod`.
+
+Two edits, and neither is optional if the link is to render:
+
+1. **`addon.json` gains two keys**, beside the ones it already carries and inside
+   the same `schema_version: 1`:
+
+   ```json
+   "sign_in_label": "Sign in with your provider",
+   "sign_in_path": "start"
+   ```
+
+   `sign_in_path` names the module's **own** page that begins the flow, as it is
+   spelled under `/addons/<name>/` — for `v0.1.0` that is the path its README
+   currently tells an operator to paste, with the prefix and the leading separator
+   removed. The host refuses a leading `/`, a `..`, a scheme, a query and a
+   fragment at load, so the value is the bare relative path and nothing else. The
+   label is at most 64 bytes and carries no control characters. Both keys are
+   optional in the schema, so a manifest without them still loads on this host —
+   what it does not do is render a link.
+
+2. **The README stops telling an operator to paste a URL.** What replaces it is two
+   sentences: this add-on declares a sign-in link, and it appears on the instance's
+   sign-in page once the operator turns on `sign_in_link` on the add-on's page in
+   the Add-on manager. The URL stays documented as what the link *is* — an operator
+   debugging a flow still needs it — but it stops being the instructions.
+
+Until both land, no link renders on an instance running `v0.1.0`, and this
+milestone is provable only against the fixtures in this tree. That is the honest
+statement of what is and is not done here.
+
+### D401 — M68's *manifest-declared* exclusion, amended
+
+**The bullet as it stood** (`phase-details/m68.md`, *Deliberately not done*):
+*"editing the operator's **environment** config from the page — the env keys M64
+reads stay the operator's, and only manifest-**declared** settings are editable
+here."*
+
+**As amended:** the same, with *only **declared** settings are editable here*.
+
+**The tree fact:** `internal/addon/manifest.go` refuses a manifest that declares
+`sign_in_link` as a setting name, and the host declares that setting itself for
+every add-on that asked for a link — so the manager's detail page now renders one
+setting no manifest may declare. Raised by M69.5's reviewer against m68.md:44 and
+:69, reading the diff rather than the milestone.
+
+A **fact** and not an assertion, which is why it is amended rather than prompted
+and why M68 is not reopened. What the sentence was drawn to exclude is the
+operator's environment, and that is untouched: `sign_in_link` is stored in
+`addon_settings` like every other answer, no env key became editable, and M68's
+own description of what M68 built is correct as it stands. The word that went
+stale is *manifest*, and only because a later milestone gave the page a second
+source of declarations. Nobody could have decided this differently — M69.5's
+owner-approved scope requires the consent to sit under `addons.manage`, and that
+is this page.
+
+**Why it is logged at all**, given how small it is: a shipped milestone's file is
+what its `done` row asserts, and this project's rule is that plan drift is allowed
+and silent plan drift is not. The count discrepancy D398 already names — the list
+page's *N of M* against the detail page's N+1 rows — is the same fact seen from
+the other side, and the two entries should be read together.
+
+## 2026-08-29 — M69.5 reopened: two greens that measured this machine
+
+M69.5 landed, and CI was red on the commit that landed it. Three actors had run
+`make check` on that tree — the worker, the reviewer independently, the
+orchestrator again at acceptance — and all three got green. The branch was red
+for one reason: the golden the milestone's own no-op bullet rests on compares a
+page containing a hash of a file that is not in the repository.
+
+Both halves are fixed here, under M69.5's own number, because a reopening keeps
+its number and the trail is worth more in one place than the numbering is.
+
+### D402 — the stock sign-in page's golden compares everything except the built stylesheet's fingerprint
+
+**The defect** ([F349](deferred-findings.md#closed)).
+`internal/ui/testdata/login_stock.html` carried
+`/static/css/app.css?v=pnpIg4DzEwg`. `app.css` is gitignored (`.gitignore:25`)
+and built by `make css`, so that token hashes a build artifact rather than
+anything the template writes. The capture was made against an `app.css` four days
+old; CI built its own and got `?v=_1USZKa0dtQ`, failing all three subtests on a
+page that was **byte-identical in every other position**. Reproduced here before
+touching anything: `make css`, then
+`go test ./internal/ui/ -run TestAStockSignInPageIsUnchanged`, red with CI's exact
+hash.
+
+**The answer: normalize that one token, on both sides, and count it.**
+`builtStylesheetURL` in `internal/ui/login_test.go` matches
+`/static/css/app.css?v=…` and nothing else; the golden carries the literal
+`?v=FINGERPRINT` in that position so a reader of the testdata file sees the
+substitution instead of inferring it from a hash that looks real and is not
+compared. Every other `?v=` on that page — the favicon, htmx, `qr-size.js`,
+`addon-select.js` — hashes a **committed** file, so those stay compared byte for
+byte and a change to any of them still fails here.
+
+**The count is the load-bearing part, not the regexp.** A comparison that skips
+part of a page is only as good as its certainty about which part.
+`withoutStylesheetFingerprint` fails unless it finds exactly one match, on the
+rendered page and on the golden alike: a layout that stopped emitting a
+fingerprinted stylesheet, or a pattern that stopped matching the one it emits,
+would otherwise turn the substitution into a no-op on both sides and leave the
+test passing while asserting something narrower than its name. Sabotaged by
+deleting `layout.html`'s stylesheet link — *the page carries 0 fingerprinted
+stylesheet URLs, want exactly 1* — and restored by counter-edit.
+
+**The two declined answers.** *Compare the body only* was declined because it
+throws away the whole `<head>`, including four fingerprints that are genuinely
+deterministic and one `<meta name="htmx-config">` an add-on-adjacent change could
+plausibly reach; the exception should be the size of the defect. *Rebuild the
+stylesheet before capturing* was declined by the owner in the reopening itself,
+and rightly: it makes the golden pass today and red again at the next UI
+milestone, which is every milestone that touches a template.
+
+**What was proved, rather than argued.** The bound on this fix was that it must
+not become a test the add-on block could pass through, so it was driven from the
+other side twice. Making `login.html`'s guard unconditional (`{{- if true}}`) so
+the empty offer block renders on a stock page: red, all three subtests. Adding a
+literal `<li><a href="/addons/oidc/start">Sign in with Contoso</a></li>` to the
+stock page: red, all three subtests. Both restored by counter-edit and diffed
+back to byte-identical. And the fix's own claim, driven forwards: appending a
+comment to `app.css` so it hashes differently leaves the test green, which is the
+property that was missing.
+
+### D403 — `make check` builds the assets it tests against
+
+**The defect** ([F350](deferred-findings.md#closed)). `check` was
+`tidy lint shellcheck check-links test`. CI's build job is
+`verify-assets css build … ci-test`, and its lint job runs `htmx swagger-ui css`
+first. So the gate this repository names before every commit ran against whatever
+`app.css` happened to be on disk, and CI ran against one built moments earlier.
+A local green and a CI red could disagree **by construction** on any test that
+reads a built asset — and did.
+
+**The answer:** `check: verify-assets css tidy lint shellcheck check-links test`,
+and the same two steps at the head of `Taskfile.yml`'s mirror.
+
+**`verify-assets` rather than the `assets` target**, though `assets` is the
+literal set the CI lint job builds. The Makefile already argues this against
+itself, in the comment above `verify-assets`: `htmx` and `swagger-ui` *repair* a
+stale copy, which is right for a developer and wrong for a gate, because a gate
+that fixes what it finds reports success on a tampered blob. `check` is a gate.
+The CI **build** job is therefore the path to mirror, not the lint job, and its
+order is exactly the order taken.
+
+**Driven.** `make -n check` now runs the three `VERIFY_ONLY=1` scripts and
+`tailwindcss` before `go test`. Sabotaged by appending five bytes to
+`internal/ui/static/js/htmx.min.js`: `make check` refuses at `verify-assets`
+naming both digests, where before it would have run the full suite green.
+Restored and compared.
+
+**This is [F348](deferred-findings.md#closed)'s shape one milestone later**, and
+saying so is most of the value of the entry. F348 was a fixture that reproduced
+on this machine and not on the runner; this is a gate that measured this machine
+and not the code. Both were found by CI rather than by anything in the loop, and
+both were invisible to every local gate the contract names. What generalizes is
+narrow and worth writing down: **a gate whose inputs are not in the repository is
+measuring the machine it runs on**, and the two inputs of that kind this
+repository has — a gitignored build artifact and a toolchain version — have now
+each cost a red branch.
+
+`.github/workflows/` is not committable from this tree and needed no change: the
+workflow already built the assets. What was wrong was the local gate claiming to
+be *everything CI runs, short of integration tests* while running less.
+
+### D404 — M69.5's byte-identical bullet, amended
+
+**The bullet as it stood** (`phase-details/m69.5.md`, *Nothing appears on a stock
+instance*): *"`login.html` is byte-identical to what it renders today — asserted
+by a template test, because this is the one page every visitor with an account
+meets and the cost of getting it wrong is the whole product's front door."*
+
+**As amended:** the same, with *byte-identical to what it renders today, save the
+built stylesheet's cache-busting fingerprint, which hashes a gitignored artifact
+rather than anything this template writes (D402)*.
+
+**The tree fact:** `internal/ui/templates/layout.html:7` emits
+`{{asset "css/app.css"}}`, and `.gitignore:25` ignores the file that URL
+fingerprints. The page rendered on this machine and the page rendered in CI
+differ in that one token and in no other, which the CI failure and the local
+reproduction both show byte for byte.
+
+A **fact** and not an assertion, which is why it is amended rather than prompted:
+the bullet's purpose is that no add-on's data reaches a stock sign-in page, and
+the amended test asserts that undiminished — proved from the other side twice,
+above. What the original sentence got wrong is that *byte-identical* was never
+achievable for a page carrying a hash of an unversioned file, on any machine,
+including the one that wrote the sentence. Nobody could have decided that
+differently.
+
+
+## 2026-08-30 — M69.9, the pre-release adversarial review: what it checked, what it found, and what it refuted
+
+Eighteen milestones, `b9886f5..66edf10`, 219 files and +72853/-513 against
+`v0.3.0`. [M64.9](phase-details/m64.9.md) had already read M59–M64 at `00d4ed5`,
+so the second half — `00d4ed5..66edf10`, 181 files — is what this review weighted,
+with the whole phase in range. Run to [M32.9](phase-details/m32.9.md)'s
+specification, as every `X.9` since.
+
+**How independence was bought.** The same way M64.9 bought it, and for the same
+stated reason: no more capable model exists, so the rule degrades to fresh
+contexts that had never seen the workers' reasoning. **Eight readers**, each
+pointed at one dimension and given the standards as files, no conclusions and no
+hint of which parts anybody thought were weak — M65 attacked as account takeover;
+M66 and M66.5 under adversarial modules; M67 and M68; M68.5 and M68.6; M69 and
+M69.5; the standing question re-read over the foundation; the published claims
+against measurement; and the cross-repo release chain. M64.9 used six for six
+milestones; this range is eleven.
+
+**~36 raw findings, and every one was put to something that tried to kill it** —
+**ten adversarial refuters** for the behavioural claims, and counting for the
+enumerations, because counting *is* the refutation for a count claim. Eight
+counts were settled that way by the orchestrator rather than by an agent.
+
+**The refutation pass killed or corrected as much as it confirmed, which is the
+point.** In order of what it saved:
+
+- **Both claimed reopenings fell.** A reader argued that M64 must reopen — its
+  *cannot mint* bullet cites a declared-but-refused list that no longer holds a
+  session function — and that M60 must reopen, its *no table* absence having
+  become a bound. Neither survived. `git show c0d0025:internal/addon/abi/functions.go`
+  has `session_mint` with **no `Live` field**: the bullet was true of M64's own
+  tree and said so in two words, *here* and *yet*. M60's four runtime absences
+  still assert and their tests are green; *no table* was narrowed in writing at
+  the time, in `internal/addon/absence_test.go` and in D342. [D304](#2026-08-21--m65-amending-m62s-ungated-count-rather-than-reopening-it)
+  had already ruled on this exact shape — *that is the mechanism working, not a
+  defect* — over a sentence carrying no temporal hedge at all. Both became dated
+  amendment parentheses. Reopening a shipped milestone is the most expensive
+  outcome this review can produce and it produced none.
+- **A finding reported as new was established as [F281](deferred-findings.md#open).**
+  The orphaned-data surface really does offer a still-installed add-on's data for
+  permanent deletion — driven end to end, `PURGE SUCCEEDED for a still-installed
+  add-on` — but F281 named this consequence in August, prescribed the same fix,
+  and is still `Unreviewed`. The refuter also broke the finder's hook: m68.md uses
+  *installed* for the loaded set in its own first bullet, so the word draws no
+  distinction. The outcome is F281 raised to High rather than a second row.
+- **A second was folded into [F336](deferred-findings.md#open)** as one further
+  consequence — a stored secret reaching the log — rather than filed as its own.
+- **One of four claimed-false digest sentences is true.** `CHANGELOG.md:85-90`
+  says the release is verifiable without trusting the page you found it on, and
+  it is: the attestation covers the **bundle** as well as the module, resolving
+  through `gh api` with Rekor `logIndex 2623837353`. Its only defect is
+  understatement.
+- **The `config.read` + `network.fetch` "exfiltration" is the shipped feature.**
+  `docs/addon-abi.md:800-805` says a token endpoint is reached with
+  `client_secret_post` and there is no other way, and
+  [D359](#2026-08-25--m68-what-a-name-inherits-and-the-harness-that-had-never-run) declined withholding it
+  at the ABI on the merits. The composition is disclosed twice more in
+  SECURITY.md, ~600 lines from the paragraph the finder read. What survived is
+  one clause: *the first time two grants compose* read as exhaustive.
+- **The wasm leak lost its headline number and its framing.** A refuter changed
+  instrument — anonymous `r-xp` mappings from `/proc/self/maps`, immune to page
+  reclaim and to the seven other agents on the box — and got 6844 KiB/cycle of
+  mapped executable, ~10 MiB RSS. The finder's 26 MiB was the race detector's
+  shadow memory. Only the instance principal can reach it, and that principal can
+  already put working code in the process, so it is robustness rather than
+  security.
+
+**Two findings the attempt to kill them made worse**, which is the outcome the
+refutation pass exists to produce:
+
+- **The `PurgeData` race**, filed Low, reproduced 3/3 and raised to Medium: the
+  install returns **success**, names the schema it created, and the schema is
+  gone. No database guard either — dropping a schema whose add-on holds an open
+  pooled connection returned `err=<nil>` in 1.44ms. The 13ms window is the floor,
+  since `MigrateAddon` runs inside it.
+- **The mint audit surface.** The claim survived a probe against a real database
+  — `organization_id` non-NULL, `rows visible to ListInstanceAuditLogs: 0` — and
+  the refuter then found what the reader had missed: the **pending** second-factor
+  record *is* instance-wide, because no workspace has resolved yet. So for an MFA
+  account the two halves of one sign-in land in two different logs, which is the
+  inversion of what `CHANGELOG.md:571-577` emphasises.
+
+**The largest finding is [F351](deferred-findings.md#open), and it is the one the
+mid-phase review could not have found**, because M66.5 did not exist yet. A
+pooled instance restores the guest's linear memory and nothing else, so a mutable
+WebAssembly global — or a funcref table, which the refuter found and the finder
+had not — carries state from one visitor's invocation into the next, across
+workspaces. Reproduced through `Host.Inline`, the production entry point:
+`visitor-a -> ?g=0&m=0`, `visitor-b -> ?g=1&m=0`, `visitor-c -> ?g=2&m=0`, and
+across three workspaces carrying a byte of the previous invocation's
+`RedirectDecision`. Readable through the shipped ABI, into the destination the
+visitor's browser is sent to. `pool.go:64-71`'s argument — that wazero exposes
+globals only through the export section and this toolchain exports none — is
+**factually true and does not bound the problem**, because M68.6 installs
+arbitrary bytes from a URL. No module this product's SDK can build reaches it.
+Both remedies the finder proposed are unusable as stated: re-instantiating
+reverses M66.5 entirely, and refusing modules with mutable globals refuses every
+add-on the SDK produces, which emit eight apiece.
+
+**Two readers reached the same defect independently, neither told about the
+other** — the signal M64.9 recorded as the strongest a review produces. The
+reader pointed at M67 and M68 and the reader pointed at M69 and M69.5 both filed
+the sign-in consent surviving its add-on and being inherited by whatever takes
+the name next. Its refuter then established that it is *not* an escalation and
+that `Remove` is the wrong defendant — remove-then-install is the only upgrade
+path this product has, so clearing consent on removal would drop the link off
+`/login` on every legitimate upgrade. What survives is the **label**: nothing
+records the words the operator agreed to and no page shows them.
+
+**CI, asked mechanically.** `make check-ci` — green on `phase-4` at `66edf10`.
+That is M59's gate exercised as a gate, which is the check F255 existed to
+create, and it is the bullet this review is obliged to answer rather than assume.
+
+**The browser check, which [M46.5](phase-details/m46.5.md) obliges every `X.9` to
+answer.** Against an image rebuilt for it at 23:09:38Z — `make up` does not
+rebuild and a check against stale code passes for the wrong reason. `make
+verify-ui`: **20 passed**. Then the phase's own surface, which the kept suite
+could not reach: the test instance ships only the `pageviews` fixture, which
+declares no routes and no sign-in link, so an add-on holding `routes.own_prefix`
+and `session.mint` was installed the way an operator would and driven. Five
+checks, all green — anonymous `/login` carries no add-on link while consent is
+ungranted; the operator grants it through the real manager form, which renders it
+as `setting_sign_in_link` carrying the sentence no ordinary toggle carries; the
+anonymous page then carries exactly one link, `Sign in with sso` →
+`/addons/sso/start`; **the CSP header is byte-identical across the add-on link
+appearing**, and every `<script>` on the page is the host's; both themes; and
+revoking removes it again. Console was asserted **empty** — `console`,
+`pageerror` and `requestfailed` collected and compared to `[]` — on every page
+walked, rather than observed. Noted while installing, and it is the rule holding
+rather than a finding: `sso` declares `failure_class: degrade` and the host
+loaded it `required`, which is M65's rule visible in the host's own log line.
+
+**What was checked and found sound** is in the review's own record and is not
+repeated here, but the shape is worth keeping: a 40-address battery against
+`refuseAddress` (loopback, `169.254.169.254`, `fe80::/10`, CGNAT edges, 6to4,
+`::ffff:127.0.0.1`) all refused with the right rule token; redirects measured on
+the wire, with a same-origin chain stopping after exactly four requests; M68.6's
+digest compared **before** any parser touches the bytes; and **no second door
+into [F347](deferred-findings.md#open)'s shape** — the reviewer looked for one
+and said so.
+
+**Coverage is scoped to what was drivable**, as m69.9.md's risk requires rather
+than implies. The consumers that exist are this repository's own WASM fixtures,
+purpose-built hostile modules, and `DevOfPie/LinkCtrl-OIDC` at `v0.1.0` — which,
+unlike at M64.9, **is** checkable and was checked: both attestations resolve, and
+CI run `33254142963` logs the fixture building with `go1.26.5` on a runner. Claims
+about "any add-on" are claims about the contract. TinyGo, clang and rustc are not
+on this machine, so F351's reachability is established for hand-assembled wasm and
+excluded for Go, and is **unverified** for the toolchains in between.
+
+## 2026-08-30 — M69.9's triage: the owner's five answers
+
+### D405 — nothing in this repository's gates may *require* another project's artifact
+
+Owner-answered, in their own words: *CI should only run for this project, not
+related projects that should have their own ci.* The finding that prompted it is
+the sharpest thing this review found — `.github/workflows/release.yml:133-137`
+runs a bare `go test -tags=integration ./test/integration/` with postgres and
+redis and no dex, against fixtures `.gitignore:84` keeps out of the repository,
+and `mustFixtureFile` **fatals**. So a `v*.*.*` tag push fails at `verify`, and
+image, binaries and notes all `needs: verify`: **0.4.0 could not have been cut.**
+`scripts/release-check.sh:359` carries the identical bare form and is green here
+only because a make target already wrote the fixture on this machine — F348 and
+F350's class, one gate later.
+
+The answer is not "add `oidc-fixture` to the release workflow". It is that
+`DevOfPie/LinkCtrl-OIDC` has its own CI and its own release workflow, and this
+repository's gates test this repository. So **absence skips**: `mustFixtureFile`
+skips rather than fatals, and no gate anywhere can go red because another
+project's artifact is not in a checkout.
+
+The cost was named before the answer was given and the owner took it anyway: **a
+skip is invisible**, and a suite that quietly stops running is F291's shape. What
+stops it is an opt-in — `make test-integration` and `make ci-integration` both
+already take `oidc-fixture`, so both set `TEST_OIDC_FIXTURE=required`, under which
+absence is fatal again. The context that builds the fixture is the context that
+may not silently lose it; the context that never promised it skips. `ci.yml` runs
+`make ci-integration` and so keeps every bit of the coverage that exists today —
+which matters, because the add-on surfaces executed on a runner for the first time
+this phase and F348 is what achieved it.
+
+Driven both ways, with the fixture moved aside: bare `go test` gives
+`--- SKIP: TestTheOIDCAddonMayBeUsed`, and `TEST_OIDC_FIXTURE=required` gives
+`FAIL` carrying the message naming the two make targets. Restored by moving it
+back.
+
+The declined answer, for the record: *cut the OIDC acceptance tests out of CI
+entirely* is the strictest reading of the same principle and throws away coverage
+that works today, which would also have made m69.md's *the acceptance test
+therefore runs in CI as well as here* something to amend rather than something to
+keep true.
+
+### D406 — the pool's non-memory leak is disclosed and filed, not patched
+
+The four false sentences are corrected now, because that half is cheap and
+independent of the code. The code is [F351](deferred-findings.md#open) and stays a
+row, because **every remedy is a design choice and two of the three obvious ones
+are wrong**: re-instantiating per invocation reverses M66.5 outright — 11.05ms of
+startup back onto a 20ms path, p99 44.89ms — and refusing modules that carry
+mutable globals refuses every add-on this product's own SDK builds, since Go emits
+eight, and would still miss tables. What is left is rewriting a module's bytes at
+load so its globals can be exported, snapshotted and restored beside the memory
+image, or refusing to **pool** a module whose shape the host cannot prove inert.
+Both are M70-or-later work and neither is a patch.
+
+Shipping 0.4.0 with this disclosed rather than closed is the accepted cost, and
+the disclosure is written where an operator reads it rather than only here.
+
+### D407 — the add-on mint's audit surface is documented, not moved
+
+The tree's own reasoning points the other way and the owner chose the documents
+anyway, which is worth recording as a choice rather than an oversight:
+`internal/addon/lifecycle.go:721` says *`InstanceWide` because an add-on belongs
+to no organization*, and D297 argues a mint's authority is not this product's. Ten
+other sites in the tree set `InstanceWide: true`.
+
+Against that: the record is not lost, it is in the tenant's log, where that
+organization's `audit.read` holders can see one of their own members signed in
+through an add-on — arguably the more useful place, and making it instance-wide
+would hide it from them. No decision ever specified the surface, so there was
+nothing to restore.
+
+What the documents now say is what the tree does, including the part nobody chose:
+for an account with a second factor, the record that an assertion arrived is
+instance-wide and the record of the session that exists is not, so one sign-in
+lands in two logs. `docs/SECURITY.md` and `CHANGELOG.md` both say where to look.
+
+### D408 — everything documentation-shaped is corrected in this milestone
+
+Rather than filed for M70. The set is larger than a review usually carries because
+this review counted rather than trusted: `Plan.md`'s redirect target gained the
+add-on clause it never had — the definition is the scope contract's and `slo.md`'s
+emphatic exclusion was an appendix a reader might not reach; `docs/usage.md` gained
+the host-declared `sign_in_link` toggle it omitted while describing settings as
+manifest-declared; `docs/operations.md`'s dimension-rollup paragraph moved from
+*every 60 seconds, 16–21 seconds per run* to the truth since M37, and gained the
+pages→redirect starvation direction that existed only in `slo.md`; the digest
+instructions in `docs/configuration.md` and `docs/SECURITY.md` stopped telling an
+operator to read a digest off the page the URL came from, which is what the
+install form in front of them says proves nothing, and now point at the
+attestation, which is the channel that works; `docs/SECURITY.md`'s *first time two
+grants compose* stopped reading as exhaustive; and two `CHANGELOG.md`
+`[Unreleased]` entries stopped saying the Add-on manager "is not built yet" in the
+section that ships it — which D104 makes load-bearing, since `[Unreleased]` is what
+README is written from at the documentation pass.
+
+Four counts were corrected by counting: `internal/addon/abi/permissions.go` read
+*Eight entries* against nine and against `functions.go` one file over;
+`internal/addon/http_test.go` read *six of the eight files* against a table of
+nine; `internal/addon/abi/abi.go` named three ABI patch moves out of four; and
+`docs/configuration.md`'s manifest table omitted the `origin` setting key, which
+the host accepts — the very divergence F286's repair asserts cannot exist, and
+which m69.5.md leaned on.
+
+**README is untouched**, per D104: it describes the released product, and the tag
+is what releases it. Its *thirty-nine actions* (now forty-four) and its
+*no telemetry leaving the box* both wait for M70's documentation pass, where they
+are written against what the tag will ship.
+
+### D409 — four shipped bullets amended, none reopened
+
+`m64.md`, `m60.md`, `m66.5.md` and `m69.5.md` each carry a dated amendment
+parenthesis naming the bullet as it stood, the bullet as amended and the tree fact
+that forced it. Three are facts a reader could not have decided differently — a
+stale cross-reference, a narrowing recorded in the wrong file, a coupling that
+does not exist. **`m66.5.md`'s is not**, and is marked as such: its bullet asserts
+that either the guest's state is reset or the pool is per-something safe, and
+neither limb holds. It is amended rather than reopened because the tree is not
+broken in a way M66.5 could have delivered differently — the channel is
+unreachable to every module the SDK can build — and because the work that closes
+it is F351's, which is scheduling and therefore the owner's.
+
+### D410 — the always-read contract grew 1433 bytes, and it is defended because the phase close removes most of it
+
+The `/work phase` resume floor reads **67066 → 68499**. Regenerated *after* this
+review's own edits, not before, for the reason [D268](#2026-08-20--m649-the-mid-phase-adversarial-review-what-it-checked-what-it-found-and-what-it-refuted)
+gives: a review that measures first is measuring the tree it walked in on.
+
+The number spans five milestones, not one. `doc-cost.md` was last regenerated at
+`e63c955` — M64.9's own commit — so this delta is M65 through M69.5 inclusive,
+with their reopenings.
+
+- **`workflow.md` +18 bytes**, and they are two identical corrections: the quick
+  reference read `make check # tidy + lint + unit tests` in both places, and
+  F350's fix put `assets` at the head of that target. A gate's description
+  matching the gate. Realized read ratio **0.92**, the highest in the tree.
+- **`phase-details/README.md` +1415 bytes** — four status rows for the four
+  milestones the phase inserted, and the paragraph that **names** those four
+  rather than counting them. That paragraph exists because of this repository's
+  own rule about numbers beside rules: a count nothing keeps true is the defect,
+  which the `demoCoverage` row records being bitten by. Naming costs bytes and
+  stays true.
+
+**The honest half.** That file's realized ratio fell **0.80 → 0.72**, which is
+the same signal that moved the *Phase 3 inherits all fourteen* table out to
+`phase-3-candidates.md` at M51.9 — evidence that a part of the file is being paid
+for on every resume and skipped. About 3900 bytes a read are not being used.
+
+**Trimmed anyway? No, and the reason is the calendar rather than the argument.**
+The whole Phase 4 status table — rows and planning paragraph together — leaves
+this file at the phase close: a released phase's rows move to its own
+`phase-N.md`, which is what `phase-1.md`, `phase-2.md` and `phase-3.md` already
+are. [M70](phase-details/m70.md) is the next milestone. Trimming now is work
+undone within one milestone, and it would take the paragraph a reader of *this*
+phase still needs. So: defended, with the trim named rather than deferred
+silently — **M70's documentation pass moves the table, and the ratio is the thing
+to re-read afterwards.** If it has not recovered past 0.80 with Phase 4's rows
+gone, the remaining growth is structural and the next review should trim rather
+than defend.
+
+**One thing that did not happen, and is worth recording because it did last
+time.** D268 filed the charging artefact where `Plan.md` swings ~68 KB depending
+on whether it happens to carry an ordering table. It carries one now and is
+charged at its longest matching row — **322 bytes** against a 100647-byte file,
+realized ratio 0.09. So this regeneration and the last are comparable, and the
+1433 is a real delta rather than an artefact. That is the first time two
+consecutive regenerations in this phase can be compared at all.
+
+### The correction this review owes to D392
+
+[D392](#2026-08-28--m69-the-release-arrives-and-the-fixture-becomes-it)
+says, of the OIDC fixture's digests, that fetching the sums file beside the bundle
+*authenticates nothing — it is the same page — which is exactly what
+`docs/configuration.md` tells an operator*. The conclusion is right and the
+attribution is backwards: `docs/configuration.md` told an operator to *read the
+digest from the release's own `SHA256SUMS`*, which is the opposite. Corrected in
+that file under D408, and recorded here rather than edited there, because
+decisions.md is append-only and a later entry is how an earlier one is corrected.
+
+
+## 2026-09-04 — The UI copy review's changes, approved and applied
+
+Prompted by a review of every page and partial in `internal/ui/templates` for
+prose that repeats itself and prose that exists because a button label is vague —
+438 lines of on-screen text across 52 templates, with duplicates found by
+matching shared phrasing rather than by eye. The owner approved the resulting
+plan in full. No milestone produced this, which is why the entry carries no
+number: it is smaller than a milestone and Phase 4 is at its cap of eighteen.
+
+Most of it needs no explanation — a shorter sentence is its own argument. Three
+calls do, and two of them changed what was approved.
+
+### D411 — `domains.html`'s bare `Change` renames a hostname, so the approved label was wrong
+
+The plan proposed `Change root redirect`. The button posts to
+`/domains/{{.ID}}` beside an input named `hostname`, under an `sr-only` label
+reading *Change {{.Hostname}}* — it renames the domain and has nothing to do
+with the root redirect. Shipping the approved words would have replaced a vague
+label with a false one, which is worse: vague costs a reader a moment, false
+costs them a wrong click.
+
+It ships as **`Rename`**, which is what `folders.html` and `workspaces.html`
+already call the same act. `members.html`'s identically bare `Change` was checked
+the same way, is genuinely a role change, and ships as `Change role` as approved.
+
+The general point, because this is the second time in two milestones a proposal
+described a tree nobody had re-read: a label proposal is a claim about what a
+control does, and it is checked against the handler, not against the surrounding
+prose.
+
+### D412 — the rotation paragraph loses its detail and gains no link, because there is nowhere to link to
+
+`keys.html` carried sixty words explaining that key rotation is deliberately
+*not* on the page. The plan moved that to `docs/cli.md` and left a link behind.
+
+Two things were wrong with the second half. The explanation is **already** in
+`docs/cli.md`'s `apikey` section and again in `docs/usage.md`'s *Rotating a key*,
+so the page held a third copy rather than the only one — no documentation needed
+writing. And **this product serves no documentation route**: there is no `/docs`
+handler and no template anywhere links to a document, so the planned
+`<a href="/docs/cli#api-key-rotation">` would have been a 404 on every click.
+
+What ships is the endpoint and the boundary in one sentence — *Rotation is an API
+operation, not a page one … This page can only revoke* — and no href. A pointer
+that cannot be followed is worse than no pointer; the operator who wants the rest
+has two documents that already carry it.
+
+### D413 — a glyph is described by what it does, never by which page calls it
+
+The tenth icon is a trash can, added because the orphaned-data rows lost their
+words. Its first comment said so in those terms — and
+`TestOnlyTheNamedHTTPFilesMentionAddOns` refused the file, because
+`internal/ui/templates/partials/icons.html` is not on the list of HTTP-surface
+files permitted to know about add-ons.
+
+The test offered two doors and only one is honest. Adding `icons.html` to that
+list widens a bound M60 asserts, permanently, to accommodate a *comment* — the
+file draws a shape and serves no add-on. So the comment changed instead: the
+glyph is described by its job, and the header now records the habit and its
+reason. The rule generalises past this instance, which is why it is written into
+the file rather than only here.
+
+Worth stating plainly: the guard caught the same mistake twice, the second time
+in the sentence explaining why not to make it. That is the guard working, and it
+is the third time this phase that an enumeration or a bound has been kept true by
+a test rather than by care.
+
+### What was proposed and deliberately not done
+
+- **`account.html`'s two-factor link was already correct.** The plan proposed
+  making it read `Manage` and look like a control; it already reads `Manage` and
+  already carries the bordered control styling. The proposal came from a
+  wireframe that drew the current state wrongly, so the template needed no edit.
+  Recorded because a plan row with no diff behind it otherwise reads as an
+  omission.
+- **The two *stores nothing of its own* sentences stay different.**
+  `addon_manager.html`'s is a fact on a detail page; `addons.html`'s explains why
+  a delete checkbox is absent from a removal confirmation. They share a clause
+  and serve different purposes, and unifying them would make one worse. A
+  duplicate that is really one fact stated twice for two reasons is not a
+  duplicate.
+
+### What the update-check partial fixes
+
+`internal/ui/templates/partials/update_check.html` is new and holds one sentence:
+what the update check's request carries. It lived on both `setup.html` and
+`dashboard.html`, and the two had already drifted — the dashboard's list said
+*no deployment size* and the setup page's did not, so one of the two was an
+incomplete account of the same request and which one a reader believed depended
+on where they were standing. Only the disclosure is shared; what surrounds it
+differs by page and stays local.
+
+`partials/dispute_reviewers.html` gets the same treatment for *This queue is
+instance-wide…*, which had drifted to *a decision in it* against *a decision
+here*.
+
+## 2026-09-04 — M70's two opening answers: the published example, and how 111 rows get reviewed
+
+Both were asked at M70's step 1 and answered the same day. The first had been
+waiting in [upcoming-decisions.md](upcoming-decisions.md) since 2026-08-30 and is
+the reason validation stopped; the second is about how the close is *run*, and it
+is written down for the same reason as any other — a phase close that decides its
+own procedure in conversation loses the procedure with the session.
+
+### D414 — the SDK bump reaches the published example, not only its main branch
+
+`LinkCtrl-OIDC` gets a **second release** in this close, so the add-on a reader
+actually downloads is built against the released SDK.
+
+M70's bullet as written is satisfied by bumping that repository's `main` to
+`github.com/DevOfPie/LinkCtrl v0.4.0`. That is not the purpose the bullet states
+for itself: *immutable and publicly resolvable is what the exercise needs;
+tagged is what the worked example needs*. Every operator-facing pointer this
+repository publishes names `LinkCtrl-OIDC v0.1.0`, whose immutable go.mod
+requires `v0.3.1-0.20260827043355-9509158d0e75` — a pseudo-version of an
+unreleased commit. Bumping `main` alone would leave that true and unremarked,
+which is the outcome the upcoming-decisions entry existed to prevent.
+
+The cost was stated when the answer was given and is accepted rather than
+discovered:
+
+- It is a second cross-repository release **inside** the phase close, in a tree
+  this one cannot commit to. It is therefore the owner's hands, and M70 stalls
+  on it rather than working around it.
+- It re-cuts the fixture digest [F348](deferred-findings.md#closed) had just
+  stabilised, so `scripts/oidc-fixture.sh`'s four pins and
+  `test/integration/addon_oidc_test.go`'s literals move together or the
+  integration suite goes red.
+- The pointers in `docs/configuration.md`, `docs/SECURITY.md` and
+  `CHANGELOG.md` move to the new tag with them.
+
+The two declined options are on record for the same reason the chosen one is.
+*Bump `main` only* was cheapest and entirely inside the written words, and its
+cost was leaving m70.md asserting a purpose it did not discharge — the shape this
+project reopens milestones over. *Defer the second release to 0.4.1* kept the
+close small and left the phase's own acceptance test pointing at an add-on built
+against an unreleased commit for however long that lasted.
+
+### D415 — the 111 open findings are triaged as a tiered proposal with a recommendation on every row
+
+Every open row is read and returned to the owner grouped by disposition — fix in
+this close, carry with the reason written, or close — each carrying its severity
+and a one-line recommendation. The owner approves by tier and pulls out any row
+they disagree with.
+
+This is Phase 3's shape, and it keeps M58's standard: *every row open when the
+findings step ran has been owner-reviewed*. A recommendation per row is what
+makes tier approval a review of 111 rows rather than a review of three tiers.
+
+Its cost is real and was named: one long reading pass happens before the owner
+sees anything, and a row inside an approved tier can pass without the argument it
+would have drawn had it arrived alone. The mitigation is that the tiers are
+proposals — pulling a row out of one is expected, not an objection.
+
+The declined alternatives: reviewing only the High and Medium rows individually
+and carrying the 91 Low en bloc would have been far cheaper and would have made
+M70's own bullet false, which is an assertion and so an amendment prompt rather
+than a saving; reviewing all 111 individually is what the bullet literally asks
+and costs the owner 111 separate decisions before any fixing starts.
+
+## 2026-09-04 — M70's triage: the tiers, and the eleven answers
+
+The triage D415 called for was delivered as five tiers over all 111 open rows,
+one recommendation each. What follows is the owner's disposition of it and the
+eleven answers that turned Tier D into work. Every one was given on 2026-09-04,
+before anything was built against it.
+
+### D416 — Tiers A and B are both worked into the close, and F315 joins them
+
+Sixty-two rows: the twenty-four where a shipped claim is false or a defect is
+reachable, the thirty-seven mechanical ones, and [F315](deferred-findings.md)
+pulled out of the carry tier by name — a connected identity can be created and
+never removed, and deleting the account is the only thing that reliably severs
+one.
+
+**The cost was stated before the answer and is not a discovery.** Sixty-two
+fixes sit on top of the documentation pass, the README fold, the tag and D414's
+second cross-repository release, and every fix that is not spelling or prose
+re-triggers validation from [step 1](phase-loop.md#1-validate). The recommendation
+put to the owner was Tier A now and Tier B after the release, with the five gate
+rows — F360, F303, F304, F322, F333 — pulled up because a close that ships with
+those still misreporting leaves the loop unable to believe its own green. The
+owner took the whole of both tiers instead. Recorded because a close that runs
+long should be readable afterwards as a choice rather than as a milestone that
+sprawled.
+
+**Tier C's thirty-five remaining rows are carried** with their reasons written.
+Two are re-verified before they are carried rather than closed: F232's bound
+rested on a `size` field being unreleased and 0.3.0 has since shipped, and F263
+may already be closed by M67's atomic set. **Tier E closes two** — F242 into
+F333, which is the same defect measured at the whole suite rather than at one
+spec, and F244, open only for its (e) limb, into F239.
+
+### D417 — an add-on's migration timeout is operator-configurable, defaulting to five minutes
+
+F274. `LINKCTRL_ADDON_MIGRATE_TIMEOUT`, validated against the lock ceiling the
+way the other nested bounds already are. Five minutes matches the wait goose
+already gives the other replicas, so a migration exceeding it was going to fail
+them anyway; the knob exists for the operator whose `CREATE INDEX` on a genuinely
+large table is the case M63 chose five minutes for. The cost is a new
+configuration surface and a fifth nesting rule.
+
+### D418 — role adoption is accepted and documented where an operator names roles
+
+F309. The proof of ownership `EnsureAddonSchema` argues holds for a `CREATEROLE`
+grantor and is false for the superuser the shipped compose connects as. It is
+accepted rather than defended: reaching it needs an operator to have hand-made a
+role called `addon_<something>` **and** to install an add-on of exactly that
+name, no add-on can trigger it, and the principal who installs already holds
+non-delegable `addons.manage`. The declined alternative was a non-superuser
+connection in the shipped compose, which is the better posture and costs a change
+to what every deployment runs as.
+
+### D419 — the log boundary gains a byte budget per add-on per minute
+
+F305. Measured at 3697 lines and 14.7 MiB in two seconds from a module's
+initialization. `log` is ungated on purpose, so the answer is a budget rather
+than a permission: a generous default, and crossing it drops lines and writes one
+summary naming the add-on and what was dropped — so an operator learns the add-on
+is flooding instead of losing the signal. A line-rate budget was declined because
+it misses the shape that was actually measured, where few lines near the 4 KiB
+cap cost more disk than many small ones.
+
+### D420 — `temp_file_limit` becomes a superuser step at install time
+
+F279. A `WITH HOLD` cursor parks a temp file — 553,197,568 bytes, measured — that
+`AddonConfinementViolations` cannot see, because it asks catalogues of *objects*
+and a temp file is not one. The only bound Postgres offers needs superuser, and
+the owner took it: `docs/deployment.md` gains the step and the gap is closed
+rather than reported.
+
+This is the answer the recommendation argued against, and the argument is kept
+rather than dropped: the optional-hardening shape would have left the default
+install unbounded but stayed inside the trust boundary `CREATEROLE` was chosen
+for. **It does not collide with [D418](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)**, which is about the
+*runtime* connection; this is a step performed once at install time, and the two
+are different connections.
+
+### D421 — `template_render` is deprecated under the ABI's own window
+
+F283. D259 has a module return text the host wraps and escapes, because markup a
+module wrote is not data — so a function whose whole purpose is parsing markup a
+module authored has no future. Deprecating it is also the first real exercise of
+the deprecation machinery [F272](deferred-findings.md) records as reached by no
+test, in a release where getting it wrong is cheap. The declined alternative —
+redefining `name` to select one of a closed set of *host-owned* templates — stays
+available under a new name if host-owned layout is ever wanted.
+
+### D422 — a vetoed redirect is recorded under its own outcome, and the UI explains nothing
+
+F323. Not a click, so nobody's existing figure moves across the 0.4.0 upgrade,
+and not silence, so D101's rule — a request that reached a real link is recorded
+whatever the link's state made the answer — stops having two readings in one
+file. **The owner's answer carries an explicit bound: no prose is added to the
+dashboard explaining the category.** It is countable and it is not narrated.
+
+### D423 — the QR contrast warning fires on either metric
+
+F239, and F244(e)'s placement. Both a WCAG relative-luminance ratio and a
+QR-specific luminance delta, warning when either is crossed. The WCAG bar is
+published and citable and is borrowed — it is about text read by an eye, and a
+code is read by a camera; the delta is closer to what a decoder thresholds on and
+its number is ours to defend. Taking both means two numbers to defend rather than
+one, and a warning whose reason a reader cannot infer from the swatches.
+
+### D424 — the QR list sorts on the name that is drawn
+
+F243. *Alphabetical order by name* means the name on the row, including when the
+row draws a substitute the reader never typed. The substitution moves into the
+sort, and `api/openapi.yaml`'s published *a code nobody has named sorts first*
+becomes false and changes with it — which is the cost, on a surface whose
+accuracy was the one thing this row had going for it.
+
+### D425 — the QR shorthand stays API-only, and seven view fields are deleted
+
+F235 and F245. `…/qr.svg` and `…/qr.png` — a link's default code addressed
+without naming it — remain reachable from the API and the documents and gain no
+control in the dashboard, which is the answer four reports on this tab have
+already given. The seven fields that fed the removed paragraphs go with it.
+Noted against this repository's standing rule that **unused is not evidence**:
+the deletion rests on the owner's answer about the shorthand, not on the fields
+having no reader.
+
+### D426 — the QR row's overlay stays, and the slug stays unselectable
+
+F236. Owner, 2026-09-04: *"I don't notice any usage problems and it is
+functioning as I expect it to, so no changes need to be made now."* The whole-row
+click target F224(f) asked for is kept, and the slug remains reachable through
+`?code=<slug>` in the address bar, the download filenames and the API. The row
+closes on the owner's answer rather than on a repair.
+
+### D427 — the tab's duplicate tooltip descriptions go, and the focusable hosts are named
+
+F241, answered separately on 2026-09-04 after the question was re-put — the first
+round recorded an answer the owner had not given, and the entry was removed
+before it was committed rather than corrected, because there was no reasoning to
+preserve behind a decision nobody made.
+
+Where a tooltip's text equals its control's name, `aria-describedby` is dropped:
+the tooltip stays a hover target and stops being announced twice. Where a host
+takes focus for a disabled control — which is the only way a disabled button's
+description is ever reached, and is why D192 chose a tooltip this page owns — it
+gains a role and that control's name, so the description has something to attach
+to.
+
+The cost: the two tooltips that actually say something the name does not —
+*Every link must have at least 1 QR code.* and *A link carries at most 20 QR
+codes.* — then behave differently from the other four, and the reason for the
+difference lives in the template rather than on the screen.
+
+## 2026-09-04 — M70's fix shapes: ten answers, and the picks taken without asking
+
+D416 approved 62 rows. Ten of them could not be built without a choice the owner
+would want; those are D428–D437. The rest were picked from the nearest existing
+code or decision rather than spending the owner's attention on naming, and the
+last section here is what those picks were — because an actor deciding on the
+owner's behalf writes it down, most of all when it decided in order not to stall.
+
+### D428 — the host records what it discovered, separately from what it loaded
+
+F281, the phase's one open High. `OrphanSchemas` subtracts what *discovery*
+found rather than what instantiation appended, so *installed but not loaded* and
+*not installed at all* become one distinction made at the source. Every consumer
+inherits it: the boot warning, the manager's list, and the purge confirmation
+that today asserts a still-installed add-on was uninstalled and then deletes its
+rows.
+
+The two declined shapes are recorded because each closes the data loss and
+neither closes the defect. Having the manager read the add-ons directory at
+request time is confined to the page that does the damage and leaves the
+enumeration wrong at the source, so the next consumer re-derives the mistake.
+Refusing the purge while the directory still holds the add-on is the smallest
+diff and leaves the false sentence standing with a button that no longer works.
+
+The cost of the chosen shape, stated: `Host` grows a second set, and **every**
+failure path between `EnsureAddonSchema` and the append to `h.loaded` has to
+maintain it. A path that forgets brings the defect back, which is the same
+failure mode this row already demonstrates once.
+
+### D429 — F315 is built in both halves
+
+The operator sees and severs an add-on's identity links on its detail page in the
+manager; the person sees and disconnects theirs on their account page. A link
+admits somebody to an account with **no password and no second factor of this
+product's**, and a credential of that weight should be revocable by the person
+whose account it opens rather than only by whoever runs the instance.
+
+Cost: two surfaces, two API operations, `api/openapi.yaml` and its contract test,
+inside a close already carrying 62 rows.
+
+### D430 — an htmx 4xx is answered by a shared `webError` limb
+
+F218. `webError` is already the single site every refusal passes through, so one
+limb there answers an htmx request with a swappable fragment and all six controls
+— a routing rule's delete, a split variant's, the link's danger zone, an
+invitation revoke, a member removal, a dispute reviewer revoke — start rendering
+the refusal the reader is entitled to.
+
+The `htmx-config` `responseHandling` entry was declined for being global: it
+changes how every form on the site treats a 4xx, including forms written later
+against htmx's documented default, and it swaps a full error page into a fragment
+target. `hx-target` on each control was declined for leaving no rule, so the
+seventh control is written without it.
+
+Cost: one error path now has two response shapes, and `webError` being the only
+place that decides is the whole of what keeps that manageable.
+
+### D431 — `sign_in_label` takes a positive rule
+
+F359. Letters, marks, numbers, punctuation, symbols and the space are accepted;
+everything else is refused — so U+202E, U+200B and U+2028/9 stop reaching a
+string drawn on the unauthenticated sign-in page.
+
+**This is deliberately the shape [D285](decisions.md) could not take** for the log
+boundary. There the input is arbitrary bytes a module composes and *invisible* is
+not a property Unicode publishes, which defeated four workers; here it is a
+64-byte label an operator types, so a closed accept-set is affordable. Extending
+the denylist was declined by name: this phase has been bitten four times by an
+enumeration that was true when written — the log sanitizer's list, the size
+gauge's relkinds, the concatenation-mark allowlist, the emoji base set — and that
+would have been the fifth.
+
+Cost: an operator writing a label in a script whose characters the category set
+mishandles is refused with nothing to appeal to.
+
+### D432 — `temp_file_limit` is 256 MB per add-on role
+
+F279, and the number [D420](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)
+left open. Comfortably above an honest sort or hash spill inside a schema an
+add-on owns, and it refuses the measured 553,197,568-byte `WITH HOLD` cursor at
+roughly half of it.
+
+Cost: an add-on running an honest large aggregate over its own tables meets
+*temporary file size exceeds temp_file_limit* and cannot raise it — the role may
+not change the setting once a superuser has set it, which is exactly the property
+that makes it a bound rather than a suggestion.
+
+### D433 — the log budget is 8 MiB per add-on per minute
+
+F305, and the number [D419](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)
+left open. Two thousand full-width 4 KiB lines a minute is past anything an
+honest add-on writes, and it cuts the measured flood — 3697 lines and 14.7 MiB in
+two seconds — inside its first second.
+
+Cost: a genuinely chatty add-on under load is truncated, and the one summary line
+naming the add-on and what was dropped is all an operator gets.
+
+### D434 — the wasm half of the SDK is analysed by `go vet` under `GOOS=wasip1`
+
+F269. One line in the `vet` and `lint` targets and one step in the CI proposal,
+catching what actually threatens that file: `unsafe.Pointer` arithmetic, a
+missing `KeepAlive`, a printf-shaped mistake in the generated wrappers.
+
+A second `golangci-lint` run under the same GOOS was declined for cost — a full
+second lint pass on every commit and in CI — and a build-tag matrix for putting a
+matrix into `.github/workflows/`, which is the owner's hands rather than the
+loop's ([workflow.md](workflow.md#standing-rules)).
+
+Cost, and the comment beside the code has to say it: `vet` is a weaker net than
+`golangci-lint`, so the SDK's wasip1 half is held to a lower standard than the
+rest of the tree rather than to the same one.
+
+### D435 — the browser suite signs in once and shares the context
+
+F333. A Playwright global setup signs in and every spec reuses the storage state,
+so twenty specs stop spending a ten-per-minute budget none of them can see. The
+suite gets faster as a side effect.
+
+Raising `LINKCTRL_LOGIN_RATE_PER_MIN` on the test instance was declined for
+masking the limiter on the one instance that exercises it; a per-spec address was
+declined for needing a seeder that makes twenty accounts and growing with every
+spec added.
+
+Cost: no spec asserts its own sign-in any more, so a regression in the login flow
+shows up as twenty failures with one cause rather than being caught by the first
+spec that tries it.
+
+### D436 — the GeoIP sentence is reworded, and the predicate is not touched
+
+F195, and it is the option that was *not* recommended. The sentence says what it
+means — that no country could be resolved for what is in this window — rather
+than reading as a permanent fact about the instance.
+
+Both behaviour-changing shapes are declined and both stay on record. The cheap
+one would have given a link with no clicks at all the ordinary empty state, which
+narrows the disagreement without closing it. The thorough one asks whether this
+link has *ever* resolved a country, which costs a query and breaks
+`fillLinkAnalytics`'s stated seam that it performs no I/O and cannot fail — a
+documented property another milestone rests on.
+
+What this buys is that the row needs no behaviour change at all, so it is inside
+workflow.md's standing documentation approval rather than stretching it. What it
+costs is that two links side by side can still disagree; they are now honestly
+labelled about why.
+
+### D437 — the fetch hold is keyed to the invocation
+
+F347. The hold lives until the invocation ends, whatever the guest does with its
+out-parameter pointers — which is the property [F346](deferred-findings.md#closed)
+and D391 were after: **one outbound request per invocation, full stop.** Releasing
+it on `StatusInvalid` let a guest that hands back an unwritable pointer re-enter
+`doFetch` and make the request a second time.
+
+Cost: a hold nobody collects sits in `hostState` until the invocation finishes,
+so a guest that abandons a fetch pins its response bytes for the rest of its
+deadline.
+
+### The picks taken without a prompt, and what each followed
+
+None of these had a choice in it that the tree or an existing decision did not
+already answer. They are listed rather than left in the diff because *deciding
+that something needed no decision* is itself a judgement, and this project's
+record is that unwritten ones get re-taken.
+
+| Row | Pick | Followed |
+| --- | --- | --- |
+| F260 | The integration fallback **refuses** rather than guessing a port | Guessing is what pointed it at the demo instance; `make db-reset` already defaults to the disposable instance by written decision |
+| F261 | `release-check` runs the package list `make test-integration` runs | The gate should exercise what the contract says it exercises; the divergence was never argued for |
+| F358 | `InstallFetchTimeout` is validated against the request timeout | [D417](#2026-09-04--m70s-triage-the-tiers-and-the-eleven-answers)'s nesting rule, applied to the one egress bound that had none |
+| F303 | The three measurements tolerate an asynchronously extended fork, with the bound stated | The suspected cause is in the row and is Postgres's, not the product's |
+| F324 | `maxConcurrentRoutes` becomes `addonSlots` | The row's own two candidates; the shorter one, because the constant bounds three things and none of them is a route |
+| F320, F315 | Actions are `addon.identity_linked` and `addon.identity_unlinked` | `session.minted_by_addon`'s spelling, established by M65 |
+| F323 | The analytics outcome is spelled `vetoed` | `linkctrl_redirects_total{outcome="vetoed"}` already uses that token |
+| F203 | Cross-references inside deferred-findings.md drop the section anchor | The four in decisions.md must stay, because it is append-only and each was true when written |
+| F268 | `config_get`'s sentence is narrowed to what the manifest format can carry | The deprecation policy makes changing a status later expensive; narrowing now is free |
+| F216 | One `@source` line **and** the rule that Go files do not name utilities | `funcs.go` and `choropleth.go` are already exceptions, so the rule has to name them |
+| F311 | The scan covers every way to come by a logger, and the packages this one hands one to | The row's own two halves; `internal/store` is where F-1 was found |
+
+## 2026-09-04 — M70's documentation batch: what three append-only entries now get wrong
+
+Corrections to entries this log may not edit. Each names the entry, quotes what
+it said, and says what is true — which is the mechanism this file has always used
+and the reason it is append-only in the first place.
+
+### D229's *an add-on cannot store what it is never handed* does not follow
+
+[D229](decisions.md) argues the add-on privacy stance from the ABI's surface and
+concludes, in those words, that an add-on cannot store what it is never handed.
+The premise is sound and is unchanged: no host function hands a module a client
+address in any spelling, `abi.AddressBearing` and a shape test enumerate what that
+means, and a test reads `click_events`' column list out of the migration rather
+than trusting a copy.
+
+**The conclusion is not the premise.** The surface bounds what the *host* hands
+over; it says nothing about what a module can *obtain*. An add-on holding
+`routes.own_prefix` writes its own `Location`, so it can send a visitor to an
+origin its author controls, observe the address there, and correlate it back
+through a cookie under its own declared prefix — with `storage.own_schema` to hold
+the result. Every leg of that is a shipped capability, and `docs/SECURITY.md`
+already documented the redirect itself as an accepted consequence of installing a
+module without connecting it to this sentence.
+
+F293 found the sentence at six sites. Five are corrected in place —
+`docs/SECURITY.md`, `docs/addon-abi.md`, `Plan.md`, `internal/addon/abi/surface.go`
+and `internal/addon/abi/abi_test.go` — and the sixth is D229 itself, which is
+corrected here rather than edited. Nothing about the boundary changed; the claim
+made about it did.
+
+### D181 and D182's *at every level* stopped being true when D187 landed
+
+Both quote a scan-corpus measurement over the control half — *the whole version
+range at every level*. [D187](decisions.md) then made the error-correction level a
+**floor** rather than a choice, which makes `L` unreachable: the `L` slot draws
+what the `M` slot draws, byte for byte, so the control covers three distinct
+levels with one duplicate a version (F233). The measurements are unaffected —
+1496 of 1496 was read off pictures that were actually rendered — and the phrase
+describing their coverage is what has gone loose.
+
+The corpus is left at 1360 pictures with its 170 duplicates, deliberately, and
+`internal/qr/scancorpus_test.go` states why where the next reader meets it: the
+count is quoted in three shipped documents, and a control that stopped covering a
+version to save a decode would be paying for tidiness with evidence.
+
+### F327's `LINKCTRL_ADDON_LOAD_TIMEOUT` never existed
+
+Not a decision being corrected but a variable being un-invented, recorded here
+because somebody reading `internal/config`'s reasoning acted on it. The comment
+argued that the instantiation deadline could not be borrowed from
+`LINKCTRL_ADDON_LOAD_TIMEOUT`, which has no struct field, no `env` tag, no
+`.env.example` line and no row in `docs/configuration.md`. The 30-second bound is
+real and is `addon.DefaultLoadTimeout`, a constant. Whether it should be an
+operator's is deliberately left open: adding a configuration surface is not a
+comment's to decide, and this correction does not.
+
+## 2026-09-06 — M70's documentation pass: the fold, the 1.0 gate, and a cost that did not move
+
+### D438 — the audit count is folded, and the clause beside it is corrected rather than carried
+
+D313 untied README's action count from `audit.AllActions` so that a mid-phase
+action could not force a mid-phase README edit, on the trade that the fold
+happens at the release. It happened here: **thirty-nine to forty-six**, and the
+entry in `internal/audit`'s `frozenUntilTheTag` went red the moment the
+vocabulary grew past the sentence, which is the self-announcing part of D313 and
+it worked.
+
+**The number was the smaller half.** The same sentence claimed the count *cannot
+drift without a failing build*, and that stopped being true at M65 — the tie is
+exactly what D313 removed, and the count then drifted on a green build twice. So
+the clause is corrected rather than restored: the sentence now says what actually
+holds it, which is that the release recounts, `internal/audit` pins the
+sentence's exact spelling so it cannot be edited silently, and `CHANGELOG.md`'s
+`[Unreleased]` carries the difference in between.
+
+Tying it back was considered and declined for D313's own reason: a README held to
+the vocabulary drags a README edit into every milestone that adds an action, and
+D104 exists to stop that. The mechanism is weaker than a tie and is now described
+as what it is rather than as what it was.
+
+### D439 — 1.0 means the add-on contract is stable, not that identity is built in
+
+`docs/releasing.md` said the product is pre-1.0 while account lifecycle and
+identity are incomplete — no SSO, OAuth, OIDC or SCIM. Identity arrived in this
+release and arrived as a **module**: an add-on asserts that somebody
+authenticated and the host mints the session. So the sentence's own condition is
+discharged, and the owner's answer — taken knowing that somebody tracking 1.0 for
+single sign-on gets it as an add-on rather than as a feature — is that the gate
+moves to the ABI.
+
+What 1.0 now obliges: the function set, the permission vocabulary, the records
+and the statuses hold as documented, and anything removed goes through the window
+`docs/addon-abi.md` fixes at two minor releases and 90 days, whichever ends
+later. **That window has never been exercised** — the first deprecation this ABI
+announces will be the first run of the machinery that announces it, which M70
+gave a test rather than leaving to the release that needs it (F272) — and 1.0 is
+where it stops being provisional.
+
+### D440 — the always-read contract grew 1217 bytes, and here is what they bought
+
+`make doc-cost`, regenerated at the close and read rather than filed. Any task
+**22115 → 23332** bytes; a `/work phase` resume **68499 → 69716**. One file moved
+and it is `workflow.md`, whose realized read ratio is **0.96** — the most
+expensive byte in the contract, because it is read nearly whole on every task.
+
+**This entry was written claiming zero and was wrong when it was written**,
+because the documentation pass then added the rule below to `workflow.md`. It is
+corrected here rather than left, which is the same discipline the pass applied to
+everybody else's sentences.
+
+What the 1217 bytes bought is one rule with two halves, and both are things this
+milestone paid for by not knowing them:
+
+- **Sabotage the fix, and check the test fails for the reason you meant.** Three
+  of M70's tests passed against the unfixed tree before one of them was right.
+- **A finding is a claim about the tree, and the tree settles it.** Three rows
+  were wrong about a fact, and F216 was not a defect at all — its fix was
+  reverted rather than kept.
+
+The trade is stated rather than assumed: 1217 bytes on the file every task reads,
+against a milestone that spent three test-writing attempts and one whole reverted
+fix on exactly what the rule now says. It is defended on those terms. Nothing
+else in the always-read set moved, and the other 29367 bytes of this phase's
+growth are **record** — `decisions.md` and `deferred-findings.md`, both charged
+by-row, neither one's longest row grown, which is what by-row charging was
+introduced to make visible.
+
+---
+
+## 2026-09-08 — PR #11's code review: fifteen findings, and the four that changed a rule rather than a line
+
+The review of `phase-4` → `main` raised fifteen findings across 271 files. Eleven
+were lines: a typed-nil interface, a regex, a missing TAB, an unlocked field
+write, a sample taken one statement too late. Four were rules this phase had
+written down and then contradicted in code, and those are the entries below.
+
+Every fix here carries a test, and every test was sabotaged and watched fail
+before it was believed — the rule D440 bought.
+
+### D441 — a default gives way to an operator's setting; only two chosen numbers are refused
+
+`ADDON_ROUTE_DEADLINE` must nest inside `HTTP_REQUEST_TIMEOUT` or it never fires,
+and the check enforcing that refused the boot. Both default to ten seconds, so
+`LINKCTRL_HTTP_REQUEST_TIMEOUT=10s` — a value this product's own configuration
+reference names as valid — stopped an instance with add-ons from starting, over a
+knob the operator had never touched. The check's own comment named the problem
+and refused anyway.
+
+`Parse` now lowers a **defaulted** route deadline to one second under the request
+timeout and says so at start-up. An **explicitly set** one is still refused,
+because then two numbers were chosen and only the operator can say which was
+meant — and *set* is read from the environment rather than from the value, since
+`ADDON_ROUTE_DEADLINE=10s` and an untouched knob are the same ten seconds.
+
+Two consequences worth stating:
+
+- **CHANGELOG.md's one upgrade break is withdrawn.** It described this refusal.
+  It is replaced by the clamp, the warning, and the one bound that genuinely
+  cannot nest.
+- **The URL-install bound moved off the boot path entirely.** Installing from a
+  URL needs a request timeout above ten seconds, and that is now answered where
+  it applies: `url_unavailable`, with a sentence of its own on the manager page
+  and a warning at start-up. A bound that binds one operation must not stop an
+  instance that never performs it.
+
+### D442 — *is anything observing* is asked per batch, not sampled at boot
+
+`cmd/linkctrl` assigned the click pipeline's `Observer` only when the host already
+had one at the moment the process started. Install an observing add-on an hour
+later and it received nothing, for ever: `startObserving` brought its workers up
+and they sat on a channel the pipeline never wrote to. No error, no log.
+
+`jobs.go` had already reasoned this out for its own list — *a list captured here
+would describe the boot rather than the instance* — and `redirectHandler.Addons`
+gets it right for the inline class. The reasoning simply was not applied here.
+
+The `RedirectObserver` interface grows `Observing() bool`, answered off the same
+atomic load the rest of the host uses, and the pipeline asks it per flush. The
+field is now assigned from the host's *existence*, which is the only fact about
+it that does not change while the process runs.
+
+### D443 — an add-on lifecycle act takes a cluster-wide lock, because the schema is shared
+
+F352 closed `PurgeData`'s time-of-check window with `installMu`. That is a
+`sync.Mutex` on one `*Host`, and the decision it guards reads process-local state
+— is this add-on loaded *here*, is it in *this* host's discovered set — before
+writing the shared database.
+
+On a multi-replica deployment, which `AddonDB.reauthenticate`'s own warning calls
+ordinary, an install lands on replica A while the manager page is served by
+replica B, where that add-on was never discovered. B offers it as an orphan and
+drops its schema while A is serving against it. Neither actor is hand-racing:
+install and purge are ordinary concurrent HTTP handlers.
+
+So both acts now take a Postgres advisory lock keyed on the add-on's name, in a
+class of its own — `0x6c63_6164`, not a value in `cmd/linkctrl`'s job namespace,
+because this is not leader election. Session-level rather than transactional: the
+check and the act are several round trips apart, and a transaction spanning them
+would hold the drop's locks across the read. An instance with no add-on database
+has no shared state and takes nothing.
+
+An add-on's own role can take this key — `pg_advisory_lock` is `EXECUTE` to
+`PUBLIC` — but cannot hold it, because `releaseLocks` runs `pg_advisory_unlock_all`
+before its connection returns to the pool. The worst it can do is delay a
+lifecycle act by one statement timeout.
+
+### D444 — the gates are split, and the add-ons run between the two halves
+
+The extension point fired on `outcome == OutcomeRedirect` alone, which is true of
+a request that is about to render a password prompt. So every anonymous GET of a
+gated link, and every wrong-password POST, instantiated every inline module and
+held one of the host's slots for the full inline deadline, then discarded the
+answer.
+
+Three facts compose into the defect. Prompt views are not rate-limited — the
+alias exists, so the probe limiters never charge. `invokeInline` answers *allow*
+when no slot is free, which is deliberate and stays: a visitor must never queue
+for an add-on's turn. And the slots are shared across the instance. So a flood of
+prompt views on one link silently skipped an access-control add-on's vetoes for
+everybody else's traffic.
+
+**Moving the block after `passGates` fixed that and broke something else**, which
+is how the answer was found rather than reasoned to.
+`TestAVetoDoesNotSpendAOneTimeLinksClick` went red: the budget gate spends a
+one-time link's only click, and an add-on that refuses traffic to a link must not
+thereby retire it. The original ordering was not an oversight — it was that
+property, and the review's finding and that property are in direct tension as
+long as *the gates* is treated as one thing.
+
+They are not one thing. `passGates` was already three ordered gates and only the
+last of them writes. So it is split: signature and password refuse or challenge
+without cost, then the add-ons, then the budget. Each gate keeps the position it
+needs and neither property is traded for the other. A prompt view spends no
+add-on slot; a veto costs no click.
+
+The lesson is the ordering of the discovery: the conflicting property was
+discovered by a test that already existed, not by reading the review, and the
+fix that satisfies both is narrower than either of the two orderings on offer.
+
+### The permission a test may conjure is an import, not a method
+
+Finding 6 moved the `addons.manage` check ahead of the 32 MiB body read, and the
+handler tests then needed a caller who holds a permission. `Identity.permissions`
+is unexported on purpose: the only things that may fill it are the loaders that
+read a real membership or instance grant.
+
+`internal/auth/authtest` is the seam, and it is a package rather than an exported
+constructor so that the ability to conjure a permission has to be named in an
+import block — visible in a way a method on a type already in scope is not. Every
+constructor in it demands a `*testing.T`, which production code has nowhere to
+get.
+

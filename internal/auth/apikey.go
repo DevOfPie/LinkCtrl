@@ -219,6 +219,31 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // not: reading the list says what a workspace has told the scheduler to do and
 // when each rule last fired, which is exactly what an integrator's tooling needs
 // and escalates nothing.
+//
+// addons.manage is the **second limb, and the widest instance of it this map
+// holds** (M67, applying D18). Every other entry describes a credential widening
+// its reach inside this product's own vocabulary: a permission it can confer, a
+// destination it can unblock, an instruction it can leave behind. This one leaves
+// the vocabulary. An add-on is a WebAssembly module the server executes, so a key
+// that may install one has acquired whatever that module can do — the ABI, the
+// permissions the module's own manifest declares, the schema M63 gives it, and,
+// with `session.mint`, the ability to decide who is signed in. Whatever scope the
+// key was issued with, the reach it has after an install is the reach of code
+// somebody else wrote, and no reasoning about the key's own scopes bounds it.
+//
+// There is no delegable half to split out, which is what makes this different
+// from `destinations.review`/`destinations.decide` and from `webhooks.read`/
+// `webhooks.write`. M68's manager reads are the nearest thing to one — listing
+// what is installed, what each module cost the redirect path, what data is
+// orphaned — and the escalation argument above genuinely does not reach them.
+// They are non-delegable all the same, because this map's unit is the **scope**
+// and they are under `addons.manage` itself: splitting them out would mean
+// minting a second permission, which is a change to the vocabulary rather than a
+// change to this map, and nothing has asked for one. It would also be an odd
+// thing to buy. What such a key would read is an inventory of the code this box
+// executes, which is the reason `/metrics` is on an unpublished listener
+// (docs/SECURITY.md) — so the delegable half would be the half this product
+// already declines to publish.
 var NonDelegableScopes = map[string]struct{}{
 	PermAPIKeysRead:        {},
 	PermAPIKeysWrite:       {},
@@ -229,6 +254,7 @@ var NonDelegableScopes = map[string]struct{}{
 	PermInstanceAdmin:      {},
 	PermDestinationsDecide: {},
 	PermAuditReadInstance:  {},
+	PermAddonsManage:       {},
 }
 
 // KeyIssuableRoles are the roles an API key may put somebody into (D43).

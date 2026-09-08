@@ -12,13 +12,79 @@ future version will do.
 
 | | |
 | --- | --- |
-| A host | 1 vCPU and 1 GB RAM is enough to start. Postgres wants the RAM; the app is idle between requests. |
+| A host | 1 vCPU and 1 GB RAM is enough to start. Postgres wants the RAM; the app is idle between requests. Add-ons are the one feature that changes this arithmetic, and by a bounded amount: sixteen add-on invocations run at once and each is capped at 8 MiB of guest memory, with eight more instances kept warm between invocations, so **192 MiB** is the ceiling of *guest* memory they add. Kept warm is 0.4.0's change and it is the only part of that number not held *in flight*: the redirect path reuses instances rather than building one per visitor, which took a well-behaved add-on's p99 from 44.89ms to 1.08ms, and `LINKCTRL_ADDON_POOL_SIZE` is what bounds the memory it costs. **Reuse costs a second copy and it is not inside that number**: LinkCtrl keeps an image of each live instance's memory to reset the instance with, bounded by the same per-instance cap, so the resident worst case is 192 MiB twice over — **384 MiB** — against a typical module measuring 2.4 MB and the redirect fixture 3.4 MB. Sixteen across **every** reason an add-on runs — a page request, an add-on on the redirect path, an out-of-band observation of one — so an instance whose add-on serves no pages at all still sizes by this number. Under sustained saturation the process holds more than that resident before Go's collector returns it. **Re-measured for 0.4.0, with the pool in place**: a **185 MB peak** against a **146 MB idle**, settling back to **143 MB**, driving a route-serving add-on at 24 concurrent requests — half again the sixteen-slot budget, so the slots were saturated throughout — for two minutes, with a second add-on observing redirects beside it. The figures before it were **406 MB peak against a 103 MB idle, returning to 48 MB**, and they were taken before instances were pooled: the idle is higher now because warm instances and their reset images are held between invocations, and the peak is lower because a saturated host stops building an instance per request. Both directions are the pool. A host serving add-on pages under load still wants 2 GB, which is now a comfortable margin rather than a close one.
+
+The measurement is this repository's own image with one module added — the routes fixture from `internal/addon/testdata`, which is a real consumer of the generated SDK compiled the way a published add-on is — because the shipped image bakes only the observing example and the figure is about route-serving instances. Taken on one machine, like every resident figure here; what it is offered as is the shape, not a guarantee. |
 | Docker Engine + Compose v2 | `docker compose version` should print v2.x |
 | A domain | With an A/AAAA record pointing at the host |
 | Ports 80 and 443 | For the reverse proxy. LinkCtrl itself listens on 8080 and never needs to be exposed directly. |
 
 Postgres 17 and Redis 7 come from the compose file. Nothing else is required —
 no Node, no Python, no build toolchain.
+
+**One extra database privilege, and only if you install an add-on that stores
+data.** An add-on declaring `storage.own_schema` gets a Postgres schema of its own
+and a **role** of its own, and the role is what confines it — see
+[SECURITY.md](SECURITY.md). Creating that role needs `CREATEROLE`, and the role
+needs to be able to authenticate with a password, because the host opens a
+connection *as* it rather than issuing `SET ROLE` on its own. The compose file's
+database user is a superuser, so both are already true there. On a managed Postgres
+where LinkCtrl connects as a restricted user, or on a deployment authenticating by
+`peer` or by a cloud IAM token, such an add-on will not load and the boot log says
+so. There is no weaker fallback on purpose: the only one available is not a
+boundary, and an instance quietly running an unconfined add-on is worse than one
+that refuses to run it. Everything else in this product needs neither.
+
+**One database-wide change, and it is worth knowing if this database has another
+tenant** — and one more that reaches the whole cluster, in the two paragraphs
+after it.
+Installing a storage add-on revokes `TEMPORARY` on the database from
+`PUBLIC` and grants it back to LinkCtrl's own user, because a temporary table is a
+place an add-on's role could otherwise put data outside its schema. Postgres has no
+per-role deny for that privilege, so `PUBLIC` is the only lever and every other role
+on this database loses temporary tables with it — if another application shares this
+database and uses one, do not install a storage add-on. LinkCtrl itself uses none.
+The revoke needs LinkCtrl's user to **own** the database; where it does not, the
+statement is a no-op, the boot log says so at warn, and nothing else changes — an
+add-on that creates a temporary relation is still refused at its next load, which is
+what the boundary actually rests on. Nothing carries the revoke through a restore
+either, so it is re-applied at the next load of a storage add-on.
+
+**One cluster-wide change, and it only ever names the add-on's own role.** A
+Postgres role is not a thing a database owns — it belongs to the cluster, and so do
+the session defaults attached to it, which Postgres keeps once per role and again
+per role *per database* in a catalogue every database shares. An add-on's role can
+write both kinds about itself for **any** database in the cluster, including one it
+cannot connect to, so every load of a storage add-on clears both kinds for that
+add-on's own role, wherever they were written, before pinning its search path.
+Nothing but that add-on's own role is altered — the catalogue read that finds the
+databases is filtered to that role's OID — so no other role, database or
+application on this cluster is affected — but the statements are cluster-scoped
+rather than scoped to this database, which matters if your Postgres user is shared
+with something else that audits them.
+
+**Removing an add-on does not clear what it parked**, and this is a residue rather
+than a repair LinkCtrl performs. Nothing here drops an add-on's role — the only
+`DROP ROLE` is the purge you type yourself — so a setting an add-on left on its own
+role stays in the cluster after its module is gone, and no load will ever run to
+clear it. LinkCtrl does **not** sweep roles no add-on claims, deliberately: a name
+beginning `addon_` is not evidence LinkCtrl created the role, and mutating a
+catalogue the whole cluster shares on the strength of a name would reach roles that
+are yours. What holds instead is measured: a session default is read only by a
+session that **logs in** as the role — `SET ROLE` and `SET SESSION AUTHORIZATION`
+both leave it at the cluster default on Postgres 17.10 — and nothing logs in as an
+add-on's role once its module is gone, so the leftover is inert. Re-installing the
+add-on clears it at the next load; clearing it by hand is one
+`ALTER ROLE … RESET ALL` per scope, and [operations.md](operations.md) has the
+query that lists them and the purge that drops the role outright.
+
+**Running more than one replica needs nothing extra**, and one detail is worth
+knowing before you read a log line about it: each replica mints that role's password
+for itself at boot, so the newest replica's boot invalidates the credential the
+others hold. They re-mint on their next connection and log
+`credential had been rotated by another replica` at warn. In a single-replica
+deployment that line means two processes are pointed at one database, which is worth
+looking into.
 
 ## 1. Get the code and set the secrets
 
@@ -130,6 +196,14 @@ docker compose -f docker-compose.yml up -d --wait
 `--wait` blocks until the healthchecks pass. The app waits for Postgres to be
 *healthy*, not merely started, so a cold boot does not race `initdb`.
 
+The healthcheck allows a 30-second start period and five attempts 10 seconds
+apart, which is generous for this product and not for an add-ons directory that
+misbehaves: boot gives each add-on 30 seconds to compile its module and 30 to
+start it, so three
+add-ons that hang exceed the window and `--wait` reports a failed bring-up for an
+instance that comes up behind it. See
+[operations.md](operations.md#add-ons) under `load_timeout`.
+
 Migrations run in-process before the listener opens, serialised across replicas
 by a Postgres session lock. There is no separate migration step, and a request
 can never reach a half-migrated schema.
@@ -220,8 +294,10 @@ invisible in the logs and only shows up as flattened analytics.
 Two things not to forward:
 
 - **`:9090`.** The metrics listener has no authentication. It reports queue
-  depths, pool saturation and traffic shape. Compose does not publish it, and
-  the proxy should not reach it.
+  depths, pool saturation and traffic shape — and, on an instance running
+  add-ons, the name and version of every one of them, which is an inventory
+  rather than a saturation figure. Compose does not publish it, and the proxy
+  should not reach it.
 - **`/api/v1/openapi.json` if you set `LINKCTRL_DOCS_ENABLED=false`.** It is
   public by default, which is usually what you want; the switch is there for
   instances that should describe nothing.
@@ -457,14 +533,37 @@ consequence; the app is a stateless image.
 ```sh
 docker compose exec -T postgres \
   pg_dump -U linkctrl -Fc linkctrl > linkctrl-$(date -u +%Y%m%d).dump
+docker compose exec -T postgres \
+  pg_dumpall -U linkctrl --roles-only > linkctrl-roles-$(date -u +%Y%m%d).sql
 ```
 
-Restore into an empty database:
+Restore the roles first, then the database:
 
 ```sh
 docker compose exec -T postgres \
+  psql -U linkctrl -d postgres -f - < linkctrl-roles-20260730.sql
+docker compose exec -T postgres \
   pg_restore -U linkctrl -d linkctrl --clean --if-exists < linkctrl-20260730.dump
 ```
+
+**The second file is only needed if you install an add-on that stores data, and
+then it is not optional.** Such an add-on gets a Postgres role of its own and owns
+its tables as that role. `pg_dump` carries **no roles** — measured: restoring
+without them fails every `ALTER … OWNER TO` line with *role does not exist*, the
+next boot repairs the schema's owner and nothing re-owns the tables, and the
+add-on's role is then refused on its own rows. A `required` add-on stops the
+instance in that state and a `degrade` one serves with its storage failing; the
+boot log names the tables. Recovering after the fact means restoring the roles and
+re-owning by hand (`REASSIGN OWNED BY linkctrl TO addon_<name>` is wrong — it would
+move the product's tables too; `ALTER TABLE addon_<name>.<table> OWNER TO
+addon_<name>` per table is right), which is why the two dumps are taken together.
+
+Two things about the roles file. Restoring it into a cluster that already has these
+roles prints *role "linkctrl" already exists* and carries on, which is correct and
+not a failure — the file is written to be replayed into an empty cluster. And **it
+contains password hashes**, this instance's database user among them, so protect it
+exactly as you protect the dump. An add-on role's own password is not worth
+protecting: LinkCtrl mints a fresh one at every boot and stores it nowhere.
 
 Two notes specific to this schema:
 
@@ -485,7 +584,7 @@ without you choosing to:
 
 ```sh
 # In .env
-LINKCTRL_TAG=0.3.0
+LINKCTRL_TAG=0.4.0
 ```
 
 ```sh
@@ -522,7 +621,7 @@ Every release also publishes static binaries — linux amd64/arm64, macOS
 amd64/arm64, and Windows amd64 — with a `SHA256SUMS` file:
 
 ```sh
-tar xzf linkctrl_0.3.0_linux_amd64.tar.gz
+tar xzf linkctrl_0.4.0_linux_amd64.tar.gz
 sha256sum -c SHA256SUMS --ignore-missing
 ./linkctrl version
 ```
@@ -533,7 +632,9 @@ configuration from the environment and needs Postgres reachable. `linkctrl
 --check-config` validates a configuration before you wire up a unit file.
 
 For change-controlled environments, set `LINKCTRL_MIGRATE_ON_START=false` and run
-migrations deliberately:
+migrations deliberately. **This governs the product's schema only** — a storage
+add-on's migrations are applied by the host at every boot whatever the flag says, and
+no command applies them out of band (F282):
 
 ```sh
 docker compose run --rm --entrypoint /lctl app migrate up
@@ -620,14 +721,20 @@ Worth knowing so you do not spend an afternoon re-adding it:
 
 ## Air-gapped and egress-restricted deployments
 
-One thing in a default 0.3.0 instance reaches the public internet on a schedule:
+One thing in a default 0.4.0 instance reaches the public internet on a schedule:
 the daily release check. Set
 
 ```sh
 LINKCTRL_UPDATE_CHECK=false
 ```
 
-and restart. Nothing else in this product opens a socket outwards unless you
+and restart. **Two doors are not covered by the sentence that follows, and both
+arrived in 0.4.0**: an add-on holding `network.fetch` reaches an origin its
+operator named in that add-on's settings, and an **install from a URL** fetches
+whatever address the operator typed at the moment they typed it — the one egress
+here that nothing configures in advance. Both are bounded by the address policy
+in [SECURITY.md](SECURITY.md), and an air-gapped instance meets neither unless
+somebody uses them. Nothing else in this product opens a socket outwards unless you
 configure it (`SMTP_HOST`, `FEED_URL`) or a workspace registers a webhook or a
 custom domain; the full accounting is the *Egress* row of
 [SECURITY.md](SECURITY.md).
@@ -684,10 +791,32 @@ the high-availability work is required to run it.** That is a gate rather than
 an intention: `scripts/single-instance-check.sh` starts the release image on a
 network carrying nothing but Postgres — no Redis, no load balancer, no second
 replica — and drives the redirect path, the dashboard, the API, the scheduler,
-cache invalidation and rate limiting over HTTP until each one answers. It runs
-in CI on every push, and a later change that makes any of those need a second
-component fails it. The required set is **Postgres**; everything else is
-optional.
+cache invalidation, rate limiting and **a loaded add-on** over HTTP until each one
+answers. It runs in CI on every push, and a later change that makes any of those
+need a second component fails it. The required set is **Postgres**; everything
+else is optional.
+
+The add-on limb is the one that is not self-contained (M60). It stages a
+directory holding a manifest and the module the manifest describes, mounts it
+read-only at `/addons`, and reads the per-add-on series off the metrics listener —
+so it needs `sha256sum` on the machine running it and a **pre-built** WASM
+fixture, which is why the script takes the module's path as its second argument
+and why `make single-instance` builds one first. **Without either, that limb is
+skipped and the other two still run**, naming which prerequisite was missing. It
+also skips against an **image older than the add-on host**, which has nothing for
+a module to load into: the limb reads that image's own version from
+`linkctrl_build_info` and declines below the release add-ons arrived in, rather
+than failing an artifact that is conformant in every way the gate is about.
+*Older* means a bare `major.minor.patch` below that release and nothing else — a
+prerelease of it, a `git describe` build off an older tag, `ci`, `dev` and no
+version series at all every one **assert**. The narrowness is deliberate and it
+costs one false red, the gate run against an old prerelease: a false red is
+visible and a false skip is not.
+Between them those two keep the invocation this script exists for — you point it
+at a published image with one argument, and that invocation has no repository
+checkout and nothing built.
+Nothing about the *product* gained a dependency: the add-ons directory is unset by
+default and an instance that configures none constructs no host at all.
 
 **What a rolling deploy actually costs, measured rather than described.** Three
 replicas behind a load balancer, every one of them destroyed and rebuilt while
@@ -744,7 +873,10 @@ What to know before running several:
 - Vertical growth first: Postgres `shared_buffers` and the two pool sizes
   (`DB_MAX_CONNS`, `DB_REDIRECT_MAX_CONNS`) are the knobs that matter. Keep
   their total under the server's `max_connections`; startup refuses to run when
-  the sum exceeds 90, so raise `max_connections` on Postgres first.
+  the sum exceeds 90, so raise `max_connections` on Postgres first. **The refusal
+  does not count add-ons**: each storage add-on holds four connections while
+  loaded and one more at boot, and the guard runs before any add-on is discovered
+  — so the arithmetic is yours, and `docs/configuration.md` states it.
 
 ## When it will not start
 

@@ -140,6 +140,19 @@ that was one file nobody reads whole. Numbers from before that commit are **not
 comparable** with numbers after it. The change was made at a phase boundary for
 exactly that reason.
 
+**There is a second way two regenerations stop being comparable, and it needs no
+change to this script to happen.** A by-row file is charged at its longest
+matching row, and charged **whole** when the pattern matches nothing — the label
+below says which, at the point of generation, and both are honest. `Plan.md` is
+the file this bites: between a phase's ordering tables being archived and the
+next phase being planned it holds no ordering row, so a regeneration in that
+window charges it at tens of thousands of bytes where the one either side charges
+it at a few hundred. A reader comparing across that gap sees a saving of tens of
+kilobytes that nobody made, and then sees it undone. **Compare like labels**: a
+row marked as charged whole is not comparable with the same row charged by
+pattern, whichever direction the diff runs. This has happened once already, across
+the Phase 3 close and the Phase 4 plan (F302).
+
 ---
 
 ## Predicted — what the documented read sets cost

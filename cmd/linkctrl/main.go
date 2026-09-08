@@ -40,6 +40,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/DevOfPie/LinkCtrl/internal/account"
+	"github.com/DevOfPie/LinkCtrl/internal/addon"
 	"github.com/DevOfPie/LinkCtrl/internal/alias"
 	"github.com/DevOfPie/LinkCtrl/internal/analytics"
 	"github.com/DevOfPie/LinkCtrl/internal/audit"
@@ -176,6 +177,16 @@ func run(cfg config.Config, _ io.Writer) error {
 			"acceptable only for local HTTP development")
 	}
 
+	// A bound the operator never set, lowered so the one they did set can stand.
+	// Said out loud for the same reason the removed variables below are: a knob at
+	// a value nobody chose is only defensible if the instance admits to choosing
+	// it (review finding 14).
+	if clamped, to := cfg.AddonRouteDeadlineClamped(); clamped {
+		log.Warn("ADDON_ROUTE_DEADLINE lowered to nest inside HTTP_REQUEST_TIMEOUT",
+			slog.Duration("route_deadline", to),
+			slog.Duration("request_timeout", cfg.HTTP.RequestTimeout))
+	}
+
 	// Variables that used to exist. Warned about rather than ignored: an operator
 	// who still has the line believes it does something, which is the same defect
 	// as a knob that parses and changes nothing.
@@ -255,23 +266,13 @@ func run(cfg config.Config, _ io.Writer) error {
 		"redirect": pools.Redirect,
 	}))
 
-	// Request limits. Built once here and shared: the router enforces two of
-	// them, the redirect handler the third, and the collector reports on all
-	// three, so none of them re-derives a limit from configuration.
-	limits := httpx.NewLimiters(cfg, rdb, log)
-	metrics.Register(observability.NewLimiterCollector(limits.Stats()))
-	for name, on := range map[string]bool{
-		"login":        limits.Login != nil,
-		"api":          limits.API != nil,
-		"redirect_404": limits.NotFound != nil,
-	} {
-		if !on {
-			// Said out loud, because a limit silently set to zero is exactly the
-			// kind of thing an operator means to change back and forgets.
-			log.Warn("rate limit disabled by configuration", slog.String("limit", name))
-		}
-	}
-
+	// The sign-in service and the audit recorder, built before the add-on host
+	// because that host takes the first as a dependency (M65): an add-on holding
+	// `session.mint` asserts, and this is what decides. Both constructions are
+	// total — neither reads the database or can fail — so moving them above the
+	// host costs the ordering nothing, and the property the comment below relies on
+	// is unchanged: this is all still before the listener.
+	//
 	// One policy, shared by both places a password can be guessed at. Sign-in is
 	// the obvious one; redeeming an invitation is the other, because it
 	// authenticates an existing account before adding the membership. Built once
@@ -295,10 +296,102 @@ func run(cfg config.Config, _ io.Writer) error {
 		Lockout: lockout,
 	})
 
-	// Built here rather than at the other services' construction point below
-	// because the key service needs it and the key service is built first — the
-	// dashboard and every API handler resolve their identity through it.
+	// The key service needs the recorder and the key service is built below, where
+	// the dashboard and every API handler resolve their identity through it.
 	auditSvc := audit.NewService(pools.App)
+
+	// The seam M65's mint writes its provenance record through, and the logger the
+	// two failures that must not fail a sign-in go to. Both are setters because
+	// this service is constructed before the audit service exists and reordering
+	// the two would put the key service — which needs auth — before its own
+	// dependency.
+	authSvc.SetSessionAuditor(auditSvc)
+	authSvc.SetLogger(log)
+
+	// The add-on host (M60). Before the services, because a `required` add-on
+	// that will not load has to stop the instance before anything is listening —
+	// and after the metrics registry, so a refusal is counted rather than only
+	// logged.
+	//
+	// Unset LINKCTRL_ADDONS_DIR returns a nil host: no runtime, no goroutine, no
+	// series. That is the shipped default, and every method on *addon.Host is
+	// nil-safe so nothing below has to ask.
+	//
+	// The error is returned rather than logged, which is the whole of the
+	// `required` failure class: the reason travels with the exit, in the same
+	// shape as a failed migration.
+	// The database is handed over for M63's storage: the host creates a schema and
+	// a confined role per add-on that asked for one, applies that add-on's
+	// migrations inside it, and opens a pool authenticated as that role. Both are
+	// needed and they are not interchangeable — the pool carries the product's own
+	// privileges and is what creates the schema; the DSN is what an add-on's own
+	// pool re-points at its own role, which a pool cannot be made to do.
+	//
+	// This is still before the listener, which is what makes a `required` add-on's
+	// failed migration an exit rather than a request meeting a half-built schema.
+	addons, err := addon.Open(ctx, addon.Options{
+		Dir:     cfg.Addons.Dir,
+		Logger:  log,
+		Metrics: metrics,
+		// Whether a URL install can work at all under this configuration, answered
+		// here rather than refused at startup (review finding 14): a bound that only
+		// binds one operation must not stop an instance that never performs it.
+		URLInstallProblem: config.InstallFetchNestingProblem(cfg),
+		DB:                pools.App,
+		DSN:               cfg.DB.URL.Reveal(),
+		// M67. Installing code into a running server without a record of who did it
+		// is the one thing that surface must not be able to do quietly, so the host
+		// is handed the same auditor every other write in this program uses.
+		Audit: auditSvc,
+		// M65. The host decides nothing about who may sign in: it decodes an
+		// assertion, refuses what it knows better than the module does, and hands the
+		// rest to the same service the sign-in form uses.
+		Sessions: authSvc,
+		// M66. The redirect limb's two bounds, and the place an operator's answer
+		// about somebody else's code enters this product. They are two because they
+		// price two parties: how long the add-on's own code may hold a redirect, and
+		// how long this host will spend starting the module before serving the
+		// redirect without it. F326 is what one number over both did on a machine
+		// slower than the one it was measured on.
+		InlineDeadline:      cfg.Addons.InlineDeadline,
+		InstantiateDeadline: cfg.Addons.InstantiateDeadline,
+		PoolSize:            cfg.Addons.PoolSize,
+		PoolTTL:             cfg.Addons.PoolTTL,
+		// M68.5. The page bound and the two egress bounds. The first is what stops a
+		// module holding an instance slot for as long as a visitor will wait; the
+		// other two are what an outbound request costs at most, in time and in bytes.
+		RouteDeadline: cfg.Addons.RouteDeadline,
+		FetchTimeout:  cfg.Addons.FetchTimeout,
+		FetchMaxBytes: cfg.Addons.FetchMaxBytes,
+	})
+	if err != nil {
+		return fmt.Errorf("add-on host: %w", err)
+	}
+	defer func() {
+		// A fresh context: ctx is cancelled by the signal that got us here, and a
+		// runtime told to close on a cancelled context would refuse the close
+		// itself.
+		if err := addons.Close(context.Background()); err != nil {
+			log.Warn("closing the add-on host", slog.Any("error", err))
+		}
+	}()
+
+	// Request limits. Built once here and shared: the router enforces two of
+	// them, the redirect handler the third, and the collector reports on all
+	// three, so none of them re-derives a limit from configuration.
+	limits := httpx.NewLimiters(cfg, rdb, log)
+	metrics.Register(observability.NewLimiterCollector(limits.Stats()))
+	for name, on := range map[string]bool{
+		"login":        limits.Login != nil,
+		"api":          limits.API != nil,
+		"redirect_404": limits.NotFound != nil,
+	} {
+		if !on {
+			// Said out loud, because a limit silently set to zero is exactly the
+			// kind of thing an operator means to change back and forgets.
+			log.Warn("rate limit disabled by configuration", slog.String("limit", name))
+		}
+	}
 
 	keySvc, err := auth.NewAPIKeyService(pools.App, authSvc, auth.APIKeyConfig{
 		Pepper: []byte(cfg.APIKeyPepper.Reveal()),
@@ -842,6 +935,23 @@ func run(cfg config.Config, _ io.Writer) error {
 	returning := analytics.NewReturningSet(rdb, salts, cfg.Redis.ReadTimeout, log)
 	ingestCfg.Returning = returning
 
+	// The observe class (M66), fed from the pipeline because that is the one place
+	// off the request path where a redirect's derived fields exist at all.
+	//
+	// Assigned when there is a host, not when the host currently has observers
+	// (review finding 2). The set of observing add-ons changes at every install,
+	// and a boot-time sample of it would hand an add-on installed an hour from now
+	// nothing at all — for ever, with its workers running and no error anywhere.
+	// The pipeline asks `Observing()` per batch instead.
+	//
+	// Still guarded on the host itself, for the reason ingestCfg.Geo is: a nil
+	// *addon.Host in an interface is not a nil interface, and the per-batch check
+	// would then rest on the host's nil-tolerance rather than saying what it
+	// means.
+	if addons != nil {
+		ingestCfg.Observer = addons
+	}
+
 	// Today's salt, loaded before the listener opens.
 	//
 	// The returning-visitor check on the redirect path reads the salt cache
@@ -899,7 +1009,7 @@ func run(cfg config.Config, _ io.Writer) error {
 	roller := analytics.NewRoller(pools.App, log)
 	jobs := newJobRunner(pools.App, salts, roller, log, metrics, notifySvc, mailSvc, signupSvc,
 		recoverySvc, accountSvc, mfaSvc,
-		linkSvc, webhookSvc, automationSvc, hostCache, updateSvc, cfg.Domains,
+		linkSvc, webhookSvc, automationSvc, hostCache, updateSvc, addons, cfg.Domains,
 		cfg.Analytics.RetentionDays, cfg.Audit.RetentionDays, cfg.Audit.SizeWarnBytes)
 	jobs.start(ctx)
 	defer jobs.stop()
@@ -926,6 +1036,11 @@ func run(cfg config.Config, _ io.Writer) error {
 	}
 	if geo.Enabled() {
 		redirectHandler.Geo = geo
+	}
+	// The inline class (M66), and the same rule as the two above: a nil host in an
+	// interface is not a nil interface, and this field is read on every redirect.
+	if addons != nil {
+		redirectHandler.Addons = addons
 	}
 
 	if needsSetup, err := authSvc.NeedsSetup(ctx); err == nil && needsSetup {
@@ -963,21 +1078,40 @@ func run(cfg config.Config, _ io.Writer) error {
 		MFA:      mfaSvc,
 		Disputes: disputeSvc,
 		Instance: instanceSvc,
-		Metrics:  metrics,
-		Limits:   limits,
+		// The lifecycle API (M67) and the manager's own endpoints (M68), through the
+		// helper for the reason the router's add-on field takes one.
+		AddonAdmin: addonAdmin(addons),
+		Metrics:    metrics,
+		Limits:     limits,
 		Web: &httpx.Web{
 			UI: renderer, Config: cfg, Auth: authSvc, Keys: keySvc,
 			Links: linkSvc, Stats: stats, Notify: notifySvc, Invites: inviteSvc,
 			Team: teamSvc, Signup: signupSvc, Recovery: recoverySvc,
 			Accounts: accountSvc, MFA: mfaSvc,
 			Disputes: disputeSvc, Instance: instanceSvc,
+			// An installed add-on's own pages (M64). Assigned through addonRouter
+			// rather than directly, because a nil *addon.Host in an interface field
+			// is not a nil interface — and the difference is a route mounted on
+			// every instance that configured no add-ons at all, which is exactly
+			// the cost m60.md promised nobody would pay.
+			Addons: addonRouter(addons),
+			// What an installed add-on offers on the sign-in page (M69.5), through the
+			// same helper and for the same reason: a typed nil here would make every
+			// instance ask the host on every render of its own front door.
+			AddonSignIn: addonSignIn(addons),
+			// The Add-on manager (M68), through the same helper the API field uses
+			// and for the same reason. One interface for both surfaces, so the page
+			// and the API cannot be wired to different halves of the host.
+			AddonAdmin: addonAdmin(addons),
 		},
 	})
 
 	// The scrape endpoint lives on its own listener, on a port compose does not
 	// publish. Queue depths, pool saturation and traffic shape are operational
-	// detail, and putting them behind the same listener as the public site is
-	// how they end up on the internet by accident.
+	// detail — as is the add-on inventory linkctrl_addon_info publishes, which
+	// names what this instance runs and at which version — and putting any of it
+	// behind the same listener as the public site is how it ends up on the
+	// internet by accident.
 	metricsSrv := httpserver.New(httpserver.Options{
 		Addr:              cfg.HTTP.MetricsAddr,
 		Handler:           metricsMux(metrics),
@@ -1159,4 +1293,47 @@ func mfaIssuer(cfg config.Config) string {
 		return u.Host
 	}
 	return "LinkCtrl"
+}
+
+// addonRouter is the add-on host as the router's interface, or a nil interface
+// when there is no host.
+//
+// The typed-nil trap, closed at the one site where it exists. Every method on
+// *addon.Host is nil-safe, so handing a nil one over would *work* — it would
+// answer ErrNoRoute and 404 — and that is what makes the trap worth a function:
+// the failure is not a panic, it is a route quietly mounted on every instance
+// that installed nothing, and the only thing that would notice is a test reading
+// the mount list.
+func addonRouter(h *addon.Host) httpx.AddonRouter {
+	if h == nil {
+		return nil
+	}
+	return h
+}
+
+// addonAdmin is the same closure of the same trap for the add-on administrative
+// surface — M67's lifecycle and M68's manager, which are one interface.
+//
+// The consequence differs and is worse than the router's. A typed nil here mounts
+// `POST /api/v1/addons` on every instance that installed nothing — an upload
+// endpoint, on an instance whose operator never turned add-ons on, answering the
+// unavailable that addon.ErrNoAddonsDir carries rather than the 404 that says the
+// capability is not here. Two lines, at the one site where it is possible.
+// addonSignIn is the same closure of the same trap for the sign-in page's read
+// (M69.5). A typed nil is not a nil interface, and the consequence here is that
+// the login handler calls into the host on every render on an instance that has
+// no add-ons — the page it draws is identical either way, which is exactly why
+// this would never have been noticed.
+func addonSignIn(h *addon.Host) httpx.AddonSignIn {
+	if h == nil {
+		return nil
+	}
+	return h
+}
+
+func addonAdmin(h *addon.Host) httpx.AddonManager {
+	if h == nil {
+		return nil
+	}
+	return h
 }

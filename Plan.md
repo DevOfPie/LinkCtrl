@@ -49,6 +49,7 @@ Serves individuals, creators, businesses, developers and enterprises.
 | Observability | `log/slog`, Prometheus |
 | GeoIP | MaxMind DB reader, optional at runtime; database supplied by the operator |
 | Rate limiting | In-process token buckets, no external dependency |
+| Add-on runtime | `wazero` — WASM, pure Go, no cgo, so the binary stays `CGO_ENABLED=0` |
 | Deployment | Docker + Compose; Caddy for TLS |
 | Load testing | k6 |
 
@@ -118,7 +119,7 @@ is the one state where it is the whole truth, and it is still that rather than a
 empty chart. The bound is the link and the window, which is narrower than
 *history*: a link whose countries all fall outside the selected window meets the
 sentence until the window is widened
-([F195](docs/build-notes/deferred-findings.md#open)).
+([F195](docs/build-notes/deferred-findings.md#closed)).
 [D65](#phase-2-decisions-taken-after-the-plan-was-finalised) carries the
 reasoning. The country is resolved at ingest, from the address, in
 the same place the visitor hash is derived — there is no stored address to enrich
@@ -160,7 +161,7 @@ rather than rendering a world uniformly colored "unknown".
 | Password links, one-time links, max-click links, signed URLs | 2 |
 | Malicious destination blocking: tiers, logging, notification, disputes | 2 |
 | Third-party reputation and malware feeds — opt-in, off by default | 2 |
-| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. **OIDC is Phase 4's, as a first-party add-on rather than in core** ([M69](docs/build-notes/phase-details/m69.md), D211). OAuth, SSO and SCIM stay unscheduled (D109) |
+| MFA, OAuth, OIDC, SSO, SCIM | **MFA built in 3** ([M53](docs/build-notes/phase-details/m53.md)) — TOTP only, off until `LINKCTRL_MFA_SECRET_KEY` is set. **OIDC built in 4** ([M69](docs/build-notes/phase-details/m69.md), D211), as a first-party add-on rather than in core: [`DevOfPie/LinkCtrl-OIDC`](https://github.com/DevOfPie/LinkCtrl-OIDC), which an operator installs and configures. A sign-in control is [M69.5](docs/build-notes/phase-details/m69.5.md)'s and is built: an add-on holding `session.mint` declares a label and a relative path, and the link appears on `/login` once an operator turns it on in the Add-on manager. The add-on's own manifest has to declare the two fields for a link to render. OAuth, SSO and SCIM stay unscheduled (D109) |
 
 Destination blocking is two threat models wearing one name, and the *Abuse
 prevention* row above is the other half. What Phase 1 already refuses — non-`http(s)`
@@ -353,10 +354,20 @@ CRM · email marketing · website builder · advertising system · full CMS.
 `Domain` · `ClickEvent` · `Visitor` · `Webhook` · `APIKey` · `AutomationRule` ·
 `AuditLog` · `Notification`
 
-33 tables: the 31 Phase 1 ones, plus `mail_outbox` ([M26](docs/build-notes/phase-details/m26.md), D23)
-and `invitations` ([M27](docs/build-notes/phase-details/m27.md)). Neither is a new
-entity — one is a delivery queue, the other a grant with a lifetime — and both are
-typed rather than dormant jsonb because the feature reading them shipped with them.
+The entities above are not the table count, and this paragraph no longer states
+one. It said **33 tables** — true when it was written during Phase 2, and left
+alone while Phase 3 and Phase 4 added theirs, so the repository knew 43 and then
+45 while the plan said 33 (F258). A count beside a thing that grows is a
+hand-maintained number, and the fix is not a digit: the tables are counted where
+they are created, in
+[docs/data-model.md](docs/data-model.md), which derives its figure from
+`internal/store/migrations/` and says so.
+
+Two of them are worth naming here because neither is a new *entity* —
+`mail_outbox` ([M26](docs/build-notes/phase-details/m26.md), D23) is a delivery
+queue and `invitations` ([M27](docs/build-notes/phase-details/m27.md)) is a grant
+with a lifetime — and both are typed rather than dormant jsonb, because the
+feature reading them shipped with them.
 
 ERD and per-entity implementation status: [docs/data-model.md](docs/data-model.md),
 written at [M45](docs/build-notes/phase-details/m45.md) after being referenced
@@ -423,6 +434,58 @@ Invariants:
   rename cannot re-open it (M57, D168). The residual window is a leader losing
   its lock connection while still working, which no deploy causes and every pass
   is written to survive.
+- **An add-on reaches this product through an enumerated set of imports and
+  nothing else.** No socket, no file, no shared table, no environment, so the whole
+  of what an add-on can do is one list — **including, from 0.4.0, reaching the
+  network, which is a function on that list and not a hole in this sentence**: a
+  module still opens nothing itself, and `network.fetch` buys it a host function
+  that dials an origin *the operator named in a setting*, with the manifest unable
+  to name one and both redirect classes refused outright
+  ([M68.5](docs/build-notes/phase-details/m68.5.md), D367). The list is
+  `internal/addon/abi`, published as
+  [docs/addon-abi.md](docs/addon-abi.md) and as a generated SDK an add-on's own
+  repository imports. The host owns the definition, and the host module the runtime
+  registers is derived from the same list rather than restating it, so host and
+  guest cannot disagree about a signature ([M61](docs/build-notes/phase-details/m61.md)).
+  **What a module may call out of that list is what its manifest declared**, against
+  a closed nine-token vocabulary the host resolves at load and checks on every call,
+  refusing anything else with a distinguishable status and a counter per add-on and
+  permission ([M62](docs/build-notes/phase-details/m62.md)). The check sits in the
+  host's dispatch rather than in each function, and it runs before the host says
+  whether it implements the function at all, so a module that declared nothing
+  cannot enumerate what a build can do. Running inside the redirect path is a
+  separate declaration, and editing where a visitor is sent is a third one on top
+  of it ([M66](docs/build-notes/phase-details/m66.md)) — an inline invocation also
+  reaches only a redirect-safe subset of the list, whatever its manifest declared,
+  so there is no storage, no request, no session and no template on the hot path. **The four functions that cost nothing
+  are not four the host trusts**: writing to the log is ungated on purpose, so
+  the host neutralizes what a module wrote, which is where a module that declared
+  nothing would otherwise be able to forge a record that reads as this product's own.
+  **The neutralization is the logger's and not a rule each call site follows**, since
+  that rule was enumerated wrongly twice — most recently missing the line naming a
+  migration as it is applied, which another package writes on the path that runs when
+  nothing is wrong. The 4 KiB bound is the log line's alone: the aggregated reason a
+  manifest was refused reaches an operator whole. What survives that boundary is
+  the set of graphic characters, in any script, and what does not is escaped — a
+  default-deny, because a list of invisible characters is behind the next Unicode
+  revision the day it is written. Graphic characters the host treats as invisible are
+  escaped too — 268 of them: Unicode's `Default_Ignorable_Code_Point`, **derived** rather
+  than asked of the residue property Go ships under a nearly identical name, plus
+  `U+2800 BRAILLE PATTERN BLANK`, which the property does not carry and which is the
+  one blank that is not whitespace. **The claim is that property and not *invisible***,
+  which is not a property anybody publishes: eight combining marks Unicode annotates as
+  not visibly rendered stay outside it, and what bounds them is that an add-on may post
+  to the log and cannot read it back. The derivation reaches 398 members the residue property never had,
+  and the 260 of them a reader could ever have seen are the variation selectors: a
+  module that declared nothing used those to carry a secret out of an
+  ordinary-looking line; **they are deleted rather than escaped**, unconditionally and
+  with no exemption for the emoji case, because a selector has no appearance of its
+  own and no property says which bases a renderer will vary. The one graphic character
+  escaped anyway is the backslash, so that a reader can tell a literal `\n` from an
+  escaped newline and a module cannot spell the mark on a truncated line; the carve-out
+  running the other way is Unicode's prepended concatenation marks, read from the
+  property rather than copied out of it, for the same reason the escape set is not a
+  list (M62, D240, D241, D242, D243, D244, D283).
 - The HTTP layer is two handler trees. The redirect tree carries no session
   lookup, CSRF check or template rendering. Enforced by test.
 - The redirect pool is separate from the application pool.
@@ -445,7 +508,13 @@ Invariants:
 The redirect target is defined as: **server-side p99, cache hits only, measured
 from a load generator on the same Docker network, excluding client RTT and TLS,
 at 2,000 rps sustained for 2 minutes, with 100k links and 5M click events
-seeded.** Both the generator's number and the server histogram are reported.
+seeded, and with no add-on on the redirect path.** Both the generator's number
+and the server histogram are reported. The last clause is not decoration: since
+[M66](docs/build-notes/phase-details/m66.md) an add-on may run inline on that
+path, and every figure against this target is core's — measured with nothing
+inline, and reported on a separate curve from the add-on's. Latency on that path
+stops being this product's the moment an operator installs a module there;
+availability does not.
 The measurement, how to reproduce it and what it found: [docs/slo.md](docs/slo.md).
 
 Measured on one developer machine, so the shape transfers and the absolute values
@@ -492,6 +561,7 @@ Implementation:
 | Analytics retention | 395 days default, enforced hourly by dropping monthly partitions of `click_events` and `visitors`; a partition goes only once its newest possible row is outside the window, so data survives up to a month longer. |
 | Audit retention | Its own window, `AUDIT_RETENTION_DAYS`, defaulting to 0 — keep forever. Never governed by the analytics number: an upgrade must not silently delete history assumed permanent. Growth is made visible instead, by `linkctrl_audit_log_bytes`. |
 | Geographic detail | Country only. Region and city are resolvable and deliberately not stored. |
+| The add-on boundary | The stance holds at the **ABI** rather than by reviewing add-on code, which this project cannot do for a module it did not write ([M61](docs/build-notes/phase-details/m61.md)). No host function hands a module a client address in any form, and the record carrying redirect data is bound to what `click_events` may carry — country-level, prefix-derived, with region and city refused although the columns exist. The host hands over no client address, and a test over the ABI surface reads the column list out of the migration rather than trusting a copy of it. That bounds what the host gives, not what a module can learn — an add-on serving its own routes can obtain an address by sending a visitor to an origin its author controls, which `docs/SECURITY.md` states. |
 | Regional storage | One instance per region via `organizations.data_region`; no row-level routing |
 
 Consequence: the largest table holds no personal data and is out of scope for
@@ -504,9 +574,9 @@ caveat with the data.
 
 ## Build status
 
-Phases 1, 2 and 3 are released: `v0.1.0` on 2026-07-31 (21 milestones),
+Phases 1, 2, 3 and 4 are released: `v0.1.0` on 2026-07-31 (21 milestones),
 `v0.2.0` on 2026-08-06 (33 milestones), `v0.3.0` tagged 2026-08-18 (23
-milestones). Status per milestone lives in
+milestones), `v0.4.0` tagged 2026-09-06 (18 milestones). Status per milestone lives in
 [phase-details/](docs/build-notes/phase-details/) and nowhere else: the live
 phase in its [README](docs/build-notes/phase-details/README.md), each released
 phase in its own `phase-N.md`.
@@ -578,9 +648,31 @@ Planned under the size rule as Phase 4's planning
 recorded it: **plan to fifteen, cap raised — once, deliberately — to
 eighteen** (owner-set 2026-08-18,
 [phase-4-candidates.md](docs/build-notes/phase-4-candidates.md#the-phases-shape)).
-One planned slot is deliberately unspent: an ABI is the kind of artifact
+One planned slot was deliberately unspent: an ABI is the kind of artifact
 insertions come from, and [M69](docs/build-notes/phase-details/m69.md) is
-designed to surface what the foundation got wrong.
+designed to surface what the foundation got wrong. **It was spent on
+2026-08-23**, before M69 ran, on
+[M66.5](docs/build-notes/phase-details/m66.5.md) — measuring what M66's inline
+class costs a visitor when nothing is pooled produced a milestone the build
+turned out to need, and the owner chose to spend the reserve on it knowing what
+the reserve was being held for. The phase is therefore at its planning target
+with no slack: an insertion M69 produces is a conversation about the cap of
+eighteen, not a slot. **That conversation happened on 2026-08-26**, when M69's
+validation produced two insertions before the milestone started —
+[M68.5](docs/build-notes/phase-details/m68.5.md) and
+[M68.6](docs/build-notes/phase-details/m68.6.md), taking the phase to seventeen
+— and the owner chose to proceed with one slot left rather than move the cap or
+close the phase early. **That slot was spent on 2026-08-27**, on
+[M69.5](docs/build-notes/phase-details/m69.5.md), when building the OIDC add-on
+found the flow it proves is reachable only by being handed a URL. The phase is at
+eighteen, which is the cap: **the next insertion is a conversation about the cap
+itself**, and M69's host-side half has not landed. See
+[D389](docs/build-notes/decisions.md#2026-08-27--m695-added-the-acceptance-tests-last-inch). So the sentence above has been honoured rather than
+overtaken: what it promised was a decision, and the decision is
+[D366](docs/build-notes/decisions.md#2026-08-26--the-conversation-planmd-promised-and-what-it-decided).
+Recorded in
+[D333](docs/build-notes/decisions.md#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)
+rather than left as a sentence describing a reserve that no longer exists.
 
 The phase's shape, its owner-set answers and their dates are
 [phase-4-candidates.md](docs/build-notes/phase-4-candidates.md)'s record and
@@ -597,7 +689,7 @@ consumer that proves it.
 
 | # | Milestone | Depends on | Discharges |
 | --- | --- | --- | --- |
-| [M59](docs/build-notes/phase-details/m59.md) | Process debt: the gates that were not watching | — | [F248](docs/build-notes/deferred-findings.md#open) · [F253](docs/build-notes/deferred-findings.md#open) · [F254](docs/build-notes/deferred-findings.md#open) · [F255](docs/build-notes/deferred-findings.md#open) |
+| [M59](docs/build-notes/phase-details/m59.md) | Process debt: the gates that were not watching | — | [F248](docs/build-notes/deferred-findings.md#closed) · [F253](docs/build-notes/deferred-findings.md#closed) · [F254](docs/build-notes/deferred-findings.md#closed) · [F255](docs/build-notes/deferred-findings.md#closed) |
 | [M60](docs/build-notes/phase-details/m60.md) | The host: a module loads, or is refused | M59 *(ordering)* | Opens the *Add-on support* scope row · owed-work #5 (single-instance gate case) |
 | [M61](docs/build-notes/phase-details/m61.md) | The ABI: what an add-on may import, written down and versioned | M60 | Owed-work #2 (deprecation policy) · the host-function question |
 | [M62](docs/build-notes/phase-details/m62.md) | Declared permissions: an add-on gets what it named and nothing else | M61 | The enforcement answer · the permission-expression question |
@@ -606,9 +698,13 @@ consumer that proves it.
 | [M64.9](docs/build-notes/phase-details/m64.9.md) | **Mid-phase adversarial review** | M59–M64 | — |
 | [M65](docs/build-notes/phase-details/m65.md) | The authentication hook: a session minted on an add-on's word | M61 · M62 · M64 | Reach: the session hook, last limb of *everything OIDC needs* |
 | [M66](docs/build-notes/phase-details/m66.md) | Add-ons on the redirect path: two classes, a deadline, and a promise rescoped | M60 · M62 | The redirect answer and its three requirements · owed-work #1 (core-only SLO claim) · the deadline question |
-| [M67](docs/build-notes/phase-details/m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 | The install/remove halves of the manager answer · split from the surface at the plan's review |
+| [M66.5](docs/build-notes/phase-details/m66.5.md) | Instances are reused, so a visitor stops paying for a cold start | M66 · M60 *(ordering)* | Owner-added scope 2026-08-23 — reverses D319, which declined pooling before an add-on had been measured under load |
+| [M67](docs/build-notes/phase-details/m67.md) | Runtime lifecycle: an add-on arrives and leaves without a reboot | M60 · M62 · M63 · M66.5 | The install/remove halves of the manager answer · split from the surface at the plan's review |
 | [M68](docs/build-notes/phase-details/m68.md) | The Add-on manager | M63 · M66 · M67 · M64 *(ordering)* | The manager answer's visible half: listing, per-module performance, orphaned data, the purge choice |
-| [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
+| [M68.5](docs/build-notes/phase-details/m68.5.md) | An add-on reaches outward, and only where the operator pointed it | M61 · M62 · M64 · M68 *(ordering)* | [F334](docs/build-notes/deferred-findings.md#closed) — the gap M69's validation found; owner-answered scope 2026-08-25 |
+| [M68.6](docs/build-notes/phase-details/m68.6.md) | A module arrives from a URL, because that was always the intention | M67 · M68.5 · M68 *(ordering)* | Owner-added scope 2026-08-25 — corrects M67's *never a fetch*, which no decision backed |
+| [M69](docs/build-notes/phase-details/m69.md) | The OIDC add-on: the foundation's acceptance test | M61 · M63 · M64 · M65 · **M68.5** · M68 *(ordering)* | The OIDC limb of *MFA, OAuth, OIDC, SSO, SCIM* · the acceptance test · owed-work #4 (the add-on repo's LICENSE, checked as a precondition) |
+| [M69.5](docs/build-notes/phase-details/m69.5.md) | Somebody can start the sign-in an add-on made possible | M64 *(ordering)* · M65 *(ordering)* · M68 *(ordering)* · M69 | [F345](docs/build-notes/deferred-findings.md#closed) — the last inch the acceptance test found; owner-answered scope 2026-08-27 |
 | [M69.9](docs/build-notes/phase-details/m69.9.md) | **Pre-release adversarial review** | everything below it | — |
 | [M70](docs/build-notes/phase-details/m70.md) | Deferred findings, documentation pass, 0.4.0 | all | Phase close · owed-work #3 (the 1.0 sentence) |
 
@@ -696,6 +792,14 @@ produced a minority of them (F37).
 | Analytics drops under overload | Bounded queue; drops counted and alertable. Backpressure would slow redirects. |
 | A replica killed without draining loses its buffered click events | The one thing the failover contract does **not** recover, and it is stated as a bound rather than left to be discovered: everything else in flight survives, because scheduled work is leader-elected on an advisory lock that releases when its holder dies and both queues claim under a 60-second lease. The click queue is neither — it is in-process and bounded by decision (D77), so a graceful shutdown flushes it and a `SIGKILL` does not. How much is lost is `linkctrl_analytics_queue_depth` at the moment of the kill. The fix is a durable work queue, which is *Redis Streams as a work queue* — a Phase 3 candidate that was not taken, and taking it would make Redis required and break the constraint in D110. [M56](docs/build-notes/phase-details/m56.md); the contract is in [docs/operations.md](docs/operations.md#what-happens-when-a-replica-dies). |
 | A dimension breakdown can be a quarter of an hour behind the totals beside it | [M37](docs/build-notes/phase-details/m37.md) discharged *the dimension rollup grows with traffic* by taking the split-cadence option: the breakdowns recompute every 15 minutes while the per-link and per-workspace totals stay on 60 seconds. The cost is a real one and it is on the page — a link's country, device and per-destination breakdowns can lag its click count by up to fifteen minutes, and nothing on the page says which of the two you are looking at. `linkctrl_rollup_staleness_seconds` is what makes the lag observable, with an alert recipe in [docs/operations.md](docs/operations.md#alerts-worth-having). Nothing about the query got cheaper: it is 4.8-6.3s per run at 5.7M events, 289k upserts, and the recorded fallback if that stops fitting 15 minutes is to narrow the recomputed window. Measured in [docs/slo.md](docs/slo.md#re-measured-for-m37-2026-08-03). |
+| The add-on ABI is `0.x`, and one of its seventeen functions still refuses | [M61](docs/build-notes/phase-details/m61.md) publishes the whole contract and implements three functions of it: logging, reading an add-on's own declared settings, and reporting the host's ABI version; [M63](docs/build-notes/phase-details/m63.md) added the two storage functions, [M64](docs/build-notes/phase-details/m64.md) added the request, the response and the session read, and [M65](docs/build-notes/phase-details/m65.md) added the mint, the identity link, the clock and the random source, and [M66](docs/build-notes/phase-details/m66.md) added the redirect limb — the observation read it turned on, and the decision read and answer write an inline module answers through, and [M68.5](docs/build-notes/phase-details/m68.5.md) added the outbound fetch, which is the seventeenth function and the sixteenth live one — so sixteen are live. Template rendering from a module's own files is declared — its name fixed, its signature fixed enough to compile against — and its call answers a refusal until the milestone behind it lands. That is deliberate, because the add-on repository compiles against this boundary from its first commit and cannot wait six milestones for a header file. The cost is stated rather than hidden: **the ABI promises no stability while it is `0.x`**, the signature of a refused function may still move as the behaviour is built — no version number moves with it, and a module built against the older SDK then fails to instantiate rather than misbehaving, which [docs/addon-abi.md](docs/addon-abi.md) states as the rule's one cost — and a generation can be retired on the minimum window — two minor releases and 90 days — and nothing longer. `1.0` is what would mean the contract has settled, and it is a release's statement to make. |
+| An add-on's schema needs a database role, and some deployments cannot make one | [M63](docs/build-notes/phase-details/m63.md) confines an add-on to its own Postgres schema with a **login role** rather than with a search path, because a search path is never consulted for a qualified name and confines nothing, and `SET ROLE` on the application's own connection was measured against Postgres 17 and escapes twice — a single `DO` block resetting the role, and `SET SESSION AUTHORIZATION`, which is checked against the session user and so succeeds whenever the application connects as a superuser. So the host creates one role per add-on and opens a connection as it. The cost is a **new operator requirement**: the application's database user needs `CREATEROLE`, and the add-on's role needs to be able to authenticate with a password. A managed Postgres where LinkCtrl connects as a restricted user, or a deployment authenticating by `peer` or a cloud IAM token, cannot satisfy that and such an add-on will not load — explicitly, naming the reason. There is deliberately no fallback, because the only weaker mechanism is not a boundary. |
+| An add-on can read the catalogue of tables it cannot read a row of | The confining role still reaches `pg_catalog` and `information_schema`, which Postgres does not make revocable, so a module holding `storage.own_schema` can enumerate every schema, table and column on the instance. It cannot read a byte of one, and the adversarial suite for that boundary reaches for the product's tables eleven ways from inside a guest. What leaks is a schema map — the same map anybody with a clone of this repository has — and closing it would mean a database per add-on or a filtering proxy, which was not worth the operational surface. |
+| An add-on's pages are text the dashboard wraps, and it may not ship markup, a stylesheet or an asset | [M64](docs/build-notes/phase-details/m64.md) gives an add-on `/addons/<name>/` on the dashboard host and renders what it answers through this product's own page template, escaped. That is the whole of how it reaches the page: the content types a module may name for itself are `text/plain` and `application/json`, `text/html` is refused, and there is no path by which a module's bytes become markup — which is what keeps the Content-Security-Policy byte-identical to what it was before add-ons could draw anything, and what makes *an add-on cannot inject a script tag* a property of the shape rather than of a filter (D259). The cost is that an add-on's page is plain: no layout of its own, no stylesheet, no font, no image. `template_render` is declared for the shape that would change it and is **still refused**, which is [F283](docs/build-notes/deferred-findings.md#open) — a contract question rather than a defect, since the milestone that backs the function answered its purpose a different way. Serving no add-on asset is also the answer to a narrower question M24.5 would otherwise have left open: its template scan walks the *embedded* templates, so a stylesheet an add-on shipped would be the first CSS this product serves unscanned, and none is served (D264). Those pages are also reachable **without signing in**, because an add-on that authenticates somebody is answering a request from a person who has no session yet (D261), and a module holding the routes grant can redirect a visitor anywhere — never permanently, which the host enforces. Sixteen add-on invocations run at once across the instance, each bounded at 8 MiB of guest memory, because a request gets an instance of the module to itself (D260, D288) — and since M66 a redirect-path invocation and an out-of-band observation draw on the same sixteen — which is also why a module cannot keep a flow's state in memory between two requests and has to keep it in the schema it owns. Since [M66.5](docs/build-notes/phase-details/m66.5.md) a redirect-path instance is **kept** afterwards rather than destroyed, because building one cost the visitor 11.05ms on a path whose target is 20ms (D335); what stops reuse handing one visitor's residue to the next is that the host restores the module's memory to what its package initialization left, so the sentence above holds by enforcement rather than by the instance being gone. Eight kept warm is what `LINKCTRL_ADDON_POOL_SIZE` bounds. The three bounds add into the 192 MiB ceiling `docs/deployment.md` sizes a host by; until M64 was reopened only the first existed, and the 2.4 MB a fixture measures was being quoted as though it were the second. A module's cookies are bounded the same way and for the same reason (D287): the host carries the whole set inside one cookie of its own, so an add-on occupies two slots of a visitor's cookie store however many cookies it sets and however often it is visited, and cannot fill that store until the browser evicts this product's session cookie. |
+| Nothing caps an add-on's schema, and removing an add-on does not remove its data | The same answer the audit log gets, for the same reason: `linkctrl_addon_schema_bytes{addon}` makes the *stored* growth visible and there is no quota, so an add-on that writes a row per redirect is a disk the operator agreed to when they installed it. **That gauge summed a list of relation kinds until D254** — ordinary and materialized tables — so a **sequence** in the add-on's own schema was 8192 bytes it reported as nothing, 24,000 of them being 188 MB of `pg_database_size` under a gauge reading 0; and the host's own migration table in that schema carries an identity column, so the shortfall was never conditional on an add-on misbehaving. It now excludes the kinds already counted inside another relation rather than listing the kinds that count, which is the same argument the confinement post-condition below makes and is why the two are stated together. A schema is not everything a confined role can fill — it can create a **large object**, which belongs to no schema and which that gauge cannot see, so `linkctrl_addon_large_objects{addon}` publishes the count, an add-on owning one is refused at its next load, and the purge in [docs/operations.md](docs/operations.md) carries the `DROP OWNED BY` that removes it; closing the capability outright needs ownership of a `pg_catalog` function and was measured to be a silent no-op for the database user this product documents (D248). A **temporary table** is the same shape and is narrowed rather than only accounted for: installing a storage add-on revokes `TEMPORARY` on the database from `PUBLIC` and grants it back to the application, which refuses every spelling of it — but only where the application owns the database, and no dump carries it, so what actually holds is the load's post-condition, which since D251 asks Postgres what the role owns instead of checking a list of the places it might have used. The cost is that another application sharing this database loses temporary tables, stated in [docs/deployment.md](docs/deployment.md). A third narrowing joins those two and is the only one in the family conditional on neither superuser nor database ownership: the confining role may set any user-settable parameter on its own role — `work_mem = '4GB'` accepted, inherited by every connection the add-on's pool opens afterwards — so every load clears the role's settings before re-pinning its search path (D253) — **in every database, which took a reopening**: `RESET ALL` clears the cluster-wide defaults and not the per-database rows the same role writes with `ALTER ROLE … IN DATABASE`, those survived every load for a phase, and scoping a second reset to the current database is evaded by naming another one, so the load reads the databases out of `pg_db_role_setting` instead of naming any (F288, D279) — **per add-on and at that add-on's load only**, because nothing sweeps roles no add-on claims: a name beginning `addon_` is not evidence this product created the role, and the membership row that looked like evidence is written automatically for a `CREATEROLE` creator, measured (D282). What that leaves is a setting parked on the role of an add-on since uninstalled, which no load will clear and which is inert because only a login reads one and nothing logs in as that role once the module is gone; [docs/operations.md](docs/operations.md) carries the statement an operator can type. **What the post-condition and the gauges cover is every kind of object Postgres catalogues, which is not every way an add-on can use disk**: a `WITH HOLD` cursor holds a temporary *file* for the life of its session, in neither catalogue and under no gauge, transient rather than stored, and bounded only by a `temp_file_limit` a superuser must set — [F279](docs/build-notes/deferred-findings.md#open). Deleting a module's directory leaves its schema, its tables and its rows, and so does removing it through [M67](docs/build-notes/phase-details/m67.md)'s API — which names the orphan in its own answer, so the choice is offered at the moment somebody made it rather than discovered later; the next boot enumerates `addon_*` schemas nothing claims and warns, its size gauges stop rather than freezing at their last reading, and nothing deletes one — a purge is an operator's explicit act, and since [M68](docs/build-notes/phase-details/m68.md) the Add-on manager is where it is offered: every orphaned schema is a row on `/instance/addons` with its size measured at the moment of the prompt rather than read from the gauge, and the purge itself is `DROP SCHEMA … CASCADE` audited as `addon.data_purged`. **The drop is the schema and nothing else**, which the confirmation states rather than leaving to be found: the `addon_<name>` login role stays with its password, so re-installing under that name works as it did and so this operation does not depend on the role owning nothing; any large objects that role owns are outside every schema and survive, which is what the `DROP OWNED BY` in [docs/operations.md](docs/operations.md) is still for; any `addon_identity_links` rows written under that name stay, which is [F330](docs/build-notes/deferred-findings.md#open); and the **stored settings** an operator typed on the manager's own detail page stay too, keyed on the name the same way and deleted by nothing in this product, which is [F332](docs/build-notes/deferred-findings.md#open). **Four things, not three** — the count moved when M68 added the fourth, and the confirmation, the API document and this row say four together or the enumeration is decoration. Backup and restore beyond what `pg_dump` of a schema already is was not built, stated in [docs/data-model.md](docs/data-model.md) — with one requirement that is not optional: `pg_dump` carries **no roles**, so a backup of an instance with a storage add-on is two files and the roles are restored first, or the add-on's tables come back owned by the application and the add-on is refused on its own rows. [docs/deployment.md](docs/deployment.md) carries both commands and the order. |
+| A bad add-on release can hold a `required` instance down | Host-run migrations are third-party DDL, applied before the listener opens, and M60's class rule says a `required` add-on that will not load stops the instance. Both are the design — the alternative is an instance serving with an authentication provider's tables missing — and together they mean an operator whose configuration did not change can be held down by somebody else's release. The manifest digests bound *what* runs to what the add-on's author published, and the schema boundary bounds where it can reach; neither bounds whether it works. [docs/operations.md](docs/operations.md#add-ons) has the recovery order. |
+| The host offers cross-add-on data access no vocabulary at all, and an add-on can still give its own data away | Nothing this product offers lets two add-ons share a table: there is no permission for it, no host function, and no way to ask. Deliberate rather than unfinished ([M63](docs/build-notes/phase-details/m63.md)): two add-ons that want to share data are one add-on, and anything else is a decision nobody has needed yet. **What that does not mean is that the reach is impossible**, and D255 corrected four documents that said it was: an add-on owns its schema, so `GRANT USAGE ON SCHEMA … TO PUBLIC` and a `GRANT SELECT` beside it are two ordinary statements through the write path, after which another add-on — whose role name `pg_roles` will tell it — reads and writes those tables. Measured on Postgres 17.10. The harm is bounded to what the granting add-on chose to give, which is its own data, so the answer is a load-time narrowing rather than a redesign: the load post-condition reads `pg_namespace.nspacl` and `pg_class.relacl` and refuses an add-on that has granted anything on its schema to any grantee but its own role, until an operator revokes. The DDL-additiveness answer rests on that — *the only reader is one the add-on created itself*, which is the add-on author's own act and visible to the host — rather than on a reader being impossible. |
+| Installing an add-on at runtime reaches one replica, and needs the add-ons directory writable | [M67](docs/build-notes/phase-details/m67.md) makes arrival and departure runtime acts: a module is uploaded — or, since [M68.6](docs/build-notes/phase-details/m68.6.md), fetched from a URL the operator typed with the `sha256` they expect beside it — verified, started and removed without restarting the instance, under `addons.manage` — an instance-level scope held by the account that administers the box and delegable to no API key, because a key that could install an add-on would carry whatever that add-on's manifest declares, past every scope the key was issued with. **The add-ons directory stays the only store**, so the boot-directory route and the API are one lifecycle with one answer to what is installed (D338); a second store in Postgres would have reached every replica and was refused because the first time the two disagreed, the disagreement would be a module running that nothing lists. What that costs is three things, each a property of where the directory is mounted rather than a defect waiting on a fix, and a URL install inherits all three because it ends in the same directory: an install reaches **the replica that served the request** and no other; a container filesystem that is not a volume loses it on the next deploy; and `:ro` — which [docs/configuration.md](docs/configuration.md) still recommends for an instance whose add-ons are placed by hand — refuses an install with a `503` that says so. Two narrower bounds sit beside them. An add-on whose manifest declares `.sql` **migration files** ships files that are part of neither install shape, so it is refused with a message naming the other route rather than failing on a missing path ([F328](docs/build-notes/deferred-findings.md#open)) — an add-on that owns a schema and creates its tables from its own code installs fine. And there is **no upgrade-in-place**: `rename(2)` onto a non-empty directory fails, which is what keeps activation to a single atomic step, so replacing an add-on is a removal and an install. Removal completes the invocations already inside the module, bounded at five seconds and interrupting past it (D340), and takes the directory out of the discovery set *before* anything is unloaded — which is what makes removing a `required` add-on unable to leave an instance that will not start. |
 | Unique visitors are estimates | Carrier NAT merges people; network switches split one. Daily resolution. |
 | Multi-day unique totals over-count | Sum of daily figures; exact values unrecoverable once salts are purged. |
 

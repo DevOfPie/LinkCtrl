@@ -857,6 +857,37 @@ func (s *Service) Update(ctx context.Context, actor *auth.Identity, id uuid.UUID
 	}
 
 	updated := s.toDomain(ctx, row, tags)
+
+	// A rename changes what every one of this link's QR codes encodes, so the
+	// stored sizes are re-fitted against the new payload (F228). A longer short
+	// URL is more bytes in the picture and can push it into a larger grid than the
+	// stored size holds, and the drawing then falls back to margin-and-scale — so
+	// a code stored at its floor came out larger than the number the reader set,
+	// on a link they renamed for unrelated reasons.
+	//
+	// After the transaction rather than inside it, and best-effort: a link's alias
+	// is the thing being changed and a re-fit that failed must not undo it. The
+	// codes are self-repairing on the next touch — refitStoredQRCode is called
+	// unconditionally from CreateQRCode for exactly that reason — so the cost of a
+	// failure here is a picture that is the wrong size until then, which is what
+	// the state was before this call existed.
+	if newAlias != nil {
+		if moved, err := s.RefitQRCodesForPayload(
+			ctx, actor.WorkspaceID, row.ID, updated.ShortURL,
+		); err != nil {
+			s.log.Warn("could not re-fit this link's QR codes after a rename; their "+
+				"stored sizes may be smaller than the picture now needs, and the next "+
+				"change to any of them repairs it",
+				slog.String("link_id", row.ID.String()),
+				slog.String("alias", row.Alias), slog.Any("error", err))
+		} else if moved > 0 {
+			s.log.Info("a rename made this link's QR codes encode more, and their stored "+
+				"sizes were raised to hold it",
+				slog.String("link_id", row.ID.String()),
+				slog.String("alias", row.Alias), slog.Int("codes_refitted", moved))
+		}
+	}
+
 	s.emitLink(ctx, domain.EventLinkUpdated, updated)
 	return updated, nil
 }

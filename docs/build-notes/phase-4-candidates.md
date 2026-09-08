@@ -115,14 +115,27 @@ somebody:
 
 ### What this collides with, named now rather than discovered
 
-Each of these is an inherited invariant from
-[phase-details/README.md](phase-details/README.md)'s *What every milestone
-inherits*, and a WASM host touches five of them — four named when this file was
-written, the fifth added at the plan's review the same day. **None is a
-blocker; every one is a milestone's argument to make in writing.** And the
-frame was owner-confirmed at that review: **Phase 4 inherits all fourteen
-rules as written**, the collisions staying arguments each milestone must win
-in its own file, never waivers.
+**None is a blocker; every one is a milestone's argument to make in writing.**
+And the frame was owner-confirmed at the plan's review: **Phase 4 inherits all
+fourteen rules as written**, the collisions staying arguments each milestone must
+win in its own file, never waivers.
+
+**This list is a record of what was weighed when the phase was planned, and it
+was wrong in both directions** (F301). It said each entry is an inherited
+invariant from [phase-details/README.md](phase-details/README.md)'s *What every
+milestone inherits*, and **`Single container is a tested configuration` is not
+among those fourteen at all** — it is a real property of this product, gated by
+`scripts/single-instance-check.sh`, and it is not one of the inherited rules the
+sentence claims to be quoting. It also said *five*, and stopped being updated:
+[M64](phase-details/m64.md) engaged a sixth, deferring *every UI feature has API
+support* to M69 and arguing it in its own file, which is exactly where the
+pointer requires such an argument to live.
+
+So this list is not an enumeration of what the phase touched. What it is, and all
+it ever was, is the four collisions somebody could see on 2026-08-18 plus the one
+the review added. The frame above is what was confirmed; the count below was
+never re-counted, and the honest form of that is to say so rather than to keep a
+number nobody maintains.
 
 - **`ui` stays stdlib-only** — no Node, no CDN, CSP unchanged, no `unsafe-`
   waivers. An add-on that renders UI has to reach the page without moving any of
@@ -153,7 +166,7 @@ in its own file, never waivers.
 | **Which areas?** | **Add-ons as the spine, and A (identity) expressed through them.** C and D were taken and then **deferred to Phase 5** later in the same conversation | B, E and F are not taken either. C and D have now waited three phases and will wait a fourth — recorded as a change of mind rather than reconciled away, because the first answer is what the arithmetic below was computed against |
 | **Version** | **Another 0.x** | [releasing.md](../releasing.md) ties 1.0 to identity being complete. See the OIDC row below, which changes what that sentence will mean |
 | **Size target** | **Raise the cap to 18; plan to 15** | Phase 2 ran 33, Phase 3 ran 23 against a plan of 15 with eight insertions. The cap moves once, deliberately, and the planning number stays where the last two phases put the pressure |
-| **Process debt** | **One milestone, early in the phase** | [F248](deferred-findings.md#open), [F253](deferred-findings.md#open), [F254](deferred-findings.md#open), [F255](deferred-findings.md#open). Early, because F255 is *nothing asks whether CI is green* and the phase should not run without that gate |
+| **Process debt** | **One milestone, early in the phase** | [F248](deferred-findings.md#closed), [F253](deferred-findings.md#closed), [F254](deferred-findings.md#closed), [F255](deferred-findings.md#closed). Early, because F255 is *nothing asks whether CI is green* and the phase should not run without that gate |
 
 ### OIDC moves out of core, and that is the phase's biggest structural change
 
@@ -230,9 +243,24 @@ decision left in it, named so the milestone that meets it does not rediscover it
 
 1. **The SLO claim is restated as core-only** in [slo.md](../slo.md),
    `docs/SECURITY.md` and `README.md`. It is a published measurement and it is
-   about to stop being true of an instance with an inline add-on.
+   about to stop being true of an instance with an inline add-on. **Discharged by
+   [M66](phase-details/m66.md) in two of the three, and the third is deliberate**:
+   slo.md now opens by scoping every figure in it to core with no inline add-on on
+   the path and carries both runs — core unmoved, and a module that never returns
+   — while `docs/SECURITY.md` gains a row saying the same thing and what stays this
+   product's, which is availability. `README.md` is **not** in that diff, because
+   D104 keeps it describing the *released* product and add-ons are not released
+   until the tag; `CHANGELOG.md`'s `[Unreleased]` carries the rescoping until
+   [M70](phase-details/m70.md)'s documentation pass moves it, which m66.md states
+   so the close does not rediscover it.
 2. **A deprecation policy is written with the ABI**, because SemVer without one
-   is a version number and a hope.
+   is a version number and a hope. **Discharged by
+   [M61](phase-details/m61.md)**: [docs/addon-abi.md](../addon-abi.md) states what
+   counts as breaking as a table rather than a judgement, fixes the minimum window
+   at two minor releases and 90 days whichever ends later, and names the four
+   places a deprecation is announced — one of them the SDK's generated Go
+   `Deprecated:` markers, so a deprecation reaches a consumer's editor and not only
+   a changelog.
 3. **[releasing.md](../releasing.md)'s pre-1.0 sentence is rewritten**, since
    1.0 now turns on the add-on contract rather than on identity being built in.
 4. **`LinkCtrl-OIDC` gets an MIT `LICENSE`.** It is public and unlicensed today,
@@ -251,7 +279,13 @@ the plan the same day ([D211](decisions.md#2026-08-18--phase-4-planned-the-spine
   [upcoming-decisions.md](upcoming-decisions.md) with the shape of its answer
   fixed in advance.
 - **What the host functions actually are** — [M61](phase-details/m61.md)'s
-  central artifact, named there as the hardest of the phase.
+  central artifact, named there as the hardest of the phase. **Answered**: ten
+  functions in `internal/addon/abi`, six capability groups, one wasm module named
+  `linkctrl`, one calling convention for all of them. Three are live — `log`,
+  `config_get`, `abi_version` — and seven are declared and refused with a status a
+  module branches on, because the add-on repository compiles against the boundary
+  from its first commit. The list itself is the ABI: the SDK, the documented table
+  and the host module the runtime registers are all derived from it.
 - **How declared permissions are expressed and checked** —
   [M62](phase-details/m62.md), which examines the `NonDelegableScopes` analogy
   and records the answer either way.
@@ -274,8 +308,8 @@ convention as the table above: recorded here, `D` numbers when
 
 | Question | Answer |
 | --- | --- |
-| **[F253](deferred-findings.md#open): the direct `release-check` form skips the integration tests — script or docs?** | **The script derives `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` itself**, the recommended shape, taking the stated cost: a new drift pair between Makefile and script, which M59 adds a check for. The alternative — docs drop the direct form — left the trap runnable and merely unrecommended |
-| **[F254](deferred-findings.md#open): which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
+| **[F253](deferred-findings.md#closed): the direct `release-check` form skips the integration tests — script or docs?** | **The script derives `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` itself**, the recommended shape, taking the stated cost: a new drift pair between Makefile and script, which M59 adds a check for. The alternative — docs drop the direct form — left the trap runnable and merely unrecommended |
+| **[F254](deferred-findings.md#closed): which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
 | **Does Phase 4 inherit all fourteen rules as written?** | **Yes, all fourteen** — the five collisions above stay per-milestone written arguments, not waivers. A milestone that cannot win its argument comes back as a prompt |
 
 ## The manager's layout: chosen from wireframes, amended, confirmed
@@ -353,6 +387,34 @@ reasons live and stay:
 - Moving links between workspaces, and the *All Workspaces* scope in
   [upcoming-decisions.md](upcoming-decisions.md) that shares its hard part.
 - Grouping API-key scopes by the object they act on.
+
+### Provisioning from an add-on's assertion — deferred by M65, on purpose
+
+**[M65](phase-details/m65.md) ships linking-only**, and this is where its own
+bullet says the other half is recorded so that the phase which wants it does not
+have to rediscover the shape.
+
+An add-on that holds `session.mint` asserts *this external subject
+authenticated*. Today the host answers by looking the subject up in
+`addon_identity_links` and minting nothing when there is no row: an account is
+reached, never created. **Whether an unknown external subject may become a new
+account is a separate question**, and it is a policy one rather than a
+mechanical one:
+
+- It has to answer to `LINKCTRL_SIGNUP_MODE` ([D38](decisions.md)), which is the
+  operator's and not an add-on's. `closed` means closed, and an identity provider
+  that could create accounts under it would be a way around the setting rather
+  than a feature beside it.
+- It has to say which organization and which workspace a provisioned account
+  lands in. Phase 2's signup section is the precedent and the reason this is not
+  a one-line answer: a self-registered account gets an organization and a
+  workspace of its own, which is a tenancy decision somebody has to have made.
+- It has to say what an operator sees. An add-on that can create accounts can
+  create them faster than anybody reads an audit log.
+
+**Not blocked on anything** — the linking table, the assertion path and the
+provenance record are all built and are what provisioning would be written on
+top of. What it needs is the decision, and the decision is the owner's.
 
 **Areas B, E and F are not taken**, and their surviving rows are in
 [phase-3-candidates.md](phase-3-candidates.md)'s close-out section rather than

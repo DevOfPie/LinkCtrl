@@ -150,7 +150,7 @@ unrecognised argument stops **nothing** and says so.
 All must pass. Failure means the commit does not happen.
 
 ```sh
-make check              # tidy + lint + unit tests, race enabled
+make check              # assets + tidy + lint + unit tests, race enabled
 make test-integration   # needs the stack up: make up
 ```
 
@@ -162,7 +162,7 @@ Then:
 | Tests | Unit and integration green under `-race` |
 | Generated code | If any `.sql` changed: `make sqlc` produces no diff |
 | OpenAPI | If any API surface changed: `make openapi` passes |
-| Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious. **If the milestone changed what an operator or reader would observe**, `docs/SECURITY.md` says so too — a claim it makes that the milestone just made false is a failing gate, not cleanup for the phase's documentation pass. **`README.md` is not in this gate (D104).** It describes the *released* product, so a mid-phase commit does not touch it and the phase's features land there at the close, when the tag makes them released. The cost is accepted and stated: this gate no longer catches README drift, because there is no mid-phase README to drift — `CHANGELOG.md`'s `[Unreleased]` section is what carries unreleased work until then, and it is load-bearing for that. |
+| Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious. **If the milestone changed what an operator or reader would observe**, `docs/SECURITY.md` says so too — a claim it makes that the milestone just made false is a failing gate, not cleanup for the phase's documentation pass. **`README.md` is not in this gate (D104).** It describes the *released* product, so a mid-phase commit does not touch it and the phase's features land there at the close, when the tag makes them released. The cost is accepted and stated: this gate no longer catches README drift, because there is no mid-phase README to drift — `CHANGELOG.md`'s `[Unreleased]` section is what carries unreleased work until then, and it is load-bearing for that. **Between the fold and the tag, the release gate wins.** Filling `[Unreleased]` is what this row requires and [`release-check`](../releasing.md) refuses a tag while anything is in it, so both bind at once on a commit landing after the notes were folded — a reopening, a late fix. This row still applies: write the work into `[Unreleased]`, and the fold is made again before the tag, which `docs/releasing.md` spells out for whoever cuts it. Documented rather than removed, deliberately (F254): the alternative shapes each moved the fold or let a gate edit the changelog, and the cost of this one is one edit repeated. |
 | Demo | **If the milestone added something somebody can see**, `cmd/lctl/demo.go` seeds it, so the demo instance shows the feature instead of an empty page where it would be. The rule and its exceptions are in [phase-details/README.md](phase-details/README.md#what-every-milestone-inherits); this row is where it is checked |
 | Links | Every relative link and anchor in tracked `.md` resolves |
 | Scope | **No more than one milestone per commit.** Never bundle two; splitting one across several is fine. Work smaller than a milestone — a process or workflow change — is not a milestone and commits on its own, as soon as it is complete. |
@@ -188,6 +188,23 @@ restore. A test that has never failed has not been shown to test anything.
 
 Restore by **counter-edit**, never `git checkout` — checkout has twice destroyed
 uncommitted work in this repo.
+
+**Sabotage the fix, and check the test fails for the reason you meant.** M70 wrote
+three tests that passed against the *unfixed* tree before one of them was right:
+each asserted something true either way. The QR re-fit is the worked example — the
+view reports the size a code is **drawn** at, so comparing it against a floor
+compares a value with itself, and the defect is only reachable once the row is
+pinned to its own floor. A sabotage that produces a *build* failure has not run
+the assertion either, which is the second way to think you verified something.
+
+**A finding is a claim about the tree, and the tree is what settles it.** Three of
+M70's rows were wrong about a fact when they were read — a site count, whether any
+test asks git, where two sentences live — and one, F216, was not a defect at all:
+Tailwind v4 auto-detects sources across the whole tree, so the class it said
+reached the stylesheet by coincidence had never depended on the coincidence. Its
+fix was reverted rather than kept, because a redundant change carrying a comment
+that asserts a false mechanism is worse than no change. **Check the row's evidence
+before building against it, and close a refuted row with the measurement.**
 
 ### Before a phase PR is created
 
@@ -343,9 +360,10 @@ not a thing to leave out quietly.
 
 ```sh
 make up                 # start Postgres, Redis, app — the test instance
-make check              # tidy + lint + unit tests (race)
+make check              # assets + tidy + lint + unit tests (race)
 make test-integration   # integration tests (needs the stack)
 make generate           # sqlc + openapi
+make check-ci           # is the branch's latest CI run green? (asks GitHub)
 make release-check      # full pre-release validation
 make rebuild            # test instance from nothing, migrated
 make down               # stop and remove volumes

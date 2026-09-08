@@ -89,7 +89,28 @@ type MapBand struct {
 // **one** link's window must not be able to disagree about whether a country can
 // be reported for it. TestTheMapAndTheRankedListUseOneSentence asserts they use
 // it — the name written here until 2026-08-10 was of no test in the tree.
-const GeoUnavailable = "Geographic data is unavailable: no GeoIP database is configured."
+// **Worded for the window, because that is what it is decided over** (F195,
+// D436). It read *Geographic data is unavailable: no GeoIP database is
+// configured.* — true wherever it appeared, since the predicate implies no
+// database is configured, and wrong about its own scope: a permanent fact about
+// the instance, on a sentence that widening the window to 90 days can replace
+// with a map and that a neighbouring link does not show.
+//
+// **The cause is kept.** It is never false where this appears — the predicate
+// `!geoShowable` implies `!GeoAvailable` — and dropping it would trade one wrong
+// scope for a reader who cannot act. What is added is the second clause, which is
+// what makes two links disagreeing legible instead of looking like a bug.
+//
+// The predicate is deliberately untouched. Both behavioural repairs were
+// declined on the owner's answer: giving a window with no clicks at all the
+// ordinary empty state narrows the disagreement without closing it, and asking
+// whether this link has *ever* resolved a country costs a query and breaks
+// fillLinkAnalytics's stated seam that it performs no I/O and cannot fail —
+// which is a documented property another milestone rests on. So two links can
+// still disagree; they now say why.
+const GeoUnavailable = "No country could be resolved for the clicks in this window. " +
+	"This instance has no GeoIP database configured; a link whose window still holds " +
+	"country history from an earlier one shows a map."
 
 // Choropleth lays a country breakdown out over the world map.
 //

@@ -23,7 +23,7 @@ import (
 // the database holds 8,123 `link_dimension_daily` rows at `dimension =
 // 'country'` and 34,683 click events carrying one, two `demoCoverage()` rows
 // exist to guarantee the map is worth looking at — and the page said
-// "Geographic data is unavailable" over every one of them. It is not
+// ui.GeoUnavailable over every one of them. It is not
 // demo-specific either: an instance that configured GeoIP, accumulated history
 // and later removed the file saw the same sentence over real data.
 

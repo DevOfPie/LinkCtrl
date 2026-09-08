@@ -74,14 +74,14 @@ HAVING count(*) = 1
 -- Everything hanging off the account that must not outlive it, removed in one
 -- statement and counted.
 --
--- **Written out because a soft delete fires no foreign key.** All eight tables
--- below declare `ON DELETE CASCADE` against `users`, and every one of those
+-- **Written out because a soft delete fires no foreign key.** Every table
+-- below declares `ON DELETE CASCADE` against `users`, and every one of those
 -- clauses triggers on `DELETE`; the account row is kept — that is what
 -- `anonymized_at` marks and what the partial `users_email_key` is shaped for —
 -- so the cascade never runs and these statements are what stands in for it.
 --
 -- Four of them are the tables M52 enumerates: `memberships`, `sessions`,
--- `api_keys`, `notifications`. Four more are here because leaving them would
+-- `api_keys`, `notifications`. Five more are here because leaving them would
 -- falsify a claim the schema already makes:
 --
 --   * `password_resets`, whose own comment (03900) says *"there is no route by
@@ -99,6 +99,24 @@ HAVING count(*) = 1
 --     are the `password_resets` defect in a new table, and shipping the tables
 --     without the statements would have reintroduced it in the same phase that
 --     closed it.
+--   * `addon_identity_links` (04500), added by M65 in the milestone that creates
+--     it, for that same reason and with no more argument than M53 needed. A link
+--     is a standing credential that admits somebody to an account with no
+--     password and no second factor of this product's — the add-on's assertion is
+--     the whole of it — so a link surviving a deletion is the deleted account
+--     still signing in.
+--
+-- **Both numbers above are counted rather than remembered**, and that is a
+-- correction rather than a flourish: this header and the paragraph in
+-- internal/account/account.go each said "eight" through the milestone that made
+-- it nine, which was the second time a hand-maintained count beside this
+-- statement drifted from the schema it describes.
+-- `TestEveryCascadeToUsersIsInTheDeletionStatement` in internal/store reads every
+-- migration for an `ON DELETE CASCADE` against `users`, reads this statement for
+-- what it deletes, and fails on a table in either and not the other — which is
+-- the failure that matters, because a table added to the schema and not to this
+-- list is rows outliving the account they belong to. A companion test holds the
+-- two sentences to the same count.
 --
 -- The counts come back so the caller can log what went, and so a test can assert
 -- the statement reached each table rather than assert it did not error.
@@ -118,6 +136,8 @@ WITH removed_memberships AS (
     DELETE FROM mfa_recovery_codes rc WHERE rc.user_id = @account_id RETURNING 1
 ), removed_pending_logins AS (
     DELETE FROM mfa_pending_logins pl WHERE pl.user_id = @account_id RETURNING 1
+), removed_identity_links AS (
+    DELETE FROM addon_identity_links il WHERE il.user_id = @account_id RETURNING 1
 )
 SELECT (SELECT count(*) FROM removed_memberships)::bigint      AS memberships,
        (SELECT count(*) FROM removed_sessions)::bigint         AS sessions,
@@ -126,7 +146,8 @@ SELECT (SELECT count(*) FROM removed_memberships)::bigint      AS memberships,
        (SELECT count(*) FROM removed_password_resets)::bigint  AS password_resets,
        (SELECT count(*) FROM removed_instance_grants)::bigint  AS instance_grants,
        (SELECT count(*) FROM removed_recovery_codes)::bigint   AS mfa_recovery_codes,
-       (SELECT count(*) FROM removed_pending_logins)::bigint   AS mfa_pending_logins;
+       (SELECT count(*) FROM removed_pending_logins)::bigint   AS mfa_pending_logins,
+       (SELECT count(*) FROM removed_identity_links)::bigint   AS addon_identity_links;
 
 -- name: SoftDeleteUser :execrows
 -- The deletion itself: the first writer `status` and `deleted_at` have ever had.

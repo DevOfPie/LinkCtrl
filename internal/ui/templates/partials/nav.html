@@ -325,6 +325,31 @@
     {{if .Identity.Can "destinations.review"}}
     <a href="/disputes" class="block px-3 py-2 text-sm {{if eq .Nav "disputes"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Blocked destinations</a>
     {{end}}
+    {{/* The Add-on manager (M68). The menu again, and this is the entry the
+         milestone's *nav integration beyond the manager's own entry* exclusion
+         reserved: what the manager gets is one item here, and how an add-on's
+         own pages surface in the nav is deliberately left undecided.
+
+         Same argument as every entry above it (D35), in its strongest form: an
+         add-on is installed once and then not thought about until a redirect
+         gets slow or an operator wants to know what is running. This page is
+         where both questions are answered, and neither is asked while work is
+         being done.
+
+         **Two conditions, and the second is not decoration.** `addons.manage` is
+         held by no role at all — it is the instance principal's and is delegable
+         to no API key — so for every account but the one that administers the box
+         this entry is absent, which is the same shape the review queue has. But
+         the permission is conferred on that principal whether or not this
+         instance has an add-on host, and the manager's routes exist only where
+         `LINKCTRL_ADDONS_DIR` is set. `.AddonManager` is that second fact,
+         carried on the shell from the same field the router registers from, so
+         this entry cannot be drawn on an instance where following it would 404.
+         Gated on the permission alone it was, on every instance that runs no
+         add-ons. */}}
+    {{if and .AddonManager (.Identity.Can "addons.manage")}}
+    <a href="/instance/addons" class="block px-3 py-2 text-sm {{if eq .Nav "addons"}}font-medium text-accent-ink{{else}}text-ink hover:bg-sunken{{end}}">Add-ons</a>
+    {{end}}
     {{/* Webhooks (M42). The menu again, for the reason every entry above gives
          (D35): a webhook is registered once and then not thought about, right up
          until it stops working — and the delivery log the page carries is what

@@ -192,3 +192,24 @@ func (m *MembershipAuthority) Permission() string {
 	}
 	return m.permission
 }
+
+// SetPermissionsForTest fills an identity's permission set from outside this
+// package.
+//
+// The one door in the wall, and it is deliberately unpleasant to walk through:
+// the name says what it is for, and the only caller is
+// internal/auth/authtest.Identity, which demands a *testing.T. Every other way
+// into this field goes through a loader that read a real membership or instance
+// grant — see identityFor and addInstanceGrants — and that is what stops a call
+// site from deciding it holds a permission.
+//
+// Here rather than in a _test.go file because the callers are in other packages:
+// a test-only file is compiled only for this package's own tests, and a handler
+// test cannot see it.
+func SetPermissionsForTest(i *Identity, permissions ...string) {
+	set := make(map[string]struct{}, len(permissions))
+	for _, p := range permissions {
+		set[p] = struct{}{}
+	}
+	i.permissions = set
+}

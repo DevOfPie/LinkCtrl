@@ -45,14 +45,24 @@
 //
 // # What a soft delete does not do
 //
-// It fires no foreign key. Eight tables declare `ON DELETE CASCADE` against
+// It fires no foreign key. Nine tables declare `ON DELETE CASCADE` against
 // `users` and every one of those clauses triggers on `DELETE`, so under a kept
 // row the cascade never runs. `DeleteAccountDependents` is what stands in for
-// it, and query/accounts.sql enumerates them and says why four are there beyond
+// it, and query/accounts.sql enumerates them and says why five are there beyond
 // the four M52 names. Six of them were M52's; `mfa_recovery_codes` and
-// `mfa_pending_logins` joined at M53, which is the milestone that created them —
-// a recovery code admits somebody to an account with no password, so leaving one
-// behind a deleted account is the `password_resets` defect in a new table.
+// `mfa_pending_logins` joined at M53 and `addon_identity_links` at M65, each in
+// the milestone that created it — a recovery code, a pending login and a link to
+// an external identity all admit somebody to an account with no password, so
+// leaving one behind a deleted account is the `password_resets` defect in a new
+// table.
+//
+// **This number is counted, not remembered.** It said eight while the answer was
+// nine, in the milestone that made it nine, which is the second time a
+// hand-maintained count beside this statement went wrong.
+// `TestEveryCascadeToUsersIsInTheDeletionStatement` and
+// `TestTheCountsAroundTheDeletionStatementAreTheRealOnes` in internal/store read
+// the migrations and hold both this sentence and the statement's own header to
+// what they find.
 //
 // Four other columns reference `users` with `ON DELETE SET NULL` —
 // `links.created_by`, `invitations.invited_by`, `invitations.redeemed_by` and

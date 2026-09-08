@@ -44,6 +44,11 @@
        larger file, and what is bought is that a save never shows the reader a
        position they did not stand at. */}}
   <script src="{{asset "js/qr-size.js"}}"></script>
+  {{/* The Add-on manager's select-mode counter (M68). Deferred, unlike its
+       neighbour above and like htmx: nothing it does can affect the first paint
+       — it relabels a button after a checkbox changes — so there is no reason
+       for it to block one. The file itself bounds what it is allowed to be. */}}
+  <script src="{{asset "js/addon-select.js"}}" defer></script>
 </head>
 <body class="min-h-full bg-surface text-ink antialiased">
 {{if .Identity}}

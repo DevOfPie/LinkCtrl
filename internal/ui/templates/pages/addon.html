@@ -1,0 +1,31 @@
+{{define "content"}}
+{{/* An installed add-on's own page (M64).
+
+     Everything an add-on draws arrives here, in `.Body`, as **text**. It is
+     rendered as a value like every other value on every other page, so
+     html/template chooses the escaping and a module that answered with a script
+     tag, an inline handler or an external reference puts the characters of one on
+     the screen. That is the whole of the Content-Security-Policy answer: the csp
+     constant does not move because there is nothing here for it to permit.
+
+     No add-on stylesheet, and no add-on markup. The layout's theme tokens are
+     what this page is drawn with — the same `text-ink`, `text-muted` and
+     `border-line` every other page uses — which is why M24.5's template scan
+     covers this file completely and why there is no served add-on CSS for it to
+     be unable to see (D264).
+
+     `whitespace-pre-wrap` because the body is text: a module's line breaks are
+     the only formatting it has, and collapsing them would leave it with none. */}}
+<section class="space-y-4">
+  <header class="space-y-1">
+    <h1 class="text-2xl font-semibold tracking-tight text-ink">{{.Addon}}</h1>
+    <p class="text-sm text-muted">
+      An add-on installed on this instance. Its pages are its own; this heading and
+      the frame around it are LinkCtrl&rsquo;s.
+    </p>
+  </header>
+  <div class="overflow-x-auto rounded-lg border border-line bg-raised p-4">
+    <div class="whitespace-pre-wrap break-words font-mono text-sm text-ink">{{.Body}}</div>
+  </div>
+</section>
+{{end}}

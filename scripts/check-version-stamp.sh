@@ -31,7 +31,11 @@ for bin in "$@"; do
   out=$("$bin" version)
   printf '%s\n' "$out"
 
-  if printf '%s' "$out" | grep -q 'commit unknown'; then
+  # A herestring, not a pipe: under `pipefail` a writer killed by SIGPIPE when
+  # grep matches early makes the pipeline 141, which reads here as *no match* —
+  # so a binary with no stamp would pass this check. F304, and it is the one
+  # site in that row's class that fails quiet rather than loud.
+  if grep -q 'commit unknown' <<<"$out"; then
     echo "$bin was built without its version stamp" >&2
     status=1
   fi

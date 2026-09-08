@@ -9,13 +9,9 @@
     exists.
   </p>
   <p class="mt-2 text-xs text-subtle">
-    The request carries this server&rsquo;s address and the version it is
-    running, in the <code>User-Agent</code>. Nothing else &mdash; no instance
-    identifier, no deployment size, no link counts, no configuration, and
-    nothing about the people using it. The reply is read for a version number
-    and discarded. Whichever you choose, this is asked once; setting
-    <code>LINKCTRL_UPDATE_CHECK=false</code> on the deployment turns the check
-    off afterwards and cannot turn it on.
+    {{template "update_check_disclosure" .}} Whichever you choose, this is asked
+    once; setting <code>LINKCTRL_UPDATE_CHECK=false</code> on the deployment
+    turns the check off afterwards and cannot turn it on.
   </p>
   <form method="post" action="/instance/update-check" class="mt-3 flex flex-wrap gap-2">
     <button type="submit" name="answer" value="yes"

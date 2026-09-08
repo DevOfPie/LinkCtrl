@@ -82,7 +82,19 @@ type Deps struct {
 	// and which leaves whoever the principal already is holding what they hold,
 	// because the grants are rows rather than a running service.
 	Instance *instance.Service
-	Web      *Web
+	// AddonAdmin is the whole add-on administrative surface: install and remove
+	// (M67), and the manager's reads, settings write and purge (M68). Nil leaves
+	// every one of those endpoints unregistered, which is the state of every
+	// instance that configured no add-ons directory — there is no host to install
+	// into, and mounting a route that answers 503 would be the unconditional cost
+	// m60.md promised nobody pays.
+	//
+	// An interface rather than the host, and it must be handed over through the
+	// helper in cmd/linkctrl that returns a nil *interface* for a nil host: a typed
+	// nil in this field is not nil, and the failure it produces is a route mounted
+	// on an instance with no add-ons rather than a panic anybody would notice.
+	AddonAdmin AddonManager
+	Web        *Web
 	// Hosts is the verified custom-hostname set (M40). Nil leaves custom domains
 	// unrouted entirely — every Host header is answered exactly as it was before
 	// this milestone — which is what the CLI and the tests that predate it get.
@@ -239,6 +251,22 @@ func registerAppRoutes(d Deps, app *appMux) {
 			acct := &AccountAPI{Accounts: d.Accounts, Config: d.Config}
 			app.Handle("DELETE "+APIPrefix+"/account",
 				guard(RequireAuth(http.HandlerFunc(acct.Delete))))
+		}
+
+		// The connected sign-in providers (M70, F315). On the auth service for the
+		// switcher's reason below: what can sign somebody in is identity.
+		//
+		// The account's own pair is under RequireAuth alone, like the deletion
+		// above — somebody asking what can sign them in may belong to no
+		// organization. The operator's severance is registered beside it rather
+		// than with the add-on routes because it is the same handler and the same
+		// service; the permission it costs is checked in the handler.
+		ident := &IdentityAPI{Auth: d.Auth}
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/account/identities":         ident.List,
+			"DELETE " + APIPrefix + "/account/identities/{id}": ident.Delete,
+		} {
+			app.Handle(pattern, RequireAuth(h))
 		}
 
 		// The switcher. On the auth service because which workspace a request
@@ -495,6 +523,54 @@ func registerAppRoutes(d Deps, app *appMux) {
 			RequireAuth(http.HandlerFunc(a.ListInstance)))
 	}
 
+	// The add-on lifecycle (M67). Registered apart from the maps above because the
+	// install carries the upload limiter for M50.5's reason — a body set by its
+	// content rather than by its shape, and `API_RATE_PER_MIN` is a number nobody
+	// chose for one. Both limits apply; the narrower one is `UPLOAD_RATE_PER_MIN`.
+	//
+	// The removal is not limited beyond the API's own bound: it accepts no body,
+	// reads nothing, and throttling it would only make it slower to take out a
+	// module somebody has decided they want gone.
+	if d.AddonAdmin != nil {
+		ad := &AddonAPI{Addons: d.AddonAdmin}
+		app.Handle("POST "+APIPrefix+"/addons",
+			RateLimit(d.Limits.Upload, "upload", d.Metrics, nil)(
+				RequireAuth(http.HandlerFunc(ad.Install))))
+		app.Handle("DELETE "+APIPrefix+"/addons/{name}",
+			RequireAuth(http.HandlerFunc(ad.Remove)))
+		// Severing one account's link to this add-on (M70, F315). **Here rather
+		// than beside the account's own pair above**, because it must not exist on
+		// an instance with no add-on host — which TestNoAddonRouteWithoutAHost
+		// caught the moment it was registered in the wrong block.
+		app.Handle("DELETE "+APIPrefix+"/addons/{name}/identities/{id}",
+			RequireAuth(http.HandlerFunc((&IdentityAPI{Auth: d.Auth}).DeleteForAddon)))
+		// M68's manager reads, and the two writes behind it. Unlimited beyond the
+		// API's own bound for the reason the removal is: they carry no body worth
+		// throttling, and the one that does — a settings form — is a handful of
+		// short strings behind a scope no API key can hold.
+		//
+		// The orphan pair is registered before `{name}`, which decides nothing at
+		// runtime — Go's mux prefers the more specific pattern whatever the order —
+		// and reads correctly, because `orphaned-data` is not a name any add-on can
+		// take. See api_addon_manager.go.
+		//
+		// Spelled as a literal rather than through [AddonOrphanPath], because
+		// TestOpenAPICoversEveryRoute reads these patterns out of this file's source
+		// and a concatenated constant is invisible to it — which is worse than one
+		// duplicated word, since what would go unchecked is whether the spec
+		// documents the endpoint at all. TestOrphanPathIsSpelledOnceInTheRouter ties
+		// the literal to the constant, so the duplication cannot drift.
+		for pattern, h := range map[string]http.HandlerFunc{
+			"GET " + APIPrefix + "/addons":                         ad.List,
+			"GET " + APIPrefix + "/addons/orphaned-data":           ad.Orphans,
+			"DELETE " + APIPrefix + "/addons/orphaned-data/{name}": ad.Purge,
+			"GET " + APIPrefix + "/addons/{name}":                  ad.Detail,
+			"PUT " + APIPrefix + "/addons/{name}/settings":         ad.SaveSettings,
+		} {
+			app.Handle(pattern, RequireAuth(h))
+		}
+	}
+
 	if d.Instance != nil {
 		in := &InstanceAPI{Instance: d.Instance}
 		for pattern, h := range map[string]http.HandlerFunc{
@@ -634,6 +710,13 @@ func registerAppRoutes(d Deps, app *appMux) {
 		if web.Accounts != nil {
 			app.Handle("POST /account/delete", guard(signedIn(web.AccountDelete)))
 		}
+		// Disconnecting a provider (M70, F315). Under `guard` with the password
+		// change and the deletion beside it, because it removes a way into the
+		// account and the same reasoning about a guessable surface applies — an id
+		// is not guessable, and the limiter costs nothing to a person who does this
+		// once.
+		app.Handle("POST /account/identities/{id}/disconnect",
+			guard(signedIn(web.IdentityDisconnect)))
 		app.Handle("POST /account/domain", signedIn(web.DomainUpdate))
 		app.Handle("POST /account/bots", signedIn(web.BotBlockingUpdate))
 
@@ -691,6 +774,120 @@ func registerAppRoutes(d Deps, app *appMux) {
 		if web.MFA != nil {
 			app.HandleFunc("GET /login/code", web.MFAChallengePage)
 			app.Handle("POST /login/code", guard(http.HandlerFunc(web.MFAChallengeSubmit)))
+		}
+
+		// An installed add-on's own pages (M64), on the application tree and
+		// nowhere else. Registered only when this instance has an add-on host, so
+		// an operator who installed none has no such route — asserted by
+		// TestNoAddonRouteWithoutAHost, and it is the reason the pattern is here
+		// rather than beside the public pages above.
+		//
+		// **Not under `signedIn`, and that is D261.** An add-on that authenticates
+		// somebody is answering a request from a person who has no session yet, so
+		// a session requirement here would make M65's hook unreachable through the
+		// surface built for it. What an add-on may learn about who *is* signed in
+		// is a grant of its own with no credential behind it (session.context).
+		//
+		// **D261 also said no limiter, and that half is overturned** (D305). It was
+		// argued about a route that could not mint, where the host's concurrency
+		// bound was the whole of what an anonymous request could spend. M65 gave
+		// the route a way to supersede an account's outstanding second-factor
+		// prompt — deleted, so the person reading the code in their authenticator
+		// has a prompt that no longer exists — and to write an `audit_logs` row per
+		// attempt, with `RecordFailedLogin` never reached because nothing failed.
+		// Nothing counted either, so `README.md`'s *per-address limits on
+		// credential endpoints* had stopped being true of this prefix.
+		//
+		// **Every add-on, and not only the ones that can mint.** A narrower
+		// rule keyed on `session.mint` was built and the owner declined it: a
+		// route's protection that depends on a grant in a manifest is a route a
+		// future grant can quietly move out of the limiter's reach, which is
+		// exactly how D261 became wrong. The cost is real and is not hidden — an
+		// add-on page carrying no credential now pays against a limiter written for
+		// credential endpoints, so an operator running a dashboard add-on behind a
+		// NAT may have to raise `LOGIN_RATE_PER_MIN`. docs/configuration.md says so
+		// where that variable is documented.
+		//
+		// **A path under the prefix that reaches no add-on pays nothing** (D309),
+		// and that is a narrowing of the route set rather than of the rule. D305
+		// charges every add-on route; a request naming an add-on this instance does
+		// not serve is not one, it is the 404 a mistyped path gets. Charged, it made
+		// an ordinary scanner a denial of sign-in: two GETs to
+		// `/addons/nosuch/wp-login.php` and `/addons/nosuch/xmlrpc.php` on an
+		// instance with `LOGIN_RATE_PER_MIN=2` answered 404, 404, and then refused
+		// `POST /login` — for that address, or with `TRUSTED_PROXIES` unset for
+		// everybody. `RateLimitWhen` asks `web.addonRouteExists` before it charges,
+		// and the handler answers its 404 through the same function, so the two
+		// cannot come to disagree about what an add-on route is. This is the
+		// 404-probe limiter's own shape — refuse on shape, then charge — with the
+		// direction reversed, because there the miss is the abuse.
+		//
+		// `guard` rather than a limiter of its own, for the reason
+		// `POST /login/code` shares it: a sweep of passwords, a sweep of six-digit
+		// codes and a sweep of assertions against one instance are three spellings
+		// of one attack, and three budgets would be three times the number an
+		// operator set. It also charges before the module runs, which is the safe
+		// direction — the alternative bounds the audit row and leaves the wasm
+		// instantiation and the pending-prompt deletion unbounded.
+		//
+		// Method-less on purpose: an add-on answers whatever it was asked, and a
+		// method filter here would be this file deciding which verbs somebody
+		// else's flow needs.
+		//
+		// **The application tree's CSRF middleware applies, and it is not
+		// conditional on a credential.** http.CrossOriginProtection refuses *every*
+		// cross-site unsafe request, whether or not a cookie was sent, so an
+		// anonymous POST from another origin to an add-on's route is a 403 the
+		// module never sees. Measured on this router: `Sec-Fetch-Site: cross-site`
+		// and `same-site` are both 403, while `same-origin`, `none` and the header
+		// absent all reach the module. That is the right default and it is not free
+		// — an identity provider posting a `response_mode=form_post` callback here
+		// is a browser navigation from the provider's origin, so it is refused,
+		// while a server-to-server webhook sends no Sec-Fetch-Site and passes.
+		// F284 carries it to M65, which builds an authentication flow on exactly
+		// this path.
+		if web.Addons != nil {
+			addonGuard := RateLimitWhen(d.Limits.Login, "login", d.Metrics,
+				web.tooManyRequests, web.addonRouteExists)
+			app.Handle(AddonPagePattern, addonGuard(http.HandlerFunc(web.AddonPage)))
+			app.Handle(AddonBarePattern, addonGuard(http.HandlerFunc(web.AddonPage)))
+		}
+
+		// The Add-on manager (M68), under `/instance/` rather than under `/addons/`
+		// — which is an installed add-on's own prefix and could not carry a detail
+		// page. web_addons.go argues the choice.
+		//
+		// Registered on the same condition the API surface is, and separately from
+		// the add-on *pages* above: an instance can have a host and no manager only
+		// if somebody wired one and not the other.
+		//
+		// **The nav entry is gated on this same field**, carried onto the shell as
+		// `AddonManager` (internal/httpx/web.go) and read beside `addons.manage` by
+		// partials/nav.html. It needs both, and the reason is that they are not the
+		// same condition: `addons.manage` is conferred on the instance principal
+		// unconditionally, so a menu item gated on the permission alone was drawn on
+		// every instance that configured no add-ons directory — where these routes
+		// do not exist and the entry led to a 404.
+		if web.AddonAdmin != nil {
+			for pattern, fn := range map[string]http.HandlerFunc{
+				"GET " + AddonManagerPath:                             web.AddonsPage,
+				"GET " + AddonManagerPath + "/{name}":                 web.AddonDetailPage,
+				"POST " + AddonManagerPath + "/" + AddonRemoveSegment: web.AddonRemove,
+				"POST " + AddonManagerPath + "/" + AddonPurgeSegment:  web.AddonPurge,
+				"POST " + AddonManagerPath + "/{name}/settings":       web.AddonSettingsSubmit,
+				// Severing one account's link to this add-on (M70, F315). Beside the
+				// settings save because it costs the same non-delegable permission and
+				// is reached from the same page.
+				"POST " + AddonManagerPath + "/{name}/identities/{id}/disconnect": web.AddonIdentityDisconnect,
+			} {
+				app.Handle(pattern, signedIn(fn))
+			}
+			// The install carries the upload limiter for the reason the API's does:
+			// a body whose cost is set by its content, sharing one bucket across
+			// every address that takes a file (D-numbered at M50.5).
+			app.Handle("POST "+AddonManagerPath,
+				RateLimit(d.Limits.Upload, "upload", d.Metrics, web.tooManyRequests)(
+					signedIn(web.AddonInstall)))
 		}
 
 		// Everything else redirects anonymous visitors to the login form,

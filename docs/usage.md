@@ -526,9 +526,10 @@ code.
 
 #### A logo on a code
 
-**The one thing in this product that accepts a file**, and it is `PUT` with a
-`multipart/form-data` body. It takes `links.update`, like every other change to
-how a code is drawn, and an API key that holds it may use it. The QR tab on a
+**One of the two things in this product that accept a file** — the other is
+installing an add-on — and it is `PUT` with a `multipart/form-data` body. It
+takes `links.update`, like every other change to how a code is drawn, and an
+API key that holds it may use it. The QR tab on a
 link's page does the same thing from a browser.
 
 Two addresses, one operation — the same relationship `qr.png` and
@@ -582,7 +583,8 @@ header bound until now, and an image over it was a `422`.)*
 
 **Uploads have their own rate limit** (`UPLOAD_RATE_PER_MIN`, thirty a minute by
 default) on top of the API's, so a `429` here can arrive while everything else
-is still answering.
+is still answering. It is one bucket for every address that accepts a file,
+which now includes installing an add-on.
 
 **A logo changes the picture in two ways, and one of them is `level`.** The
 image covers a centred square three tenths of the code's width — 9% of its area —
@@ -786,13 +788,17 @@ orgs.create
 ```
 
 `apikeys.read`, `apikeys.write`, `org.delete`, `audit.read`, `webhooks.write`,
-`automation.write`, `audit.read.instance`, `destinations.decide` and
-`instance.admin` are never grantable to a key — a key that can mint keys makes revoking a leaked one
+`automation.write`, `audit.read.instance`, `destinations.decide`,
+`instance.admin` and `addons.manage`
+are never grantable to a key — a key that can mint keys makes revoking a leaked one
 meaningless, an irreversible action should need an interactive sign-in, the audit
 log ties a network prefix to a named person, a key that could allow a blocked
 destination could then point links at it, a webhook or an automation rule keeps
-running after the credential that registered it is revoked, and a key that could
-appoint a reviewer would widen its reach by manufacturing somebody else's.
+running after the credential that registered it is revoked, a key that could
+appoint a reviewer would widen its reach by manufacturing somebody else's, and a
+key that could install an add-on would carry whatever that add-on's own manifest
+declares — including deciding who is signed in — past every scope the key was
+issued with.
 
 `destinations.review` **is** grantable, and the pair is the point: reading the
 dispute queue discloses who filed a dispute and a defanged host, escalating
@@ -1615,9 +1621,12 @@ delete itself — through the API, since every dashboard page but the ones about
 joining an organization needs one.
 
 **What goes immediately**, in a single transaction: every session, every API key,
-every membership, your notifications, any outstanding password-reset link, and
-any instance-level grant you hold. Your address becomes available for a new
-account. When the call returns there is no credential that reaches the account.
+every membership, your notifications, any outstanding password-reset link, any
+instance-level grant you hold, your second factor's recovery codes and any code
+prompt you had not answered, and every external identity you had connected. Your
+address becomes available for a new account. When the call returns there is no
+credential that reaches the account — nine tables, and the list is the whole of
+it rather than the memorable part of it.
 
 **What stays, with you taken out of it.** The audit log and the
 destination-dispute queue keep their rows — they record what happened, and one
@@ -2137,3 +2146,187 @@ Creating, editing and removing a rule are audit events. So is every firing, as
 `automation.fired` — and that record's actor is the *rule*, not a person, which is
 what makes an automated archive answerable afterwards. `linkctrl_automation_firings_total`
 counts firings by trigger and outcome.
+
+## Add-ons
+
+An add-on is a WebAssembly module this instance executes: it can observe or alter
+redirects, serve pages under its own prefix, own tables of its own, and — with the
+right grant in its manifest — decide who is signed in. What it may do is exactly
+what its manifest declares, and the host refuses everything else.
+
+**The Add-on manager is at `/instance/addons`**, in the menu under your address.
+It is behind `addons.manage`, which belongs to the account that administers the
+instance and to no API key at all, so most people will not see the entry.
+
+### The list
+
+One row per installed add-on:
+
+| Column | What it says |
+| --- | --- |
+| Name, Version | As the manifest declares them. The name is also the add-on's URL prefix and its database schema. |
+| Class | How it relates to the redirect path: `none`, `redirect-observe` (it sees redirects after the visitor has been answered) or `redirect-inline` (it runs inside the redirect, on the visitor's own latency). |
+| Failure | `required` means a future start stops if this add-on will not load; `degrade` means the instance carries on without it. This is the class the instance **applies**, which is not always the one the manifest asked for. |
+| Permissions | What the add-on's manifest *declares*, which is the whole of what it may attempt. A permission this build publishes and grants to nobody is shown **struck through**: declared and not held. So the column is never shorter than the manifest, and what is withheld is visible rather than absent. |
+| p99, Kills | What this module cost the redirect path. A dash means it has not run there. |
+
+### The performance figures, and what they are not
+
+`p99` is this module's own latency, separate from the redirect around it, and
+`Kills` is how many invocations the host stopped waiting for. They are here so
+that *which add-on is slowing my redirects* is answerable without a Prometheus.
+
+Two things to know before you act on them. They are **cumulative since this
+instance last started**, not a rate over the last hour: an add-on that was slow
+this morning still reads slow. And a module that has never run on the redirect
+path shows a dash rather than a zero, because *no observations* and *fast* are
+different facts. The detail page splits the kills into the two that have different
+owners — one at `call` is the add-on holding a redirect past its deadline, and one
+at `instantiate` is this instance failing to start the module in time, which is
+hardware rather than the publisher.
+
+### Installing one
+
+**Two ways, and they produce the same add-on.** Upload the module and the
+`addon.json` that describes it, or give this instance a URL to fetch it from. The
+host checks the module against the manifest's digest before it writes anything
+either way, and the add-on is running when the page comes back — no restart.
+
+**An add-on runs with whatever its manifest declares.** Read the permissions
+before you install one: `session.mint` means it decides who is signed in, and
+`storage.own_schema` means it owns tables in your database.
+
+#### From a URL
+
+The URL names a **bundle**: a `.tar`, a `.tar.gz` or a `.zip` holding
+`addon.json` and the module it names, and nothing else. One file, because a
+manifest and a module fetched separately could come from two different moments.
+
+Ship whichever container your release pipeline already emits. **The name plays no
+part** — this instance decides what a bundle is from its leading bytes, so a
+`.tar.gz` that is really a zip installs, and a `.tar` that is really an error page
+is refused as not a bundle. All three carry the same rule about what may be
+inside: exactly two plain files with plain names, so no directory, no symbolic
+link, no path and no repeated name. A compressed bundle is bounded a second time
+on what it may amount to once opened — the smaller of 32 MiB and fifty times what
+was fetched — and that is where the decompressor **stops**, so a bundle expanding
+by more than any module plausibly does is refused part-unpacked rather than
+unpacked and then declined. Below a mebibyte the ratio does not apply: a small
+tar is mostly padding, and its ratio says nothing about it.
+
+**Type the expected `sha256` beside the URL, and get it from somewhere else.**
+The digest is the whole of what makes this safe, and it is the digest of the
+bundle rather than of the module inside it: this instance refuses to write
+anything unless the fetched bytes hash to what you typed. A digest copied off the
+same page as the URL proves nothing — whoever can change the one can change the
+other. The manifest inside the bundle also declares the module's digest, and that
+check still runs; it says the module matches its own manifest, which whoever
+built the bundle decided.
+
+**What the fetch can reach is bounded and it is not configurable.** `https` only.
+The address is checked after the name resolves, on every address it resolves to,
+and only the public internet is dialled — loopback, link-local, private and
+carrier-grade NAT ranges are refused, so a URL cannot be used to make this server
+probe your own network. A redirect that leaves the origin you typed is not
+followed. A refusal names which of those bounds it hit rather than telling you to
+check a digest that is fine.
+
+Uploading is still the right answer for a large module or a slow link: the fetch
+is bounded at ten seconds, and on an upload the bytes travel on your own request.
+
+Two shapes cannot be installed here and the page says so: an add-on that ships
+`.sql` migration files (those files are not part of either shape — place its
+directory in `LINKCTRL_ADDONS_DIR` and restart), and any add-on at all on an
+instance whose add-ons directory is read-only.
+
+Both arrive the same way, and it is not the API's `503`. A refusal from this page
+redirects back to it and the page states the reason — *this instance cannot write
+to its add-ons directory, so nothing was changed* — so that reloading does not
+re-post the upload. `503` is what [the API](../api/openapi.yaml) answers for the
+read-only case, and the [configuration reference](configuration.md#add-ons) is
+where that is scoped.
+
+### Removing one, and what it leaves
+
+Press **Remove…** and each row's chevron becomes a checkbox. Tick as many as you
+like and press the button again; one confirmation covers all of them.
+
+That confirmation asks a second question per add-on: **also delete its data?** The
+box starts unticked, every time, because several irreversible decisions taken in
+one breath is exactly where a mis-tick lands. Leave it unticked and the add-on's
+schema stays, listed on this page as orphaned data. It also states what removing a
+`required`-class add-on costs before you do it.
+
+### Orphaned data
+
+Every `addon_*` schema with no installed add-on, with its size as it is right now
+and the add-on it belonged to. Purging one is `DROP SCHEMA … CASCADE` and there is
+no undo and no backup taken.
+
+**It drops the schema and nothing else**, which the confirmation repeats — four
+things survive it:
+
+- the `addon_<name>` database **login role** stays, so re-installing under that
+  name works as it did;
+- any **large objects** that role owns live outside every schema and survive — the
+  page tells you how many there are, and it is zero for every add-on that behaves;
+- any **external-identity links** written under that name stay, and the page tells
+  you how many. They are keyed on the add-on's *name*, so an add-on installed
+  under that name later inherits those account mappings and can sign those people
+  in;
+- any **settings you saved** for that name stay too, and the page tells you how
+  many. Same key, same inheritance — an add-on installed under the name later
+  reads them, **a stored secret included** — and this is the one nothing here
+  deletes: saving settings is refused for a name that is not installed, so once
+  the add-on is gone its values are reachable only from a `psql` prompt.
+
+The last two are the ones you are least likely to have predicted, which is why the
+page counts them instead of describing them.
+
+[operations.md](operations.md#removing-an-add-on-leaves-its-schema) has the
+statements for the cases the page deliberately does not cover.
+
+### Settings
+
+An add-on's manifest can declare settings, each with a type, and its detail page
+renders the matching input: a text box, a password field, a dropdown or a switch.
+One setting is not the manifest's. An add-on that asks for a link on the sign-in
+page gets a `sign_in_link` toggle the *host* declares on its behalf, off until
+you turn it on — no manifest may declare a setting by that name, because the
+answer is yours and not its author's.
+Saving them takes effect on the add-on's **next** invocation; one already running
+finishes with what it had.
+
+**A secret is never shown again.** The field says whether one is set, and clearing
+it is its own checkbox rather than an empty box — otherwise saving a neighbouring
+field would wipe it. That holds against the value's own record and not against the
+manifest in front of you: replacing an add-on is a removal and an install, and a
+replacement declaring the same setting as plain text still cannot get what its
+predecessor stored drawn back into this form. Type a new value, or clear it.
+**What it does not stop is the replacement module reading it.** Settings are kept
+under the add-on's *name*, so whatever you install under a name you have used
+before is configured with what you typed for the last one, secret included. Clear
+what should not carry over before you install the successor, or take the row out
+by hand — [operations.md](operations.md) has the statement.
+
+**Every other field is blank for *unset*.** A text box, a dropdown's *Not set*
+entry and a switch all mean the same thing when they carry nothing: the row is
+deleted and the add-on reads whatever its manifest declares as the default. The
+secret is the one exception, and the checkbox above is why.
+
+**A setting your deployment's environment answers is not editable here.** If
+`LINKCTRL_ADDON_<NAME>_<SETTING>` is set, that is what the add-on reads, and the
+page names the variable instead of offering a control that could not change
+anything. Unset it and restart to configure the setting from this page instead.
+
+### What it records
+
+Installing, removing, saving settings and purging data are all **instance-wide**
+audit events, readable at `/api/v1/instance/audit`: `addon.installed`,
+`addon.removed`, `addon.settings_saved` and `addon.data_purged`. The settings
+record names *which* settings the save wrote and never their values — the form
+carries every editable field, so what it lists is what that save touched rather
+than what differed. The purge record
+carries how many bytes went. Nothing can measure the schema afterwards, so the
+audit log is where that number keeps: the API's own response and the server log
+carry it too, at the moment of the purge and no longer.
