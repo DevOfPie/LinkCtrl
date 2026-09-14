@@ -8,7 +8,7 @@ this file draws from, and nothing here restates it.
 **Written on 2026-08-18, before any milestone exists.** Everything below was
 answered by the owner in one planning conversation on that date. It is recorded
 here rather than as LNK decisions because no milestone uses it
-yet — the answers get `D` numbers when the milestones that rest on them land,
+yet — the answers become LNK decisions when the milestones that rest on them land,
 carrying the date they were *given* as well as the date they were used, which is
 the convention [workflow.md](workflow.md#a-decision-is-coming-and-the-loop-has-not-reached-it-yet) states and this
 file follows.
@@ -271,13 +271,12 @@ decision left in it, named so the milestone that meets it does not rediscover it
 
 **Genuinely open at planning — each now routed, none silently.** The four
 questions this section held when it was written on 2026-08-18 were taken up by
-the plan the same day (LNK-D-0211):
+the plan the same day (LNK-D-0809):
 
 - **What the deadline is** — deliberately *not* answered: no data exists until
   something runs, so the value is measured into at
-  LNK-M-0086, and the question waits in
-  `upcoming-decisions.md` with the shape of its answer
-  fixed in advance.
+  LNK-M-0086, where the question was put to the owner with the shape of its
+  answer fixed in advance (LNK-D-0902).
 - **What the host functions actually are** — LNK-M-0080's
   central artifact, named there as the hardest of the phase. **Answered**: ten
   functions in `internal/addon/abi`, six capability groups, one wasm module named
@@ -303,7 +302,7 @@ the plan the same day (LNK-D-0211):
 ## Two more answers, given at the plan's review
 
 **Owner-answered 2026-08-18**, when the drafted plan was put to them — same
-convention as the table above: recorded here, `D` numbers when
+convention as the table above: recorded here, LNK decisions when
 LNK-M-0078 lands, options and costs stated when asked.
 
 | Question | Answer |
@@ -367,7 +366,7 @@ select / toggle inputs + Save) · Declared permissions ·
 Data (schema, size) + [Remove add-on…]
 ```
 
-`D` numbers when M68 lands, like every answer above.
+LNK decisions when LNK-M-0089 lands, like every answer above.
 
 ## What is not in Phase 4
 
@@ -384,8 +383,8 @@ reasons live and stay:
 - Filing a link into a folder by typing its path — the one thing round two called
   irritating with no defect behind it.
 - Switching organizations anywhere except the workspace dropdown.
-- Moving links between workspaces, and the *All Workspaces* scope in
-  LNK-Q-0002 that shares its hard part.
+- Moving links between workspaces, and the *All Workspaces* scope that shares
+  its hard part — both candidates for the next phase (LNK-D-0951).
 - Grouping API-key scopes by the object they act on.
 
 ### Provisioning from an add-on's assertion — deferred by M65, on purpose

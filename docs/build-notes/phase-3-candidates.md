@@ -83,7 +83,7 @@ in the way the rest are.
 | Notification severity, grouping and filtering | Plan.md *Not in Phase 2* — needs a schema change M22's model has no column for |
 | Trash/restore UI | Plan.md *Not in Phase 2* — Phase 1 decided against it |
 | Bulk operations | Plan.md *Not in Phase 2*, a "2+" row |
-| An **All Workspaces** dashboard scope | LNK-Q-0002 — an open question, not a parked row, and it stays there because Mustur holds questions. Nothing takes an all-workspaces scope today: no handler, no query, no UI, and `actor.WorkspaceID` is a single value threaded through the service layer rather than a filter that could be widened. It is the surviving half of a queue row split on 2026-08-01 |
+| An **All Workspaces** dashboard scope | LNK-D-0951 — owner-answered 2026-09-13 on LNK-Q-0004, which re-asked LNK-Q-0002: a candidate for the next phase, planned beside moving links between workspaces. Nothing takes an all-workspaces scope today: no handler, no query, no UI, and `actor.WorkspaceID` is a single value threaded through the service layer rather than a filter that could be widened. It is the surviving half of a queue row split on 2026-08-01 |
 
 **Boundary note:** a redesign large enough to answer the three complaints will
 touch templates that every other area's UI also touches. If B runs in parallel
@@ -250,7 +250,7 @@ that changed shape and says nothing is a row somebody re-derives from scratch.
 | The workspace selector should always render | **Half shipped** | M46 added the label, which the row itself identified as the real gap — the current workspace and organization now appear in the shell unconditionally. The control still renders only above one membership, and D117 settled *why*: a switcher offers the places you can go. What is left of this row is a preference, not a gap |
 | Mobile navigation rework | **Stays a candidate**, narrowed | M46 made *no horizontal scroll at 360px* a scanned property of the shell, and LNK-F-0184 closed the one page that broke it. The header hiding the signed-in address below `sm` is untouched and is what the row is now about |
 | Notification severity, grouping, filtering | **Stays a candidate** | Unchanged — still needs the column M22's model has no room for |
-| Trash/restore UI · Bulk operations · An **All Workspaces** scope | **Stay candidates** | Unchanged. The all-workspaces question is still a question, LNK-Q-0002 |
+| Trash/restore UI · Bulk operations · An **All Workspaces** scope | **Stay candidates** | Unchanged. The all-workspaces question was answered on 2026-09-13: a candidate for the next phase (LNK-D-0951) |
 
 ### C — Analytics and reporting *(area not taken)*
 
@@ -334,7 +334,7 @@ LNK-M-0056 and LNK-M-0058, plus seven defects
 (F160–F166) that are fixed at LNK-M-0075 rather than costing a
 redesign slot. The reasoning, including why *irritating* turned out to mean
 *defective* in four of six areas, is
-LNK-D-0114.
+LNK-D-0671.
 
 Three asks the walkthrough produced are **deferred to Phase 4** rather than
 dropped — folders path-entry, organization switching, and API-key scope grouping.

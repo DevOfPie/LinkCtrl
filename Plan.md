@@ -589,7 +589,10 @@ section's record of what it deferred are archived in `docs/build-notes/phase-det
 ## Phase 2 build plan
 
 The 33-milestone table (M21–M45) and its ordering are the LNK milestones
-LNK-M-0016 to LNK-M-0052, each carrying its `Plan.md order`.
+LNK-M-0016 to LNK-M-0052, each carrying its `Phase` and `Phase order`. Four
+identifiers in that range carry neither: LNK-M-0021, LNK-M-0031, LNK-M-0035 and
+LNK-M-0050 are stubs for M24.6, M30.5, M32.6 and M44.5, numbers LinkCtrl cited
+and never defined.
 
 ### Phase 2 decisions
 
@@ -614,7 +617,7 @@ and [phase-4-candidates.md](docs/build-notes/phase-4-candidates.md).
 ## Phase 3 build plan
 
 The 23-milestone table (M46–M58) and its ordering are the LNK milestones
-LNK-M-0053 to LNK-M-0075, each carrying its `Plan.md order`.
+LNK-M-0053 to LNK-M-0075, each carrying its `Phase` and `Phase order`.
 
 ### Phase 3 decisions
 
@@ -662,11 +665,11 @@ LNK-M-0093, when building the OIDC add-on
 found the flow it proves is reachable only by being handed a URL. The phase is at
 eighteen, which is the cap: **the next insertion is a conversation about the cap
 itself**, and M69's host-side half has not landed. See
-LNK-D-0389. So the sentence above has been honoured rather than
+LNK-D-0932. So the sentence above has been honoured rather than
 overtaken: what it promised was a decision, and the decision is
-LNK-D-0366.
+LNK-D-0918.
 Recorded in
-LNK-D-0333
+LNK-D-0907
 rather than left as a sentence describing a reserve that no longer exists.
 
 The phase's shape, its owner-set answers and their dates are
@@ -689,11 +692,11 @@ The eighteen milestones, M59–M70, are the LNK milestones LNK-M-0078 to LNK-M-0
 ### Phase 4 decisions
 
 The planning conversation's answers — all owner-set 2026-08-18 — live in
-[phase-4-candidates.md](docs/build-notes/phase-4-candidates.md) and receive `D`
-numbers as the milestones that rest on them land, per the convention
+[phase-4-candidates.md](docs/build-notes/phase-4-candidates.md) and become LNK
+decisions as the milestones that rest on them land, per the convention
 [workflow.md](docs/build-notes/workflow.md#a-decision-is-coming-and-the-loop-has-not-reached-it-yet) states.
 The plan itself is
-LNK-D-0211.
+LNK-D-0809.
 
 ### Not in Phase 4
 

@@ -1406,7 +1406,7 @@ one that finds no concurrency slot is skipped rather than queued.
 
 
 **The middle column is the milestone**, and it is the one to read against
-LNK-D-0333's
+LNK-D-0907's
 baseline rather than against either neighbour:
 
 | | M66, 2026-08-23 | M66.5, 2026-08-24 |

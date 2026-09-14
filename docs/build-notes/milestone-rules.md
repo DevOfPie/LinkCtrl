@@ -8,7 +8,7 @@ them (LNK-D-0952, answering LNK-Q-0003).
 
 ## What every milestone inherits
 
-Not repeated in the milestone files. **These are Phase 2's**, and they stayed
+Not repeated in the milestones' work units. **These are Phase 2's**, and they stayed
 here rather than moving with its status table because most are product
 invariants that outlast the phase that wrote them — never permanent redirects,
 the privacy stance, `ui` stays stdlib-only, sabotage a test that passes first
