@@ -79,8 +79,8 @@ instruction, the same way `/work phase` and `/work linkctrl phase` are.
 
 **It bounds the loop; it does not choose the work.** The phase loop resumes and
 iterates exactly as it always does — [step 0](phase-loop.md#0-resume) reads the
-note, [step 1](phase-loop.md#1-validate) takes the next un-`done` row in the
-status table's order. One stop condition is added: the run ends when the named
+note, [step 1](phase-loop.md#1-validate) takes the next un-`done` row by
+`Phase order`. One stop condition is added: the run ends when the named
 milestone lands.
 
 That is a ceiling and never a floor. A milestone target can only stop a run
@@ -98,9 +98,9 @@ Resolved against the status table **before** the loop is entered:
 
 | The named row | Then |
 | --- | --- |
-| Un-`done`, this phase | Route. The bound is written to the note's `Stop:` line, which is what carries it across a resume |
+| Un-`done`, its `Phase` the live phase | Route. The bound is written to the note's `Stop:` line, which is what carries it across a resume |
 | Already `done` | Enter nothing, and report that. The run being asked for has already happened; re-running it is [reopening](workflow.md#an-issue-is-found--any-time-any-source), which is scheduling and therefore the owner's |
-| A row in another phase | **Prompt.** *Never cross a phase boundary* is one of [phase-loop.md](phase-loop.md#the-loop)'s five overriding rules, and this target asks for exactly that |
+| A row whose `Phase` is another phase | **Prompt.** *Never cross a phase boundary* is one of [phase-loop.md](phase-loop.md#the-loop)'s five overriding rules, and this target asks for exactly that |
 | Absent from the table | An [unknown target](#an-unknown-target), handled unchanged |
 
 Milestone targets take `phase` and nothing else. The workflow loop runs over

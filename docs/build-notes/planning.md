@@ -170,8 +170,8 @@ Five artifacts. None optional — each keeps a different document true.
 
 | # | Artifact | What it must say |
 | --- | --- | --- |
-| 1 | An LNK work unit, from the template (`mustur add work-unit --project LNK`) | Falsifiable definitions of done. Deliberate exclusions stated, each with its reason. Enforcement named as a mechanism — a test that fails, not review vigilance. |
-| 2 | An LNK milestone, in its place in the order | Dependencies, with soft edges marked as ordering preferences. Discharges: the promise it closes, or "owner-added scope" with the date — never an invented one. The milestone-count sentence stays true. |
+| 1 | An LNK work unit, from the template — **the milestone's definition of done** (`mustur add work-unit --project LNK --ref milestone=<id>`, once row 2's record exists) | Falsifiable definitions of done. Deliberate exclusions stated, each with its reason. Enforcement named as a mechanism — a test that fails, not review vigilance. |
+| 2 | An LNK milestone, in its place in the order: `mustur add milestone --project LNK --title … --data "Phase=N" --data "Phase order=N" --data "Status=…"`, then `mustur amend <milestone> --ref work-unit=<id>` so the record cites row 1 | Dependencies, with soft edges marked as ordering preferences. Discharges: the promise it closes, or "owner-added scope" with the date — never an invented one. The milestone-count sentence stays true. |
 | 3 | Its `Status` on that milestone | Plus an inherited-rules row in [milestone-rules.md](milestone-rules.md) **only** if the milestone constrains all later work (M24.5's template scan qualifies; most milestones do not). |
 | 4 | An LNK decision | The why, dated. Placement reasoning, design constraints that forced choices, what deliberately stays out. |
 | 5 | The restraint list | Do **not** touch: a decisions table headed "taken before the plan was finalised"; README's *Not built yet* unless the absence is a production surprise; any committed decision-log entry — a later entry corrects, never an edit. |

@@ -50,7 +50,8 @@ report. That is the good outcome, not an empty result.
 ## 2. Write
 
 Raise each with `mustur ask --project LNK`, one question per record, its answers
-as `--option`. Every one carries:
+as `--option`, and `--needed` when the loop cannot proceed without the answer.
+In a Mustur-started session add `--in <session>`. Every one carries:
 
 - **The milestone** that will need it, and roughly when the loop gets there.
 - **The question**, in one sentence, answerable without reading the milestone
@@ -76,13 +77,17 @@ step 2 required all four, so **the prompt is that content and nothing newly
 authored**. A question phrased differently in the conversation than in Mustur
 is two questions.
 
+In a Mustur-started session the raise with `--in` **is** the prompt: put nothing
+on the screen, because a prompt there swallows the answer Mustur types back.
+Outside one, put it in a prompt and run `mustur surfaced <ID>`.
+
 Ask only what this run wrote. Questions already open were asked when they
 were raised; re-asking them every run is how a read-ahead becomes noise.
 
 | The owner | Then |
 | --- | --- |
-| Answers | The answer is recorded on the question (`mustur answer`) and filed as an LNK decision **now** (`mustur add decision --project LNK`, citing the question), carrying the date it was given. A question holds no decision, so an answer left only on it is an answer that will be re-taken |
-| Says *you decide* | That is an answer: the entry's stated **default** is what happens. Record it as the owner's, with the note that it was taken as the default rather than chosen |
+| Answers | The owner answers in Mustur, and this session never records the answer — `mustur answer` refuses the actor that raised the question. What it files is the LNK decision, **now** (`mustur add decision --project LNK`, citing the question), carrying the date the answer was given. A question holds no decision, so an answer left only on it is an answer that will be re-taken |
+| Says *you decide* | That is an answer: the entry's stated **default** is what happens. The decision filed records it as the owner's, with the note that it was taken as the default rather than chosen |
 | Does not answer | The question stays open, unanswered and untouched. Nothing is inferred from silence, and the report names it |
 
 **Never answer one yourself.** Reading ahead does not relax *ask, never assume*;

@@ -27,5 +27,10 @@ milestone's definition of done, decisions, findings and questions are LNK
 records. Before any work, call `mustur_route` (server `mustur`) with repository
 `DevOfPie/LinkCtrl`; call it with `id` for one record in full, and read only the
 milestone being built. Write with `~/.local/bin/mustur`: `add decision|finding
---project LNK`, `ask --project LNK`, `amend` for a milestone's `Status`. No
-`.mcp.json` is committed — the server and its token are per machine.
+--project LNK`, `ask --project LNK`, `amend <milestone> --data Status=<value>`
+for a milestone's status. No `.mcp.json` is committed — the server and its token
+are per machine.
+
+If the tool is not there, say so and carry on; start it with `make serve` in the
+Mustur checkout. If it refuses with 403, that is a missing token, not a stopped
+server — `mustur account token --for "…"` issues one.

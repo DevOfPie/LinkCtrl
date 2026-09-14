@@ -122,9 +122,11 @@ one, and **spawn nothing while it stands** if there is not.
 
 ## 1. Validate
 
-**Next milestone** = the first LNK milestone of the live phase, in its
-`Plan.md order`, whose `Status` is not `done`. That ordered set is what this
-contract calls the **status table**.
+**Next milestone** = the first LNK milestone whose `Phase` is the live phase,
+by its `Phase order`, whose `Status` is not `done`. That ordered set is what
+this contract calls the **status table**. Every milestone LinkCtrl defined carries
+both fields, and a stub for a number cited and never defined carries neither;
+`mustur get LNK-M-0052` shows the shape.
 
 **Blocked, and another row is independent → take that one instead of stopping.**
 Blocked means a check below raises a prompt, or the work itself cannot proceed.
@@ -211,7 +213,8 @@ Plan drift is allowed here. Silent plan drift is not.
 
 Worker.
 
-- `Status` → `in progress` on the LNK milestone (`mustur amend`).
+- `Status` → `in progress` on the LNK milestone
+  (`mustur amend <milestone> --data "Status=in progress"`).
 - **In spec only.** Anything else → one LNK finding, marked per
   [Marking what gets appended](#marking-what-gets-appended), then carry on.
   Never fix out of spec, never bundle a second milestone.
@@ -302,7 +305,7 @@ contradicts on what it *asserts* is still a prompt, and the milestone waits.
 
 **Orchestrator — 3.4 to 3.9, on acceptance:**
 
-4. `Status` → `done` on the LNK milestone (`mustur amend`)
+4. `Status` → `done` on the LNK milestone (`mustur amend <milestone> --data Status=done`)
 5. `make check-links`
 6. **Commit.** One milestone maximum. Message is the worker's proposed prose,
    edited as needed — *why*, not what. Name any deferred row closed under step
