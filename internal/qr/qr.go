@@ -16,7 +16,7 @@
 // TestTheSVGAndThePNGAreTheSamePicture holds them to.
 //
 // **The encoder is github.com/boombuler/barcode, MIT, with no module
-// dependencies of its own** — see decisions.md, D72, for what it was weighed
+// dependencies of its own** — see LNK-D-0072, for what it was weighed
 // against. This package uses it for one thing: turning a string into a matrix of
 // dark and light modules. Everything a reader can see — the quiet zone, the
 // colours, the size — is drawn here, because `qr_codes.style` has to drive it
@@ -109,7 +109,7 @@ const (
 	// renders the corpus at this quiet zone across the whole version range and
 	// decodes it through two pinned decoders at five simulated distances, the
 	// same instrument M50.6's logo fraction rests on. The result is in
-	// decisions.md; a change to this number is a change that has to be
+	// Mustur; a change to this number is a change that has to be
 	// re-measured, not re-reasoned.
 	MinMarginModules = 3
 
@@ -118,7 +118,7 @@ const (
 	// inverted onto a dark page is refused by a large share of scanners, and a
 	// transparent one becomes inverted the moment somebody views the dashboard
 	// in dark mode. So the code carries its own background and does not follow
-	// the theme; the frame around it does. See decisions.md, D74.
+	// the theme; the frame around it does. See LNK-D-0074.
 	DefaultForeground = "#000000"
 	DefaultBackground = "#ffffff"
 )

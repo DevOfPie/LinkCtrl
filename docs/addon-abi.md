@@ -39,7 +39,7 @@ on a diff — so a hand-edited SDK does not survive CI.
 The ABI has a version of its own, and it is not the product's. It follows
 **semantic versioning with deprecation windows** — owner-set 2026-08-18, against
 a recommendation of path versioning like `/api/v1`; the reasoning is in
-[build-notes/decisions.md](build-notes/decisions.md).
+Mustur's LNK decisions.
 
 An add-on's manifest declares one integer, `abi_version`. That integer is the
 ABI's **generation**: the component a breaking change moves.
@@ -268,7 +268,7 @@ It has been used exactly once, and this subsection exists because that use was m
 before the rule was written down. `config_get` cost nothing when the ABI was first
 written and costs `config.read` from the release that publishes it — the same
 release, so no host ever offered the free form. The reasoning is in
-[build-notes/decisions.md](build-notes/decisions.md).
+Mustur's LNK decisions.
 
 **Unlike the signature carve-out, this one announces nothing** — and the difference
 is worth stating, because the two conditions look alike. A refused function's
@@ -458,7 +458,7 @@ holding one is the operator's act of installing a module whose manifest asks for
 it, rather than anything a role or a credential confers. The comparison with this
 product's own permission model, and why the two are parallel mechanisms rather
 than one, is in
-[build-notes/decisions.md](build-notes/decisions.md).
+Mustur's LNK decisions.
 
 ## What a storage statement may and may not do
 
@@ -970,8 +970,7 @@ Nothing is exempted from that refusal — not a trusted origin your manifest nam
 not one declared callback path. Both were considered and declined: the first is a
 trust decision an add-on makes about itself that neither the host nor an operator
 can verify, and the second is a CSRF carve-out on a route anything holding
-`routes.own_prefix` can serve. The reasoning is D291 in
-[build-notes/decisions.md](build-notes/decisions.md).
+`routes.own_prefix` can serve. The reasoning is LNK-D-0291.
 
 ## What is not promised
 

@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
 //
 // Since M47.5 the strip carries badges, and the spec asserts the half of that
 // no template scan can: the glyphs render at the measured size — 12px, the
-// three-engine answer recorded in decisions.md — and every badged tab draws
+// three-engine answer recorded in Mustur — and every badged tab draws
 // its badge, because a chip that failed to render would put the strip back in
 // the bare intermediate state M47 shipped and nothing else red.
 //

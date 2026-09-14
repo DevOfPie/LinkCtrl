@@ -39,7 +39,7 @@ import (
 // been at. A QR code is a property of a link, so whoever may edit the link may
 // edit it. An automation rule is a property of nothing: it runs unattended, on a
 // clock, and can archive links and make this server connect to an address the
-// workspace chose. See decisions.md for which limb of D18 the write half
+// workspace chose. See Mustur for which limb of D18 the write half
 // matched.
 const (
 	PermAutomationRead  = "automation.read"

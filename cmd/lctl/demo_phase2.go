@@ -52,7 +52,7 @@ import (
 // the whole of the rule: a statement here either goes through the service layer
 // or carries a comment saying why it cannot. The count is deliberately not
 // written down. It read *four* here and *three* at the statements themselves
-// until M58, which is [F69](../../docs/build-notes/deferred-findings.md)'s
+// until M58, which is LNK-F-0069's
 // lesson exactly — a number beside a rule is a fact nothing keeps true, and
 // these two had already drifted apart from each other. `demoActor` in demo.go
 // takes the same step around

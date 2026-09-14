@@ -128,21 +128,17 @@ fi
 #
 # Which anchors are row tables cannot be inferred from the anchor. It is a
 # per-file list, and it is this:
-row_tables='docs/build-notes/deferred-findings.md|open|F
-docs/build-notes/deferred-findings.md|closed|F
-docs/build-notes/workflow-changes.md|proposed|W
+row_tables='docs/build-notes/workflow-changes.md|proposed|W
 docs/build-notes/workflow-changes.md|made|W'
 #
-# The row a link is *for* comes from its link text: `[F248](…#open)` is a claim
-# about F248. A link whose text names no row — `[deferred-findings.md](…#open)`,
-# `[the table](…#closed)` — is not checked, and that bound is deliberate: the
+# deferred-findings.md's Open and Closed tables were on this list until W48 moved
+# the findings to Mustur, where a finding's state is a field and not a table.
+#
+# The row a link is *for* comes from its link text: `[W48](…#made)` is a claim
+# about W48. A link whose text names no row — `[workflow-changes.md](…#made)`,
+# `[the table](…#proposed)` — is not checked, and that bound is deliberate: the
 # alternative is parsing the sentence around it, which is where a false positive
 # on a gate resolving several thousand links would come from.
-#
-# decisions.md is exempt as a *source*. It is append-only by contract — never
-# edit an entry; a later entry corrects an earlier one — so each of its 22 such
-# links was true on the day it was written and correcting one would be editing
-# history. Nothing else is exempt.
 memfails=0
 memchecked=0
 
@@ -177,7 +173,7 @@ rows_under() { # rows_under FILE SLUG
   ' "$1"
 }
 
-# Four sections, read once each rather than once per link.
+# Two sections, read once each rather than once per link.
 rowdir=$(mktemp -d)
 trap 'rm -rf "$rowdir"' EXIT
 while IFS= read -r spec; do
@@ -196,8 +192,6 @@ row_present() { # row_present FILE ANCHOR KEY
 }
 
 while IFS= read -r file; do
-  [ "$file" = docs/build-notes/decisions.md ] && continue
-
   while IFS= read -r pair; do
     [ -n "$pair" ] || continue
     text=${pair%%\](*}; text=${text#\[}

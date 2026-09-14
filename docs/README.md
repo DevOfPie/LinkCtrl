@@ -40,8 +40,7 @@ comments in a generated SDK that lands in somebody else's checkout, where
 
 | Folder | What lives there |
 | --- | --- |
-| [build-notes/](build-notes/) | Process and record, indexed by [README.md](build-notes/README.md) (how the project is built, for a reviewer of the method): [workflow.md](build-notes/workflow.md) (operating rules), [phase-loop.md](build-notes/phase-loop.md) (the validate–build–land cycle a phase repeats), [planning.md](build-notes/planning.md) (how a requested feature enters the plan), [decisions.md](build-notes/decisions.md) (append-only rationale), [development.md](build-notes/development.md) (contributor setup), [deferred-findings.md](build-notes/deferred-findings.md), and [phase-details/](build-notes/phase-details/) (per-milestone definitions of done) |
-| [adr/](adr/) | Investigations that outgrew a decision-log entry |
+| [build-notes/](build-notes/) | Process and record, indexed by [README.md](build-notes/README.md) (how the project is built, for a reviewer of the method): [workflow.md](build-notes/workflow.md) (operating rules), [phase-loop.md](build-notes/phase-loop.md) (the validate–build–land cycle a phase repeats), [planning.md](build-notes/planning.md) (how a requested feature enters the plan), [development.md](build-notes/development.md) (contributor setup), and [milestone-rules.md](build-notes/milestone-rules.md) (what every milestone inherits); decisions, findings and definitions of done are LNK records in [Mustur](https://github.com/DevOfPie/Mustur) |
 | [dev-notes/](dev-notes/) | This machine's environment: the [two instances](dev-notes/instances.md), the [machine setup](dev-notes/environment.md), the [WSL2 notes](dev-notes/wsl2-environment.md) |
 
 The scope contract itself is [../Plan.md](../Plan.md), at the repository root

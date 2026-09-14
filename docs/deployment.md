@@ -168,7 +168,7 @@ recollection: `API_KEY_PEPPER`, `MFA_SECRET_KEY`, `DATABASE_URL`,
 for the same secret is an error rather than a silent precedence rule.
 
 *(This said "`API_KEY_PEPPER` and `DATABASE_URL`" until 0.3.0, while the loader
-accepted five. It is [F45](build-notes/deferred-findings.md)'s class exactly — an
+accepted five. It is LNK-F-0045's class exactly — an
 enumeration that presents itself as complete and falls behind the code it
 describes — and it is the second time this particular list has done it, which is
 why the count leads and the source is named.)*

@@ -345,7 +345,7 @@ type AnalyticsConfig struct {
 // deleting history an operator assumed permanent, while keep-forever means
 // unbounded growth. The first failure is invisible and irreversible; the second
 // is visible and recoverable, and linkctrl_audit_log_bytes plus the alert recipe
-// in docs/operations.md are what make it visible. See decisions.md, D5.
+// in docs/operations.md are what make it visible. See LNK-D-0005.
 type AuditConfig struct {
 	RetentionDays int `env:"AUDIT_RETENTION_DAYS" envDefault:"0"`
 
@@ -427,7 +427,7 @@ func (s SMTPConfig) Addr() string { return net.JoinHostPort(s.Host, strconv.Itoa
 //
 // FeedName is required alongside FeedURL for the same reason: the disclosure
 // this feature ships names the third party, and a disclosure that cannot is not
-// one. See docs/build-notes/decisions.md, D40.
+// one. See LNK-D-0040.
 type FeedConfig struct {
 	// URL is the endpoint, and the switch. Empty means no feed, no client, and
 	// no code path that sends a destination anywhere.

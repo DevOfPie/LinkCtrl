@@ -38,7 +38,7 @@ var PartitionedTables = []string{"click_events", "visitors", "audit_logs"}
 // bound literal produces a different absolute range under a different
 // timezone, leaving either a gap that silently routes rows to the default
 // partition or an overlap that makes attaching fail. Demonstrated in
-// docs/adr/0001-partitioning-and-sqlc.md.
+// LNK-I-0001, in Mustur.
 //
 // It looks more than one month ahead. Creating next month's partition on the
 // last day of this one is a single point of failure with a hard deadline; two

@@ -25,7 +25,7 @@ import (
 // permission slugs whose grants would land on exactly the roles that hold these,
 // producing a vocabulary two entries longer and a product no different. The
 // decision, and what would have to change for a `folders.*` set to be worth
-// minting, is recorded in decisions.md as D67.
+// minting, is recorded in Mustur as D67.
 //
 // Four rules are enforced here and nowhere else:
 //

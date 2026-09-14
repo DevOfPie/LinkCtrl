@@ -1774,7 +1774,7 @@ func (h *Host) Close(ctx context.Context) error {
 	// One store rather than three field writes. The set is a value and the empty
 	// one is a value: a reader that loaded the pointer a moment ago goes on working
 	// from the set it has, and one that loads it now finds nothing installed. That
-	// is what [F325](../../docs/build-notes/deferred-findings.md#open) is a row
+	// is what LNK-F-0325 is a row
 	// about from the other side — a hot-path read racing a teardown write on
 	// `h.inline` and `h.pools` — and it is closed here as a consequence of M67
 	// needing the set to be swappable at all, rather than as this milestone's work.

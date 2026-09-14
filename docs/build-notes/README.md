@@ -24,8 +24,8 @@ in ways an all-human project is not constrained:
   whether the work is done, and will say it is.
 
 Every rule below is a response to one of those, and most were added after the
-corresponding failure actually happened. [decisions.md](decisions.md) is
-append-only and records which.
+corresponding failure actually happened. The LNK decisions in
+[Mustur](https://github.com/DevOfPie/Mustur) are append-only and record which.
 
 ## The shape of it
 
@@ -39,10 +39,8 @@ append-only and records which.
 | [planning.md](planning.md) | How a requested feature becomes planned work | A feature is asked for |
 | [phase-3-candidates.md](phase-3-candidates.md) | What Phase 3 might take, grouped by work area. Schedules nothing | Parking a future-phase feature, or scoping the next phase |
 | [phase-4-candidates.md](phase-4-candidates.md) | The same for Phase 4, plus the record of what the phase collides with on purpose | Parking a future-phase feature, or scoping the next phase |
-| [phase-details/](phase-details/) | One definition of done per milestone, plus the status table | Building one milestone |
-| [decisions.md](decisions.md) | Why. Append-only; a later entry corrects an earlier one, nothing is edited | Wondering why something is the way it is |
-| [deferred-findings.md](deferred-findings.md) | Defects found at the wrong moment, parked rather than fixed | A defect turns up out of scope |
-| [upcoming-decisions.md](upcoming-decisions.md) | Questions with no answer yet — one section the loop will stall on, one it will not | Answering ahead of the loop, or at leisure |
+| [milestone-rules.md](milestone-rules.md) | The rules every milestone inherits, and the template a definition of done starts from | Planning or building a milestone |
+| [Mustur](https://github.com/DevOfPie/Mustur), project LNK | The records: milestones and their status, one definition of done per milestone, decisions (append-only), findings parked rather than fixed, open questions | Building one milestone, wondering why, a defect turns up out of scope, answering ahead of the loop |
 | [workflow-changes.md](workflow-changes.md) | Changes to the process itself: proposed, and made | Asking what the contract used to be, or what is queued to change |
 | [development.md](development.md) | Toolchain and local setup | Running it yourself |
 | [doc-cost.md](doc-cost.md) | What the always-read documents cost to read, measured | Adding to them |
@@ -67,7 +65,7 @@ one's reasoning. The orchestrator re-runs the gates itself; the worker's report
 of a passing gate is not evidence that it passes.
 
 **Out of spec means it does not get fixed.** A defect found while building
-something else is written to [deferred-findings.md](deferred-findings.md) — what,
+something else is filed as an LNK finding in Mustur — what,
 where, the evidence it is real, how bad — and then left alone. The owner reviews
 each row individually and approves it or does not. The single exception is a
 defect that makes the *current* milestone's own claim false, which is in scope by
@@ -93,12 +91,12 @@ participants, so the artifacts are the point:
   measurement, no *should be fast*, no feature described in the present tense
   that is not built." Where a measurement is quoted, the way it was taken is
   recorded next to it.
-- **The record shows changes of mind.** decisions.md is append-only, so a
+- **The record shows changes of mind.** LNK decisions are append-only, so a
   reversed decision leaves both entries standing. When a milestone's definition
   of done is amended mid-build, the entry carries the bullet as it stood, the
   bullet as amended, and the tree fact that forced it.
-- **Status lives in exactly one place** — the table in
-  [phase-details/](phase-details/README.md). Rationale never appears in the plan
+- **Status lives in exactly one place** — each LNK
+  milestone's `Status`, in Mustur. Rationale never appears in the plan
   and status never appears in the decision log.
 - **Nothing leaves a tracker silently.** A row is re-homed into another tracker,
   which names where it went, or its removal is logged with a reason. Deciding

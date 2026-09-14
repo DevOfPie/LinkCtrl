@@ -156,7 +156,7 @@ func APIKeyHash(pepper []byte, prefix, secret string) []byte {
 // This map is the only thing that makes audit.read session-only. There is no
 // second check in the handler or the service — the endpoint authorizes on the
 // permission like every other endpoint — so if machine export ever outweighs
-// the disclosure, deleting this one line is the whole change. See decisions.md.
+// the disclosure, deleting this one line is the whole change. See Mustur.
 //
 // destinations.decide is the escalating limb again, and more directly than key
 // management is. Allowing a disputed destination deletes a row from the

@@ -8,7 +8,7 @@ ends in a one-shot — every route terminates in a loop that runs until one of
 that loop's own stop conditions fires.
 
 Style matches [workflow.md](workflow.md) — terse, trigger-first, no rationale.
-The *why* is in [decisions.md](decisions.md).
+The *why* is in Mustur's LNK decisions.
 
 **Precedence.** This file wins on *routing* — which target, which kind, which
 loop, and what happens when one of them is unknown. It wins on nothing else.
@@ -42,7 +42,7 @@ are the same instruction.
 
 | Kind | Loop | Runs over |
 | --- | --- | --- |
-| `phase` | [phase-loop.md](phase-loop.md) | The un-`done` rows in [phase-details/README.md](phase-details/README.md), until the phase ends |
+| `phase` | [phase-loop.md](phase-loop.md) | The un-`done` rows of the [status table](phase-loop.md#1-validate), until the phase ends |
 | `workflow` | [The workflow loop](#the-workflow-loop), below | The **approved** *Proposed* rows in [workflow-changes.md](workflow-changes.md), until none is left |
 
 **A kind with no loop is not a kind.** Adding one means writing its loop first —
@@ -70,7 +70,7 @@ absent from it is unknown, whatever it looks like.
 | Target | Is | Kinds |
 | --- | --- | --- |
 | `linkctrl` | This repository | `phase`, `workflow` |
-| `M<n>` | A milestone, spelled as [phase-details/README.md](phase-details/README.md)'s status table spells it — `M45`, `M24.5` | `phase` |
+| `M<n>` | A milestone, spelled as its LNK record's `LinkCtrl` field spells it — `M45`, `M24.5` | `phase` |
 
 ### A milestone target
 
@@ -79,8 +79,8 @@ instruction, the same way `/work phase` and `/work linkctrl phase` are.
 
 **It bounds the loop; it does not choose the work.** The phase loop resumes and
 iterates exactly as it always does — [step 0](phase-loop.md#0-resume) reads the
-note, [step 1](phase-loop.md#1-validate) takes the next un-`done` row in the
-status table's order. One stop condition is added: the run ends when the named
+note, [step 1](phase-loop.md#1-validate) takes the next un-`done` row by
+`Phase order`. One stop condition is added: the run ends when the named
 milestone lands.
 
 That is a ceiling and never a floor. A milestone target can only stop a run
@@ -98,9 +98,9 @@ Resolved against the status table **before** the loop is entered:
 
 | The named row | Then |
 | --- | --- |
-| Un-`done`, this phase | Route. The bound is written to the note's `Stop:` line, which is what carries it across a resume |
-| Already `done` | Enter nothing, and report that. The run being asked for has already happened; re-running it is [reopening](phase-details/README.md), which is scheduling and therefore the owner's |
-| A row in another phase | **Prompt.** *Never cross a phase boundary* is one of [phase-loop.md](phase-loop.md#the-loop)'s five overriding rules, and this target asks for exactly that |
+| Un-`done`, its `Phase` the live phase — the one whose LNK phase record's `Status` is `live` | Route. The bound is written to the note's `Stop:` line, which is what carries it across a resume |
+| Already `done` | Enter nothing, and report that. The run being asked for has already happened; re-running it is [reopening](workflow.md#an-issue-is-found--any-time-any-source), which is scheduling and therefore the owner's |
+| A row whose `Phase` is another phase | **Prompt.** *Never cross a phase boundary* is one of [phase-loop.md](phase-loop.md#the-loop)'s five overriding rules, and this target asks for exactly that |
 | Absent from the table | An [unknown target](#an-unknown-target), handled unchanged |
 
 Milestone targets take `phase` and nothing else. The workflow loop runs over
@@ -214,7 +214,7 @@ change existed:
 | Still absent | the tree already does what the row asks | close it — a *Made* row naming where, and no commit of its own |
 | Still a task | making it needs code, SQL, config or a test change | **prompt.** A workflow change that touches the product is not a task; it is a feature or an issue, per [`/process-queue`](../../.claude/commands/process-queue.md)'s dispute table |
 | Dependencies made | it names another row that is not yet *Made* | ordering → **prompt** |
-| Decisions cover it | it needs a choice no `D`-numbered decision made | **prompt** |
+| Decisions cover it | it needs a choice no LNK decision made | **prompt** |
 
 ### 2. Make
 
@@ -231,8 +231,8 @@ change existed:
    an operator can see, and the demo is rebuilt from milestones
 3. **Commit.** One row maximum, per the scope gate
 4. Move the row from *Proposed* to *Made*, carrying its commit
-5. Append the reasoning to [decisions.md](decisions.md) — **no milestone
-   number**, naming what prompted it, per
+5. File the reasoning as an LNK decision (`mustur add decision --project LNK`) —
+   **no milestone number**, naming what prompted it, per
    [phase-loop.md](phase-loop.md#marking-what-gets-appended)
 6. `git push`
 7. Reset `.current-task.md` to the next row at step 1

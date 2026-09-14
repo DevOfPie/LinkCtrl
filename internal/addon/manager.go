@@ -187,7 +187,7 @@ type Orphan struct {
 	// and is handed to whatever is installed under that name next. **Nothing in
 	// this product deletes one**: `SaveSettings` refuses a name that is not loaded,
 	// so a removed add-on's rows are unreachable from every surface here. F332 in
-	// docs/build-notes/deferred-findings.md carries that half. What this number
+	// the LNK findings in Mustur carry that half. What this number
 	// buys is that the point of decision says so with a figure instead of leaving
 	// it to the migration's comment.
 	StoredSettings int64 `json:"stored_settings"`

@@ -99,7 +99,7 @@ const PermReview = "destinations.review"
 // surface that does not exist.
 //
 // auth.NonDelegableScopes is the only thing that enforces it, so reversing this
-// is deleting one map entry. See decisions.md.
+// is deleting one map entry. See Mustur.
 const PermDecide = "destinations.decide"
 
 // PermFile guards filing one.

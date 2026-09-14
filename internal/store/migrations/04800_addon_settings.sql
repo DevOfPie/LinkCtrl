@@ -19,7 +19,7 @@
 -- rather than discovered: a *different* module installed under a name that has
 -- been used before inherits the rows written for its predecessor, exactly as it
 -- inherits that add-on's identity mappings
--- ([F330](../../../docs/build-notes/deferred-findings.md)). M68 answers it where
+-- (LNK-F-0330). M68 answers it where
 -- an operator can act on it — removing an add-on names what its removal leaves,
 -- and the manager's orphan list is where leftovers are purged — rather than by
 -- inventing an identifier the product has no way to verify.

@@ -12,8 +12,8 @@ holding it.
 ## Why one is built into the image
 
 The demo instance runs `pageviews`, and that is a decision rather than a
-convenience — [D265](../../docs/build-notes/decisions.md) deferred it to
-[M68](../../docs/build-notes/phase-details/m68.md) in exactly those terms. The
+convenience — LNK-D-0265 deferred it to
+LNK-M-0089 in exactly those terms. The
 Add-on manager is a page about add-ons, and on an instance running none it is an
 empty table with an upload form: every column the milestone exists to show —
 declaration class, held permissions, schema size, per-module latency, settings —

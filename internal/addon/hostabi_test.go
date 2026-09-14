@@ -818,7 +818,7 @@ func TestNoDefaultIgnorableCharacterReachesALogLine(t *testing.T) {
 	// revision they are all expected to move together, and a run that reports six
 	// failures without this line reads as six defects rather than one toolchain bump.
 	if unicode.Version != "15.0.0" {
-		t.Errorf("the counts here were measured on Unicode 15.0.0 and this toolchain ships %s; re-count and move hostabi.go, abi/functions.go — then `make abi-sdk`, which carries it into sdk/abi_gen_other.go, sdk/abi_gen_wasip1.go and addon-abi.md's generated table — m62.md, SECURITY.md, addon-abi.md, deferred-findings.md, Plan.md and CHANGELOG.md with them",
+		t.Errorf("the counts here were measured on Unicode 15.0.0 and this toolchain ships %s; re-count and move hostabi.go, abi/functions.go — then `make abi-sdk`, which carries it into sdk/abi_gen_other.go, sdk/abi_gen_wasip1.go and addon-abi.md's generated table — LNK-M-0081's work unit, SECURITY.md, addon-abi.md, the LNK findings, Plan.md and CHANGELOG.md with them",
 			unicode.Version)
 	}
 	// 4174 is the property's own total in Unicode 15.0's DerivedCoreProperties.txt,

@@ -15,7 +15,7 @@
 // there is no escalation left for the rule to prevent. The last owner of an
 // organization cannot be removed or demoted by anybody, which is what stops one
 // being orphaned. The table this implements is written out in
-// docs/build-notes/phase-details/m28.md, before this code existed.
+// LNK-M-0027's work unit, before this code existed.
 //
 // **A workspace-scoped membership only ever adds** (D31). Permissions are the
 // union of every membership matching the workspace and the effective role is

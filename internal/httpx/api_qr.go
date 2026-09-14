@@ -23,7 +23,7 @@ import (
 //
 // **No permission of its own.** A QR code is a picture of the link's own short
 // URL, so seeing one is `links.read` and styling one is `links.update` — see
-// internal/link/qr.go and decisions.md, D75.
+// internal/link/qr.go and LNK-D-0075.
 //
 // The SVG response is the one non-JSON body this API has besides the spec
 // document itself, which is why the contract test validates it by hand: the
@@ -187,7 +187,7 @@ func (a *LinkAPI) DeleteQR(w http.ResponseWriter, r *http.Request) {
 // The five operations above are untouched and now name the link's *default*
 // code: the one an untagged picture resolves through, which is every picture
 // this product drew before per-code identity existed. That choice is recorded in
-// decisions.md under M50, because silently changing what a shipped endpoint
+// Mustur under M50, because silently changing what a shipped endpoint
 // answers for is the thing the contract test exists to catch.
 //
 // **The shorthand names a role and the collection names codes** (D183). The

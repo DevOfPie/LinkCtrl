@@ -90,7 +90,7 @@ import (
 // **Rejected**: it adds a refusal to the one milestone whose purpose is to stop
 // refusing what it can adapt, and it would refuse a valid PNG for a property its
 // author cannot see in any viewer. So the arithmetic moved instead — see
-// [MaxDecodedLogoBytesPerPixel], and the D180 entry in decisions.md for the
+// [MaxDecodedLogoBytesPerPixel], and the D180 entry in Mustur for the
 // trade.
 //
 // The largest decode this package can be made to perform is therefore

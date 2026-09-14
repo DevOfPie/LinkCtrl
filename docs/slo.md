@@ -24,7 +24,7 @@ an empty database measures an empty database.
 
 **Every figure in this document is *core*: this product's own redirect path, with
 no inline add-on on it.** That was unconditionally true of the whole instance
-until [M66](build-notes/phase-details/m66.md), and it is a scope rather than a
+until LNK-M-0086, and it is a scope rather than a
 caveat — the owner set the boundary in those terms: *we are only responsible for
 maintaining the core redirect promise; if an add-on ruins that, it is on the
 add-on.*
@@ -66,7 +66,7 @@ not be.
 
 ### Re-measured for M23 (2026-07-31)
 
-[M23](build-notes/phase-details/m23.md) added a Redis pub/sub subscriber that
+LNK-M-0018 added a Redis pub/sub subscriber that
 clears the in-process cache when another replica publishes an invalidation, so
 the measurement was repeated on an image built from that code.
 
@@ -95,7 +95,7 @@ touching Redis or Postgres, and the pool waited zero times.
 
 ### Re-measured for M24 (2026-07-31)
 
-[M24](build-notes/phase-details/m24.md) put the credential and API limits in
+LNK-M-0019 put the credential and API limits in
 Redis. The 404-probe limiter deliberately stayed in process, so the redirect
 path gained one nil comparison and nothing else, but the rule is to re-measure
 whenever that path is touched at all.
@@ -124,7 +124,7 @@ result, not its absolute value, is what transfers.
 
 ### Re-measured for M32.5 (2026-08-01)
 
-[M32.5](build-notes/phase-details/m32.5.md) is the first milestone to put a
+LNK-M-0034 is the first milestone to put a
 decision on the redirect path itself. Everything measured above was cached
 lookup and response; this adds a policy check and, when blocking is on, a pass
 over the user-agent string on every request.
@@ -171,7 +171,7 @@ a cached one.
 
 ### Re-measured for M33 (2026-08-02)
 
-[M33](build-notes/phase-details/m33.md) is the first milestone to do string
+LNK-M-0037 is the first milestone to do string
 surgery on the path a visitor is redirected to. M32.5 added a decision; this
 adds work — a slice out of the escaped path, a scan of its segments, a
 concatenation, and a URL that has to be re-emitted without being re-encoded.
@@ -232,7 +232,7 @@ did not change.
 
 ### Re-measured for M34 (2026-08-02)
 
-[M34](build-notes/phase-details/m34.md) is the phase's largest redirect-path
+LNK-M-0039 is the phase's largest redirect-path
 change. Everything before it added a decision (M32.5) or string surgery (M33);
 this adds an ordered walk of a rule list, user-agent classification, clock
 evaluation against a real timezone, an optional MaxMind lookup, and — for the
@@ -351,7 +351,7 @@ this project's machines and one cannot be committed.
 
 ### Re-measured for M35 (2026-08-03)
 
-[M35](build-notes/phase-details/m35.md) puts four gates in front of a link, and
+LNK-M-0040 puts four gates in front of a link, and
 one of them does something no earlier milestone did: **a synchronous Postgres
 write on the redirect path**. So this section reports two numbers rather than
 one, and the milestone asks for exactly that split — the SLO's claim is about
@@ -440,7 +440,7 @@ rather than a regression in this one.
 
 ### Re-measured for M36 (2026-08-03)
 
-[M36](build-notes/phase-details/m36.md) divides a link's traffic between several
+LNK-M-0041 divides a link's traffic between several
 destinations, and the two kinds it ships cost wildly different amounts. So this
 section reports **three** columns rather than one: a link with no split, the same
 links carrying a **weighted** split, and the same links carrying a **sequential**
@@ -553,7 +553,7 @@ different paths rather than regressions in this one.
 
 ### Re-measured for M37 (2026-08-03)
 
-[M37](build-notes/phase-details/m37.md) does not touch the redirect path, so
+LNK-M-0042 does not touch the redirect path, so
 there is no k6 column here. What it changes is the **rollup**, and the number
 that needed re-measuring is the one Plan.md's known-limitation row carries: the
 dimension breakdowns cost 16–21 seconds of a sixty-second interval, and would
@@ -629,7 +629,7 @@ quarter of an hour late needs a number that says how late it actually is.
 
 ### Re-measured for M40 (2026-08-03)
 
-[M40](build-notes/phase-details/m40.md) touches the redirect path, so this is a
+LNK-M-0045 touches the redirect path, so this is a
 k6 run rather than a note. What it adds in front of every request is a **host
 lookup**: the router matches the `Host` header against an in-process map of
 verified custom hostnames before dispatching, and a request that matches carries
@@ -678,7 +678,7 @@ Seventeen cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%, 100%
 
 ### Re-measured for M41 (2026-08-03)
 
-[M41](build-notes/phase-details/m41.md) touches the redirect path, so this is a
+LNK-M-0046 touches the redirect path, so this is a
 k6 run rather than a note. What it adds is **one read of the query string**:
 `clickSource` looks for the reserved `src` parameter, which is what a QR code
 encodes so a scan can be told apart from a typed URL
@@ -726,7 +726,7 @@ mean was not recorded, so it is counted below and quoted nowhere.
 
 `SUFFIX` is what produced the `?src=qr` runs — it appends to the measured URL, so
 `SUFFIX='?src=qr' make load` is a query rather than the path segments
-[M33](build-notes/phase-details/m33.md) used it for. The cache key is the alias,
+LNK-M-0037 used it for. The cache key is the alias,
 so the query changes nothing about which tier answers, and the mix confirms it:
 240,001 memory, zero elsewhere.
 
@@ -736,8 +736,8 @@ and **100%** under 20ms.
 
 ### Re-measured for M35's reopening (2026-08-04)
 
-[M35](build-notes/phase-details/m35.md) was reopened on
-[M44.9](build-notes/phase-details/m44.9.md)'s triage for four defects in the
+LNK-M-0040 was reopened on
+LNK-M-0051's triage for four defects in the
 gates, and three of the four are on the redirect path — so the inherited rule
 applies and this is a k6 run rather than a note. **Both columns were re-taken**,
 not only the SLO's own, because the milestone under repair is the one whose claim
@@ -842,7 +842,7 @@ configuration, which is a different path rather than a regression in this one.
 
 ### Re-measured for M45's redirect findings (2026-08-04)
 
-Four findings from [M45](build-notes/phase-details/m45.md)'s triage — F87, F96,
+Four findings from LNK-M-0052's triage — F87, F96,
 F88 and F89 — and three of them touch the redirect path, so the inherited rule
 applies and this is a k6 run rather than a note. **Both columns were re-taken**,
 because the one change that adds instructions to a hot call adds them to a gated
@@ -934,7 +934,7 @@ this one.
 
 ### Re-measured for M45's Redis client change (2026-08-05)
 
-[F138](build-notes/deferred-findings.md#closed): `internal/platform/redis.Open`
+LNK-F-0138: `internal/platform/redis.Open`
 now sets `ContextTimeoutEnabled`. That is the client the resolver holds, so the
 inherited rule applies and this is a k6 run rather than a note.
 
@@ -1015,7 +1015,7 @@ Twenty-five cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
 
 ### Re-measured for M50 (2026-08-07)
 
-[M50](build-notes/phase-details/m50.md) touches the redirect path, so the
+LNK-M-0060 touches the redirect path, so the
 inherited rule applies and this is a k6 run rather than a note. It is the first
 of the phase's three.
 
@@ -1097,14 +1097,14 @@ Twenty-eight cached runs now read 100%, 100%, 100%, 99.991%, 100%, 100%, 100%,
 
 ### Measured during a rolling deploy, for M57 (2026-08-09)
 
-[M57](build-notes/phase-details/m57.md) does not change the redirect path. It
+LNK-M-0072 does not change the redirect path. It
 measures what that path does while the processes serving it are **replaced one
 at a time underneath live traffic**, which is the one thing every figure above
 was taken with carefully held still.
 
 It is the second of the phase's three, after
 [M50](#re-measured-for-m50-2026-08-07)'s and before
-[M57.9](build-notes/phase-details/m57.9.md)'s re-measurement on the final build.
+LNK-M-0074's re-measurement on the final build.
 
 Every earlier section is a single container serving 240,000 requests. This is
 **three replicas behind a load balancer**, with each replica destroyed and
@@ -1226,7 +1226,7 @@ promises and those runs are what the promise is scoped away from.
 
 ### Re-measured for M66 (2026-08-22)
 
-[M66](build-notes/phase-details/m66.md) admits an add-on onto the redirect path,
+LNK-M-0086 admits an add-on onto the redirect path,
 so this is two runs and not one: the inherited rule says a milestone that touches
 this path re-measures it, and this milestone's own claim is that **core is
 unmoved and an inline add-on's cost is the add-on's**. One number would have
@@ -1348,7 +1348,7 @@ its decision, probe six host functions, write a query rewrite — is a mean of
 **3.27 ms** and a worst-of-twenty of **4.34 ms**, and *that* is the number
 [`DefaultInlineDeadline`](../internal/addon/redirect.go) is set at roughly six
 times of (25 / 4.34 ≈ 5.8). D318 has the arithmetic. The first real add-on to hold this grant is
-[M69](build-notes/phase-details/m69.md)'s, and it holds `routes.own_prefix`
+LNK-M-0092's, and it holds `routes.own_prefix`
 rather than this class.
 
 **A deadline other than the default.** 25 ms is what shipped and what was run.
@@ -1370,7 +1370,7 @@ pipeline it rides on.
 
 ### Re-measured for M66.5 (2026-08-24)
 
-[M66.5](build-notes/phase-details/m66.5.md) exists because of a number on this
+LNK-M-0087 exists because of a number on this
 page's neighbour rather than on this page: an add-on that does nothing wrong cost
 the visitor **44.89 ms** at p99 against a 20 ms target, and 11.05 ms of every
 invocation was this host building and destroying a Go runtime. The milestone pools
@@ -1406,7 +1406,7 @@ one that finds no concurrency slot is skipped rather than queued.
 
 
 **The middle column is the milestone**, and it is the one to read against
-[D333](build-notes/decisions.md#2026-08-23--m665-added-pooling-because-a-well-behaved-add-on-cost-4489ms)'s
+LNK-D-0907's
 baseline rather than against either neighbour:
 
 | | M66, 2026-08-23 | M66.5, 2026-08-24 |
@@ -1488,7 +1488,7 @@ predate the pool.
 
 ### Re-measured for M67 (2026-08-24)
 
-[M67](build-notes/phase-details/m67.md) makes the loaded set swappable while the
+LNK-M-0088 makes the loaded set swappable while the
 instance is serving, and three of the changes that took land on the redirect
 path. `Host.HasInline` was a field read and is now an atomic load of a snapshot
 pointer. `Host.Inline` takes **one** snapshot per redirect rather than reading a
@@ -1583,7 +1583,7 @@ cannot — the store happens once per install.
 
 ### Re-measured for M68 (2026-08-25)
 
-[M68](build-notes/phase-details/m68.md) is the Add-on manager, which is a page
+LNK-M-0089 is the Add-on manager, which is a page
 rather than a redirect — and three of its changes land on the redirect path all
 the same. `acquireInstance` takes the pool mutex through `generation()` on every
 cold acquire, so a settings save that drains the pool cannot lose the race with a
@@ -1690,7 +1690,7 @@ between two is still nothing this page has a number for.
 
 ### Not re-measured for M68.5 (2026-08-26), and this is where that is said
 
-[M68.5](build-notes/phase-details/m68.5.md) gives an add-on an outbound request —
+LNK-M-0090 gives an add-on an outbound request —
 the first door in this product through which a server-side request reaches an
 address somebody else chose. The inherited rule about touching the redirect path
 is discharged **in writing** rather than by a run, because of what the milestone
@@ -2021,7 +2021,7 @@ and changing either number changes what the deploy column means.
 
 ### Re-measured for M45's redirect-path batch (2026-08-05)
 
-Six findings fixed in [M45](build-notes/phase-details/m45.md) touch the redirect
+Six findings fixed in LNK-M-0052 touch the redirect
 path, so the inherited rule applies and this is a k6 run rather than a note. They
 were batched deliberately and measured once, because one run answers for all of
 them and six runs would answer the same question six times.

@@ -418,7 +418,7 @@ func TestARecoveryCodeMatchesHoweverItIsTyped(t *testing.T) {
 func TestNoModuleDependencyJoinedTheSetForTheSecondFactor(t *testing.T) {
 	// As of M53, and identical to the list internal/qr holds at M49. A milestone
 	// that adds a direct dependency changes both lists deliberately and says why
-	// in decisions.md.
+	// in Mustur.
 	want := map[string]bool{
 		"github.com/boombuler/barcode":            true,
 		"github.com/caarlos0/env/v11":             true,
@@ -445,7 +445,7 @@ func TestNoModuleDependencyJoinedTheSetForTheSecondFactor(t *testing.T) {
 			t.Errorf("go.mod requires %s directly, and M53's claim is that a second "+
 				"factor joins no module to the dependency set. If this is a deliberate "+
 				"addition from a later milestone, add it to the list here with its "+
-				"reason in decisions.md", path)
+				"reason in Mustur", path)
 		}
 		delete(want, path)
 	}

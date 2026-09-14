@@ -16,7 +16,7 @@
 -- since 00300, NOT NULL DEFAULT 100 CHECK (weight >= 0), with a comment naming
 -- Phase 2 weighted routing as the reason. M36 is that reason arriving; the
 -- decision to keep weights on the destination rather than on the rule is
--- recorded in decisions.md and needs no DDL.
+-- recorded in Mustur and needs no DDL.
 
 -- Every kind needs a destination, not only 'match'.
 --

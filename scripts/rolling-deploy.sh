@@ -381,7 +381,7 @@ echo "A key with max_holders = 1 was never held by two sessions at once in any"
 echo "sample. That is evidence bounded by the sampling interval above, and it is"
 echo "not the whole argument: from 0.2.0 on every binary takes the same"
 echo "per-family keys, so pg_try_advisory_lock is what excludes the second"
-echo "leader — see docs/build-notes/decisions.md for M57."
+echo "leader — see the LNK decisions for M57 (LNK-M-0072)."
 
 ## ---- give the instance back -------------------------------------------------
 

@@ -12,12 +12,12 @@ make verify-scan SCAN_ARGS=--zbar                 # plus a third engine, reporti
 
 ## Why it exists
 
-[M50.6](../../docs/build-notes/phase-details/m50.6.md) puts a logo in the middle
+LNK-M-0062 puts a logo in the middle
 of a code, which destroys modules; error correction is the only reason that is
 survivable, and `internal/qr/composite.go` derives from level H's budget how
 much of a code the logo may cover. As shipped that was a **fifth** of the
 symbol's width, and the owner asked for it "as big as possible without making
-the barcode unreadable" ([F215](../../docs/build-notes/deferred-findings.md)).
+the barcode unreadable" (LNK-F-0215).
 
 The reopened milestone answers *how big* by measuring, and requires the
 measurement to be **kept rather than run once**, because a number nothing
@@ -28,7 +28,7 @@ third — the third fails, here, reproducibly.
 ## What it does
 
 Two halves, because Go has no QR decoder and adding one to `go.mod` would break
-[M49](../../docs/build-notes/phase-details/m49.md)'s assertion that the QR path
+LNK-M-0059's assertion that the QR path
 adds no dependency. Node is admissible for verification tooling under
 [D25](../../Plan.md), the way `../render-verify` and `../agent-browser` already
 are; nothing here is imported by the product, built into it, or in the image.

@@ -159,7 +159,7 @@ var theCountIsStatedHere = []anchoredCount{
 // every other exemption, so the sentence cannot quietly disappear, and the moment
 // M70's documentation pass folds the count the entry goes red and has to be
 // re-read — which is the one place D104 says README changes. The obligation to do
-// the fold is a bullet in docs/build-notes/phase-details/m70.md, with a definition
+// the fold is a bullet in LNK-M-0095's work unit, with a definition
 // of done, rather than a note somebody has to remember.
 //
 // **The fold happened at 0.4.0 and this entry is what it moved**: thirty-nine to

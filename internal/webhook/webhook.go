@@ -23,7 +23,7 @@
 // it refuses to follow redirects because *"a feed that answers 302 is a feed
 // pointing this process somewhere nobody configured."* That sentence applies here
 // with more force and less trust, which is why this package has a dialer of its
-// own — see client.go, and decisions.md for why the two clients are not shared.
+// own — see client.go, and Mustur for why the two clients are not shared.
 package webhook
 
 import (

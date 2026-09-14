@@ -50,7 +50,7 @@ const StylesheetPath = "css/app.css"
 // 6rem is 6rem for every link in the product, which is what makes the height of
 // the heading row something the markup states rather than something the data
 // decides. TestTheEditControlIsReachableWithoutScrolling is the rule that
-// requires it, and decisions.md carries why it is a rule and not an exemption.
+// requires it, and Mustur carries why it is a rule and not an exemption.
 //
 // Both dimensions, because a QR code is square and a CSS height alone would
 // leave the `width` attribute to fight it.

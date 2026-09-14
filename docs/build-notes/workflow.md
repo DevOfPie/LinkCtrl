@@ -5,7 +5,7 @@ Operating rules for whoever is building this, human or model.
 **Style is deliberate.** Terse, trigger-first, no rationale. The rest of this
 project explains itself at length; this file is read on every task, so it is
 optimized for scanning and low token cost instead. Do not rewrite it into prose.
-Rationale belongs in [decisions.md](decisions.md).
+Rationale belongs in Mustur, as an LNK decision.
 
 **Precedence.** [Plan.md](../../Plan.md) is the scope contract and wins on *what*.
 This file wins on *gates* — what must pass. [phase-loop.md](phase-loop.md) wins
@@ -32,7 +32,7 @@ the conflict is a bug — report it, do not pick.
 ```
 in spec      → fix now, inside the current milestone
 out of spec  → DO NOT FIX
-               append one row to deferred-findings.md
+               mustur add finding --project LNK
                continue the current milestone
 ```
 
@@ -46,11 +46,11 @@ A defect that makes the *current* milestone's claim false is in spec, whatever i
 looks like. Judge by the claim, not by the subsystem.
 
 A defect that makes a **shipped** milestone's claim false **reopens that
-milestone** — status row back to `in progress`, the correction written into its
-own file — rather than arriving as a successor. A successor leaves a `done` row
+milestone** — its LNK milestone's `Status` back to `in progress (reopened)`, the correction written
+into its work unit — rather than arriving as a successor. A successor leaves a `done` row
 asserting something untrue, which is the one outcome worth spending a reopening
 to avoid, and it scatters one piece of work across two numbers. The defect still
-gets a deferred-findings row first: reopening is scheduling, and scheduling is
+gets an LNK finding first: reopening is scheduling, and scheduling is
 the owner's.
 
 ### A feature is requested
@@ -83,7 +83,7 @@ found:
 
 | Type | Is | Routes to |
 | --- | --- | --- |
-| **issue** | a change to existing function or design | [deferred-findings.md](deferred-findings.md), one row |
+| **issue** | a change to existing function or design | an LNK finding, one record |
 | **feature** | an addition of new function or design | [planning.md](planning.md)'s five artifacts |
 | **task** | a change to workflow or process, not to the product | its own commit, per the scope gate — or a **Proposed** row in [workflow-changes.md](workflow-changes.md) when it is not being made now, so a process change waiting is as visible as a defect waiting |
 
@@ -96,15 +96,15 @@ file, and draining is what makes it durable.
 ### A decision is coming, and the loop has not reached it yet
 
 `/preview-decisions` reads ahead: it runs [step 1](phase-loop.md#1-validate)'s
-*decisions cover it* check across the milestones not yet built, writes what it
-finds to [upcoming-decisions.md](upcoming-decisions.md), **and then asks** — the
-file first, always, so an interrupted run has still recorded every question.
-Answering one there is worth exactly what answering it in the loop is worth, and
-costs the loop no stall.
+*decisions cover it* check across the milestones not yet built, raises what it
+finds as LNK questions (`mustur ask --project LNK`), **and then asks** — raised
+first, always, so an interrupted run has still recorded every question. Answering
+one there is worth exactly what answering it in the loop is worth, and costs the
+loop no stall.
 
-One direction only. An entry leaves that file when it is answered, and the answer
-is appended to [decisions.md](decisions.md) with its `D` number on the date it is
-*used*, noting the date it was given. Upcoming-decisions is never where a
+One direction only. A question is answered in Mustur, and the answer becomes an
+LNK decision (`mustur add decision --project LNK`, citing the question) on the
+date it is *used*, noting the date it was given. A question is never where a
 decision lives; it is where a question waits.
 
 Each entry records what it assumes about a tree that is not built yet.
@@ -162,8 +162,8 @@ Then:
 | Tests | Unit and integration green under `-race` |
 | Generated code | If any `.sql` changed: `make sqlc` produces no diff |
 | OpenAPI | If any API surface changed: `make openapi` passes |
-| Docs | Plan.md reflects new truth; decisions.md has the *why* for anything non-obvious. **If the milestone changed what an operator or reader would observe**, `docs/SECURITY.md` says so too — a claim it makes that the milestone just made false is a failing gate, not cleanup for the phase's documentation pass. **`README.md` is not in this gate (D104).** It describes the *released* product, so a mid-phase commit does not touch it and the phase's features land there at the close, when the tag makes them released. The cost is accepted and stated: this gate no longer catches README drift, because there is no mid-phase README to drift — `CHANGELOG.md`'s `[Unreleased]` section is what carries unreleased work until then, and it is load-bearing for that. **Between the fold and the tag, the release gate wins.** Filling `[Unreleased]` is what this row requires and [`release-check`](../releasing.md) refuses a tag while anything is in it, so both bind at once on a commit landing after the notes were folded — a reopening, a late fix. This row still applies: write the work into `[Unreleased]`, and the fold is made again before the tag, which `docs/releasing.md` spells out for whoever cuts it. Documented rather than removed, deliberately (F254): the alternative shapes each moved the fold or let a gate edit the changelog, and the cost of this one is one edit repeated. |
-| Demo | **If the milestone added something somebody can see**, `cmd/lctl/demo.go` seeds it, so the demo instance shows the feature instead of an empty page where it would be. The rule and its exceptions are in [phase-details/README.md](phase-details/README.md#what-every-milestone-inherits); this row is where it is checked |
+| Docs | Plan.md reflects new truth; an LNK decision has the *why* for anything non-obvious. **If the milestone changed what an operator or reader would observe**, `docs/SECURITY.md` says so too — a claim it makes that the milestone just made false is a failing gate, not cleanup for the phase's documentation pass. **`README.md` is not in this gate (D104).** It describes the *released* product, so a mid-phase commit does not touch it and the phase's features land there at the close, when the tag makes them released. The cost is accepted and stated: this gate no longer catches README drift, because there is no mid-phase README to drift — `CHANGELOG.md`'s `[Unreleased]` section is what carries unreleased work until then, and it is load-bearing for that. **Between the fold and the tag, the release gate wins.** Filling `[Unreleased]` is what this row requires and [`release-check`](../releasing.md) refuses a tag while anything is in it, so both bind at once on a commit landing after the notes were folded — a reopening, a late fix. This row still applies: write the work into `[Unreleased]`, and the fold is made again before the tag, which `docs/releasing.md` spells out for whoever cuts it. Documented rather than removed, deliberately (F254): the alternative shapes each moved the fold or let a gate edit the changelog, and the cost of this one is one edit repeated. |
+| Demo | **If the milestone added something somebody can see**, `cmd/lctl/demo.go` seeds it, so the demo instance shows the feature instead of an empty page where it would be. The rule and its exceptions are in [milestone-rules.md](milestone-rules.md#what-every-milestone-inherits); this row is where it is checked |
 | Links | Every relative link and anchor in tracked `.md` resolves |
 | Scope | **No more than one milestone per commit.** Never bundle two; splitting one across several is fine. Work smaller than a milestone — a process or workflow change — is not a milestone and commits on its own, as soon as it is complete. |
 
@@ -239,13 +239,13 @@ phase touched.
 | `README.md` | Status line, feature claims, "Not built yet". **This pass is the only place README changes (D104)**, because it describes the released product and the tag is what releases it. So it is written against what the tag will ship rather than against the branch, and the `[Unreleased]` section of CHANGELOG.md is what it draws from. |
 | `CHANGELOG.md` | Entry for what shipped, with its limitations |
 | `docs/*.md` | Configuration, usage, operations, deployment, CLI, releasing — every documented behaviour still behaves that way |
-| `docs/build-notes/decisions.md` | Append-only. Never edit an entry; a later entry corrects an earlier one |
-| `docs/build-notes/upcoming-decisions.md` | Answered entries removed, their answers in decisions.md with `D` numbers; entries for milestones now built are gone |
+| LNK decisions, in Mustur | Append-only. Never edit an entry; a later entry corrects an earlier one |
+| LNK questions, in Mustur | Every answered question's answer is an LNK decision; none stays open for a milestone now built |
 | `docs/build-notes/doc-cost.md` | Regenerated (`make doc-cost`) **and judged** — defend the growth or trim to pay for it, which [phase-loop.md](phase-loop.md#two-milestones-that-do-not-end-like-the-others) defines and this row does not restate. On record is not answered for: the number was in the diff for a whole phase and obliged nobody |
 | `docs/SECURITY.md` | New defences, new gaps, new operator responsibilities |
 | `docs/build-notes/workflow.md` | This file. Rules learned this phase |
 | `docs/build-notes/phase-loop.md` | The loop that ran this phase, and where it needed a human anyway |
-| `docs/adr/` | Investigations that outgrew a decision-log entry |
+| LNK investigations, in Mustur | Investigations that outgrew a decision entry |
 
 Minimize means: delete what is no longer true, merge what is duplicated, and cut
 what restates something the reader already read. It does not mean shortening
@@ -275,19 +275,18 @@ output.
 corrupted UTF-8 in this repo (em-dashes into mojibake). Use editors that preserve
 bytes.
 
-**Plan.md states what is true. decisions.md states why.** Rationale in the plan
+**Plan.md states what is true. LNK decisions state why.** Rationale in the plan
 and status in the decision log are both wrong.
 
 **Nothing leaves a tracker silently.** A row removed from any tracked list —
-Plan.md's scope and *Not in Phase N* tables, [phase-details/](phase-details/)'s
-status table, [deferred-findings.md](deferred-findings.md),
-[upcoming-decisions.md](upcoming-decisions.md),
-[workflow-changes.md](workflow-changes.md) — leaves only one of two ways:
+Plan.md's scope and *Not in Phase N* tables, the LNK milestones, findings and
+questions in Mustur, [workflow-changes.md](workflow-changes.md) — leaves only one
+of two ways:
 
 1. **Re-homed.** It appears in another tracker, and the row it left says which.
    Moving is the normal case: a finding becomes a milestone, a question becomes a
    decision, a queue row becomes a Plan.md row.
-2. **Logged.** Its removal is an entry in decisions.md naming what was dropped
+2. **Logged.** Its removal is an LNK decision naming what was dropped
    and why.
 
 Deciding an item no longer matters *is a decision*, and it is the one kind this
@@ -303,8 +302,8 @@ go anywhere else.
 **A decision made in conversation is written down before it is acted on.**
 Answers given in prose evaporate: the reasoning is gone by the next session and
 the conclusion gets re-derived, differently. If a milestone forces it, the
-answer goes to decisions.md with its `D` number. If nothing forces it yet, the
-*question* goes to [upcoming-decisions.md](upcoming-decisions.md) — including
+answer is an LNK decision. If nothing forces it yet, the *question* is an LNK
+question (`mustur ask --project LNK`) — including
 when it has already been acted on, in which case the entry names the behaviour
 the tree currently has. This applies to whoever is deciding, and most of all to
 an actor deciding on the owner's behalf because the loop would otherwise stall.

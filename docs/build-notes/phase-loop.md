@@ -12,7 +12,7 @@ reason.
 
 Style matches [workflow.md](workflow.md) — terse, trigger-first, no rationale —
 because this file is re-read at every resume. The *why* is in
-[decisions.md](decisions.md).
+Mustur's LNK decisions.
 
 **Precedence.** [Plan.md](../../Plan.md) wins on *what*. workflow.md wins on
 *gates* — what must pass. This file wins on *sequence* — what order, who does
@@ -59,8 +59,8 @@ does not inherit the first one's reasoning.
 ### Spawning a worker
 
 Pass the milestone number, the branch, and this file. Nothing else. A worker
-handed a summary of `phase-details/mN.md` builds the summary; it reads the
-milestone file itself. On a re-spawn, add the rejection verbatim and nothing
+handed a summary of the milestone's work unit builds the summary; it reads the
+work unit itself. On a re-spawn, add the rejection verbatim and nothing
 more.
 
 Run it synchronously — the orchestrator needs its report before step 3.4.
@@ -72,7 +72,7 @@ Short, and the only thing the orchestrator reads from it:
 - what it built, and what it deliberately did not
 - each gate run, and its result
 - proposed commit message — prose about *why*
-- rows appended to [deferred-findings.md](deferred-findings.md)
+- LNK findings filed (`mustur add finding --project LNK`)
 - any prompt, verbatim and unanswered
 
 A report is not evidence. The tree is.
@@ -86,11 +86,11 @@ milestone number is written at the time or it is not recoverable at all.
 **Anything appended while a milestone is under way carries that milestone's
 number, whoever appends it.**
 
-| File | Marker |
+| Where | Marker |
 | --- | --- |
-| decisions.md | `## <date> — MN, <title>` — the number leads the title, before any prose |
-| [deferred-findings.md](deferred-findings.md) | the **Found in** column |
-| Plan.md, phase-details/ | none — every row already sits under its own number |
+| An LNK decision | `MN, <title>` — the number leads the title — and the milestone cited (`--ref milestone=LNK-M-…`) |
+| An LNK finding | the milestone cited, as its **Found in** |
+| Plan.md, an LNK milestone or work unit | none — every one already sits under its own number |
 | CHANGELOG.md | none — it is written for operators, and `MN` means nothing outside this repo |
 
 Entries no milestone produced — a process change, a phase close — carry no
@@ -109,7 +109,7 @@ is preferred to a successor milestone — the trail stays in one place.
 
 Present → it names a milestone, a step, and which actor held it. Trust it for
 *intent*; verify *state* independently — `git status`, `git log -1`, and the
-status row in [phase-details/README.md](phase-details/README.md) are what
+`Status` of the LNK milestone in Mustur are what
 actually landed. The note is only what was being attempted.
 
 Held by a worker at step 2 or 3 → spawn a new worker from step 2. Never continue
@@ -122,8 +122,13 @@ one, and **spawn nothing while it stands** if there is not.
 
 ## 1. Validate
 
-**Next milestone** = first row in
-[phase-details/README.md](phase-details/README.md) that is not `done`.
+**Next milestone** = the first LNK milestone whose `Phase` is the live phase —
+the phase whose LNK phase record's `Status` is `live`, and with none live there
+is nothing to resume ([milestone-rules.md](milestone-rules.md#phases)) —
+by its `Phase order`, whose `Status` is not `done`. That ordered set is what
+this contract calls the **status table**. Every milestone LinkCtrl defined carries
+both fields, and a stub for a number cited and never defined carries neither;
+`mustur get LNK-M-0052` shows the shape.
 
 **Blocked, and another row is independent → take that one instead of stopping.**
 Blocked means a check below raises a prompt, or the work itself cannot proceed.
@@ -143,12 +148,12 @@ Nothing independent → [§4](#4-repeat-or-stop) fires as it always did. Fallbac
 only ever changes *which* row is next; it never invents one and never reorders the
 table.
 
-Read exactly three things. Not the other milestone files — the split exists so
-you do not.
+Read exactly three things. Not the other milestones' work units — the split
+exists so you do not.
 
-1. `phase-details/mN.md` — the definition of done
-2. that README's *What every milestone inherits* table
-3. Plan.md's ordering row for N — dependencies, discharges
+1. MN's work unit — the definition of done (`mustur_route` with its identifier)
+2. [milestone-rules.md](milestone-rules.md)'s *What every milestone inherits* table
+3. MN's LNK milestone record — dependencies, discharges, its place in the order
 
 Then check the plan against the tree as it actually is. The plan was written
 before the code existed; validation is where that gap surfaces.
@@ -159,8 +164,8 @@ before the code existed; validation is where that gap surfaces.
 | Not already built | code already satisfies a bullet | record in the note, do not rebuild |
 | Discharges real | the Plan.md row or limitation it claims to close is gone or reworded | plan drift → **prompt** |
 | Bullets falsifiable now | a bullet names a file, test or behaviour that no longer exists | [amend](#amending-a-bullet) — correct a fact, **prompt** on an assertion |
-| Decisions cover it | it needs a choice no `D`-numbered decision made | **prompt** |
-| Deferred overlap | an open row in [deferred-findings.md](deferred-findings.md) would make *this* milestone's claim false | in spec → fix here, close the row pointing at MN |
+| Decisions cover it | it needs a choice no LNK decision made | **prompt** |
+| Deferred overlap | an open LNK finding would make *this* milestone's claim false | in spec → fix here, close the finding pointing at MN |
 
 That last row is the only path by which an unapproved finding becomes work. It
 follows from workflow.md — *a defect that makes the current milestone's claim
@@ -168,7 +173,7 @@ false is in spec, whatever it looks like* — and not from owner approval, so na
 the exception in the commit message and keep it visible.
 
 Output is one line: `MN validates`, plus notes; or `MN does not validate:
-<reason>`, plus the prompt. **Validation never edits code**, and mN.md stays
+<reason>`, plus the prompt. **Validation never edits code**, and the work unit stays
 read for step 3.4.
 
 ### Amending a bullet
@@ -192,7 +197,7 @@ choice, so prompting about it spends the owner's attention on arithmetic. Which
 pages *should* carry a control is a choice, and correcting it silently would be
 the loop editing its own definition of done.
 
-**Every amendment gets a decisions.md entry**, marked with the milestone under
+**Every amendment gets an LNK decision**, marked with the milestone under
 way, carrying three things:
 
 - the bullet **as it stood**, quoted
@@ -201,7 +206,7 @@ way, carrying three things:
 
 All three, because the first is what makes it an amendment rather than a
 conclusion — argued in
-[the M24.5 entry](decisions.md#2026-07-31--plan-drift-is-allowed-silent-plan-drift-is-not),
+the LNK-M-0020 entry (LNK-D-0485),
 which is also the amendment that forced this rule.
 
 Plan drift is allowed here. Silent plan drift is not.
@@ -210,8 +215,10 @@ Plan drift is allowed here. Silent plan drift is not.
 
 Worker.
 
-- Status row → `in progress` in phase-details/README.md.
-- **In spec only.** Anything else → one row in deferred-findings.md, marked per
+- `Status` → `in progress` on the LNK milestone
+  (`mustur amend <milestone> --data "Status=in progress"`), or
+  `in progress (reopened)` for a shipped one come back.
+- **In spec only.** Anything else → one LNK finding, marked per
   [Marking what gets appended](#marking-what-gets-appended), then carry on.
   Never fix out of spec, never bundle a second milestone.
 - A test that passes first try → sabotage it, confirm red, restore by
@@ -227,8 +234,8 @@ Order is load-bearing. Do not reorder. The actor changes in the middle.
 
 1. `make check`, then `make test-integration` with the stack up (`make up`)
 2. Every gate in workflow.md's *Before completing a commit* table
-3. Docs true: Plan.md, CHANGELOG.md, `docs/*.md`; decisions.md **appended**
-   (never edited) with its index row, and every append
+3. Docs true: Plan.md, CHANGELOG.md, `docs/*.md`; LNK decisions **added**
+   (never edited), and every one
    [marked](#marking-what-gets-appended)
 
 Then stop and report. **The worker does not commit.** One that commits, pushes,
@@ -254,22 +261,22 @@ Two halves, and they do not cost the same:
 
 | Half | Ask |
 | --- | --- |
-| **This milestone** | Does the tree satisfy every bullet in `mN.md`, read against the code rather than against anybody's account of it |
-| **Every other** | Does anything in this diff make a **shipped** milestone's claim false — in its own file, in Plan.md, in `docs/SECURITY.md`, in README.md, or in a decisions.md entry |
+| **This milestone** | Does the tree satisfy every bullet in the work unit, read against the code rather than against anybody's account of it |
+| **Every other** | Does anything in this diff make a **shipped** milestone's claim false — in its own file, in Plan.md, in `docs/SECURITY.md`, in README.md, or in an LNK decision |
 
 **The second half is why the step exists**, and most of the effort belongs
 there. It is answered by reading what the diff touches and asking which shipped
 promises rest on it — not by re-reading the phase.
 
 The reviewer **changes nothing**: no code, no tests, no records, not even a
-deferred row. It reports with `file:line` evidence, and a reviewer that found
+finding. It reports with `file:line` evidence, and a reviewer that found
 nothing says so in as many words rather than returning silence, because silence
 and *did not look* are the same string.
 
 A finding is **not** a rejection. The orchestrator weighs it at acceptance the
 way it weighs the worker's report, and dispositions it like anything else — in
-spec for this milestone, or a row in
-[deferred-findings.md](deferred-findings.md). A finding that falsifies a shipped
+spec for this milestone, or an LNK
+finding. A finding that falsifies a shipped
 milestone's claim is a [reopening](workflow.md), which is scheduling and
 therefore the owner's.
 
@@ -279,13 +286,13 @@ agent, and reads one diff.
 
 **Orchestrator — accept, or reject:**
 
-Re-read `phase-details/mN.md`, then read the tree: `git status --short`,
+Re-read MN's work unit, then read the tree: `git status --short`,
 `git diff`, and the tests the milestone named. The question is never *did the
 worker say it was done*. It is *does the tree satisfy every bullet*.
 
 | Reject when | Carrying |
 | --- | --- |
-| A bullet in mN.md is not satisfied by the tree | the bullet |
+| A bullet in the work unit is not satisfied by the tree | the bullet |
 | A gate reported passing does not pass when re-run | the failure |
 | The diff holds work no bullet asked for | what to remove — or a deferred row, if it is a real finding |
 | A deferred row was closed without the exception named | the row |
@@ -301,7 +308,7 @@ contradicts on what it *asserts* is still a prompt, and the milestone waits.
 
 **Orchestrator — 3.4 to 3.9, on acceptance:**
 
-4. Status row → `done` in phase-details/README.md
+4. `Status` → `done` on the LNK milestone (`mustur amend <milestone> --data Status=done`)
 5. `make check-links`
 6. **Commit.** One milestone maximum. Message is the worker's proposed prose,
    edited as needed — *why*, not what. Name any deferred row closed under step
@@ -341,7 +348,7 @@ say so in the report and continue.
 
 Unmarked rows are not read, not counted, and not acted on. They wait for
 `/process-queue`, which the owner runs deliberately — draining routes work into
-Plan.md and deferred-findings.md, and an unattended run that quietly grew its own
+Plan.md and LNK findings, and an unattended run that quietly grew its own
 scope is the failure the whole deferral system exists to prevent.
 
 demo-update sits between commit and push because it rebuilds from the commit
@@ -358,7 +365,7 @@ continue:
 | Stop when | Because |
 | --- | --- |
 | A prompt is unanswered **and no un-`done` row is independent of it** | Ask, never assume. A blocked question is not a blocked phase, so [step 1](#1-validate) falls back first and this fires only when there is nowhere to fall. The question stays owed either way — parking it is not answering it |
-| The milestone just landed was the phase's last row — Phase 2: [M45](phase-details/m45.md) | Never cross a phase boundary |
+| The milestone just landed was the phase's last row — Phase 2: LNK-M-0052 | Never cross a phase boundary |
 | No un-`done` rows remain | Same |
 | The same cause failed a gate twice | Retrying is not progress |
 | The same gap survived two workers | Same |
@@ -395,8 +402,8 @@ summary when [§4](#4-repeat-or-stop)'s table has not fired.
 Neither is delegated. The orchestrator runs both itself, because the product of
 each is a conversation with the owner.
 
-**Reviews** (`X.9` — [M32.9](phase-details/m32.9.md),
-[M44.9](phase-details/m44.9.md)). Their product is findings, and findings are
+**Reviews** (`X.9` — LNK-M-0036,
+LNK-M-0051). Their product is findings, and findings are
 the owner's to schedule. Fix only what makes a shipped milestone's own claim
 false; everything else becomes deferred rows. Then **prompt** with the triage
 before acting on it.
@@ -410,7 +417,7 @@ survives the tool being replaced; today the cheapest yes is the kept suite
 green against a running instance, plus driving what the range changed. A
 review that did not answer it is not finished. Owner-set 2026-08-11, over four
 CI shapes offered and declined —
-[the entry](decisions.md#2026-08-11--reviews-carry-a-browser-check) says why.
+the entry (LNK-D-0744) says why.
 
 A review also **judges what the always-read contract costs**: `make doc-cost`,
 then defend the growth or trim to pay for it. **This is the one place that
@@ -428,11 +435,12 @@ resume charge, and its *realized* read ratio was 0.01. The files worth arguing
 about are the ones read end to end — [workflow.md](workflow.md) at 0.83, this
 file at 0.43.
 
-**Phase close** ([M45](phase-details/m45.md)). Every deferred row needs
+**Phase close** (LNK-M-0052). Every deferred row needs
 individual owner review, so expect a conversation rather than an iteration. Its
 release actions reach outside the repo — tagging, pushing a tag, opening the
 phase PR are each confirmed before they happen, and merging is the owner's
-alone.
+alone. The phase ends when its phase record's `Status` stops reading `live`
+(`mustur amend <phase> --data "Status=closed: every milestone it holds is done"`).
 
 ### A review gets its own session
 
@@ -449,7 +457,7 @@ loop would deadlock politely.
 This is **not** the context rule in the table above, which stands: a long context
 is never a reason to stop. This one is about the *kind* of work, not its
 quantity. Why that difference holds, and the run that forced it, are in
-[W17's entry](decisions.md#2026-08-01--two-rules-the-last-run-earned).
+W17's entry (LNK-D-0522).
 
 ## Stop work
 
@@ -520,12 +528,12 @@ Working state only. Everything else already has a home:
 
 | Not here | There |
 | --- | --- |
-| Milestone status | phase-details/README.md — status lives there and only there |
-| Why anything was decided | decisions.md |
-| A decision not yet taken | upcoming-decisions.md |
-| Out-of-spec findings | deferred-findings.md |
+| Milestone status | the LNK milestone's `Status` — status lives there and only there |
+| Why anything was decided | an LNK decision |
+| A decision not yet taken | an LNK question |
+| Out-of-spec findings | an LNK finding |
 | Anything the owner said in passing | `.queue.md`, via `/note` |
-| Scope, definitions of done | Plan.md, phase-details/ |
+| Scope, definitions of done | Plan.md, LNK work units |
 
 Two untracked files sit in the repo root and they are not interchangeable.
 `.current-task.md` is *this milestone's* working state and is reset at step 3.9.
@@ -591,7 +599,7 @@ The bar is a claim instead:
 
 Checked at [3.9](#3-land), against the note just written, by the actor that wrote
 it. The test is to name what the note omits that would force a question — a
-decision taken this session and not yet in decisions.md, a rejection whose reason
+decision taken this session and not yet an LNK decision, a rejection whose reason
 lives only in the conversation, a gate that passed for a reason nobody recorded,
 a parked milestone whose owed question is not on the `Parked:` line.
 Nothing named, it clears. Something named, it goes in the note or in the file

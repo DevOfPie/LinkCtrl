@@ -330,12 +330,10 @@ func (r Recipient) Greeting() string {
 // introduced an instance-level principal — the blocklist and the disputes about
 // it cross every organization (M31), so "everybody who might be able to act" was
 // approximated by "every owner of everything". The approximation was the
-// amplifier in [F137]: one filer could put an unbounded number of disputes in
+// amplifier in LNK-F-0137: one filer could put an unbounded number of disputes in
 // front of a recipient list that grows with every registration on an instance
 // running LINKCTRL_SIGNUP_MODE=open, and neither rate-limiting the filer nor
 // capping the queue touches a multiplier that is the recipient list.
-//
-// [F137]: ../../docs/build-notes/deferred-findings.md
 //
 // Since D98 the people who can act are a named set, so this asks who they are
 // rather than guessing. It reads the review half rather than the decide half:
@@ -767,8 +765,8 @@ const AuditGrowthReminderInterval = 7 * 24 * time.Hour
 // This used to mail every organization's owners. The justification was the rule
 // this package applies everywhere else — tell the people who can act — and it was
 // true when written, because an instance had one organization and its owner was
-// the operator. [M28](../../docs/build-notes/phase-details/m28.md) made owner and
-// operator different people, [M29](../../docs/build-notes/phase-details/m29.md)
+// the operator. LNK-M-0027 made owner and
+// operator different people, LNK-M-0029
 // made owner mean anybody who registered, and the recipient list was never
 // revisited: under `SIGNUP_MODE=open` the warning went to every account on the
 // instance, weekly, carrying an operational number none of them could act on.

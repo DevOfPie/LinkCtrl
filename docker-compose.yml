@@ -114,7 +114,7 @@ services:
       # environment. Partition bounds on timestamptz are resolved using the
       # session timezone at DDL time, so a non-UTC session silently creates
       # partitions offset by the UTC offset, leaving gaps that swallow rows.
-      # See docs/adr/0001-partitioning-and-sqlc.md.
+      # See LNK-I-0001, in Mustur.
       - "-c"
       - "timezone=UTC"
       - "-c"
