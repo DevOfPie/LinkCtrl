@@ -31,7 +31,7 @@
 -- a key's permissions are its scopes intersected with its owner's role on every
 -- request, so an organization created through a key leaves that key holding
 -- exactly the scopes it was minted with. `NonDelegableScopes` therefore does not
--- list it. See decisions.md.
+-- list it. See Mustur.
 
 INSERT INTO permissions (id, slug, description) VALUES
     ('00000000-0000-4000-8000-000000000211', 'orgs.create',

@@ -69,7 +69,7 @@ import (
 // fabricating an add-on's effect on redirects that were served without one, which
 // is not a narrowing question at all — there is no query to write. The visible
 // half of this milestone is the per-module performance the Add-on manager renders,
-// which is [M68](../../docs/build-notes/phase-details/m68.md)'s and is named in
+// which is LNK-M-0089's and is named in
 // M66's own file as such.
 //
 // **M67 falls under it as well, and this was the last milestone that did.** The
@@ -1155,7 +1155,7 @@ func demoCoverage() []demoFeature {
 			// untrue about itself — that its audit log has outgrown its disk, or
 			// that a hostname it serves has stopped verifying — so the honest row
 			// is about what the feature needs rather than about the vocabulary
-			// being complete. decisions.md carries the full reasoning.
+			// being complete. Mustur carries the full reasoning.
 			//
 			// Counted as distinct kinds rather than as a list of them. A query
 			// naming the kinds would be a second enumeration of the vocabulary,

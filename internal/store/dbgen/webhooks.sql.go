@@ -54,7 +54,7 @@ type ClaimDueWebhookDeliveriesRow struct {
 //     process that dies mid-send retry the same delivery forever.
 //
 // FOR UPDATE SKIP LOCKED inside the subquery is the claim mechanism this
-// milestone had to choose (see decisions.md). Leadership already keeps a second
+// milestone had to choose (see Mustur). Leadership already keeps a second
 // replica out of the job, but leadership is an advisory lock released when its
 // holder dies, so a moment of overlap is possible; skip-locked makes that moment
 // cost nothing rather than deliver the same event twice.

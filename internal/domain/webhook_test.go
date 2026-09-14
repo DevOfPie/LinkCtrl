@@ -40,7 +40,7 @@ func TestEveryWebhookEventIsClassifiedForDisclosure(t *testing.T) {
 				"webhookEventsWithoutDestination. Classify it: an unclassified event "+
 				"defaults to carrying nothing, so /feeds would tell a workspace "+
 				"subscribed to it that no destination leaves — see M45's F135 entry "+
-				"in decisions.md", e)
+				"in Mustur", e)
 		}
 	}
 	if got, want := len(WebhookDestinationEvents)+len(webhookEventsWithoutDestination),

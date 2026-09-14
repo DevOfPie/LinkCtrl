@@ -6,7 +6,7 @@ does not re-derive the path; that addition is the worked example throughout.
 
 Defects are not features. A defect — anything making an existing claim false —
 follows [workflow.md](workflow.md)'s issue trigger and
-[deferred-findings.md](deferred-findings.md). This file is for capabilities the
+an LNK finding. This file is for capabilities the
 product was never claimed to have.
 
 The owner decides *whether*. This file decides *where and how*.
@@ -14,23 +14,23 @@ The owner decides *whether*. This file decides *where and how*.
 ## 1. Establish absence
 
 Search before writing anything: Plan.md and its scope tables,
-[phase-details/](phase-details/), decisions.md, and the artifact itself — the
+the LNK milestones, work units and decisions in Mustur, and the artifact itself — the
 plan can omit what the code half-has, and the code can lack what a plan row
 implies. (Dark mode was proven absent in both: no plan mention, and the
 compiled stylesheet contained zero `dark:` variants.) Search synonyms, not just
 the requested name.
 
 Four outcomes: already built (point at it), already scheduled (point at the
-row), partially scheduled (extend that milestone's file, not the table), or
+row), partially scheduled (extend that milestone's work unit, not the order), or
 absent — continue below.
 
 ## 2. Read before writing
 
 The conventions decide most questions before taste gets a vote:
 
-- [phase-details/_template.md](phase-details/_template.md) — the file format.
-- [phase-details/README.md](phase-details/README.md) — the rules every
-  milestone inherits, so the new file does not restate or contradict them.
+- [milestone-rules.md](milestone-rules.md#the-template) — the work unit's format.
+- [milestone-rules.md](milestone-rules.md#what-every-milestone-inherits) — the rules
+  every milestone inherits, so the new unit does not restate or contradict them.
 - The phase's decisions table in Plan.md — the addition may touch a decision
   already taken; reference it by number rather than re-deciding it.
 - The precedent: Phase 1 absorbed M18–M20 after its review, Phase 2 absorbed
@@ -66,8 +66,8 @@ went in at M24.5, before seven UI-building milestones, for exactly this reason.
   is a phase-boundary conversation, not an insertion.
 
 A future-phase feature is parked, not remembered: a row in *Not in Phase N*
-(or the next phase's candidate list) carrying its reason, and a decisions.md
-entry for the why. The queue is the plan, never anybody's head.
+(or the next phase's candidate list) carrying its reason, and an LNK
+decision for the why. The queue is the plan, never anybody's head.
 
 ### The size target: a phase stays under sixteen milestones
 
@@ -101,7 +101,7 @@ Phase 3 was planned at fifteen with every slot spent.
 
 On 2026-08-07 the owner asked for QR logos, was shown that they fitted no
 milestone and that the phase had no room, was offered the alternatives with their
-costs — park them for Phase 4, or trade [M50](phase-details/m50.md)'s slot — and
+costs — park them for Phase 4, or trade LNK-M-0060's slot — and
 chose to have both. Sixteen.
 
 Hours later an independent review of that milestone found it was two: an upload
@@ -115,7 +115,7 @@ against *reviewability* rather than against the number. The rule's own sentence
 holds: if the target and a milestone's reviewability disagree, the target gives.
 
 Phase 3 therefore ran at **seventeen** as planned and built, and **eighteen**
-once [M57.5](phase-details/m57.5.md) was added after the close under the
+once LNK-M-0073 was added after the close under the
 clarification above. That is a recorded exception rather
 than a new ceiling: **the rule here stays fifteen**. Moving the target for one
 phase and moving it for every phase after are different decisions, and only the
@@ -170,10 +170,10 @@ Five artifacts. None optional — each keeps a different document true.
 
 | # | Artifact | What it must say |
 | --- | --- | --- |
-| 1 | `phase-details/mN.md`, from the template | Falsifiable definitions of done. Deliberate exclusions stated, each with its reason. Enforcement named as a mechanism — a test that fails, not review vigilance. |
-| 2 | Plan.md ordering-table row | Dependencies, with soft edges marked as ordering preferences. Discharges: the promise it closes, or "owner-added scope" with the date — never an invented one. The milestone-count sentence stays true. |
-| 3 | `phase-details/README.md` status row | Plus an inherited-rules row **only** if the milestone constrains all later work (M24.5's template scan qualifies; most milestones do not). |
-| 4 | decisions.md entry, with index row | The why, dated. Placement reasoning, design constraints that forced choices, what deliberately stays out. |
+| 1 | An LNK work unit, from the template (`mustur add work-unit --project LNK`) | Falsifiable definitions of done. Deliberate exclusions stated, each with its reason. Enforcement named as a mechanism — a test that fails, not review vigilance. |
+| 2 | An LNK milestone, in its place in the order | Dependencies, with soft edges marked as ordering preferences. Discharges: the promise it closes, or "owner-added scope" with the date — never an invented one. The milestone-count sentence stays true. |
+| 3 | Its `Status` on that milestone | Plus an inherited-rules row in [milestone-rules.md](milestone-rules.md) **only** if the milestone constrains all later work (M24.5's template scan qualifies; most milestones do not). |
+| 4 | An LNK decision | The why, dated. Placement reasoning, design constraints that forced choices, what deliberately stays out. |
 | 5 | The restraint list | Do **not** touch: a decisions table headed "taken before the plan was finalised"; README's *Not built yet* unless the absence is a production surprise; any committed decision-log entry — a later entry corrects, never an edit. |
 
 ## 6. Verify
@@ -217,8 +217,8 @@ An independent reviewer, and the two words carry weight:
   conclusions, no summary of the author's intent, and above all no hint of which
   parts the author thinks are weak — that is the fastest way to get a review
   that confirms rather than checks. Name the standards as files:
-  [_template.md](phase-details/_template.md), the inherited-rules table in
-  [phase-details/README.md](phase-details/README.md), this file,
+  [the template](milestone-rules.md#the-template), the inherited-rules table in
+  [milestone-rules.md](milestone-rules.md#what-every-milestone-inherits), this file,
   [workflow.md](workflow.md), and [phase-loop.md](phase-loop.md).
 
 ### What it is pointed at

@@ -4,8 +4,8 @@
 #
 # This repository's operating contract is documentation, and documentation is
 # read into a context window on every task. That cost recurs forever and nothing
-# was measuring it. decisions.md is append-only and already larger than every
-# other build-note combined, so the growth is real and it is one-directional.
+# was measuring it. The records — decisions, findings, milestone files — live in
+# Mustur since W48 and are not charged here; the contract that stays still grows.
 #
 # Two numbers, because either one alone misleads:
 #
@@ -45,24 +45,19 @@ cd "$(dirname "$0")/.." || exit 1
 EVERY_TASK=(CLAUDE.md docs/build-notes/workflow.md)
 # An entry may be `path` — charged whole — or `path::regex`, charged at the
 # longest line matching that regex. The second form is for a file the contract
-# reads one row of: phase-loop.md's step 1 says "Plan.md's ordering row for N",
-# and charging the whole 170KB file for one 185-byte row reported a cost nobody
-# has ever paid. See the note in the generated header about comparability.
+# reads one row of. Plan.md's ordering rows were the one use, and W48 moved them
+# to Mustur, whose records are not charged here. See the note in the generated
+# header about comparability.
 PHASE_LOOP=(
 	docs/build-notes/phase-loop.md
-	docs/build-notes/phase-details/README.md
-	'Plan.md::^\| \[M'
+	docs/build-notes/milestone-rules.md
 )
 FEATURE=(
 	docs/build-notes/planning.md
-	docs/build-notes/phase-details/README.md
-	docs/build-notes/phase-details/_template.md
+	docs/build-notes/milestone-rules.md
 )
 REFERENCE=(
-	docs/build-notes/decisions.md
-	docs/build-notes/deferred-findings.md
 	docs/build-notes/development.md
-	docs/build-notes/upcoming-decisions.md
 )
 
 bytes_of() { wc -c <"$1" | tr -d ' '; }
@@ -198,8 +193,8 @@ printf '| Any task | %s | %s |\n' "$every" "$(est_tokens "$every")"
 printf '| `/work phase` resume | %s | %s |\n' \
 	"$((every + loop))" "$(est_tokens "$((every + loop))")"
 echo
-echo "Plus one \`phase-details/mN.md\` per milestone, which the split exists to"
-echo "keep small — the loop reads the one being built and no others."
+echo "Plus one LNK work unit per milestone, read from Mustur and not charged here —"
+echo "the loop reads the one being built and no others."
 echo
 
 rm -f "/tmp/doc-cost-total.$$"

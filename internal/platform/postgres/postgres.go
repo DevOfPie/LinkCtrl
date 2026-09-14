@@ -76,7 +76,7 @@ func open(ctx context.Context, c config.Config, maxConns, minConns int32, name s
 	// container environment. None of the three is sufficient alone: partition
 	// bounds on timestamptz resolve against the session timezone at DDL time,
 	// so a connection running in a local zone silently creates partitions
-	// offset from the intended range. See docs/adr/0001-partitioning-and-sqlc.md.
+	// offset from the intended range. See LNK-I-0001, in Mustur.
 	cfg.ConnConfig.RuntimeParams["timezone"] = "UTC"
 	// Identifies the pool in pg_stat_activity, which is what makes "which pool
 	// is holding this connection" answerable during an incident.

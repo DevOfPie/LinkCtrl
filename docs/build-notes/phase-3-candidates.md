@@ -7,7 +7,7 @@ next phase's candidate list)"* — and the list it names.
 
 **It restates nothing.** Almost every candidate already has a home in
 [Plan.md](../../Plan.md)'s *Not in Phase 2* list, its *Other surfaces* table, or
-[deferred-findings.md](deferred-findings.md), each carrying the reason it was
+the LNK findings, each carrying the reason it was
 deferred. This file adds one thing those cannot: a **grouping**. A row here is a
 pointer plus which area it belongs to, and the reason stays where it was written.
 
@@ -61,9 +61,9 @@ milestone would touch and they are the same files under their real names.)*
 | Candidate | Where it is recorded |
 | --- | --- |
 | MFA, OAuth, OIDC, SSO, SCIM | Plan.md *Not in Phase 2*; Phase 3 by the scope table |
-| **Account recovery — a forgotten password locks the account out permanently** | [F141](deferred-findings.md), and Plan.md *Not in Phase 2* |
-| **Account deletion and GDPR erasure — the schema and four sites describe both as existing** | [F44](deferred-findings.md), and Plan.md *Not in Phase 2* |
-| An API key that reaches more than one organization | [F75](deferred-findings.md), owner-directed 2026-08-05; Plan.md *Not in Phase 2* |
+| **Account recovery — a forgotten password locks the account out permanently** | LNK-F-0141, and Plan.md *Not in Phase 2* |
+| **Account deletion and GDPR erasure — the schema and four sites describe both as existing** | LNK-F-0044, and Plan.md *Not in Phase 2* |
+| An API key that reaches more than one organization | LNK-F-0075, owner-directed 2026-08-05; Plan.md *Not in Phase 2* |
 | A runtime signup toggle changeable from the dashboard | Plan.md *Not in Phase 2*, parked at D38, still parked after D98 gave the instance a principal |
 
 **Two of these are defects, not features.** F44 and F141 falsify claims the tree
@@ -78,12 +78,12 @@ in the way the rest are.
 | Candidate | Where it is recorded |
 | --- | --- |
 | **A UI/UX redesign, owner-requested for early Phase 3** | Queue row, 2026-08-06. Three complaints named: the link configuration page *"leaves a massive mess … difficult to find what you are looking for in"*; high-traffic items like retrieving a QR code are *"buried deep in the page"* alongside config that belongs in an on-demand popup; and the QR settings expose *Quiet zone* and *Module size* where an end user wants **output size in pixels** and the rest handled in the background. **It cannot be specified without the owner** — the row asks for a walkthrough, area by area, plus blind-task exercises where the owner is given a task with no instructions so the UX is judged by whether it can be done. That walkthrough is a Phase 3 planning input, and this row is where it is remembered |
-| **The workspace selector should always render, not only above one membership** | Queue row, 2026-08-02. `nav.html:38` is `{{if gt (len .Workspaces) 1}}`, which is [decisions.md](decisions.md)'s M25 entry working as designed — *"a control that cannot do anything"*. What the decision did not weigh is its **label**: with one membership the current workspace and organization name appear nowhere in the shell. Not a defect, because nothing claims the control always shows. Folding it into the redesign is recommended and is the owner's call |
+| **The workspace selector should always render, not only above one membership** | Queue row, 2026-08-02. `nav.html:38` is `{{if gt (len .Workspaces) 1}}`, which is the M25 decision entry working as designed — *"a control that cannot do anything"*. What the decision did not weigh is its **label**: with one membership the current workspace and organization name appear nowhere in the shell. Not a defect, because nothing claims the control always shows. Folding it into the redesign is recommended and is the owner's call |
 | Mobile navigation rework | Plan.md *Not in Phase 2* — the header hides the signed-in address below `sm` |
 | Notification severity, grouping and filtering | Plan.md *Not in Phase 2* — needs a schema change M22's model has no column for |
 | Trash/restore UI | Plan.md *Not in Phase 2* — Phase 1 decided against it |
 | Bulk operations | Plan.md *Not in Phase 2*, a "2+" row |
-| An **All Workspaces** dashboard scope | [upcoming-decisions.md](upcoming-decisions.md) — an open question, not a parked row, and it stays there because that file holds questions. Nothing takes an all-workspaces scope today: no handler, no query, no UI, and `actor.WorkspaceID` is a single value threaded through the service layer rather than a filter that could be widened. It is the surviving half of a queue row split on 2026-08-01 |
+| An **All Workspaces** dashboard scope | LNK-Q-0002 — an open question, not a parked row, and it stays there because Mustur holds questions. Nothing takes an all-workspaces scope today: no handler, no query, no UI, and `actor.WorkspaceID` is a single value threaded through the service layer rather than a filter that could be widened. It is the surviving half of a queue row split on 2026-08-01 |
 
 **Boundary note:** a redesign large enough to answer the three complaints will
 touch templates that every other area's UI also touches. If B runs in parallel
@@ -102,7 +102,7 @@ This is the clearest case in the file for *not* running two milestones at once.
 | Storing region or city | Plan.md *Not in Phase 2* — reverses the privacy stance, so it is a decision before it is work |
 | ASN/VPN detection | Plan.md *Not in Phase 2*, a "2+" row |
 | Activity feed and comments | Plan.md *Not in Phase 2*, "2+" rows |
-| **Distinguishing a blocked bot click from an observed one** | [decisions.md](decisions.md), 2026-08-06 — the residual left by the queue row that closed as already built. A column, an ingest field, one more `FILTER` |
+| **Distinguishing a blocked bot click from an observed one** | An LNK decision, 2026-08-06 — the residual left by the queue row that closed as already built. A column, an ingest field, one more `FILTER` |
 
 ### D — Redirect path and routing
 
@@ -128,7 +128,7 @@ landing in one phase means the measurement runs twice.
 
 | Candidate | Where it is recorded |
 | --- | --- |
-| High availability as a claim somebody could rely on | Plan.md *Other surfaces* — Phase 3. Multi-replica operation itself already works and is documented; what is missing is failover, a health-gated load-balancer contract, and measured rolling-deploy behaviour ([decisions.md](decisions.md), 2026-08-06) |
+| High availability as a claim somebody could rely on | Plan.md *Other surfaces* — Phase 3. Multi-replica operation itself already works and is documented; what is missing is failover, a health-gated load-balancer contract, and measured rolling-deploy behaviour (an LNK decision, 2026-08-06) |
 | Redis Streams as a work queue, for webhooks or the analytics recorder | Plan.md *Not in Phase 2* |
 | Redis resilience beyond a bounded failure — a circuit breaker | Plan.md *Not in Phase 2* |
 | **An update checker against GitHub releases, notifying instance owners** | Queue row, 2026-08-06. Absent everywhere — no version comparison against a remote, no release notification. **It introduces a new outbound-connection class**: the only one today is M42's webhooks, which `docs/SECURITY.md` treats as an operator-visible property, so this owes a decision on default-on-versus-off and an opt-out before it owes any code |
@@ -204,15 +204,15 @@ planning itself — see *Open questions*.
 
 **Which candidates each area takes.** Owner-set 2026-08-06, recorded as D109–D111
 in [Plan.md](../../Plan.md#phase-3-decisions) with the reasoning in
-[decisions.md](decisions.md#2026-08-06--phase-3-planned-what-each-area-takes-and-the-twelve-slots).
+LNK-D-0670.
 Twelve slots for work, after two reviews and the close come out of fifteen. *(The phase later ran to seventeen, and to eighteen when M57.5 was added after the close — see Plan.md's Phase 3 build plan for how the target moved and why.)*
 
 | Area | Takes | Leaves on this list |
 | --- | --- | --- |
-| **A** | F141 recovery ([M51](phase-details/m51.md)), F44 erasure ([M52](phase-details/m52.md)), MFA/TOTP ([M53](phase-details/m53.md)), the multi-organization key F75 ([M54](phase-details/m54.md)) | OAuth, OIDC, SSO, SCIM; the runtime signup toggle |
+| **A** | F141 recovery (LNK-M-0065), F44 erasure (LNK-M-0067), MFA/TOTP (LNK-M-0068), the multi-organization key F75 (LNK-M-0069) | OAuth, OIDC, SSO, SCIM; the runtime signup toggle |
 | **B** | Three milestones, M46–M48, specified by the walkthrough | The rows folded into the redesign are decided by it, including the workspace-selector label |
-| **E** | The update checker ([M55](phase-details/m55.md)), high availability ([M56](phase-details/m56.md), [M57](phase-details/m57.md)) | Redis Streams as a work queue; the circuit breaker |
-| **F** | All of it — PNG and pixel sizing ([M49](phase-details/m49.md)), several codes per link ([M50](phase-details/m50.md)) | Nothing |
+| **E** | The update checker (LNK-M-0070), high availability (LNK-M-0071, LNK-M-0072) | Redis Streams as a work queue; the circuit breaker |
+| **F** | All of it — PNG and pixel sizing (LNK-M-0059), several codes per link (LNK-M-0060) | Nothing |
 
 Four rows above are now **scheduled** and their reasons live where they always
 did; this file points at the milestone instead of at the deferral. The rows left
@@ -222,7 +222,7 @@ behind keep their reason and stay candidates.
 
 ## What Phase 3 shipped, and what is still on this list
 
-Written at [M58](phase-details/m58.md), the phase close, against the tree rather
+Written at LNK-M-0075, the phase close, against the tree rather
 than against the plan. **Seven areas were listed and the phase took four**; C, D
 and G stay candidates — not dropped, not re-homed, and *we stopped caring about
 this* is the decision this project keeps losing.
@@ -236,27 +236,27 @@ that changed shape and says nothing is a row somebody re-derives from scratch.
 
 | Candidate | Now | What moved |
 | --- | --- | --- |
-| MFA, OAuth, OIDC, SSO, SCIM | **MFA shipped** ([M53](phase-details/m53.md)); the other four stay candidates | D109 discharged only the MFA limb. The `password_hash` nullability comment and `auth.Service.verifyPassword` promised SSO *"(Phase 3)"* and no longer carry a phase number — M58's sweep. The row is now a candidate with no date rather than a promise |
-| Account recovery (F141) | **Shipped** — [M51](phase-details/m51.md) | — |
-| Account deletion and erasure (F44) | **Shipped** — [M52](phase-details/m52.md) | The residue is smaller than M52 left it: [F177](deferred-findings.md) and [F181](deferred-findings.md) closed at M58, so the erasure pass reaches audit `metadata` and invitation addresses too |
-| An API key reaching more than one organization (F75) | **Shipped** — [M54](phase-details/m54.md) | New ground the candidate did not anticipate: an administrator can cut their own organization out of somebody's account-wide key (D158), and M58 closed both halves of it — the read bound ([F183](deferred-findings.md)) and the owner's view of it ([F178](deferred-findings.md)) |
+| MFA, OAuth, OIDC, SSO, SCIM | **MFA shipped** (LNK-M-0068); the other four stay candidates | D109 discharged only the MFA limb. The `password_hash` nullability comment and `auth.Service.verifyPassword` promised SSO *"(Phase 3)"* and no longer carry a phase number — M58's sweep. The row is now a candidate with no date rather than a promise |
+| Account recovery (F141) | **Shipped** — LNK-M-0065 | — |
+| Account deletion and erasure (F44) | **Shipped** — LNK-M-0067 | The residue is smaller than M52 left it: LNK-F-0177 and LNK-F-0181 closed at M58, so the erasure pass reaches audit `metadata` and invitation addresses too |
+| An API key reaching more than one organization (F75) | **Shipped** — LNK-M-0069 | New ground the candidate did not anticipate: an administrator can cut their own organization out of somebody's account-wide key (D158), and M58 closed both halves of it — the read bound (LNK-F-0183) and the owner's view of it (LNK-F-0178) |
 | A runtime signup toggle from the dashboard | **Stays a candidate** | Still parked at D38. But the phase built the surface the parking was partly about: D161's `instance_settings` singleton and its checkbox exist now, so the toggle has somewhere to live that it did not have |
 
 ### B — Dashboard UI and UX
 
 | Candidate | Now | What moved |
 | --- | --- | --- |
-| The UI/UX redesign | **Shipped** — [M46](phase-details/m46.md)–[M48](phase-details/m48.md), plus the seven defects it produced, fixed at M58 | All three complaints answered. The blind tasks that specified it are recorded nowhere (D146), so the exercise cannot be re-run |
+| The UI/UX redesign | **Shipped** — LNK-M-0053–LNK-M-0058, plus the seven defects it produced, fixed at M58 | All three complaints answered. The blind tasks that specified it are recorded nowhere (D146), so the exercise cannot be re-run |
 | The workspace selector should always render | **Half shipped** | M46 added the label, which the row itself identified as the real gap — the current workspace and organization now appear in the shell unconditionally. The control still renders only above one membership, and D117 settled *why*: a switcher offers the places you can go. What is left of this row is a preference, not a gap |
-| Mobile navigation rework | **Stays a candidate**, narrowed | M46 made *no horizontal scroll at 360px* a scanned property of the shell, and [F184](deferred-findings.md) closed the one page that broke it. The header hiding the signed-in address below `sm` is untouched and is what the row is now about |
+| Mobile navigation rework | **Stays a candidate**, narrowed | M46 made *no horizontal scroll at 360px* a scanned property of the shell, and LNK-F-0184 closed the one page that broke it. The header hiding the signed-in address below `sm` is untouched and is what the row is now about |
 | Notification severity, grouping, filtering | **Stays a candidate** | Unchanged — still needs the column M22's model has no room for |
-| Trash/restore UI · Bulk operations · An **All Workspaces** scope | **Stay candidates** | Unchanged. The all-workspaces question is still a question, in [upcoming-decisions.md](upcoming-decisions.md) |
+| Trash/restore UI · Bulk operations · An **All Workspaces** scope | **Stay candidates** | Unchanged. The all-workspaces question is still a question, LNK-Q-0002 |
 
 ### C — Analytics and reporting *(area not taken)*
 
 Every row stays. Two changed shape:
 
-- **Campaign analytics** — [M50](phase-details/m50.md) gave per-code counts by
+- **Campaign analytics** — LNK-M-0060 gave per-code counts by
   making the code *its own stored referrer value* (D132) rather than by building
   the rollup this row was deferred for. The row's reason was job load, and that
   reason is intact; what moved is that the cheapest version of it is now done and
@@ -275,7 +275,7 @@ Every row stays. One changed shape:
   `internal/link/domain_settings.go:276`, Plan.md's *Known limitations* row,
   `docs/SECURITY.md`'s *A human blocked as a bot cannot get through*,
   `test/integration/bots_test.go:291`, and both of
-  [m32.5.md](phase-details/m32.5.md)'s — its *Deliberately not in this
+  LNK-M-0034's — its *Deliberately not in this
   milestone* bullet and its *Risks* paragraph. This entry said *the three sites*
   and then listed four; the count is stated because a section whose method is
   counting cannot afford to recall. `decisions.md`'s two mentions are the
@@ -287,8 +287,8 @@ Every row stays. One changed shape:
 
 | Candidate | Now | What moved |
 | --- | --- | --- |
-| High availability as a claim somebody could rely on | **Shipped** — [M56](phase-details/m56.md), [M57](phase-details/m57.md) | The load-balancer contract is D167's; the two-leader window is D168's, closed for deploys and bounded for crashes |
-| The update checker | **Shipped** — [M55](phase-details/m55.md) | D149 defaults it on and asks at first run, which required the instance-settings surface the row did not anticipate |
+| High availability as a claim somebody could rely on | **Shipped** — LNK-M-0071, LNK-M-0072 | The load-balancer contract is D167's; the two-leader window is D168's, closed for deploys and bounded for crashes |
+| The update checker | **Shipped** — LNK-M-0070 | D149 defaults it on and asks at first run, which required the instance-settings surface the row did not anticipate |
 | Redis Streams as a work queue | **Stays a candidate** | Verified unexercised at M58, not assumed: `cmd/linkctrl/recorder.go` and `internal/webhook/webhook.go` both state it as an upgrade path nothing is written against, and both are still true |
 | Redis resilience beyond a bounded failure | **Stays a candidate** | Unchanged |
 
@@ -296,13 +296,13 @@ Every row stays. One changed shape:
 
 | Candidate | Now | What moved |
 | --- | --- | --- |
-| A PNG QR code | **Shipped** — [M49](phase-details/m49.md), D11 reversed | — |
-| More than one QR code per link, and per-code scan counts | **Shipped** — [M50](phase-details/m50.md) | — |
+| A PNG QR code | **Shipped** — LNK-M-0059, D11 reversed | — |
+| More than one QR code per link, and per-code scan counts | **Shipped** — LNK-M-0060 | — |
 
 This area's *Leaves on this list* cell read **Nothing**, and after the phase it
 is nearly true — but not quite, and the exception was found by M58's comment
 sweep rather than by the plan. Logos were not on this list at all and shipped
-anyway ([M50.5](phase-details/m50.5.md), [M50.6](phase-details/m50.6.md)), from
+anyway (LNK-M-0061, LNK-M-0062), from
 the walkthrough. **Module shape is the one thing `qr_codes.style`'s comment
 claimed and nothing built** — square modules only — and it is named here so that
 removing the claim from the schema does not also remove the idea.
@@ -312,8 +312,8 @@ removing the claim from the schema does not also remove the idea.
 The row stays, and **both** its anchors in the tree lost their dates.
 `orgs.create` names itself the call site an entitlement check would hang on in
 two places — `CreateOrganization`'s doc in `internal/team/organization.go`, and
-[M28](phase-details/m28.md)'s own bullet — and each said *"(Phase 3+)"* until
-[M58](phase-details/m58.md); each now says unscheduled. **This close-out counted
+LNK-M-0027's own bullet — and each said *"(Phase 3+)"* until
+LNK-M-0075; each now says unscheduled. **This close-out counted
 one of them**, corrected 2026-08-10: the one it missed is in a shipped
 milestone's file, which is exactly where the bot-bypass count had been caught
 hiding two more of itself hours earlier. A third mention, `Plan.md`'s D16 row,
@@ -329,12 +329,12 @@ urgent half.
 *Answered* above. What remains open is everything below.
 
 **What does the redesign actually specify?** **Answered 2026-08-07.** Eighteen
-blind tasks over two rounds produced [M46](phase-details/m46.md),
-[M47](phase-details/m47.md) and [M48](phase-details/m48.md), plus seven defects
-(F160–F166) that are fixed at [M58](phase-details/m58.md) rather than costing a
+blind tasks over two rounds produced LNK-M-0053,
+LNK-M-0056 and LNK-M-0058, plus seven defects
+(F160–F166) that are fixed at LNK-M-0075 rather than costing a
 redesign slot. The reasoning, including why *irritating* turned out to mean
 *defective* in four of six areas, is
-[D114](decisions.md#2026-08-07--what-eighteen-blind-tasks-specified-and-the-six-defects-hiding-inside-a-word).
+LNK-D-0114.
 
 Three asks the walkthrough produced are **deferred to Phase 4** rather than
 dropped — folders path-entry, organization switching, and API-key scope grouping.
@@ -342,14 +342,14 @@ Their reasons are in Plan.md's *Not in Phase 3*, which is where a deferral's
 reason lives; this file does not restate them.
 
 **Does the update checker default on or off?** **Re-homed 2026-08-06** to
-[upcoming-decisions.md](upcoming-decisions.md#m55--does-the-update-checker-default-on-or-off),
+LNK-Q-0001,
 which is where it said it belonged once the phase was planned. It carries three
-options, their costs and a recommendation, and [M55](phase-details/m55.md) reads
+options, their costs and a recommendation, and LNK-M-0070 reads
 the answer from there rather than pre-empting it.
 
 **How do B and F share the QR work?** **Answered 2026-08-06 — an ordered pair.**
 The settings vocabulary is B's templates over F's generator, so
-[M49](phase-details/m49.md) sits behind M48 as an ordering preference
+LNK-M-0059 sits behind M48 as an ordering preference
 rather than inside it: the generator work — PNG, the pixel-size arithmetic, the
 snap — has no edge on B at all and can land first if B stalls, which is exactly
 the fallback [W33](workflow-changes.md#made) exists for. What must not happen is
@@ -358,8 +358,8 @@ it twice.
 
 ## Phase 3 inherits all fourteen, confirmed 2026-08-07
 
-**Moved here from [phase-details/README.md](phase-details/README.md#what-every-milestone-inherits)
-on 2026-08-08**, at [M51.9](phase-details/m51.9.md)'s doc-cost judgement. It is
+**Moved here from `phase-details/README.md`'s inherited-rules section
+on 2026-08-08**, at LNK-M-0066's doc-cost judgement. It is
 planning evidence — produced once, when the phase was scoped — and it was being
 charged against the `/work phase` resume at every milestone. The rules
 themselves have not moved and are still in that file's *What every milestone
@@ -371,17 +371,17 @@ a validator knows where the rule does work rather than sits:
 
 | Rule | Which milestone tests it, and how |
 | --- | --- |
-| Redirect tree stays minimal | [M50](phase-details/m50.md) parses a second query parameter on the hot path. Its tripwires must pass unmodified; if the code identity needs a lookup the resolver does not already hold, M50 says it does not ship in that form. |
+| Redirect tree stays minimal | LNK-M-0060 parses a second query parameter on the hot path. Its tripwires must pass unmodified; if the code identity needs a lookup the resolver does not already hold, M50 says it does not ship in that form. |
 | Redirects are never permanent | Untouched. No Phase 3 milestone writes a redirect status. |
-| Cache is optional | [M56](phase-details/m56.md) and [M57](phase-details/m57.md) are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. [M50.5](phase-details/m50.5.md)'s storage decision is bounded by that same test — an object store would be a new required dependency. |
-| Privacy stance | [M52](phase-details/m52.md) writes the first erasure routine in the product and [M51](phase-details/m51.md) audits a reset with an IP prefix only. Neither adds a column the stance forbids. [M50.5](phase-details/m50.5.md) adds the first *user-uploaded* content — which the stance is not about, and which account erasure deliberately does **not** reach. |
-| Every UI feature has API support | [M51](phase-details/m51.md) (recovery routes), [M50](phase-details/m50.md) (QR code CRUD), [M50.5](phase-details/m50.5.md) (upload and clear — **and teaching the contract test multipart, which it has never done**) and [M54](phase-details/m54.md) (key reach) each land operations in `api/openapi.yaml`. |
-| Dormant structure is jsonb | [M50](phase-details/m50.md) touches `qr_codes.style`; [M49](phase-details/m49.md) reads pre-milestone styles forward out of the same blob; [M50.6](phase-details/m50.6.md) draws a logo, but **not** out of the blob — [D134](../../Plan.md#phase-3-decisions) put it in a `bytea` column, so the *logo reference* the blob's comment has promised since Phase 1 is still unbuilt and the rule is untested by it. *(Amended 2026-08-07: written at planning time, made false by M50.5's storage answer.)* |
+| Cache is optional | LNK-M-0071 and LNK-M-0072 are where this could quietly break: M57's conformance test asserts one container with **no Redis** exercises the full surface, which is this rule turned into a gate rather than a habit. LNK-M-0061's storage decision is bounded by that same test — an object store would be a new required dependency. |
+| Privacy stance | LNK-M-0067 writes the first erasure routine in the product and LNK-M-0065 audits a reset with an IP prefix only. Neither adds a column the stance forbids. LNK-M-0061 adds the first *user-uploaded* content — which the stance is not about, and which account erasure deliberately does **not** reach. |
+| Every UI feature has API support | LNK-M-0065 (recovery routes), LNK-M-0060 (QR code CRUD), LNK-M-0061 (upload and clear — **and teaching the contract test multipart, which it has never done**) and LNK-M-0069 (key reach) each land operations in `api/openapi.yaml`. |
+| Dormant structure is jsonb | LNK-M-0060 touches `qr_codes.style`; LNK-M-0059 reads pre-milestone styles forward out of the same blob; LNK-M-0062 draws a logo, but **not** out of the blob — [D134](../../Plan.md#phase-3-decisions) put it in a `bytea` column, so the *logo reference* the blob's comment has promised since Phase 1 is still unbuilt and the rule is untested by it. *(Amended 2026-08-07: written at planning time, made false by M50.5's storage answer.)* |
 | Partitioning | Untouched. No Phase 3 milestone adds a partitioned table. |
-| DDL is additive | [M54](phase-details/m54.md) makes `api_keys.organization_id` nullable and [M50](phase-details/m50.md) drops a unique index. Both are additive within 0.3.0; M54's risk section states that the *resolution logic* is what is not reversible, which the rule does not cover. |
-| Permissions | No Phase 3 milestone adds a permission. [M54](phase-details/m54.md) re-derives D18's delegability reasoning against a credential that crosses tenancies, and [M52](phase-details/m52.md) declines an administrative delete-somebody-else rather than inventing one. |
-| `ui` stays stdlib-only | [M46](phase-details/m46.md)–[M48](phase-details/m48.md) are a redesign, which is exactly where the argument for a framework gets made. All three restate the rule for that reason. |
+| DDL is additive | LNK-M-0069 makes `api_keys.organization_id` nullable and LNK-M-0060 drops a unique index. Both are additive within 0.3.0; M54's risk section states that the *resolution logic* is what is not reversible, which the rule does not cover. |
+| Permissions | No Phase 3 milestone adds a permission. LNK-M-0069 re-derives D18's delegability reasoning against a credential that crosses tenancies, and LNK-M-0067 declines an administrative delete-somebody-else rather than inventing one. |
+| `ui` stays stdlib-only | LNK-M-0053–LNK-M-0058 are a redesign, which is exactly where the argument for a framework gets made. All three restate the rule for that reason. |
 | Both themes | Same three. New markup uses the theme tokens and M24.5's template scan applies unchanged. |
-| Touching the redirect path | [M50](phase-details/m50.md), [M57](phase-details/m57.md) and [M57.9](phase-details/m57.9.md) — three k6 runs this phase. |
-| A test that passes first try | Everywhere. [M54](phase-details/m54.md) names it as doing real work rather than ceremony: there is no existing test that would fail if scope intersection were taken against the wrong role. |
-| A new feature somebody can *see* | [M50](phase-details/m50.md) and [M53](phase-details/m53.md) add `demoCoverage()` rows. [M49](phase-details/m49.md) deliberately adds none and says why; [M57](phase-details/m57.md) is exempt because there is nothing to look at. |
+| Touching the redirect path | LNK-M-0060, LNK-M-0072 and LNK-M-0074 — three k6 runs this phase. |
+| A test that passes first try | Everywhere. LNK-M-0069 names it as doing real work rather than ceremony: there is no existing test that would fail if scope intersection were taken against the wrong role. |
+| A new feature somebody can *see* | LNK-M-0060 and LNK-M-0068 add `demoCoverage()` rows. LNK-M-0059 deliberately adds none and says why; LNK-M-0072 is exempt because there is nothing to look at. |

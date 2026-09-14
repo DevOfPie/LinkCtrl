@@ -51,7 +51,7 @@ import (
 // code.** m50.md required this choice be made and recorded, and the alternative —
 // growing `GET /links/{id}/qr` an identifier — would have changed what a shipped
 // endpoint answers for every client already calling it, which is exactly what
-// the contract test exists to catch. Recorded in decisions.md under M50.
+// the contract test exists to catch. Recorded in Mustur under M50.
 
 // The default became a flag (M50's reopening, D183).
 //

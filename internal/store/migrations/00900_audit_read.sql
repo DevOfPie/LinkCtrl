@@ -11,7 +11,7 @@
 -- It is not delegable to an API key. NonDelegableScopes in internal/auth
 -- enforces that at mint time, and it is the only place that does, so the
 -- decision can be reversed by deleting one map entry if the operational case
--- for machine export ever outweighs it. See decisions.md.
+-- for machine export ever outweighs it. See Mustur.
 
 INSERT INTO permissions (id, slug, description) VALUES
     ('00000000-0000-4000-8000-000000000210', 'audit.read',

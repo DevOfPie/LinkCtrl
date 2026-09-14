@@ -220,7 +220,7 @@ It is served only while `users` is empty, and answers `303 → /login` once an
 account exists — so a redirect there means the instance is already claimed, not
 that the route is missing.
 
-**The test instance's account, as rebuilt 2026-08-11 for [M46.6](../build-notes/phase-details/m46.6.md):**
+**The test instance's account, as rebuilt 2026-08-11 for LNK-M-0055:**
 
 | | |
 | --- | --- |

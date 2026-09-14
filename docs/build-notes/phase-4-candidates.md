@@ -7,10 +7,10 @@ this file draws from, and nothing here restates it.
 
 **Written on 2026-08-18, before any milestone exists.** Everything below was
 answered by the owner in one planning conversation on that date. It is recorded
-here rather than in [decisions.md](decisions.md) because no milestone uses it
+here rather than as LNK decisions because no milestone uses it
 yet — the answers get `D` numbers when the milestones that rest on them land,
 carrying the date they were *given* as well as the date they were used, which is
-the convention [upcoming-decisions.md](upcoming-decisions.md) states and this
+the convention [workflow.md](workflow.md#a-decision-is-coming-and-the-loop-has-not-reached-it-yet) states and this
 file follows.
 
 ---
@@ -122,12 +122,12 @@ win in its own file, never waivers.
 
 **This list is a record of what was weighed when the phase was planned, and it
 was wrong in both directions** (F301). It said each entry is an inherited
-invariant from [phase-details/README.md](phase-details/README.md)'s *What every
+invariant from [milestone-rules.md](milestone-rules.md#what-every-milestone-inherits)'s *What every
 milestone inherits*, and **`Single container is a tested configuration` is not
 among those fourteen at all** — it is a real property of this product, gated by
 `scripts/single-instance-check.sh`, and it is not one of the inherited rules the
 sentence claims to be quoting. It also said *five*, and stopped being updated:
-[M64](phase-details/m64.md) engaged a sixth, deferring *every UI feature has API
+LNK-M-0083 engaged a sixth, deferring *every UI feature has API
 support* to M69 and arguing it in its own file, which is exactly where the
 pointer requires such an argument to live.
 
@@ -152,7 +152,7 @@ number nobody maintains.
 - **The privacy stance** — no IP column anywhere, `ip_prefix` only — meets a
   storage-holding add-on that watches redirects, which nothing in the first
   four collisions covers. *Added at the plan's review, 2026-08-18.* The plan's
-  answer is [M61](phase-details/m61.md)'s: the stance binds **at the ABI, not
+  answer is LNK-M-0080's: the stance binds **at the ABI, not
   by auditing add-on DDL** — no host function hands a module a raw client
   address, so an add-on cannot store what it is never handed, asserted by a
   test over the ABI surface rather than promised by review vigilance.
@@ -166,7 +166,7 @@ number nobody maintains.
 | **Which areas?** | **Add-ons as the spine, and A (identity) expressed through them.** C and D were taken and then **deferred to Phase 5** later in the same conversation | B, E and F are not taken either. C and D have now waited three phases and will wait a fourth — recorded as a change of mind rather than reconciled away, because the first answer is what the arithmetic below was computed against |
 | **Version** | **Another 0.x** | [releasing.md](../releasing.md) ties 1.0 to identity being complete. See the OIDC row below, which changes what that sentence will mean |
 | **Size target** | **Raise the cap to 18; plan to 15** | Phase 2 ran 33, Phase 3 ran 23 against a plan of 15 with eight insertions. The cap moves once, deliberately, and the planning number stays where the last two phases put the pressure |
-| **Process debt** | **One milestone, early in the phase** | [F248](deferred-findings.md#closed), [F253](deferred-findings.md#closed), [F254](deferred-findings.md#closed), [F255](deferred-findings.md#closed). Early, because F255 is *nothing asks whether CI is green* and the phase should not run without that gate |
+| **Process debt** | **One milestone, early in the phase** | LNK-F-0248, LNK-F-0253, LNK-F-0254, LNK-F-0255. Early, because F255 is *nothing asks whether CI is green* and the phase should not run without that gate |
 
 ### OIDC moves out of core, and that is the phase's biggest structural change
 
@@ -244,18 +244,18 @@ decision left in it, named so the milestone that meets it does not rediscover it
 1. **The SLO claim is restated as core-only** in [slo.md](../slo.md),
    `docs/SECURITY.md` and `README.md`. It is a published measurement and it is
    about to stop being true of an instance with an inline add-on. **Discharged by
-   [M66](phase-details/m66.md) in two of the three, and the third is deliberate**:
+   LNK-M-0086 in two of the three, and the third is deliberate**:
    slo.md now opens by scoping every figure in it to core with no inline add-on on
    the path and carries both runs — core unmoved, and a module that never returns
    — while `docs/SECURITY.md` gains a row saying the same thing and what stays this
    product's, which is availability. `README.md` is **not** in that diff, because
    D104 keeps it describing the *released* product and add-ons are not released
    until the tag; `CHANGELOG.md`'s `[Unreleased]` carries the rescoping until
-   [M70](phase-details/m70.md)'s documentation pass moves it, which m66.md states
+   LNK-M-0095's documentation pass moves it, which m66.md states
    so the close does not rediscover it.
 2. **A deprecation policy is written with the ABI**, because SemVer without one
    is a version number and a hope. **Discharged by
-   [M61](phase-details/m61.md)**: [docs/addon-abi.md](../addon-abi.md) states what
+   LNK-M-0080**: [docs/addon-abi.md](../addon-abi.md) states what
    counts as breaking as a table rather than a judgement, fixes the minimum window
    at two minor releases and 90 days whichever ends later, and names the four
    places a deprecation is announced — one of them the SDK's generated Go
@@ -271,14 +271,14 @@ decision left in it, named so the milestone that meets it does not rediscover it
 
 **Genuinely open at planning — each now routed, none silently.** The four
 questions this section held when it was written on 2026-08-18 were taken up by
-the plan the same day ([D211](decisions.md#2026-08-18--phase-4-planned-the-spine-and-the-fourteen-slots)):
+the plan the same day (LNK-D-0211):
 
 - **What the deadline is** — deliberately *not* answered: no data exists until
   something runs, so the value is measured into at
-  [M66](phase-details/m66.md), and the question waits in
-  [upcoming-decisions.md](upcoming-decisions.md) with the shape of its answer
+  LNK-M-0086, and the question waits in
+  `upcoming-decisions.md` with the shape of its answer
   fixed in advance.
-- **What the host functions actually are** — [M61](phase-details/m61.md)'s
+- **What the host functions actually are** — LNK-M-0080's
   central artifact, named there as the hardest of the phase. **Answered**: ten
   functions in `internal/addon/abi`, six capability groups, one wasm module named
   `linkctrl`, one calling convention for all of them. Three are live — `log`,
@@ -287,7 +287,7 @@ the plan the same day ([D211](decisions.md#2026-08-18--phase-4-planned-the-spine
   from its first commit. The list itself is the ABI: the SDK, the documented table
   and the host module the runtime registers are all derived from it.
 - **How declared permissions are expressed and checked** —
-  [M62](phase-details/m62.md), which examines the `NonDelegableScopes` analogy
+  LNK-M-0081, which examines the `NonDelegableScopes` analogy
   and records the answer either way.
 - **How many milestones this is** — **fourteen**: eleven integers, two
   reviews, one close, M59–M70, in
@@ -304,12 +304,12 @@ the plan the same day ([D211](decisions.md#2026-08-18--phase-4-planned-the-spine
 
 **Owner-answered 2026-08-18**, when the drafted plan was put to them — same
 convention as the table above: recorded here, `D` numbers when
-[M59](phase-details/m59.md) lands, options and costs stated when asked.
+LNK-M-0078 lands, options and costs stated when asked.
 
 | Question | Answer |
 | --- | --- |
-| **[F253](deferred-findings.md#closed): the direct `release-check` form skips the integration tests — script or docs?** | **The script derives `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` itself**, the recommended shape, taking the stated cost: a new drift pair between Makefile and script, which M59 adds a check for. The alternative — docs drop the direct form — left the trap runnable and merely unrecommended |
-| **[F254](deferred-findings.md#closed): which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
+| **LNK-F-0253: the direct `release-check` form skips the integration tests — script or docs?** | **The script derives `COMPOSE_PROJECT_NAME` and `COMPOSE_ENV_FILES` itself**, the recommended shape, taking the stated cost: a new drift pair between Makefile and script, which M59 adds a check for. The alternative — docs drop the direct form — left the trap runnable and merely unrecommended |
+| **LNK-F-0254: which shape ends the fold/tag conflict?** | **The release-time gate is named in workflow.md's Docs row**, the recommended shape, taking the stated cost: the conflict is documented rather than removed, and a post-fold reopening still re-folds by hand. The losing shapes: fold-at-the-close (phase-loop grows a step and post-close reopenings still hit the window), and release-check folding it itself (a gate that edits the tree it checks, date-checking a date it wrote) |
 | **Does Phase 4 inherit all fourteen rules as written?** | **Yes, all fourteen** — the five collisions above stay per-milestone written arguments, not waivers. A milestone that cannot win its argument comes back as a prompt |
 
 ## The manager's layout: chosen from wireframes, amended, confirmed
@@ -334,8 +334,8 @@ typed input the host renders — text, secret, select, toggle — saved behind
 `addons.manage`, audited, secrets never echoed. The drafted plan had kept
 add-on configuration in the operator's environment; this reverses that for
 *declared* settings only, and it was amended into
-[M60](phase-details/m60.md) (manifest), [M61](phase-details/m61.md) (ABI
-reads) and [M68](phase-details/m68.md) (render and save) after the plan's
+LNK-M-0079 (manifest), LNK-M-0080 (ABI
+reads) and LNK-M-0089 (render and save) after the plan's
 independent review, at the owner's direction, on 2026-08-18.
 
 The confirmed frames, compressed to their essentials (the drawn versions live
@@ -385,12 +385,12 @@ reasons live and stay:
   irritating with no defect behind it.
 - Switching organizations anywhere except the workspace dropdown.
 - Moving links between workspaces, and the *All Workspaces* scope in
-  [upcoming-decisions.md](upcoming-decisions.md) that shares its hard part.
+  LNK-Q-0002 that shares its hard part.
 - Grouping API-key scopes by the object they act on.
 
 ### Provisioning from an add-on's assertion — deferred by M65, on purpose
 
-**[M65](phase-details/m65.md) ships linking-only**, and this is where its own
+**LNK-M-0085 ships linking-only**, and this is where its own
 bullet says the other half is recorded so that the phase which wants it does not
 have to rediscover the shape.
 
@@ -401,7 +401,7 @@ reached, never created. **Whether an unknown external subject may become a new
 account is a separate question**, and it is a policy one rather than a
 mechanical one:
 
-- It has to answer to `LINKCTRL_SIGNUP_MODE` ([D38](decisions.md)), which is the
+- It has to answer to `LINKCTRL_SIGNUP_MODE` (LNK-D-0038), which is the
   operator's and not an add-on's. `closed` means closed, and an identity provider
   that could create accounts under it would be a way around the setting rather
   than a feature beside it.

@@ -74,7 +74,7 @@ ORDER BY d.is_default DESC, lower(d.hostname), d.id;
 
 -- name: RenameDomain :one
 -- The hostname is the only thing a registration has to change, and it is
--- changeable only while nothing serves it; see decisions.md, D69.
+-- changeable only while nothing serves it; see LNK-D-0069.
 --
 -- Not scoped by owner. The caller has already been judged against the row read
 -- by GetDomainByID, and repeating the predicate here would turn a 403 into a

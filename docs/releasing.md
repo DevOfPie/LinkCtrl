@@ -171,7 +171,7 @@ tag.
 3. **Binaries.** `linkctrl` and `lctl` cross-compiled for linux (amd64, arm64),
    macOS (arm64, amd64) and Windows (amd64), each archive carrying `LICENSE`,
    `README.md`, `CHANGELOG.md` and `.env.example`, with a `SHA256SUMS` file.
-   (Three were listed until 0.2.0 and the Makefile copied four — [F45](build-notes/deferred-findings.md).) The workflow unpacks
+   (Three were listed until 0.2.0 and the Makefile copied four — LNK-F-0045.) The workflow unpacks
    the linux/amd64 archive and asserts the binaries report the version being
    released — a stamp that silently fails is invisible until someone needs it.
 4. **Publish.** A GitHub release whose notes are this version's changelog section,

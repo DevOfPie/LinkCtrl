@@ -43,7 +43,7 @@ import (
 //
 // No new permission slug. `domains.write` already exists (migration 00800,
 // granted to the owner and admin roles), and what M39 adds is a scope check on
-// the permission rather than a second kind of permission; see decisions.md, D69.
+// the permission rather than a second kind of permission; see LNK-D-0069.
 
 // Domain is a hostname as the dashboard and the API see it.
 //
@@ -317,7 +317,7 @@ func (s *Service) RegisterDomain(
 // aliases all hang off `domain_id` and are untouched by the name. Once M40
 // verifies a hostname, a rename has to invalidate that verification, and the
 // bullet that says so belongs to M40 rather than being written here against
-// behaviour that does not exist. See decisions.md, D69.
+// behaviour that does not exist. See LNK-D-0069.
 func (s *Service) RenameDomain(
 	ctx context.Context, actor *auth.Identity, id uuid.UUID, rawHostname string,
 ) (*Domain, error) {

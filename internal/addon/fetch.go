@@ -34,7 +34,7 @@ import (
 // falls in globally-routable unicast space and is refused otherwise, checked at
 // the moment the connection is made. **Where a particular caller may
 // point** is the origin allowlist, which for an add-on is what its operator wrote
-// in a setting and for [M68.6](../../docs/build-notes/phase-details/m68.6.md)'s
+// in a setting and for LNK-M-0091's
 // URL install will be the URL the operator typed.
 //
 // The separation is that milestone's own requirement, written into its file as a

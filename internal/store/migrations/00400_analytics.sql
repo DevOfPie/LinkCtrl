@@ -26,7 +26,7 @@
 -- sqlc emits a duplicate junk model for every child partition it sees, so
 -- partitions would add a dead struct to generated code every month. They are
 -- created by a Go migration and by the partition_maintain job instead.
--- See docs/adr/0001-partitioning-and-sqlc.md.
+-- See LNK-I-0001, in Mustur.
 
 -- Rotating salts for visitor hashing.
 CREATE TABLE analytics_salts (

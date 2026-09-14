@@ -187,7 +187,7 @@ type Config struct {
 	BlockedAuditLimit KeyLimiter
 	// Feed is the opt-in third-party reputation check. Nil is the default and
 	// the only state in which this program sends nothing anywhere; see
-	// Service.askFeed and docs/build-notes/decisions.md, D40.
+	// Service.askFeed and LNK-D-0040.
 	Feed FeedChecker
 	// FeedMetrics counts feed checks, including the failures that fail open.
 	// Nil counts nothing.

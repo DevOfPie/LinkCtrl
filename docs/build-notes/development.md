@@ -88,9 +88,9 @@ no other target wants.
 
 | | Re-checks | Needs |
 | --- | --- | --- |
-| `make verify-render` | [M26.5](phase-details/m26.5.md)'s popover geometry, in Blink, Gecko and WebKit — [tools/render-verify/](../../tools/render-verify/README.md) | Three browser engines, several hundred megabytes |
+| `make verify-render` | LNK-M-0024's popover geometry, in Blink, Gecko and WebKit — [tools/render-verify/](../../tools/render-verify/README.md) | Three browser engines, several hundred megabytes |
 | `make verify-ui` | The kept browser spec, against a running test instance — [tools/agent-browser/](../../tools/agent-browser/README.md) | One engine, and `make up` |
-| `make verify-scan` | [M50.6](phase-details/m50.6.md)'s logo cap: every code the product can draw, decoded at simulated distance — [tools/qr-scan/](../../tools/qr-scan/README.md) | Two decoders, and a few minutes |
+| `make verify-scan` | LNK-M-0062's logo cap: every code the product can draw, decoded at simulated distance — [tools/qr-scan/](../../tools/qr-scan/README.md) | Two decoders, and a few minutes |
 
 `Taskfile.yml` carries the Makefile's tasks for contributors without `make`, and
 it is **not** a complete mirror — it said it was until 0.4.0 while two of the

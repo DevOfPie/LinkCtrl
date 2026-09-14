@@ -19,7 +19,7 @@
 -- a free band, so recovery takes the next free number rather than a `002xx`
 -- that reads as related. m51.md reserved `037xx` when it was written and M50
 -- and M50.5 spent `03700` and `03800` before it was read — the amendment is in
--- decisions.md under M51, and the rule it settled on is *do not reserve a
+-- Mustur under M51, and the rule it settled on is *do not reserve a
 -- number; take the next free one*.
 CREATE TABLE password_resets (
     id          uuid        PRIMARY KEY,

@@ -16,7 +16,7 @@
 -- that sets the terminal status, so the window is the delivery rather than the
 -- retention window. Why that option and not the other two — a send-time
 -- reference, or shorter retention for credential-bearing kinds — is in
--- decisions.md under M45.
+-- Mustur under M45.
 --
 -- **Not additive, and that is named rather than hidden.** The inherited rule is
 -- that DDL is additive within a minor version. Both statements below break it:

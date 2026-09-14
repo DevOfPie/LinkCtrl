@@ -25,7 +25,7 @@
 -- folder holds no data of its own: there is nothing to restore but a name.
 -- `deleted_at` therefore stays unwritten, and every folder query still filters
 -- on it so that the partial indexes below and `folders_workspace_idx` above
--- remain usable if that ever changes. See decisions.md, D66.
+-- remain usable if that ever changes. See LNK-D-0066.
 
 -- Two folders in one place may not share a name.
 --

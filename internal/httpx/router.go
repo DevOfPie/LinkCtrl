@@ -315,7 +315,7 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// links it holds is a question the links list answers with
 			// `?folder=`. No permission of their own either — a folder is where a
 			// link lives, and that is links.read, links.create, links.update and
-			// links.delete; see internal/link/folder.go and decisions.md, D67.
+			// links.delete; see internal/link/folder.go and LNK-D-0067.
 			//
 			// The move is its own POST rather than a field on the PATCH, because
 			// `parent_id: null` has to mean "the top level" and a PATCH field's
@@ -323,7 +323,7 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// QR codes (M41), nested under the link because a code is a picture
 			// of that link's own short URL. No permission of their own either:
 			// seeing the code is links.read and styling it is links.update — see
-			// internal/link/qr.go and decisions.md, D75.
+			// internal/link/qr.go and LNK-D-0075.
 			//
 			// The `.svg` and `.png` siblings are the picture and are the only
 			// non-JSON responses this API has besides the spec document. Paths
@@ -432,7 +432,7 @@ func registerAppRoutes(d Deps, app *appMux) {
 			// and M39 turns it into an ownership check rather than adding a
 			// second slug — a workspace admin administers their own hostnames
 			// and gets a 403 on anybody else's. See internal/link/domains.go
-			// and decisions.md, D68 and D69.
+			// and LNK-D-0068 and LNK-D-0069.
 			//
 			// Nothing registered here is served. The host router still refuses
 			// an unrecognized Host with the operational 404; verification and

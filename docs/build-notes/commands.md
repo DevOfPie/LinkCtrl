@@ -160,10 +160,10 @@ not use. Cross a phase boundary.
 
 **Authority.** [workflow.md](workflow.md#a-decision-is-coming-and-the-loop-has-not-reached-it-yet).
 
-**Produces.** Open questions in a tracked file, each with options, costs, a
+**Produces.** Open LNK questions in Mustur, each with options, costs, a
 recommendation, and what it assumes about a tree that is not built yet — and
 then the asking of them, so a read-ahead ends with answers rather than with a
-file nobody was told about. An answer moves to decisions.md immediately; an
+file nobody was told about. An answer becomes an LNK decision immediately; an
 unanswered question stays where it was written.
 
 ---

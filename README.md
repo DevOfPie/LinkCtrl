@@ -151,7 +151,7 @@ answers, not the same ones with a domain name.
 | [docs/build-notes/README.md](docs/build-notes/README.md) | How this project is built, and why the method looks like that — start here to review the process rather than the product |
 | [docs/build-notes/workflow.md](docs/build-notes/workflow.md) | How work is done here: gates, commit rules, what happens when a defect turns up |
 | [Plan.md](Plan.md) | Scope contract: what is in Phase 1, what is deferred, what is measured |
-| [docs/build-notes/decisions.md](docs/build-notes/decisions.md) | Why it is built this way. Every non-obvious choice, with its trade-off |
+| [Mustur](https://github.com/DevOfPie/Mustur), project LNK | Why it is built this way. Every non-obvious choice, with its trade-off, as an LNK decision |
 
 ## Privacy
 
@@ -463,7 +463,7 @@ make lint
 ```
 
 New behaviour is expected to come with a test that fails without it, and any
-non-obvious decision with an entry in `docs/build-notes/decisions.md`. The gates a
+non-obvious decision with an LNK decision in Mustur. The gates a
 change has to clear before it is committed, and what happens to a defect found
 along the way, are in
 [docs/build-notes/workflow.md](docs/build-notes/workflow.md).

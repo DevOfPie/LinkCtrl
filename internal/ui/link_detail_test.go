@@ -60,7 +60,7 @@ func TestTheLinkPageStaysDecomposed(t *testing.T) {
 			"page renders, so no section can be inlined here without breaking it. "+
 			"Put the new section in internal/ui/templates/partials/ and invoke it "+
 			"from the ordered list. Raising the cap is a decision about the page's "+
-			"structure and belongs in decisions.md, not in this constant.",
+			"structure and belongs in Mustur, not in this constant.",
 			page, n, linkDetailLineCap)
 	}
 }
@@ -81,7 +81,7 @@ func TestTheLinkPageStaysDecomposed(t *testing.T) {
 // than about the tag: statedHeight below is that rule, and it is stricter than
 // membership of this list in the one direction that matters, because it also
 // adds up what it finds. The owner set this on 2026-08-07 against a milestone
-// that wanted an exemption for one element; decisions.md carries why the
+// that wanted an exemption for one element; Mustur carries why the
 // difference is worth the paragraph.
 var unboundedHeight = []string{
 	"<table", "<img", "<iframe", "<video", "<canvas", "<ul", "<ol", "<details",
@@ -188,7 +188,7 @@ var htmlTag = regexp.MustCompile(`(?s)<[^>]*>`)
 // The harness that took both sets of figures is not committed, for the reason
 // M46's was not — `tools/render-verify` is opt-in and reachable from no gate, so
 // a pixel assertion living there would protect nothing between the two times
-// somebody ran it. decisions.md carries the numbers.
+// somebody ran it. Mustur carries the numbers.
 //
 // What this test asserts is the structural property that measurement rests on,
 // in the three directions that can regress:
@@ -528,7 +528,7 @@ func TestTheThumbnailOpensTheQRTab(t *testing.T) {
 // the prefix pixel budget above refuses arbitrary utilities, so the real
 // choices were h-2.5 (10px) and h-3 (12px), and which one is M46.5's
 // three-engine browser check's to answer. The answer — h-3, in Blink, Gecko
-// and WebKit, with what was seen — is recorded in decisions.md under M47.5.
+// and WebKit, with what was seen — is recorded in Mustur under M47.5.
 // This constant is what ties that recorded answer to the tree: change the
 // class in icons.html and this fails until the new size is re-measured and
 // re-recorded.

@@ -1,7 +1,7 @@
 # agent-browser
 
 Two tools, one pinned manifest, added by
-[M46.5](../../docs/build-notes/phase-details/m46.5.md):
+LNK-M-0054:
 
 - **`@playwright/cli` 0.1.18** — a browser an agent drives from a terminal:
   open, snapshot, click, fill, eval. Sessions persist between commands.
@@ -50,7 +50,7 @@ core, so aligning the two means pinning verification evidence to an alpha.
 Declined; the cost — ~700MB of duplicate engines (the cache went 1.2G → 1.9G
 when the CLI's chromium was installed) and two versions to reason about — is
 recorded in
-[decisions.md](../../docs/build-notes/decisions.md#2026-08-11--m465-a-browser-an-agent-can-drive),
+LNK-D-0745,
 with the instruction to revisit when a stable 1.63 ships.
 
 Because of that split, `node_modules` holds both: the alpha `playwright` is
@@ -84,7 +84,7 @@ Each was found by driving the running test instance on 2026-08-11:
 | htmx swaps kill element refs | `e11` became `f1e12` after a swap, and a fill against the old ref went nowhere, silently | Re-snapshot after every swap, or target by role and name |
 | The product classifies the driver as a bot | `internal/analytics/useragent.go` lists `playwright`, `headlesschrome`, `puppeteer`, `selenium` | Only the redirect path's analytics care. A spec touching that path must say how it handles this; the kept spec does not touch it |
 | An unstyled page is the default failure | `app.css` is generated and gitignored | Both targets drive the Docker instance, whose image builds its own stylesheet — the trap cannot bite there. Driving a locally-run server instead needs `make css` first |
-| A failed sign-in charges a real lockout counter | Credentials also do not belong in a committed spec | The clean-console spec stays on `/login`, where layout, stylesheet, CSP and htmx are all live without a session. The other five specs — every file in `specs/` except that one — assert the signed-in shell, which no spec can do sessionless: each reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falls back to parsing the account table in [`docs/dev-notes/instances.md`](../../docs/dev-notes/instances.md) — the file a rebuild already updates, so no committed second copy — and makes exactly one attempt (retries are 0). **Sign-ins are counted, because the limit is real**: `LOGIN_RATE_PER_MIN` defaults to 10 and the suite runs in well under a minute from one address, so the whole run performs **8** — one each from workspace-control, link-tabs and qr-logo, three from qr-codes-list, two from qr-tab-controls, which shares one signed-in page across its scripted cases for exactly this reason. Two spare, and a spec adding a third fails *every* file at sign-in with a message naming the credentials. [F242](../../docs/build-notes/deferred-findings.md#open) is the row for that headroom |
+| A failed sign-in charges a real lockout counter | Credentials also do not belong in a committed spec | The clean-console spec stays on `/login`, where layout, stylesheet, CSP and htmx are all live without a session. The other five specs — every file in `specs/` except that one — assert the signed-in shell, which no spec can do sessionless: each reads `LINKCTRL_UI_EMAIL` / `LINKCTRL_UI_PASSWORD`, falls back to parsing the account table in [`docs/dev-notes/instances.md`](../../docs/dev-notes/instances.md) — the file a rebuild already updates, so no committed second copy — and makes exactly one attempt (retries are 0). **Sign-ins are counted, because the limit is real**: `LOGIN_RATE_PER_MIN` defaults to 10 and the suite runs in well under a minute from one address, so the whole run performs **8** — one each from workspace-control, link-tabs and qr-logo, three from qr-codes-list, two from qr-tab-controls, which shares one signed-in page across its scripted cases for exactly this reason. Two spare, and a spec adding a third fails *every* file at sign-in with a message naming the credentials. LNK-F-0242 is the row for that headroom |
 
 ## Opt-in, with a cadence
 

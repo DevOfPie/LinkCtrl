@@ -31,7 +31,7 @@ try-it-out console). The document itself is at `/api/v1/openapi.json` and
 | `/campaigns` | Campaign labels, and the links filed under each. |
 | `/account` | Your profile, password, appearance — and deleting the account. |
 
-This table listed eight of these pages until 0.2.0 and omitted the rest, including three that share the identity menu with pages it did list ([F45](build-notes/deferred-findings.md)).
+This table listed eight of these pages until 0.2.0 and omitted the rest, including three that share the identity menu with pages it did list (LNK-F-0045).
 
 **The dashboard needs JavaScript**, and there is no `<noscript>` fallback — the
 stance is recorded rather than defended in markup nobody reads. htmx makes

@@ -1,6 +1,6 @@
 # render-verify
 
-Re-checks the claims [M26.5](../../docs/build-notes/phase-details/m26.5.md) makes
+Re-checks the claims LNK-M-0024 makes
 about where the header's two popover panels land, in Blink, Gecko and WebKit.
 
 ```sh

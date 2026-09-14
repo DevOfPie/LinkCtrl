@@ -200,7 +200,7 @@ type Querier interface {
 	//     process that dies mid-send retry the same delivery forever.
 	//
 	// FOR UPDATE SKIP LOCKED inside the subquery is the claim mechanism this
-	// milestone had to choose (see decisions.md). Leadership already keeps a second
+	// milestone had to choose (see Mustur). Leadership already keeps a second
 	// replica out of the job, but leadership is an advisory lock released when its
 	// holder dies, so a moment of overlap is possible; skip-locked makes that moment
 	// cost nothing rather than deliver the same event twice.
@@ -2672,7 +2672,7 @@ type Querier interface {
 	RecordJobFailure(ctx context.Context, arg RecordJobFailureParams) error
 	RecordSuccessfulLogin(ctx context.Context, id uuid.UUID) error
 	// The hostname is the only thing a registration has to change, and it is
-	// changeable only while nothing serves it; see decisions.md, D69.
+	// changeable only while nothing serves it; see LNK-D-0069.
 	//
 	// Not scoped by owner. The caller has already been judged against the row read
 	// by GetDomainByID, and repeating the predicate here would turn a 403 into a

@@ -271,7 +271,7 @@ func TestTheDepthCapIsEnforcedOnCreateAndOnMove(t *testing.T) {
 }
 
 // TestTwoConcurrentMovesCannotBuildACycle is F108, and it reopens
-// [M38](../../docs/build-notes/phase-details/m38.md)'s own claim that a folder
+// LNK-M-0043's own claim that a folder
 // can never become its own descendant.
 //
 // MoveRefusal answers "is the new parent inside the subtree being moved", a

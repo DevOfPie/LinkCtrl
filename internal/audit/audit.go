@@ -160,7 +160,7 @@ const (
 // M45. The vocabulary having two homes meant anything enumerating it from this
 // package was silently short by two, and that is not hypothetical: the action
 // count in docs/SECURITY.md was wrong twice, at M32.5 and again at 0.2.0, and
-// [F18](../../docs/build-notes/deferred-findings.md) is the mechanical cause
+// LNK-F-0018 is the mechanical cause
 // both times. internal/dispute now refers to these rather than declaring its
 // own, so there is one list and AllActions can be complete.
 //

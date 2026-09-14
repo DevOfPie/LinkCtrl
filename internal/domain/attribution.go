@@ -15,7 +15,7 @@ import "strings"
 // referrer host on the click event and is rolled up, capped and read by exactly
 // the query every other breakdown uses, appearing in the Referrers panel beside
 // `direct` — which is itself a non-hostname sentinel that rollup already writes
-// into that column. See decisions.md, D76.
+// into that column. See LNK-D-0076.
 //
 // **The vocabulary is closed, and that is the load-bearing part.** The value is
 // written into `link_dimension_daily.value`, whose primary key includes it, so

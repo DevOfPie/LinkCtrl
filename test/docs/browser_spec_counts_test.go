@@ -44,7 +44,7 @@ var declaredTest = regexp.MustCompile(`(?m)^\s*test\(`)
 // check-links is not run by CI, and a gate that only runs on one machine is the
 // F255 shape this repository has now paid for twice.
 func TestTheBrowserSuiteReadmeCountsItsCases(t *testing.T) {
-	// A relative path, like [decisionsPath] beside it: this package's tests run
+	// A relative path: this package's tests run
 	// from their own directory and the repository root is two levels up.
 	const suite = "../../tools/agent-browser"
 	readme := filepath.Join(suite, "README.md")

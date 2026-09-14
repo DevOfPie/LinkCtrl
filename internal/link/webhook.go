@@ -36,7 +36,7 @@ import (
 // while somebody is typing it into the form can resolve to 169.254.169.254 by
 // the time the scheduler opens a socket, and no check made here can see that.
 // internal/webhook checks the resolved address again at connect, and the posture
-// is stated in decisions.md rather than inherited.
+// is stated in Mustur rather than inherited.
 //
 // **Delivery is not here.** This package registers and audits; internal/webhook
 // signs, dials and retries. The two never import each other — this one hands
@@ -49,7 +49,7 @@ import (
 // codes and campaigns (D75). Those are properties of a link, so whoever may edit
 // the link may edit them. A webhook is a standing instruction to make this
 // server connect somewhere, which is a different power from editing what a
-// visitor's browser is sent to — see decisions.md.
+// visitor's browser is sent to — see Mustur.
 const (
 	PermWebhooksRead  = "webhooks.read"
 	PermWebhooksWrite = "webhooks.write"

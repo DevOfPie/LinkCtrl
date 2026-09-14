@@ -267,7 +267,7 @@ func TestAPictureTooLargeToRasteriseIsRefused(t *testing.T) {
 // because a count would pass for a swap.
 func TestNoModuleDependencyJoinedTheSetForThePNG(t *testing.T) {
 	// As of M49. A milestone that adds a direct dependency changes this list
-	// deliberately and says why in decisions.md; a milestone that adds one by
+	// deliberately and says why in Mustur; a milestone that adds one by
 	// accident finds out here.
 	want := map[string]bool{
 		"github.com/boombuler/barcode":            true,
@@ -296,7 +296,7 @@ func TestNoModuleDependencyJoinedTheSetForThePNG(t *testing.T) {
 			t.Errorf("go.mod requires %s directly, and M49's claim is that a PNG "+
 				"download joins no module to the dependency set. If this is a "+
 				"deliberate addition from a later milestone, add it to the list here "+
-				"with its reason in decisions.md", path)
+				"with its reason in Mustur", path)
 		}
 		delete(want, path)
 	}
