@@ -582,7 +582,7 @@ on its LNK milestone record in Mustur, and nowhere else.
 ### Phase 1 scope not yet built
 
 Phase 1's per-area completion table, its verification note, and this
-section's record of what it deferred are archived in `docs/build-notes/phase-details/phase-1.md` at `230771a`, the commit Mustur imported LinkCtrl's records from.
+section's record of what it deferred are in LNK-S-0001, Phase 1's phase record, under *Build status detail* and *Phase 1 scope not yet built*.
 
 ---
 
@@ -596,17 +596,17 @@ and never defined.
 
 ### Phase 2 decisions
 
-The decisions behind Phase 2's plan are LNK decisions,
-archived in `docs/build-notes/phase-details/phase-2.md` at `230771a`, the commit Mustur imported LinkCtrl's records from.
+The decisions behind Phase 2's plan are LNK decisions, tabled in LNK-S-0002,
+Phase 2's phase record, under *Phase 2 decisions*.
 
 ### Phase 2 decisions taken after the plan was finalised
 
-The decisions taken while Phase 2 was being built are LNK decisions,
-archived in `docs/build-notes/phase-details/phase-2.md` at `230771a`, the commit Mustur imported LinkCtrl's records from.
+The decisions taken while Phase 2 was being built are LNK decisions, tabled in
+LNK-S-0002 under *Phase 2 decisions taken after the plan was finalised*.
 
 ### Not in Phase 2
 
-The full deferral reasons are archived in `docs/build-notes/phase-details/phase-2.md` at `230771a`, the commit Mustur imported LinkCtrl's records from.
+The full deferral reasons are in LNK-S-0002, Phase 2's phase record, under *Not in Phase 2*.
 What of it is still actually parked, tracked by work area, is
 [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md)'s [*What Phase
 3 shipped, and what is still on this list*](docs/build-notes/phase-3-candidates.md#what-phase-3-shipped-and-what-is-still-on-this-list)
@@ -621,12 +621,12 @@ LNK-M-0053 to LNK-M-0075, each carrying its `Phase` and `Phase order`.
 
 ### Phase 3 decisions
 
-The decisions behind Phase 3's plan are LNK decisions,
-archived in `docs/build-notes/phase-details/phase-3.md` at `230771a`, the commit Mustur imported LinkCtrl's records from.
+The decisions behind Phase 3's plan are LNK decisions, tabled in LNK-S-0003,
+Phase 3's phase record, under *Phase 3 decisions*.
 
 ### Not in Phase 3
 
-The full deferral reasons are archived in `docs/build-notes/phase-details/phase-3.md` at `230771a`, the commit Mustur imported LinkCtrl's records from.
+The full deferral reasons are in LNK-S-0003, Phase 3's phase record, under *Not in Phase 3*.
 What of it is still actually parked, tracked by work area, is
 [phase-3-candidates.md](docs/build-notes/phase-3-candidates.md)'s [*What Phase
 3 shipped, and what is still on this list*](docs/build-notes/phase-3-candidates.md#what-phase-3-shipped-and-what-is-still-on-this-list)

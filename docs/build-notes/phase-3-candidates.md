@@ -6,7 +6,7 @@ already sanctions for a future-phase feature — *"a row in Not in Phase N (or t
 next phase's candidate list)"* — and the list it names.
 
 **It restates nothing.** Almost every candidate already has a home in
-[Plan.md](../../Plan.md)'s *Not in Phase 2* list, its *Other surfaces* table, or
+LNK-S-0002's *Not in Phase 2* list, [Plan.md](../../Plan.md)'s *Other surfaces* table, or
 the LNK findings, each carrying the reason it was
 deferred. This file adds one thing those cannot: a **grouping**. A row here is a
 pointer plus which area it belongs to, and the reason stays where it was written.
@@ -60,11 +60,11 @@ milestone would touch and they are the same files under their real names.)*
 
 | Candidate | Where it is recorded |
 | --- | --- |
-| MFA, OAuth, OIDC, SSO, SCIM | Plan.md *Not in Phase 2*; Phase 3 by the scope table |
-| **Account recovery — a forgotten password locks the account out permanently** | LNK-F-0141, and Plan.md *Not in Phase 2* |
-| **Account deletion and GDPR erasure — the schema and four sites describe both as existing** | LNK-F-0044, and Plan.md *Not in Phase 2* |
-| An API key that reaches more than one organization | LNK-F-0075, owner-directed 2026-08-05; Plan.md *Not in Phase 2* |
-| A runtime signup toggle changeable from the dashboard | Plan.md *Not in Phase 2*, parked at D38, still parked after D98 gave the instance a principal |
+| MFA, OAuth, OIDC, SSO, SCIM | LNK-S-0002 *Not in Phase 2*; Phase 3 by the scope table |
+| **Account recovery — a forgotten password locks the account out permanently** | LNK-F-0141, and LNK-S-0002 *Not in Phase 2* |
+| **Account deletion and GDPR erasure — the schema and four sites describe both as existing** | LNK-F-0044, and LNK-S-0002 *Not in Phase 2* |
+| An API key that reaches more than one organization | LNK-F-0075, owner-directed 2026-08-05; LNK-S-0002 *Not in Phase 2* |
+| A runtime signup toggle changeable from the dashboard | LNK-S-0002 *Not in Phase 2*, parked at D38, still parked after D98 gave the instance a principal |
 
 **Two of these are defects, not features.** F44 and F141 falsify claims the tree
 makes *today*, so their milestones close findings rather than add scope — which
@@ -79,10 +79,10 @@ in the way the rest are.
 | --- | --- |
 | **A UI/UX redesign, owner-requested for early Phase 3** | Queue row, 2026-08-06. Three complaints named: the link configuration page *"leaves a massive mess … difficult to find what you are looking for in"*; high-traffic items like retrieving a QR code are *"buried deep in the page"* alongside config that belongs in an on-demand popup; and the QR settings expose *Quiet zone* and *Module size* where an end user wants **output size in pixels** and the rest handled in the background. **It cannot be specified without the owner** — the row asks for a walkthrough, area by area, plus blind-task exercises where the owner is given a task with no instructions so the UX is judged by whether it can be done. That walkthrough is a Phase 3 planning input, and this row is where it is remembered |
 | **The workspace selector should always render, not only above one membership** | Queue row, 2026-08-02. `nav.html:38` is `{{if gt (len .Workspaces) 1}}`, which is the M25 decision entry working as designed — *"a control that cannot do anything"*. What the decision did not weigh is its **label**: with one membership the current workspace and organization name appear nowhere in the shell. Not a defect, because nothing claims the control always shows. Folding it into the redesign is recommended and is the owner's call |
-| Mobile navigation rework | Plan.md *Not in Phase 2* — the header hides the signed-in address below `sm` |
-| Notification severity, grouping and filtering | Plan.md *Not in Phase 2* — needs a schema change M22's model has no column for |
-| Trash/restore UI | Plan.md *Not in Phase 2* — Phase 1 decided against it |
-| Bulk operations | Plan.md *Not in Phase 2*, a "2+" row |
+| Mobile navigation rework | LNK-S-0002 *Not in Phase 2* — the header hides the signed-in address below `sm` |
+| Notification severity, grouping and filtering | LNK-S-0002 *Not in Phase 2* — needs a schema change M22's model has no column for |
+| Trash/restore UI | LNK-S-0002 *Not in Phase 2* — Phase 1 decided against it |
+| Bulk operations | LNK-S-0002 *Not in Phase 2*, a "2+" row |
 | An **All Workspaces** dashboard scope | LNK-D-0951 — owner-answered 2026-09-13 on LNK-Q-0004, which re-asked LNK-Q-0002: a candidate for the next phase, planned beside moving links between workspaces. Nothing takes an all-workspaces scope today: no handler, no query, no UI, and `actor.WorkspaceID` is a single value threaded through the service layer rather than a filter that could be widened. It is the surviving half of a queue row split on 2026-08-01 |
 
 **Boundary note:** a redesign large enough to answer the three complaints will
@@ -97,11 +97,11 @@ This is the clearest case in the file for *not* running two milestones at once.
 | Candidate | Where it is recorded |
 | --- | --- |
 | Advanced analytics | Plan.md *Other surfaces* — Phase 3 |
-| Campaign analytics | Plan.md *Not in Phase 2*, kept there after M41 shipped campaigns; the reason is job load, not scope |
-| The new-vs-returning analytics split | Plan.md *Not in Phase 2*, D12 |
-| Storing region or city | Plan.md *Not in Phase 2* — reverses the privacy stance, so it is a decision before it is work |
-| ASN/VPN detection | Plan.md *Not in Phase 2*, a "2+" row |
-| Activity feed and comments | Plan.md *Not in Phase 2*, "2+" rows |
+| Campaign analytics | LNK-S-0002 *Not in Phase 2*, kept there after M41 shipped campaigns; the reason is job load, not scope |
+| The new-vs-returning analytics split | LNK-S-0002 *Not in Phase 2*, D12 |
+| Storing region or city | LNK-S-0002 *Not in Phase 2* — reverses the privacy stance, so it is a decision before it is work |
+| ASN/VPN detection | LNK-S-0002 *Not in Phase 2*, a "2+" row |
+| Activity feed and comments | LNK-S-0002 *Not in Phase 2*, "2+" rows |
 | **Distinguishing a blocked bot click from an observed one** | An LNK decision, 2026-08-06 — the residual left by the queue row that closed as already built. A column, an ingest field, one more `FILTER` |
 
 ### D — Redirect path and routing
@@ -110,12 +110,12 @@ This is the clearest case in the file for *not* running two milestones at once.
 
 | Candidate | Where it is recorded |
 | --- | --- |
-| A human check or dispute path for a blocked bot | Plan.md *Not in Phase 2*, and the *Known limitations* row that says a misjudged person gets a 403 with no appeal |
-| Per-bot allowlists, and improving bot classification | Plan.md *Not in Phase 2* — editing `Classify`'s marker list moves every existing analytics figure at the same time, which is why it is not a small change |
-| The cookies routing condition | Plan.md *Not in Phase 2*, D2 |
-| `links.status = 'disabled'` gaining a writer | Plan.md *Not in Phase 2*, D10 |
-| Sharing the 404-probe limiter across replicas | Plan.md *Not in Phase 2* — a network round trip inside the 20ms budget |
-| Re-checking already-accepted links against new blocklist tiers | Plan.md *Not in Phase 2* — a separate job |
+| A human check or dispute path for a blocked bot | LNK-S-0002 *Not in Phase 2*, and Plan.md's *Known limitations* row that says a misjudged person gets a 403 with no appeal |
+| Per-bot allowlists, and improving bot classification | LNK-S-0002 *Not in Phase 2* — editing `Classify`'s marker list moves every existing analytics figure at the same time, which is why it is not a small change |
+| The cookies routing condition | LNK-S-0002 *Not in Phase 2*, D2 |
+| `links.status = 'disabled'` gaining a writer | LNK-S-0002 *Not in Phase 2*, D10 |
+| Sharing the 404-probe limiter across replicas | LNK-S-0002 *Not in Phase 2* — a network round trip inside the 20ms budget |
+| Re-checking already-accepted links against new blocklist tiers | LNK-S-0002 *Not in Phase 2* — a separate job |
 
 **Boundary note:** every row here lands on the hot path, so each one owes the
 [slo.md](../slo.md) k6 measurement its inherited rule requires. That is a shared
@@ -129,8 +129,8 @@ landing in one phase means the measurement runs twice.
 | Candidate | Where it is recorded |
 | --- | --- |
 | High availability as a claim somebody could rely on | Plan.md *Other surfaces* — Phase 3. Multi-replica operation itself already works and is documented; what is missing is failover, a health-gated load-balancer contract, and measured rolling-deploy behaviour (an LNK decision, 2026-08-06) |
-| Redis Streams as a work queue, for webhooks or the analytics recorder | Plan.md *Not in Phase 2* |
-| Redis resilience beyond a bounded failure — a circuit breaker | Plan.md *Not in Phase 2* |
+| Redis Streams as a work queue, for webhooks or the analytics recorder | LNK-S-0002 *Not in Phase 2* |
+| Redis resilience beyond a bounded failure — a circuit breaker | LNK-S-0002 *Not in Phase 2* |
 | **An update checker against GitHub releases, notifying instance owners** | Queue row, 2026-08-06. Absent everywhere — no version comparison against a remote, no release notification. **It introduces a new outbound-connection class**: the only one today is M42's webhooks, which `docs/SECURITY.md` treats as an operator-visible property, so this owes a decision on default-on-versus-off and an opt-out before it owes any code |
 
 ### F — QR codes and campaigns
@@ -139,8 +139,8 @@ landing in one phase means the measurement runs twice.
 
 | Candidate | Where it is recorded |
 | --- | --- |
-| A PNG QR code | Plan.md *Not in Phase 2*, D11 — SVG only, no image encoder in the dependency set |
-| More than one QR code per link, and per-code scan counts | Plan.md *Not in Phase 2* |
+| A PNG QR code | LNK-S-0002 *Not in Phase 2*, D11 — SVG only, no image encoder in the dependency set |
+| More than one QR code per link, and per-code scan counts | LNK-S-0002 *Not in Phase 2* |
 
 **Boundary note:** the redesign's third complaint is about QR *settings
 vocabulary* — output size instead of quiet zone and module size. That is B's
@@ -164,7 +164,7 @@ work area with a single owner. Whatever it turns into is assembled from rows
 above rather than added beside them.
 
 Also not areas, because neither is a milestone: the root-level `SECURITY.md`
-pointer (Plan.md *Not in Phase 2*, and still nobody has asked for it), and
+pointer (LNK-S-0002 *Not in Phase 2*, and still nobody has asked for it), and
 version history, scheduled changes and approval workflows, which are "3+" rather
 than 3.
 
@@ -338,7 +338,7 @@ LNK-D-0671.
 
 Three asks the walkthrough produced are **deferred to Phase 4** rather than
 dropped — folders path-entry, organization switching, and API-key scope grouping.
-Their reasons are in Plan.md's *Not in Phase 3*, which is where a deferral's
+Their reasons are in LNK-S-0003's *Not in Phase 3*, which is where a deferral's
 reason lives; this file does not restate them.
 
 **Does the update checker default on or off?** **Re-homed 2026-08-06** to

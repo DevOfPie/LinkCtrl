@@ -46,7 +46,7 @@ A defect that makes the *current* milestone's claim false is in spec, whatever i
 looks like. Judge by the claim, not by the subsystem.
 
 A defect that makes a **shipped** milestone's claim false **reopens that
-milestone** — its LNK milestone's `Status` back to `in progress`, the correction written
+milestone** — its LNK milestone's `Status` back to `in progress (reopened)`, the correction written
 into its work unit — rather than arriving as a successor. A successor leaves a `done` row
 asserting something untrue, which is the one outcome worth spending a reopening
 to avoid, and it scatters one piece of work across two numbers. The defect still

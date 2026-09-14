@@ -122,7 +122,9 @@ one, and **spawn nothing while it stands** if there is not.
 
 ## 1. Validate
 
-**Next milestone** = the first LNK milestone whose `Phase` is the live phase,
+**Next milestone** = the first LNK milestone whose `Phase` is the live phase —
+the phase whose LNK phase record's `Status` is `live`, and with none live there
+is nothing to resume ([milestone-rules.md](milestone-rules.md#phases)) —
 by its `Phase order`, whose `Status` is not `done`. That ordered set is what
 this contract calls the **status table**. Every milestone LinkCtrl defined carries
 both fields, and a stub for a number cited and never defined carries neither;
@@ -214,7 +216,8 @@ Plan drift is allowed here. Silent plan drift is not.
 Worker.
 
 - `Status` → `in progress` on the LNK milestone
-  (`mustur amend <milestone> --data "Status=in progress"`).
+  (`mustur amend <milestone> --data "Status=in progress"`), or
+  `in progress (reopened)` for a shipped one come back.
 - **In spec only.** Anything else → one LNK finding, marked per
   [Marking what gets appended](#marking-what-gets-appended), then carry on.
   Never fix out of spec, never bundle a second milestone.
@@ -436,7 +439,8 @@ file at 0.43.
 individual owner review, so expect a conversation rather than an iteration. Its
 release actions reach outside the repo — tagging, pushing a tag, opening the
 phase PR are each confirmed before they happen, and merging is the owner's
-alone.
+alone. The phase ends when its phase record's `Status` stops reading `live`
+(`mustur amend <phase> --data "Status=closed: every milestone it holds is done"`).
 
 ### A review gets its own session
 

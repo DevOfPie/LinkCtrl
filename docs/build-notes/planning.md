@@ -59,7 +59,8 @@ went in at M24.5, before seven UI-building milestones, for exactly this reason.
 
 - It needs capabilities this phase does not build.
 - It would land after the pre-release review.
-- It is listed in Plan.md's *Not in Phase N* with a reason. The request is then
+- It is listed in a *Not in Phase N* with a reason — a closed phase's in its LNK
+  phase record, a later one's where Plan.md points. The request is then
   a request to reverse a recorded decision: surface that reason to the owner
   and let them reverse it knowingly, rather than scheduling around it.
 - It is large enough to move the phase's success criteria or its release. That
@@ -168,10 +169,16 @@ milestone's reviewability disagree, the target is the thing that gives.
 
 Five artifacts. None optional — each keeps a different document true.
 
+**A new phase is one record more, written first**:
+`mustur add phase --project LNK --title … --data Status=live`. Every milestone
+in it cites it — `mustur amend <milestone> --ref phase=<id>` — and its `Status`
+reading `live` is what makes it the phase `/work phase` runs
+([milestone-rules.md](milestone-rules.md#phases)).
+
 | # | Artifact | What it must say |
 | --- | --- | --- |
 | 1 | An LNK work unit, from the template — **the milestone's definition of done** (`mustur add work-unit --project LNK --ref milestone=<id>`, once row 2's record exists) | Falsifiable definitions of done. Deliberate exclusions stated, each with its reason. Enforcement named as a mechanism — a test that fails, not review vigilance. |
-| 2 | An LNK milestone, in its place in the order: `mustur add milestone --project LNK --title … --data "Phase=N" --data "Phase order=N" --data "Status=…"`, then `mustur amend <milestone> --ref work-unit=<id>` so the record cites row 1 | Dependencies, with soft edges marked as ordering preferences. Discharges: the promise it closes, or "owner-added scope" with the date — never an invented one. The milestone-count sentence stays true. |
+| 2 | An LNK milestone, in its place in the order: `mustur add milestone --project LNK --title … --data "Phase=N" --data "Phase order=N" --data "Status=…" --ref phase=<id>`, then `mustur amend <milestone> --ref work-unit=<id>` so the record cites row 1 | Dependencies, with soft edges marked as ordering preferences. Discharges: the promise it closes, or "owner-added scope" with the date — never an invented one. The milestone-count sentence stays true. |
 | 3 | Its `Status` on that milestone | Plus an inherited-rules row in [milestone-rules.md](milestone-rules.md) **only** if the milestone constrains all later work (M24.5's template scan qualifies; most milestones do not). |
 | 4 | An LNK decision | The why, dated. Placement reasoning, design constraints that forced choices, what deliberately stays out. |
 | 5 | The restraint list | Do **not** touch: a decisions table headed "taken before the plan was finalised"; README's *Not built yet* unless the absence is a production surprise; any committed decision-log entry — a later entry corrects, never an edit. |

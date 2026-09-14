@@ -98,7 +98,7 @@ Resolved against the status table **before** the loop is entered:
 
 | The named row | Then |
 | --- | --- |
-| Un-`done`, its `Phase` the live phase | Route. The bound is written to the note's `Stop:` line, which is what carries it across a resume |
+| Un-`done`, its `Phase` the live phase — the one whose LNK phase record's `Status` is `live` | Route. The bound is written to the note's `Stop:` line, which is what carries it across a resume |
 | Already `done` | Enter nothing, and report that. The run being asked for has already happened; re-running it is [reopening](workflow.md#an-issue-is-found--any-time-any-source), which is scheduling and therefore the owner's |
 | A row whose `Phase` is another phase | **Prompt.** *Never cross a phase boundary* is one of [phase-loop.md](phase-loop.md#the-loop)'s five overriding rules, and this target asks for exactly that |
 | Absent from the table | An [unknown target](#an-unknown-target), handled unchanged |

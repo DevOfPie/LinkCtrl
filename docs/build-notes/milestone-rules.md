@@ -1,10 +1,27 @@
 # Milestone rules
 
-The rules every milestone inherits, and the template its definition of done
-starts from. Rules, not records: milestones, their status and each definition of
-done are LNK records in [Mustur](https://github.com/DevOfPie/Mustur). These two
-stayed in the tree when `phase-details/` left in W48, because no Mustur kind holds
-them (LNK-D-0952, answering LNK-Q-0003).
+The rules every milestone inherits, the conventions a phase's status follows,
+and the template a definition of done starts from. Rules, not records: phases,
+milestones, their status and each definition of done are LNK records in
+[Mustur](https://github.com/DevOfPie/Mustur). These stayed in the tree when
+`phase-details/` left in W48, because no Mustur kind holds them (LNK-D-0952,
+answering LNK-Q-0003).
+
+## Phases
+
+**A phase is live when its LNK phase record's `Status` is `live`.** None is
+today: LNK-S-0001 to LNK-S-0004 all read `closed: every milestone it holds is
+done`. With no phase live there is no status table, and `/work phase` refuses to
+resume rather than starting the next phase —
+[phase-loop.md](phase-loop.md#1-validate)'s *next milestone* is the first
+un-`done` row of a table that does not exist. Opening a phase is planning's, in
+[planning.md](planning.md#5-what-a-scope-addition-writes).
+
+A milestone that shipped and came back reads `in progress (reopened)`. The
+parenthesis earns its place: without it, a milestone ordered below the one being
+built looks like an ordering mistake. Reopening is what happens when a shipped
+milestone's claim turns out false — the rule, and why it beats a successor, is in
+[workflow.md](workflow.md#an-issue-is-found--any-time-any-source).
 
 ## What every milestone inherits
 
